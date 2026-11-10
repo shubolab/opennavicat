@@ -2,6 +2,7 @@
 from dataclasses import replace
 import json
 import threading
+from datetime import datetime, timezone
 
 import pytest
 from bson import BSON, Int64
@@ -9,12 +10,40 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QFileDialog, QInputDialog
 
 from opennavicat.js_engine.runtime import JavaScriptResult
+from opennavicat.mongodb_session import BSON_CODEC, canonical_dumps
 from opennavicat.query_language import LEGACY, MONGO_JS
 from opennavicat.storage import Store
 from opennavicat.ui.mongo_native_query import NativeMongoQueryPage
 from opennavicat.ui.query import QueryPage
 from opennavicat.ui.window import MainWindow
 from test_mongo_window import mongo_window, mongodb_service, idle
+
+
+def test_real_mainwindow_copied_index_execution_script_runs_in_default_javascript(qtbot,mongo_window):
+    window,config,database,schema,errors,threads=mongo_window
+    database.docs.create_index([('name',1)],name='copied_preview')
+    designer=window.open_mongo_index_designer(config.id,config.database,'docs','copied_preview')
+    qtbot.waitUntil(lambda:designer.snapshot is not None,timeout=15000);idle(qtbot,window)
+    predicate={'created_at':{'$gte':datetime(2026,1,1,tzinfo=timezone.utc)}}
+    designer.partial_editor.setPlainText(canonical_dumps(predicate))
+    designer.tabs.setCurrentIndex(5)
+    qtbot.waitUntil(lambda:designer._plan is not None,timeout=15000);idle(qtbot,window)
+    designer.preview_mode.setCurrentIndex(2)
+    script=designer.sql_preview.toPlainText()
+    assert all(token in script for token in ('Int32(', 'ISODate(', 'Binary.createFromBase64('))
+    assert 'partialFilterExpression' not in database.docs.index_information()['copied_preview']
+    query=window.new_query(sql=script,connection_id=config.id)
+    assert isinstance(query,NativeMongoQueryPage)
+    qtbot.mouseClick(query.run_button,Qt.MouseButton.LeftButton)
+    assert query.running
+    qtbot.waitUntil(lambda:not query.running,timeout=15000);idle(qtbot,window)
+    assert query.last_execution is not None and not query.last_execution.error,query.message.text()
+    assert query.last_execution.child_reaped and query.last_execution.has_confirmed_writes
+    assert len(query.last_execution.commands)==2
+    actual=database.docs.index_information()['copied_preview']
+    assert list(actual['key'])==[('name',1)]
+    assert BSON.encode(actual['partialFilterExpression'],codec_options=BSON_CODEC)==BSON.encode(predicate,codec_options=BSON_CODEC)
+    assert designer.dirty  # Direct query execution never overwrites the source draft.
 
 
 def test_real_mainwindow_new_js_runs_loop_typed_writes_and_cancel_without_changing_legacy_semantics(qtbot,mongo_window):

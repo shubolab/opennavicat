@@ -215,8 +215,15 @@ class Store:
                 value["ssh_host_key"] = existing.get("ssh_host_key", "")
             previous = imports.get(identifier, {})
             paths = getattr(profile, "group_paths", ()) or ((profile.group_path,) if profile.group_path else ())
-            if getattr(profile, "groups_complete", True) is not True:
-                paths = deepcopy(previous.get("group_paths", []))
+            groups_complete = getattr(profile, "groups_complete", True) is True
+            # A partial first import can contain valid memberships. Keep them
+            # until an authoritative snapshot exists; only then does a failed
+            # reload have a last-known-good grouping to preserve (even empty).
+            group_history = previous.get("groups_authoritative_seen",
+                bool(previous) and previous.get("groups_complete", True) is True) is True
+            if not groups_complete:
+                previous_paths = deepcopy(previous.get("group_paths", []))
+                paths = previous_paths if group_history else [*previous_paths, *paths]
             group_paths = []
             for path in paths:
                 if not isinstance(path, (list, tuple)) or any(not isinstance(part, str) for part in path):
@@ -237,7 +244,8 @@ class Store:
                 "source_id": source_id, "provenance": str(profile.source_path),
                 "source_format": str(profile.source_format), "platform": platform,
                 "group_paths": group_paths, "blocked": blocked,
-                "groups_complete": getattr(profile, "groups_complete", True) is True,
+                "groups_complete": groups_complete,
+                "groups_authoritative_seen": groups_complete or group_history,
                 "unsupported_fields": unsupported, "requires_secrets": requires,
                 "locally_edited": edited, "last_seen": now, "source_missing": False,
                 "source_blocked": blocked, "source_unsupported_fields": unsupported,

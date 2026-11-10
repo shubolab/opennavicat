@@ -403,6 +403,12 @@ def test_group_read_or_structure_failure_keeps_last_known_good_for_all_sources(t
     store.sync_navicat_profiles(incomplete)
     metadata = store.state["navicat_imports"][local.id]
     assert metadata["group_paths"] == [["Generated group"]] and metadata["groups_complete"] is False
+    # Consecutive partial reads cannot turn retained history into an
+    # unauthoritative first import and replace it with a different grouping.
+    mixed_group_file(group, title="Different partial group")
+    store.sync_navicat_profiles(read())
+    metadata = store.state["navicat_imports"][local.id]
+    assert metadata["group_paths"] == [["Generated group"]]
     if edited:
         assert store.connections()[0].host == "reviewed.invalid" and not metadata["blocked"]
         assert store.passwords[local.id] == "LOCAL-SECRET"
@@ -417,6 +423,58 @@ def test_first_import_is_visible_despite_unavailable_groups(tmp_path, platform):
     counts = store.sync_navicat_profiles(read())
     assert counts["added"] == 1 and len(store.connections()) == 1
     assert store.state["navicat_imports"][store.connections()[0].id]["group_paths"] == []
+
+
+def mixed_group_file(path, unsupported="member", title="Generated group"):
+    valid = {"vgroup_name": title, "vgroup_type": "CONNECTION", "items": [
+        {"name": "Generated connection", "server_type": "PGSQL", "type": "CONNECTION"}]}
+    groups = [valid]
+    if unsupported == "member":
+        valid["items"].append(None)
+    else:
+        groups.append({"vgroup_name": "Unrecognized group", "vgroup_type": "UNSUPPORTED", "items": []})
+    path.write_text(json.dumps({"vgroups": groups}))
+
+
+@pytest.mark.parametrize("platform", ["darwin", "linux", "win32"])
+@pytest.mark.parametrize("unsupported", ["member", "group_type"])
+def test_first_import_keeps_valid_memberships_from_incomplete_groups(tmp_path, platform, unsupported):
+    read, group = file_or_registry_source(tmp_path, platform)
+    mixed_group_file(group, unsupported)
+    imported = read()
+    assert not imported.profiles[0].groups_complete
+    assert imported.profiles[0].group_paths == (("Generated group",),)
+    store = Store(tmp_path / "workspace")
+    store.sync_navicat_profiles(imported)
+    metadata = store.state["navicat_imports"][store.connections()[0].id]
+    assert metadata["group_paths"] == [["Generated group"]]
+
+
+@pytest.mark.parametrize("platform", ["darwin", "linux", "win32"])
+def test_partial_memberships_accumulate_until_complete_source_is_available(tmp_path, platform):
+    read, group = file_or_registry_source(tmp_path, platform)
+    damage_group_file(group, "unknown_structure")
+    store = Store(tmp_path / "workspace")
+    store.sync_navicat_profiles(read())
+    identifier = store.connections()[0].id
+    mixed_group_file(group)
+    store.sync_navicat_profiles(read())
+    assert store.state["navicat_imports"][identifier]["group_paths"] == [["Generated group"]]
+    store = Store(tmp_path / "workspace")
+    mixed_group_file(group, title="Another known group")
+    store.sync_navicat_profiles(read())
+    assert store.state["navicat_imports"][identifier]["group_paths"] == [["Generated group"], ["Another known group"]]
+    damage_group_file(group, "unknown_structure")
+    store.sync_navicat_profiles(read())
+    assert store.state["navicat_imports"][identifier]["group_paths"] == [["Generated group"], ["Another known group"]]
+    # A fully valid empty source is authoritative, even after partial imports.
+    group.write_text('{"vgroups":[]}')
+    store.sync_navicat_profiles(read())
+    assert store.state["navicat_imports"][identifier]["group_paths"] == []
+    store = Store(tmp_path / "workspace")
+    mixed_group_file(group)
+    store.sync_navicat_profiles(read())
+    assert store.state["navicat_imports"][identifier]["group_paths"] == []
 
 
 @pytest.mark.parametrize("platform", ["darwin", "linux", "win32"])

@@ -10,6 +10,8 @@
 
 记录导航使用实际读取成功的偏移历史，避免字节预算产生短页后仍按 `page_size` 前进而跳过记录。过滤、排序、projection、limit、数据库、集合或会话变化时重置对应状态；读取失败不污染历史。已知总数的最后记录按真实总数定位，未知总数时禁用最后记录，不猜最后整页。未保存编辑提供保存/放弃/取消，异步保存期间保持忙状态，取消不跳转。
 
+独立审查用真实 QTest 鼠标事件另发现一项回归：取消离开脏稿后，当前文档已恢复，但 Qt 后续选择事务可把蓝色高亮留在目标行，导致工具条编辑与高亮不一致。现通过同步 `selectionChanged` 收尾校正及显式整行选择修复，没有增加 Timer 或延迟。回归覆盖鼠标及 Shift/Ctrl、方向键变体、工具条编辑/删除、保存进行中和双击；当前索引、高亮、文档与编辑目标保持一致。分支受控 browser/GridFS 检查为 62 passed、8 项 live deselected，与全源及真实服务测试分开记录。
+
 GridFS 预览和进度移至列表及分页下方，可分别开关。全局右侧信息面板与预览独立，底层有界预览、取消、内容检查和原子下载提交沿用既有实现。外部应用打开仍未完成。
 
 ## 历史连接与配置保护
@@ -27,6 +29,8 @@ macOS 既有实际来源支持继续保留。Linux 的现有识别格式与 Linu
 集成前各分支的测试结果保留在相应记录。本轮首次全量集成发现端口布局测试受全局 12px Qt stylesheet 污染，导致其 24/36pt 字体场景失效；夹具现已隔离并恢复原 stylesheet。该次失败记录仍保留，不将其改写为通过。
 
 修补后首次全源集成为 **1003 passed、234 skipped、0 failed，71.17 秒，`-Werror`**。新增 Windows 冻结探针、0.7.0 版本与严格发布合同后，安装/发布/端口布局专项为 **126 passed**；最终全源为 **1012 passed、234 skipped、0 failed/error，73.16 秒，`-Werror`**，启用各测试自有的真实 MongoDB 服务。XML 为 ignored 的 `artifacts/integration-v0.7/source-0.7.0-final.xml`。外部 TLS/SSH、SQL Server/Redis 和手工参考端点未启用的用例按条件跳过，不能算作已执行验收；正式安全 CI 另执行真实服务。
+
+纳入高亮修补及其交互回归后，全源再次执行为 **1023 passed、234 skipped、0 failed/error，73.62 秒，`-Werror`**，三份独有真实 MongoDB fixture 的就绪、归属与最终清理均已验证。XML 为 `artifacts/integration-v0.7/source-0.7.0-post-review.xml`。随后只追加一项双击测试，无产品代码变化，独立执行 **1 passed、43 deselected**；没有将它虚加成另一轮全源总数。最终冻结版本的全部测试由正式六目标 CI 再执行。
 
 0.7.0 源码 smoke 在 macOS ARM64 实际返回 SQLite **6 行 × 4 列**，MongoDB 原生 BSON、TLS context、SQL Server/Redis 适配器与加密探针均通过。报告是 `artifacts/integration-v0.7/source-0.7.0-runtime-smoke.json`。本机不支持 Windows API，因此其探针为 `null`，没有伪造为 `true`；Windows 安装门禁须在真实 Windows 主机获得结果。源码 smoke 未连接外部数据库，也不读取历史来源。
 

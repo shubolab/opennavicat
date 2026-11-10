@@ -101,7 +101,8 @@ def report(architecture="arm64", version="0.3.0"):
             "python_tds": "1.17.1", "redis": "8.1.0", "pyopenssl": "26.4.0",
             "certifi": "2026.10.23", "sqlserver_default_ca_present": True, "extra_adapters_constructed": True, "sqlserver_tls_context_ready": True,
             "pymongo": "4.19.0", "mongodb_adapter_constructed": True,
-            "mongodb_bson_probe": True, "mongodb_tls_context_ready": True}}
+            "mongodb_bson_probe": True, "mongodb_tls_context_ready": True,
+            **dict.fromkeys(('native_js_helper_ready','native_js_bigint_bson_probe','native_js_cancel_probe','native_js_child_reaped','native_js_no_console','native_js_bundled'),True)}}
 
 
 def test_empty_windowed_process_stdout_is_not_an_installed_smoke(tmp_path):
@@ -138,6 +139,17 @@ def test_installed_mongodb_probe_cannot_be_missing_or_truthy_text(tmp_path, fiel
     path.write_text(json.dumps(payload))
     with pytest.raises(installer.PackagingError, match="MongoDB"):
         installer.validate_smoke_report(path, "0.3.0", "arm64", "windows")
+
+
+@pytest.mark.parametrize('field', ['native_js_helper_ready','native_js_bigint_bson_probe','native_js_cancel_probe','native_js_child_reaped','native_js_no_console','native_js_bundled'])
+@pytest.mark.parametrize('value', [None, False, 'true', 1])
+def test_installed_native_javascript_requires_executed_true_probes(tmp_path,field,value):
+    value_report=report()
+    if value is None:value_report['runtime'].pop(field)
+    else:value_report['runtime'][field]=value
+    path=tmp_path/'report.json';path.write_text(json.dumps(value_report))
+    with pytest.raises(installer.PackagingError,match='JavaScript'):
+        installer.validate_smoke_report(path,'0.3.0','arm64','windows')
 
 
 def test_inno_native_architecture_and_verification_install_are_explicit(tmp_path):

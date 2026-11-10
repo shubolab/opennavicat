@@ -11,8 +11,8 @@ That evidence does not qualify a packaged application or this newer UI layer.
 
 `NativeMongoQueryPage` in `ui/mongo_native_query.py` subclasses the existing dense
 `QueryPage`, retaining its editor, file/save actions, result tabs, current-result
-export API and script-modified handling. It does not register itself in the main
-window. Its own Run, Ctrl/Command+Enter and Stop buttons are connected to the
+export API and script-modified handling. The feature branch now registers it for
+new MongoDB queries in the main window. Run, Ctrl/Command+Enter and Stop use the
 new execution path, so component tests do not accidentally exercise the old
 literal parser. The connection selector contains MongoDB profiles only.
 
@@ -54,18 +54,18 @@ including `acknowledged_error` and `uncertain`. Missing affected counts remain
 acknowledged writes stay visible after cancellation, duplicate errors or lost
 acknowledgement. No rollback is claimed.
 
-## Minimal owning-window changes still required
+## Owning-window routing and language migration
 
-The parent currently owns `window.py` for other work. This branch intentionally
-does not edit it. An integration change must review these hooks together:
+The branch now implements the following hooks. Main has separate index-routing
+work, so these small routing changes require deliberate integration there:
 
-1. Construct `NativeMongoQueryPage` for explicitly native-JavaScript MongoDB
-   queries. Preserve the existing `QueryPage` for legacy Canonical EJSON commands
-   and older stored queries. Add a query-language field to draft/history
-   metadata; missing historical metadata means legacy, not a heuristic JS
-   reinterpretation. New JS scripts may be the default after deliberate routing
-   integration, but opening a historical JSON object must not execute it as a
-   JavaScript block. File extension alone is insufficient for older `.js` files.
+1. New MongoDB queries construct `NativeMongoQueryPage`. Existing `QueryPage`
+   remains the interpreter for legacy Canonical EJSON commands and older saved
+   queries. `query_language` is persisted in drafts, favorites and history. The
+   SQLite history migration adds a column with `legacy` default; JSON records
+   without a language or with null get `legacy` too. Unknown language identifiers
+   are refused rather than reinterpreted. A native favorite cannot silently run
+   under an unrelated SQL connection.
 2. In `MainWindow.run_query`, dispatch native pages to `page.run_native()` before
    calling `session.execute`. This also covers the main toolbar and menu Run.
    The component's own toolbar and editor shortcut already use its native path.
@@ -73,8 +73,13 @@ does not edit it. An integration change must review these hooks together:
    the generic queued `session.cancel` path. App-close cancellation must take
    this branch too. Existing serial task completion remains the authority for
    allowing close, disconnect or another operation.
-4. Store and restore the language when saving/reopening drafts/history. Keep
-   the current dirty-script Save/Discard/Cancel behavior. Script Save saves a
+4. Language survives saving/reopening drafts and favorites/history. External
+   files without metadata present a meaningful choice: legacy command/EJSON
+   semantics, or JavaScript with ordinary Number stored as Double. Cancel opens
+   and executes nothing. The selection is stored in the workspace bound to the
+   file path and SHA of its exact text; edited/replaced files require a fresh
+   choice. Neither file extensions nor a leading JSON object choose JS silently.
+   Current dirty-script Save/Discard/Cancel behavior is retained. Script Save saves a
    file; it must never execute the script or imply a database rollback.
 
 Component tests capture actual worker thread IDs and lifecycle completion. A
@@ -82,7 +87,9 @@ fresh-owned MongoDB case exercises variables/loops, three typed inserts and
 find results, a later duplicate error with one earlier confirmed write, refusal
 of read-only delete, and the real post-failure server state. Separate actual
 native-Qt tests exercise BigInt and CPU-loop Stop. This is local native macOS
-source evidence; the main window factory is not claimed integrated.
+source evidence. Actual main-window tests also prove new-loop typed writes,
+legacy Int32 versus JS Double, history tagging, file-language Cancel and choices,
+draft restoration and global Stop with real helper cleanup.
 
 The independent qualification workflow now adds four Qt component cases on each
 native target: three controlled-engine handoff/lifecycle contracts and one
@@ -119,8 +126,11 @@ sandbox. Helper build receipts and application signing serve different roles.
 
 ## Bundle work and release gates still required
 
-The release Spec and six-installer workflow remain unchanged. Before enabling
-this engine in a usable release, the owning packaging change must:
+The branch Spec and `build.py` now build/stage the helper. The reused installer
+workflow can be dispatched on this branch; its publisher explicitly requires a
+tag **push**, so a workflow dispatch cannot create or alter a Release. Versions,
+main and existing assets remain untouched. The branch must still pass its exact
+HEAD's complete six-platform build and installation run before integration:
 
 * Build the fixed official QuickJS-NG source independently on each native
   target, retaining source archive SHA, toolchain log, real PE/ELF/Mach-O machine
@@ -128,16 +138,19 @@ this engine in a usable release, the owning packaging change must:
 * Bundle helper, manifest, receipt, bootstrap and MIT license. Include the
   third-party notice in the existing license inventory. No source compiler or
   network download is needed on an end-user machine.
-* Account for Mach-O post-processing and code signing before finalizing hashes.
-  PyInstaller may rewrite/sign a collected binary, so an unsigned source-build
-  SHA cannot be compared blindly to its final signed bytes. Retain the original
-  build SHA plus an auditable final-payload SHA/receipt; finalize these before
-  signing the outer application. Alternatively, a separately signed helper
-  collected without further byte rewriting must be proved on the actual bundle.
-  Do not weaken runtime verification merely to make a signed bundle start.
+* The implemented Spec processes the helper for its final native target path
+  first, then writes a receipt retaining both `source_helper_sha256` and the
+  processed `helper_sha256`. The payload manifest binds the final receipt and
+  bootstrap. It appends executable DATA after Analysis classification, preventing
+  another binary rewrite during collection. The outer bundle is then signed.
+  This sequence has passed a real local ARM64 Mac BUNDLE, Cocoa smoke, DMG
+  install/launch/uninstall, with final bytes checked at runtime. This local proof
+  is not substituted for the six-target hosted installer run.
 * Add strict frozen and installed smoke probes that launch the bundled helper,
   execute BigInt and exact BSON IPC, verify native machine/bytes, reap the child
-  and verify no Windows console popup. Remove developer helper/SDK environment
+  and verify no Windows console popup. `--smoke-test` now runs these actual probes
+  and exposes strict boolean fields; packaging and publishing reject missing,
+  false or merely truthy values. Remove developer helper/SDK environment
   paths during these probes. Existing crypto, SQL, BSON-C and TLS probes remain
   mandatory; a new optional/false value cannot count as pass.
 * Run actual Qt component/main-window worker/cancel/draft/partial-result tests

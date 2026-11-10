@@ -24,6 +24,7 @@ from ..navicat_profiles import discover_navicat_profiles
 from .. import __version__
 from ..compare import compare_tables
 from ..storage import Store, create_sample
+from ..query_language import LEGACY, MONGO_JS, query_language as resolve_query_language
 from ..tasks import Task
 from ..transfer import export_result, import_data
 from ..transport import SSHAuthenticationError, SSHHostKeyError, TLSKeyPasswordError
@@ -38,6 +39,7 @@ from .diagram import SchemaDiagram
 from .workspace import ObjectBrowser, Inspector, OBJECT_LABELS, object_symbol
 from .icons import icon as workbench_icon, tool_icon
 from .query import QueryPage
+from .mongo_native_query import NativeMongoQueryPage
 from .table_designer import TableDesignerPage
 from .schema_object_designer import IndexDesignerPage, TriggerDesignerPage
 from .redis_browser import RedisBrowserPage, RedisKeyPage
@@ -1820,12 +1822,18 @@ class MainWindow(QMainWindow):
         menu.addAction(self.new_connection_action)
         menu.exec(self.tree.viewport().mapToGlobal(pos))
 
-    def new_query(self, checked=False, sql="", connection_id=None):
+    def new_query(self, checked=False, sql="", connection_id=None, query_language=None):
         connection_id = connection_id or self.active_id
         if connection_id not in self.configs:
             QMessageBox.information(self, "选择连接", "请先创建或选择一个连接。")
             return
-        page = QueryPage(self, connection_id, sql)
+        try:
+            language = resolve_query_language(query_language, driver=self.configs[connection_id].driver, new=True)
+        except ValueError as exc:
+            self.error(exc)
+            return
+        page = NativeMongoQueryPage(self, connection_id, sql) if language == MONGO_JS else QueryPage(self, connection_id, sql)
+        page.query_language = language
         root = self.connection_item(connection_id)
         completions = []
         if root:
@@ -1851,6 +1859,8 @@ class MainWindow(QMainWindow):
             self.run_query(page)
 
     def run_query(self, page):
+        if isinstance(page, NativeMongoQueryPage):
+            return page.run_native()
         if page.running:
             return
         if self.tasks:
@@ -1895,12 +1905,20 @@ class MainWindow(QMainWindow):
         for i in range(self.tabs.count()):
             page = self.tabs.widget(i)
             if isinstance(page, QueryPage) and page.running:
+                if isinstance(page, NativeMongoQueryPage):
+                    page.request_cancel()
+                    continue
                 session = self.sessions.get(page.connection_id)
                 if session:
                     self._cancelling = True
                     def finish():
                         self._cancelling = False
-                    self.submit(session.cancel, label="Cancelling query", finished=finish, pool=self.cancel_pool)
+                    if session.config.driver == 'mongodb':
+                        marker = session.cancellation_marker()
+                        cancel = lambda session=session, marker=marker: session.cancel(expected_comment=marker)
+                    else:
+                        cancel = session.cancel
+                    self.submit(cancel, label="Cancelling query", finished=finish, pool=self.cancel_pool)
 
     def transaction(self, sql):
         session = self.sessions.get(self.active_id)
@@ -2111,8 +2129,15 @@ class MainWindow(QMainWindow):
             return
         try:
             sql = Path(filename).read_text("utf-8-sig")
-            page = self.new_query(sql=sql)
+            language = self.store.saved_file_language(filename, sql)
+            if self.configs.get(self.active_id) and self.configs[self.active_id].driver == 'mongodb' and language is None:
+                choice, accepted = QInputDialog.getItem(self, '查询语言', '文件没有执行语言记录，请选择其原有语义：',
+                    ['旧版 MongoDB 命令 / Canonical EJSON（保留原整数语义）', 'MongoDB JavaScript（普通 Number 保存为 Double）'], 0, False)
+                if not accepted: return
+                language = MONGO_JS if choice.startswith('MongoDB JavaScript') else LEGACY
+            page = self.new_query(sql=sql, query_language=language or LEGACY)
             if page:
+                self.store.remember_file_language(filename, sql, page.query_language)
                 page.filename = filename
                 page.modified = False
                 self.tabs.setTabText(self.tabs.indexOf(page), Path(filename).name)
@@ -2137,6 +2162,7 @@ class MainWindow(QMainWindow):
             return False
         try:
             Path(filename).write_text(page.editor.toPlainText(), "utf-8")
+            self.store.remember_file_language(filename, page.editor.toPlainText(), getattr(page, 'query_language', LEGACY))
             page.filename, page.modified = filename, False
             self.tabs.setTabText(self.tabs.indexOf(page), Path(filename).name)
             return True
@@ -2244,7 +2270,7 @@ class MainWindow(QMainWindow):
             return
         name, ok = QInputDialog.getText(self, "保存查询", "查询名称")
         if ok and name.strip():
-            self.store.add_favorite(name.strip(), page.editor.selected_sql(), page.connection_id)
+            self.store.add_favorite(name.strip(), page.editor.selected_sql(), page.connection_id, query_language=getattr(page, 'query_language', LEGACY))
             self.statusBar().showMessage("Query saved to favorites", 5000)
 
     def show_history(self):
@@ -2290,7 +2316,7 @@ class MainWindow(QMainWindow):
                 connection_id = entry.get("connection_id")
                 if connection_id not in self.configs:
                     connection_id = self.active_id
-                if self.new_query(sql=entry["sql"], connection_id=connection_id):
+                if self.new_query(sql=entry["sql"], connection_id=connection_id, query_language=entry.get('query_language') if entry.get('query_language') is not None else LEGACY):
                     dialog.accept()
         open_button.clicked.connect(open_entry)
         listing.itemDoubleClicked.connect(lambda _: open_entry())
@@ -2327,9 +2353,10 @@ class MainWindow(QMainWindow):
             self.error(exc)
 
     def restore_drafts(self):
+        unrestored = []
         for draft in self.store.state.get("drafts", []):
             if draft.get("connection_id") in self.configs:
-                page = self.new_query(sql=draft.get("sql", ""), connection_id=draft["connection_id"])
+                page = self.new_query(sql=draft.get("sql", ""), connection_id=draft["connection_id"], query_language=draft.get('query_language') if draft.get('query_language') is not None else LEGACY)
                 if page:
                     page.filename = draft.get("filename")
                     page.schema = draft.get("schema", page.schema)
@@ -2337,6 +2364,11 @@ class MainWindow(QMainWindow):
                     page.modified = bool(draft.get("modified", False))
                     if page.filename:
                         self.tabs.setTabText(self.tabs.indexOf(page), Path(page.filename).name + (" •" if page.modified else ""))
+                else:
+                    unrestored.append(deepcopy(draft))
+            else:
+                unrestored.append(deepcopy(draft))
+        self._unrestored_query_drafts = unrestored
 
     def shortcuts(self):
         QMessageBox.information(self, "Keyboard shortcuts", "Use Command on macOS and Control on Windows/Linux.\n\nNew connection: Ctrl+Shift+N\nNew query: Ctrl+N\nOpen SQL: Ctrl+O\nSave SQL: Ctrl+S\nRun selection / script: Ctrl+Enter\nFind in SQL: Ctrl+F\nFormat SQL: Ctrl+Shift+F\nQuery history: Ctrl+H\nRefresh: F5\nCopy grid selection: Ctrl+C")
@@ -2393,11 +2425,11 @@ class MainWindow(QMainWindow):
             if QMessageBox.question(self, "事务尚未结束", "回滚尚未提交的事务并退出？", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel) != QMessageBox.StandardButton.Yes:
                 event.ignore()
                 return
-        drafts = []
+        drafts = deepcopy(getattr(self, '_unrestored_query_drafts', []))
         for i in range(self.tabs.count()):
             page = self.tabs.widget(i)
             if isinstance(page, QueryPage):
-                drafts.append({"connection_id": page.connection_id, "schema": page.schema, "sql": page.editor.toPlainText(), "filename": page.filename, "modified": page.modified})
+                drafts.append({"connection_id": page.connection_id, "schema": page.schema, "sql": page.editor.toPlainText(), "filename": page.filename, "modified": page.modified, 'query_language': getattr(page, 'query_language', LEGACY)})
         self.store.state["drafts"] = drafts
         self.store.state["ui_revision"] = 2
         self.store.state["info_visible"] = self.info_action.isChecked()

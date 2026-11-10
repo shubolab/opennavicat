@@ -132,7 +132,7 @@ class NativeMongoQueryPage(QueryPage):
                 self.results.setCurrentWidget(self.info)
             record = getattr(getattr(self.window, 'store', None), 'record', None)
             if callable(record):
-                record(session.config, job.source, execution.elapsed_ms, 'error' if execution.error else 'success')
+                record(session.config, job.source, execution.elapsed_ms, 'error' if execution.error else 'success', query_language=self.query_language)
 
         def failed(error):
             if isValid(self) and self._job is job:

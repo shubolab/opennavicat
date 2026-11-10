@@ -69,6 +69,7 @@ def validate_assets(directory, version):
         require(all(runtime.get(field) is True for field in ("extra_adapters_constructed", "sqlserver_tls_context_ready")), f"Installed SQL Server/Redis adapter or TLS context probes did not pass: {installer.name}")
         require(all(runtime.get(field) is True for field in ("mongodb_adapter_constructed", "mongodb_bson_probe", "mongodb_tls_context_ready")), f"Installed MongoDB adapter, BSON or TLS probes did not pass: {installer.name}")
         require(runtime.get("crypto_legacy_probe") is True, f"Installed OpenSSL provider was not verified: {installer.name}")
+        require(all(runtime.get(field) is True for field in ('native_js_helper_ready','native_js_bigint_bson_probe','native_js_cancel_probe','native_js_child_reaped','native_js_no_console','native_js_bundled')), f'Installed native JavaScript probes did not pass: {installer.name}')
         manifests.append(manifest)
     return manifests
 

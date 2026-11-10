@@ -13,7 +13,7 @@ import shutil
 import sys
 
 from ..database import DatabaseError
-from .runtime import NativeJavaScript
+from .runtime import NativeJavaScript, helper_machine
 
 
 def helper_name():
@@ -24,7 +24,7 @@ def _sha(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def stage_helper_payload(helper, directory):
+def stage_helper_payload(helper, directory, *, processed_helper=None):
     """Stage only verified runtime assets; callers choose independent output."""
     engine = NativeJavaScript(helper)
     if engine.helper.name != helper_name():
@@ -41,6 +41,19 @@ def stage_helper_payload(helper, directory):
         target = directory / name
         shutil.copy2(source, target)
         assets[name] = _sha(target)
+    if processed_helper is not None:
+        processed_helper = Path(processed_helper)
+        if helper_machine(processed_helper) != helper_machine(engine.helper):
+            raise DatabaseError('Processed helper architecture differs from the official source build')
+        shutil.copy2(processed_helper, directory/helper_name())
+        receipt_path = directory/'build-receipt.json'
+        receipt = json.loads(receipt_path.read_text(encoding='utf-8'))
+        receipt['source_helper_sha256'] = receipt['helper_sha256']
+        receipt['helper_sha256'] = _sha(directory/helper_name())
+        receipt['postprocessing'] = 'PyInstaller native target-path processing before final payload collection and outer signing'
+        receipt_path.write_text(json.dumps(receipt, indent=2)+'\n', encoding='utf-8')
+        assets[helper_name()] = _sha(directory/helper_name())
+        assets['build-receipt.json'] = _sha(receipt_path)
     manifest = {'format': 'opennavicat-js-payload-v1', 'assets': assets,
         'bootstrap_sha256': _sha(Path(__file__).with_name('bootstrap.js'))}
     (directory / 'payload-manifest.json').write_text(json.dumps(manifest, indent=2) + '\n', encoding='utf-8')
@@ -54,6 +67,10 @@ def locate_helper(*, source_root=None):
         if frozen:
             root = Path(sys._MEIPASS).resolve(strict=True)
             directory = root / 'native' / 'js-engine'
+            # PyInstaller's macOS bundle relocates data to Resources with
+            # Frameworks symlinks. Both remain inside the same signed Contents.
+            if sys.platform == 'darwin' and root.name == 'Frameworks' and root.parent.name == 'Contents' and root.parent.parent.suffix == '.app':
+                root = root.parent
             helper = (directory / helper_name()).resolve(strict=True)
             if not helper.is_relative_to(root):
                 raise DatabaseError('The bundled JavaScript helper points outside the application')

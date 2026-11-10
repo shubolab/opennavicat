@@ -70,7 +70,7 @@ def main(argv=None):
         finally:(directory/'cleanup-verification.json').write_text(json.dumps(receipt,indent=2)+'\n')
     is_qt=args.mode in {'qt','qt-protocol'}
     is_protocol=args.mode in {'protocol','qt-protocol'}
-    scope=QT if is_qt else VM if args.mode=='vm'else PROTOCOL
+    scope=(*QT,'tests/test_js_window.py') if args.mode=='qt-protocol' else QT if is_qt else VM if args.mode=='vm'else PROTOCOL
     test_arguments=[*scope]
     if is_qt:test_arguments=['-p','pytestqt.plugin',*test_arguments]
     if args.mode=='qt':test_arguments += ['-k','not fresh_mongo']
@@ -109,7 +109,7 @@ def main(argv=None):
         if is_protocol:
             fixtures=[json.loads(path.read_text())for path in (directory/'fixtures').glob('fixture-*.json')]
             fixtures=[value for value in fixtures if value.get('run_id')==run_id]
-            expected_modules={'test_mongo_native_query_ui'}if is_qt else{'test_js_engine','test_js_host_reference'}
+            expected_modules={'test_mongo_native_query_ui','test_js_window'}if is_qt else{'test_js_engine','test_js_host_reference'}
             if (not fixtures or {value.get('module')for value in fixtures}!=expected_modules or
                 any(value.get(field)is not True for value in fixtures for field in ('cleanup_removed','owner_token_verified',
                     'port_loopback_only','native_docker_architecture_matches','external_auth_readiness'))):

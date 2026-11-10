@@ -5,6 +5,7 @@ from contextlib import closing
 from copy import deepcopy
 
 import json
+import hashlib
 import os
 import re
 import sqlite3
@@ -16,6 +17,7 @@ from pathlib import Path
 from PySide6.QtCore import QStandardPaths
 
 from .database import ConnectionConfig, SUPPORTED_DRIVERS
+from .query_language import LEGACY, LANGUAGES
 
 
 _NAVICAT_NAMESPACE = uuid.UUID("9e8f2378-d17a-56f5-a6e1-2cb52b166378")
@@ -45,6 +47,12 @@ class Store:
         self.history_path = self.directory / "history.sqlite3"
         with closing(sqlite3.connect(self.history_path)) as db, db:
             db.execute("CREATE TABLE IF NOT EXISTS history (id INTEGER PRIMARY KEY, created TEXT, connection_id TEXT, connection_name TEXT, sql TEXT, elapsed REAL, status TEXT)")
+            if 'query_language' not in {row[1] for row in db.execute('PRAGMA table_info(history)')}:
+                db.execute("ALTER TABLE history ADD COLUMN query_language TEXT NOT NULL DEFAULT 'legacy'")
+            db.execute("UPDATE history SET query_language='legacy' WHERE query_language IS NULL")
+        for collection in ('drafts', 'favorites'):
+            for entry in self.state.get(collection, []):
+                if 'sql' in entry and entry.get('query_language') is None: entry['query_language'] = LEGACY
         try:
             self.history_path.chmod(0o600)
         except OSError:
@@ -296,10 +304,11 @@ class Store:
         self.state["connections"] = [c for c in self.state["connections"] if c["id"] != connection_id]
         self.flush()
 
-    def record(self, config, sql, elapsed, status):
+    def record(self, config, sql, elapsed, status, *, query_language=LEGACY):
+        if query_language not in LANGUAGES: raise ValueError('Unknown query language')
         with closing(sqlite3.connect(self.history_path)) as db, db:
-            db.execute("INSERT INTO history(created, connection_id, connection_name, sql, elapsed, status) VALUES (?, ?, ?, ?, ?, ?)",
-                       (datetime.now(timezone.utc).isoformat(timespec="seconds"), config.id, config.name, sql, elapsed, status))
+            db.execute("INSERT INTO history(created, connection_id, connection_name, sql, elapsed, status, query_language) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                       (datetime.now(timezone.utc).isoformat(timespec="seconds"), config.id, config.name, sql, elapsed, status, query_language))
             db.execute("DELETE FROM history WHERE id NOT IN (SELECT id FROM history ORDER BY id DESC LIMIT 2000)")
 
     def history(self, search=""):
@@ -307,8 +316,19 @@ class Store:
             db.row_factory = sqlite3.Row
             return [dict(r) for r in db.execute("SELECT * FROM history WHERE sql LIKE ? OR connection_name LIKE ? ORDER BY id DESC LIMIT 200", (f"%{search}%", f"%{search}%"))]
 
-    def add_favorite(self, name, sql, connection_id):
-        self.state["favorites"].append({"name": name, "sql": sql, "connection_id": connection_id})
+    def add_favorite(self, name, sql, connection_id, *, query_language=LEGACY):
+        if query_language not in LANGUAGES: raise ValueError('Unknown query language')
+        self.state["favorites"].append({"name": name, "sql": sql, "connection_id": connection_id, 'query_language': query_language})
+        self.flush()
+
+    def saved_file_language(self, filename, text):
+        entry = self.state.get('query_files', {}).get(str(Path(filename).resolve()), {})
+        return entry.get('query_language') if entry.get('sha256') == hashlib.sha256(text.encode('utf-8')).hexdigest() else None
+
+    def remember_file_language(self, filename, text, language):
+        if language not in LANGUAGES: raise ValueError('Unknown query language')
+        self.state.setdefault('query_files', {})[str(Path(filename).resolve())] = {
+            'sha256': hashlib.sha256(text.encode('utf-8')).hexdigest(), 'query_language': language}
         self.flush()
 
 

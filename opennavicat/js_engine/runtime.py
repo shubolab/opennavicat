@@ -27,6 +27,23 @@ from .codec import decode
 MAX_FRAME = 1024*1024
 
 
+def helper_machine(path):
+    """Read the actual controlled executable, independently of its receipt."""
+    data = Path(path).read_bytes()
+    try:
+        if data[:2] == b'MZ':
+            offset = struct.unpack_from('<I', data, 0x3c)[0]
+            if data[offset:offset+4] != b'PE\0\0': raise ValueError('PE signature')
+            return {0x8664:'amd64', 0xaa64:'arm64'}[struct.unpack_from('<H', data, offset+4)[0]]
+        if data[:6] == b'\x7fELF\x02\x01':
+            return {62:'amd64',183:'arm64'}[struct.unpack_from('<H',data,18)[0]]
+        if data[:4] == b'\xcf\xfa\xed\xfe':
+            return {0x1000007:'amd64',0x100000c:'arm64'}[struct.unpack_from('<I',data,4)[0]]
+    except (KeyError, ValueError, struct.error) as exc:
+        raise DatabaseError('Invalid native JavaScript helper image') from exc
+    raise DatabaseError('The JavaScript helper is not a supported native 64-bit executable')
+
+
 class _NoDatabase:
     receipts = ()
     open_cursors = open_sessions = 0
@@ -109,6 +126,7 @@ class NativeJavaScript:
             or receipt.get("archive_sha256") != "a49defe70cbcae9226d9fac025af116e87ebae2440dcff1ca3c80b79e1cdef0b"
             or receipt.get("operating_system") != platform.system()
             or receipt.get("native_image",{}).get("machine") != machine(platform.machine())
+            or helper_machine(self.helper) != machine(platform.machine())
             or receipt.get("helper_sha256") != hashlib.sha256(self.helper.read_bytes()).hexdigest()):
             raise DatabaseError("The controlled helper does not match its pinned official-source build receipt")
 

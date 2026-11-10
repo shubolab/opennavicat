@@ -17,15 +17,20 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--archive", action="store_true", help="Also create a ZIP in artifacts/.")
     parser.add_argument("--clean", action="store_true", help="Clean PyInstaller's cache before building.")
+    parser.add_argument('--distpath', type=Path, help='Independent build output directory')
+    parser.add_argument('--workpath', type=Path, help='Independent PyInstaller working directory')
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
-    command = [sys.executable, "-m", "PyInstaller", "--noconfirm", "--distpath", str(root / "dist"),
-               "--workpath", str(root / "build" / "pyinstaller")]
+    subprocess.run([sys.executable, str(root/'scripts/build-quickjs.py'), '--allow-unqualified-platform'], cwd=root, check=True)
+    dist = args.distpath.resolve() if args.distpath else root/'dist'
+    work = args.workpath.resolve() if args.workpath else root/'build/pyinstaller'
+    command = [sys.executable, "-m", "PyInstaller", "--noconfirm", "--distpath", str(dist),
+               "--workpath", str(work)]
     if args.clean:
         command.append("--clean")
     command.append(str(root / "OpenNavicat.spec"))
     subprocess.run(command, cwd=root, check=True)
-    target = root / "dist" / ("OpenNavicat.app" if sys.platform == "darwin" else "OpenNavicat")
+    target = dist / ("OpenNavicat.app" if sys.platform == "darwin" else "OpenNavicat")
     if not target.is_dir():
         raise RuntimeError(f"Expected build output was not created: {target}")
     print(f"Native desktop build: {target}")

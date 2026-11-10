@@ -297,6 +297,8 @@ def validate_smoke_report(path: Path, version: str, architecture: str, operating
         raise PackagingError("Installed native database adapters or SQL Server TLS context did not initialize")
     if any(runtime.get(field) is not True for field in ("mongodb_adapter_constructed", "mongodb_bson_probe", "mongodb_tls_context_ready")):
         raise PackagingError("Installed MongoDB adapter, native BSON codec or TLS context did not initialize")
+    if any(runtime.get(field) is not True for field in ('native_js_helper_ready','native_js_bigint_bson_probe','native_js_cancel_probe','native_js_child_reaped','native_js_no_console','native_js_bundled')):
+        raise PackagingError('Installed native JavaScript helper execution, typed BSON, cancellation or payload proof is missing')
     if report.get("smoke") != "passed" or report.get("rows") != 6:
         raise PackagingError(f"Installed SQL smoke did not return six real rows: {report}")
     if runtime.get("version") != version:

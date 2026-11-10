@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Build the pinned official engine and controlled helper, without installing it.
 
-Initial local qualification is macOS ARM64. The portable C/process layer now has
-Windows/POSIX branches; other targets explicitly opt into independent native CI.
+The pinned helper has native source qualification on all six targets. Installer
+acceptance remains a separate gate and must execute the final processed payload.
 """
 from __future__ import annotations
 
@@ -46,8 +46,6 @@ def binary_architecture(binary):
 
 
 def build(output, archive=None, allow_unqualified=False):
-    if (platform.system() != "Darwin" or platform.machine() != "arm64") and not allow_unqualified:
-        raise RuntimeError("The controlled helper has only qualified native macOS ARM64; six-platform glue is pending")
     if platform.system()not in {"Darwin","Windows","Linux"}or machine(platform.machine())is None:
         raise RuntimeError("Unsupported native qualification target")
     output.mkdir(parents=True, exist_ok=True)
@@ -107,6 +105,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-dir", type=Path, default=ROOT / "artifacts/js-engine")
     parser.add_argument("--source-archive", type=Path)
-    parser.add_argument("--allow-unqualified-platform",action="store_true",help="Opt into this development branch's native qualification; not release acceptance")
+    parser.add_argument("--allow-unqualified-platform",action="store_true",help="Compatibility flag for earlier prototype build commands; not release acceptance")
     args = parser.parse_args()
     print(build(args.output_dir.resolve(),args.source_archive.resolve()if args.source_archive else None,args.allow_unqualified_platform))

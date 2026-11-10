@@ -12,6 +12,7 @@ from PyInstaller.utils.hooks import collect_dynamic_libs, collect_submodules, co
 from PySide6.QtCore import QLibraryInfo
 
 project = Path(SPECPATH)
+sys.path.insert(0, str(project))
 project_version = tomllib.loads((project / "pyproject.toml").read_text("utf-8"))["project"]["version"]
 qt_chinese = Path(QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath)) / "qtbase_zh_CN.qm"
 if not qt_chinese.is_file():
@@ -73,7 +74,9 @@ a = Analysis(
     [str(project / "scripts" / "desktop_entry.py")],
     pathex=[str(project)],
     binaries=psycopg_binaries,
-    datas=metadata + license_files + qt_translations + [(str(project / "LICENSE"), "licenses"),
+    datas=metadata + license_files + qt_translations + [(str(project/'opennavicat/js_engine/bootstrap.js'), 'opennavicat/js_engine'),
+                                    (str(project/'native/quickjs/LICENSE.quickjs-ng'), 'licenses/third-party/QuickJS-NG'),
+                                    (str(project / "LICENSE"), "licenses"),
                                     (str(project / "THIRD_PARTY_NOTICES.md"), "licenses")],
     hiddenimports=hiddenimports,
     hookspath=[],
@@ -106,6 +109,19 @@ elif sys.platform == "darwin" and provider_report["libraries"]:
             raise RuntimeError(f"Missing matching libssl for provider-linked {crypto}")
         preferred[ssl.name] = str(ssl)
     a.binaries = provider_tools["prefer_openssl_sources"](a.binaries, preferred)
+# Process the native helper once, then bind the final bytes in its receipt.
+# Append DATA after Analysis classification so COLLECT/BUNDLE cannot rewrite it
+# a second time. Executable mode is preserved; all payload images are still
+# independently scanned and the actual frozen helper is executed by smoke.
+from PyInstaller.building.utils import process_collected_binary
+from opennavicat.js_engine.payload import helper_name, stage_helper_payload
+import platform
+source_helper = project/'artifacts/js-engine'/helper_name()
+processed_helper = process_collected_binary(str(source_helper), 'native/js-engine/'+helper_name(),
+    target_arch=platform.machine() if sys.platform=='darwin' else None, strict_arch_validation=True)
+js_payload = stage_helper_payload(source_helper, project/'artifacts/js-engine/processed-payload', processed_helper=processed_helper)
+for asset in (helper_name(), 'build-receipt.json', 'payload-manifest.json', 'LICENSE.quickjs-ng'):
+    a.datas.append(('native/js-engine/'+asset, str(js_payload/asset), 'DATA'))
 pyz = PYZ(a.pure)
 exe = EXE(
     pyz, a.scripts, [], exclude_binaries=True, name="OpenNavicat",

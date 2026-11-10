@@ -1,10 +1,11 @@
 # Native MongoDB JavaScript process prototype
 
 This independent `work/mongodb-js-engine` development branch starts at reviewed
-main `165d491`. It does not change the application version, released 0.6.1,
-registry, UI query routing, dependencies, packaging or the retained Dell Windows
-GUI fixture. The first foundation checkpoint is `20e1118`. The implementation is
-not merged or enabled in the main application.
+main `165d491`. It retains that base's version and does not change main, existing
+releases or the retained Dell Windows GUI fixture. The first foundation
+checkpoint is `20e1118`. Subsequent checkpoints integrate the native query page,
+language migration and helper packaging only on this feature branch; see
+`mongodb-js-integration-plan.md`. It is not merged into the main application.
 
 ## API and ownership
 

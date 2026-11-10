@@ -199,3 +199,25 @@ def test_native_host_metadata_typed_ipc_with_synthetic_parent(native,monkeypatch
     if operation!='host-unchanged':
         expected['i32']=1.0;expected['nested']['i32']=1.0;expected['arr'][0]=1.0
     assert BSON.encode(captured[0],codec_options=BSON_CODEC)==BSON.encode(expected,codec_options=BSON_CODEC)
+
+
+def test_native_preview_constructors_preserve_int32_limits_uuid_subtype_and_exact_dates(native):
+    from datetime import datetime, timezone
+    result=native.evaluate("({min:Int32('-2147483648'),max:NumberInt('2147483647'),uuid:Binary.createFromBase64('AAECAwQFBgcICQoLDA0ODw==',4),date:ISODate('2026-01-02T03:04:05.678Z'),offset:ISODate('2026-01-02T11:04:05.678000+08:00')})")
+    date=datetime(2026,1,2,3,4,5,678000,timezone.utc)
+    expected={'min':-2147483648,'max':2147483647,'uuid':Binary(bytes(range(16)),4),'date':date,'offset':date}
+    assert BSON.encode(result.value,codec_options=BSON_CODEC)==BSON.encode(expected,codec_options=BSON_CODEC)
+    assert result.child_reaped and result.commands==()
+
+
+@pytest.mark.parametrize('expression',[
+    "Int32('2147483648')","Int32('-2147483649')","Int32('1.5')","Int32('1e2')","Int32('')","Int32(true)",
+    "Binary.createFromBase64('not base64',4)","Binary.createFromBase64('AA==',256)",
+    "ISODate('not a date')","ISODate('2026-02-30T00:00:00.000Z')",
+    "ISODate('2026-01-02T03:04:05.6780001Z')","ISODate('2026-01-02T03:04:05')",
+])
+def test_invalid_constructor_never_reaches_database_capability(native,expression):
+    with pytest.raises(JavaScriptError)as raised:
+        native.evaluate('db.runCommand({insert:"never",documents:[{_id:1,value:'+expression+'}]})')
+    assert raised.value.result.child_reaped and raised.value.result.commands==()
+    assert 'no database capability'not in str(raised.value)

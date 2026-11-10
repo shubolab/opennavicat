@@ -407,3 +407,22 @@ def test_real_cancel_while_server_call_blocks_stops_only_own_query_and_recovers(
     assert raised.value.result.elapsed_ms < 4500
     assert_clean(raised.value.result)
     assert engine.execute(session,'db.docs.findOne({_id:1})').value=={'_id':1}
+
+
+def test_real_constructor_commands_roundtrip_bson_and_collection_uuid(engine,session):
+    from datetime import datetime, timezone
+    database=session.config.database
+    result=engine.execute(session,"db.docs.insertOne({_id:'typed-preview',i:Int32('1'),n:NumberInt('-2'),long:Long('9007199254740995'),uuid:Binary.createFromBase64('AAECAwQFBgcICQoLDA0ODw==',4),date:ISODate('2026-01-02T03:04:05.678Z')});db.docs.findOne({_id:'typed-preview'})")
+    expected={'_id':'typed-preview','i':1,'n':-2,'long':Int64(9007199254740995),'uuid':Binary(bytes(range(16)),4),'date':datetime(2026,1,2,3,4,5,678000,timezone.utc)}
+    actual=session.connection[database].docs.find_one({'_id':'typed-preview'})
+    assert BSON.encode(actual,codec_options=BSON_CODEC)==BSON.encode(expected,codec_options=BSON_CODEC)
+    assert BSON.encode(result.value,codec_options=BSON_CODEC)==BSON.encode(expected,codec_options=BSON_CODEC)
+    # The exact UUID literal also travels through a native command to the real
+    # server, matching protected index-preview command argument shapes.
+    session.connection[database].create_collection('target')
+    info=session.collection_info(database,'target');uuid=info['info']['uuid']
+    import base64
+    text=base64.b64encode(uuid).decode('ascii')
+    created=engine.execute(session,'db.runCommand({createIndexes:"target",indexes:[{key:{a:Int32("1")},name:"owned-preview",v:Int32("2")}],collectionUUID:Binary.createFromBase64("'+text+'",4),writeConcern:{w:Int32("1")}})')
+    assert not created.error and 'owned-preview' in session.connection[database].target.index_information()
+    assert created.child_reaped and created.open_cursors==created.open_sessions==0

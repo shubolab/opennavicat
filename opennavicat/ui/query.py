@@ -1,4 +1,4 @@
-"""Dense native SQL workspace reconstructed from observed query UI geometry."""
+"""Dense native SQL and Redis workspaces using the observed query layout."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -72,10 +72,7 @@ class QueryPage(QWidget):
         super().__init__()
         self.window = window
         self.connection_id = connection_id
-        config = window.configs[connection_id]
-        self.schema = window.active_schema
-        if self.schema == "main" and config.driver != "sqlite":
-            self.schema = "public" if config.driver == "postgresql" else config.database
+        self.schema = self._initial_schema(connection_id)
         self.filename = None
         self.modified = False
         self._running = False
@@ -250,7 +247,54 @@ class QueryPage(QWidget):
             self.run_button.setEnabled(not self._running)
             self.connection_picker.setEnabled(not self._running)
             self.schema_picker.setEnabled(not self._running)
-            self.explain_button.setEnabled(not self._running and callable(getattr(self.window, "explain_query", None)))
+            self._update_protocol_actions()
+
+    @property
+    def protocol_driver(self):
+        config = self.window.configs.get(self.connection_id)
+        return config.driver if config else "sqlite"
+
+    @property
+    def supports_explain(self):
+        return self.protocol_driver not in {"redis", "sqlserver"} and callable(getattr(self.window, "explain_query", None))
+
+    def _initial_schema(self, connection_id):
+        config = self.window.configs[connection_id]
+        session = getattr(self.window, "sessions", {}).get(connection_id)
+        selected = getattr(session, "_selected_schema", None)
+        if selected is not None and selected != "":
+            return str(selected)
+        if config.driver == "sqlserver":
+            return "dbo"
+        if config.driver == "redis":
+            return config.database or "0"
+        if config.driver == "sqlite":
+            return "main"
+        active = getattr(self.window, "active_schema", None)
+        if active and active != "main" and getattr(self.window, "active_id", connection_id) == connection_id:
+            return active
+        return "public" if config.driver == "postgresql" else config.database
+
+    def _apply_protocol_mode(self):
+        native = self.protocol_driver == "redis"
+        self.editor.set_language("redis" if native else "sql")
+        self.editor.setPlaceholderText('Redis 原生命令，每行一条；参数支持 CLI 引号和 \\xNN 字节转义。' if native else "")
+        self.schema_picker.setToolTip("Redis 数据库编号" if native else "数据库 / 模式")
+        self._update_protocol_actions()
+
+    def _update_protocol_actions(self):
+        native = self.protocol_driver == "redis"
+        self.format_button.setEnabled(not native)
+        self.format_button.setToolTip("Redis 原生命令不使用 SQL 格式化。" if native else "格式化 SQL")
+        self.builder_button.setEnabled(False)
+        self.builder_button.setToolTip("Redis 使用原生命令，不使用 SQL 查询创建工具。" if native else "查询创建工具（尚未实现）")
+        self.explain_button.setEnabled(not self.running and self.supports_explain)
+        if native:
+            self.explain_button.setToolTip("Redis 原生命令不支持 SQL EXPLAIN。")
+        elif self.protocol_driver == "sqlserver":
+            self.explain_button.setToolTip("SQL Server 执行计划尚未实现。")
+        else:
+            self.explain_button.setToolTip("解释 SQL / 执行计划" if self.supports_explain else "执行计划功能尚未实现。")
 
     def refresh_label(self):
         self.connection_picker.blockSignals(True)
@@ -273,6 +317,7 @@ class QueryPage(QWidget):
         self.schema_picker.blockSignals(False)
         config = self.window.configs.get(self.connection_id)
         self.connection_label.setText(f"{config.name if config else ''} / {self.schema or ''}")
+        self._apply_protocol_mode()
 
     def _connection_changed(self, index):
         if self.running:
@@ -281,16 +326,22 @@ class QueryPage(QWidget):
         if connection_id not in self.window.configs or connection_id == self.connection_id:
             return
         self.connection_id = connection_id
-        config = self.window.configs[connection_id]
-        self.schema = "main" if config.driver == "sqlite" else ("public" if config.driver == "postgresql" else config.database)
+        self.schema = self._initial_schema(connection_id)
+        self.editor.set_completions([])
         self.refresh_label()
         self.window.set_active(connection_id, self.schema)
-        self.results.clear()
+        self._clear_result_tabs()
+        for attribute in ("info", "summary"):
+            if hasattr(self, attribute):
+                delattr(self, attribute)
         self.results.hide()
         self._has_results = False
+        self._last_results = []
         self.message.clear()
         self.elapsed_label.clear()
         self.export_button.setEnabled(False)
+        if callable(getattr(self.window, "refresh_actions", None)):
+            self.window.refresh_actions()
 
     def _schema_changed(self, text):
         if text and not self.running:
@@ -305,7 +356,10 @@ class QueryPage(QWidget):
             self.window.tabs.setTabText(index, f"{name} *")
 
     def format_sql(self):
+        if self.protocol_driver == "redis":
+            return False
         self.editor.setPlainText(pretty_sql(self.editor.toPlainText()))
+        return True
 
     def results_below(self):
         self.split.setOrientation(Qt.Orientation.Vertical)
@@ -327,6 +381,8 @@ class QueryPage(QWidget):
             self.limit.setValue(value)
 
     def _explain(self):
+        if not self.supports_explain or self.running:
+            return
         explain = getattr(self.window, "explain_query", None)
         if callable(explain):
             explain(self)
@@ -337,10 +393,23 @@ class QueryPage(QWidget):
         if hasattr(self.window, "refresh_actions"):
             self.window.refresh_actions()
 
+    def _clear_result_tabs(self):
+        while self.results.count():
+            widget = self.results.widget(0)
+            self.results.removeTab(0)
+            widget.deleteLater()
+
     def show_results(self, results):
+        if self.protocol_driver == "redis":
+            session = getattr(self.window, "sessions", {}).get(self.connection_id)
+            selected = getattr(session, "_selected_schema", None)
+            if selected is not None and str(selected) != self.schema:
+                self.schema = str(selected)
+                self.refresh_label()
+                self.window.set_active(self.connection_id, self.schema)
         first_execution = not self._has_results
         self._last_results = list(results)
-        self.results.clear()
+        self._clear_result_tabs()
         self.info = QPlainTextEdit()
         self.info.setObjectName("queryInformation")
         self.info.setReadOnly(True)
@@ -353,7 +422,7 @@ class QueryPage(QWidget):
         self.results.addTab(self.info, "消息")
         self.summary = QTableWidget(len(results), 4)
         self.summary.setObjectName("querySummary")
-        self.summary.setHorizontalHeaderLabels(["查询", "状态", "受影响的行数", "执行时间"])
+        self.summary.setHorizontalHeaderLabels(["命令" if self.protocol_driver == "redis" else "查询", "状态", "受影响的行数", "执行时间"])
         self.summary.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.summary.verticalHeader().setDefaultSectionSize(20)
         self.summary.horizontalHeader().setStretchLastSection(True)
@@ -403,6 +472,6 @@ class QueryPage(QWidget):
         details = f"{sql}\n\n[错误] {error}"
         self.info.setPlainText((prefix + "\n\n" if prefix else "") + details)
         self.results.setCurrentIndex(0)
-        self.message.setText(f"查询失败：{error}")
+        self.message.setText(f"{'命令' if self.protocol_driver == 'redis' else '查询'}失败：{error}")
         self.message.setToolTip(str(error))
         self._result_changed()

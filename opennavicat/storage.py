@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 from contextlib import closing
+from copy import deepcopy
 
 import json
 import os
+import re
 import sqlite3
 import uuid
 from dataclasses import asdict, replace
@@ -13,7 +15,11 @@ from pathlib import Path
 
 from PySide6.QtCore import QStandardPaths
 
-from .database import ConnectionConfig
+from .database import ConnectionConfig, SUPPORTED_DRIVERS
+
+
+_NAVICAT_NAMESPACE = uuid.UUID("9e8f2378-d17a-56f5-a6e1-2cb52b166378")
+_METADATA_FIELD = re.compile(r"[A-Za-z_][A-Za-z_0-9.-]{0,119}\Z")
 
 
 def data_directory() -> Path:
@@ -28,7 +34,7 @@ class Store:
         self.directory = directory or data_directory()
         self.directory.mkdir(parents=True, exist_ok=True)
         self.path = self.directory / "workspace.json"
-        self.state = {"connections": [], "favorites": [], "drafts": [], "remembered_passwords": [], "remembered_secrets": {}}
+        self.state = {"connections": [], "favorites": [], "drafts": [], "remembered_passwords": [], "remembered_secrets": {}, "navicat_imports": {}}
         if self.path.exists():
             try:
                 self.state.update(json.loads(self.path.read_text("utf-8")))
@@ -144,7 +150,137 @@ class Store:
         for field in self.SECRET_FIELDS:
             value[field] = ""
         self.state["connections"] = [c for c in self.state["connections"] if c["id"] != config.id] + [value]
+        imported = self.state.setdefault("navicat_imports", {}).get(config.id)
+        if imported is not None:
+            imported.update(locally_edited=True, blocked=config.driver not in SUPPORTED_DRIVERS,
+                            unsupported_fields=[] if config.driver in SUPPORTED_DRIVERS else ["driver"],
+                            requires_secrets=[], reviewed_at=datetime.now(timezone.utc).isoformat(timespec="microseconds"))
         self.flush()
+
+    def sync_navicat_profiles(self, report) -> dict[str, int]:
+        """Add/update redacted discovery metadata without credentials or connections.
+
+        Discovery is deliberately external: isolated Stores never inspect a
+        user's Navicat installation. Build the complete candidate before one
+        atomic workspace replacement, and restore memory if that flush fails.
+        Locally reviewed profiles retain their config, secrets and resolved
+        guard; source deletions only mark metadata, never delete connections.
+        """
+        candidate = deepcopy(self.state)
+        imports = candidate.setdefault("navicat_imports", {})
+        rows = candidate["connections"]
+        by_id = {row["id"]: row for row in rows}
+        positions = {row["id"]: index for index, row in enumerate(rows)}
+        by_source = {}
+        for identifier, metadata in imports.items():
+            source_id = metadata.get("source_id")
+            if source_id in by_source:
+                raise ValueError("Stored Navicat source identities are ambiguous")
+            if source_id:
+                by_source[source_id] = identifier
+        counts = dict.fromkeys(("added", "updated", "unchanged", "preserved", "source_missing", "blocked", "total"), 0)
+        now = datetime.now(timezone.utc).isoformat(timespec="microseconds")
+        seen, seen_ids = set(), set()
+        platform = str(getattr(report, "platform", ""))
+        def safe_fields(values):
+            return sorted({value if isinstance(value, str) and _METADATA_FIELD.fullmatch(value)
+                           else "unknown_field" for value in values})
+        for profile in report.profiles:
+            source_id = profile.source_id
+            if not isinstance(source_id, str) or not source_id or len(source_id) > 2048 or any(ord(c) < 32 for c in source_id):
+                raise ValueError("Invalid Navicat source identity")
+            if source_id in seen:
+                raise ValueError("Repeated Navicat source identity in discovery report")
+            if not isinstance(profile.config, ConnectionConfig):
+                raise ValueError("Invalid Navicat connection metadata")
+            seen.add(source_id)
+            identifier = by_source.get(source_id)
+            if identifier is None:
+                identifier = str(uuid.uuid5(_NAVICAT_NAMESPACE, source_id))
+                suffix = 0
+                # Even an intentionally colliding hand-created ID must survive.
+                while identifier in by_id or identifier in imports:
+                    suffix += 1
+                    identifier = str(uuid.uuid5(_NAVICAT_NAMESPACE, source_id + "\0collision\0" + str(suffix)))
+            seen_ids.add(identifier)
+            value = asdict(profile.config)
+            value["id"] = identifier
+            for field in self.SECRET_FIELDS:
+                value[field] = ""
+            # Imported metadata cannot approve a new SSH host key. Preserve a
+            # previously approved public pin only for the same SSH endpoint.
+            value["ssh_host_key"] = ""
+            existing = by_id.get(identifier, {})
+            if value["ssh_host"] and (existing.get("ssh_host"), existing.get("ssh_port", 22)) == (value["ssh_host"], value["ssh_port"]):
+                value["ssh_host_key"] = existing.get("ssh_host_key", "")
+            paths = getattr(profile, "group_paths", ()) or ((profile.group_path,) if profile.group_path else ())
+            group_paths = []
+            for path in paths:
+                if not isinstance(path, (list, tuple)) or any(not isinstance(part, str) for part in path):
+                    raise ValueError("Invalid Navicat group metadata")
+                path = list(path)
+                if path and path not in group_paths:
+                    group_paths.append(path)
+            unsupported = safe_fields(profile.unsupported_fields)
+            if value["driver"] not in SUPPORTED_DRIVERS and "driver" not in unsupported:
+                unsupported.append("driver")
+            requires = sorted(set(profile.requires_secrets) & set(self.SECRET_FIELDS))
+            if set(profile.requires_secrets) - set(self.SECRET_FIELDS):
+                unsupported = sorted(set(unsupported) | {"requires_secrets"})
+            blocked = bool(profile.blocked or value["driver"] not in SUPPORTED_DRIVERS
+                           or set(profile.requires_secrets) - set(self.SECRET_FIELDS))
+            previous = imports.get(identifier, {})
+            edited = bool(previous.get("locally_edited"))
+            metadata = {
+                "source_id": source_id, "provenance": str(profile.source_path),
+                "source_format": str(profile.source_format), "platform": platform,
+                "group_paths": group_paths, "blocked": blocked,
+                "unsupported_fields": unsupported, "requires_secrets": requires,
+                "locally_edited": edited, "last_seen": now, "source_missing": False,
+                "source_blocked": blocked, "source_unsupported_fields": unsupported,
+                "source_requires_secrets": requires,
+            }
+            if previous.get("reviewed_at"):
+                metadata["reviewed_at"] = previous["reviewed_at"]
+            if edited and identifier in by_id:
+                for field in ("blocked", "unsupported_fields", "requires_secrets"):
+                    metadata[field] = deepcopy(previous.get(field, False if field == "blocked" else []))
+                # Adapter availability is still enforced after a local review.
+                if by_id[identifier]["driver"] not in SUPPORTED_DRIVERS:
+                    metadata["blocked"] = True
+                    metadata["unsupported_fields"] = sorted(set(metadata["unsupported_fields"]) | {"driver"})
+                counts["preserved"] += 1
+            elif identifier not in by_id:
+                positions[identifier] = len(rows)
+                rows.append(value)
+                by_id[identifier] = value
+                counts["added"] += 1
+            else:
+                comparable = {k: v for k, v in metadata.items() if k != "last_seen"}
+                old_comparable = {k: v for k, v in previous.items() if k != "last_seen"}
+                changed = by_id[identifier] != value or comparable != old_comparable
+                if changed:
+                    rows[positions[identifier]] = value
+                    by_id[identifier] = value
+                counts["updated" if changed else "unchanged"] += 1
+            imports[identifier] = metadata
+        incomplete = {"source_read_failed", "registry_read_failed", "profile_read_failed", "unsupported_source_structure",
+                      "source_structure_limit", "windows_discovery_pending", "unsupported_platform"}
+        if not any(getattr(issue, "code", "") in incomplete for issue in getattr(report, "issues", ())):
+            for identifier, metadata in imports.items():
+                if identifier not in seen_ids and (not platform or metadata.get("platform", "") == platform):
+                    metadata["source_missing"] = True
+        counts["total"] = len(seen_ids)
+        counts["blocked"] = sum(bool(imports[identifier]["blocked"]) for identifier in seen_ids)
+        counts["source_missing"] = sum(bool(metadata.get("source_missing")) for metadata in imports.values())
+        previous_state = self.state
+        self.state = candidate
+        try:
+            self.flush()
+        except Exception:
+            self.state = previous_state
+            raise
+        return counts
 
     def delete_connection(self, connection_id: str):
         for field in self.SECRET_FIELDS:

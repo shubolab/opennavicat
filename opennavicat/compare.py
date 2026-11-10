@@ -136,7 +136,7 @@ def apply_plan(target: DatabaseSession, plan: DiffPlan, include_deletes: bool = 
     if target.columns(plan.schema, plan.table) != plan.target_columns:
         raise ValueError("The target table structure changed. Compare again before applying.")
     require_transactional_table(target, plan.schema, plan.table)
-    target.execute("BEGIN")
+    target.execute("BEGIN TRANSACTION" if target.config.driver == "sqlserver" else "BEGIN")
     try:
         # Existing rows retain every original field for conflict detection.
         for original, changes in plan.updates:

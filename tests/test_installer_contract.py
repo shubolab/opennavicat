@@ -97,7 +97,9 @@ def report(architecture="arm64", version="0.3.0"):
     return {"smoke": "passed", "rows": 6, "columns": ["customer"],
         "runtime": {"version": version, "os": "Windows", "machine": architecture,
             "libpq": 180000, "qt": "6.12.0", "psycopg": "3.3.8", "pymysql": "1.2.4",
-            "paramiko": "5.1.0", "cryptography": "46.0.0", "crypto_legacy_probe": True}}
+            "paramiko": "5.1.0", "cryptography": "46.0.0", "crypto_legacy_probe": True,
+            "python_tds": "1.17.1", "redis": "8.1.0", "pyopenssl": "26.4.0",
+            "certifi": "2026.10.23", "sqlserver_default_ca_present": True, "extra_adapters_constructed": True, "sqlserver_tls_context_ready": True}}
 
 
 def test_empty_windowed_process_stdout_is_not_an_installed_smoke(tmp_path):

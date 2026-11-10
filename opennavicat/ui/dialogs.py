@@ -9,7 +9,8 @@ import re
 import uuid
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QThreadPool, QTimer, QSize, Signal
+from PySide6.QtCore import Qt, QThreadPool, QTimer, QSize, Signal, QRegularExpression
+from PySide6.QtGui import QRegularExpressionValidator
 from PySide6.QtWidgets import (
     QButtonGroup, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout,
     QFrame, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QListWidget, QMessageBox, QPlainTextEdit,
@@ -160,7 +161,8 @@ class ConnectionDialog(QDialog):
         self.driver_combo = QComboBox(self)
         self.driver_combo.setObjectName("connectionDriver")
         for label, driver in [("SQLite", "sqlite"), ("PostgreSQL", "postgresql"),
-                              ("MySQL", "mysql"), ("MariaDB", "mariadb")]:
+                              ("MySQL", "mysql"), ("MariaDB", "mariadb"),
+                              ("SQL Server", "sqlserver"), ("Redis", "redis")]:
             self.driver_combo.addItem(label, driver)
         self.driver_combo.hide()
         self.new_profile_button = QPushButton("＋ 新建连接配置文件")
@@ -269,6 +271,7 @@ class ConnectionDialog(QDialog):
         advanced.setSpacing(16)
         self.read_only_check = QCheckBox("以只读方式打开连接")
         self.read_only_check.setChecked(bool(config and config.read_only))
+        self.read_only_check.toggled.connect(self._read_only_driver_state)
         advanced.addRow(self.read_only_check)
         self.foreign_keys_check = QCheckBox("启用 SQLite 外键约束")
         self.foreign_keys_check.setChecked(True)
@@ -289,6 +292,24 @@ class ConnectionDialog(QDialog):
         form.insertRow(5, self.remote_database_label, self.remote_database_edit)
         self.remote_database_edit.textChanged.connect(self.database_edit.setText)
         self.database_edit.textChanged.connect(self.remote_database_edit.setText)
+        self.redis_type_label = QLabel("类型")
+        self.redis_mode_combo = QComboBox()
+        for label, value in [("单机", "standalone"), ("集群", "cluster"), ("哨兵", "sentinel")]:
+            self.redis_mode_combo.addItem(label, value)
+            if value != "standalone":
+                item = self.redis_mode_combo.model().item(self.redis_mode_combo.count() - 1)
+                item.setEnabled(False)
+                item.setToolTip("此连接类型尚未实现；当前仅支持 Redis 单机。")
+        form.insertRow(1, self.redis_type_label, self.redis_mode_combo)
+        self.sqlserver_auth_label = QLabel("身份验证")
+        self.sqlserver_auth_combo = QComboBox()
+        self.sqlserver_auth_combo.addItem("SQL Server 身份验证", "sql")
+        self.sqlserver_auth_combo.addItem("Windows 集成身份验证（尚未实现）", "integrated")
+        integrated = self.sqlserver_auth_combo.model().item(1)
+        integrated.setEnabled(False)
+        integrated.setToolTip("Windows 集成身份验证尚未实现，请使用 SQL Server 用户名和密码。")
+        form.insertRow(form.rowCount() - 3, self.sqlserver_auth_label, self.sqlserver_auth_combo)
+        self._redis_database_validator = QRegularExpressionValidator(QRegularExpression("[0-9]*"), self)
         self.sqlite_database_note = QLabel("数据库文件在“常规”页中设置。")
         self.sqlite_database_note.setWordWrap(True)
         databases.addWidget(self.sqlite_database_note)
@@ -320,6 +341,7 @@ class ConnectionDialog(QDialog):
         self.ssl_verify_check.setToolTip("启用自定义证书文件。服务器证书验证策略由 SSL 模式决定。")
         ssl_form.addRow(self.ssl_verify_check)
         self._ssl_file_widgets = []
+        self._ssl_file_rows = {}
         for name, attribute in [("客户端密钥", "ssl_key"), ("客户端证书", "ssl_cert"),
                                 ("根证书", "ssl_ca"), ("证书撤消列表", "ssl_crl")]:
             field, edit, browse = self._file_field(getattr(config, attribute, "") if config else "", name)
@@ -327,6 +349,7 @@ class ConnectionDialog(QDialog):
             setattr(self, attribute + "_browse", browse)
             self._ssl_file_widgets.append(field)
             ssl_form.addRow(name, field)
+            self._ssl_file_rows[attribute] = (ssl_form.labelForField(field), field)
         self.ssl_key_password_edit = QLineEdit(getattr(config, "ssl_key_password", "") if config else "")
         self.ssl_key_password_edit.setEchoMode(QLineEdit.EchoMode.Password)
         ssl_form.addRow("密钥通行短语", self.ssl_key_password_edit)
@@ -485,7 +508,7 @@ class ConnectionDialog(QDialog):
 
     @property
     def remember_ssl_password(self) -> bool:
-        return (self.driver_combo.currentData() != "sqlite" and self.ssl_enabled_check.isChecked()
+        return (self.driver_combo.currentData() not in {"sqlite", "sqlserver"} and self.ssl_enabled_check.isChecked()
                 and self.ssl_verify_check.isChecked() and self.remember_ssl_check.isChecked())
 
     def _file_field(self, value, title):
@@ -509,13 +532,25 @@ class ConnectionDialog(QDialog):
 
     def _ssl_state_changed(self, *_):
         enabled = self.ssl_enabled_check.isChecked()
+        sqlserver = self.driver_combo.currentData() == "sqlserver"
         self.ssl_combo.setEnabled(enabled)
         self.ssl_verify_check.setEnabled(enabled)
+        self.ssl_verify_check.setText("使用自定义根证书" if sqlserver else "使用验证")
+        self.ssl_verify_check.setToolTip(
+            "SQL Server 的所有 TLS 模式均验证证书链。未选择自定义根证书时使用 certifi 信任库；自签证书必须提供根证书。"
+            if sqlserver else "启用自定义证书文件。服务器证书验证策略由 SSL 模式决定。")
         custom_files = enabled and self.ssl_verify_check.isChecked()
-        for field in self._ssl_file_widgets:
-            field.setEnabled(custom_files)
-        self.ssl_key_password_edit.setEnabled(custom_files and bool(self.ssl_key_edit.text().strip()))
-        self.remember_ssl_check.setEnabled(custom_files and bool(self.ssl_key_edit.text().strip()))
+        for attribute, (label, field) in self._ssl_file_rows.items():
+            supported = not sqlserver or attribute == "ssl_ca"
+            field.setEnabled(custom_files and supported)
+            label.setEnabled(custom_files and supported)
+            unsupported_tip = "SQL Server 当前不支持客户端证书、客户端密钥或证书撤消列表。" if not supported else ""
+            field.setToolTip(unsupported_tip)
+            label.setToolTip(unsupported_tip)
+        key_password_supported = not sqlserver and custom_files and bool(self.ssl_key_edit.text().strip())
+        self.ssl_key_password_edit.setEnabled(key_password_supported)
+        self.remember_ssl_check.setEnabled(key_password_supported)
+        self.ssl_key_password_edit.setToolTip("SQL Server 当前不支持客户端密钥及其通行短语。" if sqlserver else "")
         self.ssl_diagram.ssl_enabled = enabled
         self.ssl_diagram.update()
         if hasattr(self, "ssh_diagram"):
@@ -558,16 +593,18 @@ class ConnectionDialog(QDialog):
 
     def _driver_changed(self, *_):
         driver = self.driver_combo.currentData()
+        previous_driver = getattr(self, "_active_driver", None)
         local = driver == "sqlite"
         label = self.driver_combo.currentText()
         self.setWindowTitle(f"{label} - {'编辑连接' if self._original else '新建连接'}")
         self.diagram.driver = label
         self.diagram.update()
-        allow_index = self.ssl_combo.findData("allow")
-        if driver == "postgresql" and allow_index < 0:
-            self.ssl_combo.insertItem(0, "allow", "allow")
-        elif driver != "postgresql" and allow_index >= 0:
-            self.ssl_combo.removeItem(allow_index)
+        if driver != previous_driver and (self._original is None or self._original.driver != driver):
+            if driver == "sqlserver":
+                self.ssl_enabled_check.setChecked(True)
+            elif driver == "redis":
+                self.ssl_enabled_check.setChecked(False)
+        self._set_ssl_modes(driver)
         self.tabs.clear()
         for widget, name in [(self.general_tab, "常规"), (self.advanced_tab, "高级"),
                              (self.databases_tab, "数据库")]:
@@ -580,10 +617,17 @@ class ConnectionDialog(QDialog):
         self.tabs.setTabToolTip(index, "HTTP 隧道尚未实现。")
         self.sqlite_type_label.setVisible(local)
         self.sqlite_type_widget.setVisible(local)
+        self.redis_type_label.setVisible(driver == "redis")
+        self.redis_mode_combo.setVisible(driver == "redis")
+        self.sqlserver_auth_label.setVisible(driver == "sqlserver")
+        self.sqlserver_auth_combo.setVisible(driver == "sqlserver")
         self.database_label.setVisible(local)
         self.database_row.setVisible(local)
         self.remote_database_label.setVisible(not local)
         self.remote_database_edit.setVisible(not local)
+        self.remote_database_label.setText("数据库编号" if driver == "redis" else "初始数据库")
+        self.remote_database_edit.setPlaceholderText("0" if driver == "redis" else "数据库名称")
+        self.remote_database_edit.setValidator(self._redis_database_validator if driver == "redis" else None)
         self.sqlite_database_note.setVisible(local)
         self.network_database_note.setVisible(not local)
         self.foreign_keys_check.setVisible(local)
@@ -594,19 +638,62 @@ class ConnectionDialog(QDialog):
             field.setEnabled(not local)
             field.setToolTip("SQLite 3 直连不使用用户名及密码；加密扩展尚未实现。" if local else "")
         self.remember_check.setToolTip("SQLite 3 直连不使用用户名及密码；加密扩展尚未实现。" if local else "密码仅保存在本机系统钥匙串中。")
-        self.port_spin.setValue(5432 if driver == "postgresql" else 3306)
+        self.port_spin.setValue({"postgresql": 5432, "mysql": 3306, "mariadb": 3306,
+                                 "sqlserver": 1433, "redis": 6379}.get(driver, 3306))
         self.port_spin.setFixedWidth(78)
         if not local:
-            if not self.database_edit.text():
-                self.database_edit.setText("postgres" if driver == "postgresql" else "")
-            if not self.user_edit.text():
-                self.user_edit.setText("postgres" if driver == "postgresql" else "root")
+            defaults = {"postgresql": "postgres", "mysql": "", "mariadb": "", "sqlserver": "master", "redis": "0"}
+            user_defaults = {"postgresql": "postgres", "mysql": "root", "mariadb": "root", "sqlserver": "", "redis": ""}
+            if not self.database_edit.text() or (previous_driver and self.database_edit.text() == defaults.get(previous_driver, "")):
+                self.database_edit.setText(defaults.get(driver, ""))
+            if not self.user_edit.text() or (previous_driver and self.user_edit.text() == user_defaults.get(previous_driver, "")):
+                self.user_edit.setText(user_defaults.get(driver, ""))
+        self.user_edit.setPlaceholderText("ACL 用户名（可留空）" if driver == "redis" else "SQL Server 登录名" if driver == "sqlserver" else "")
+        self._read_only_driver_state()
         self.database_edit.setPlaceholderText("数据库文件路径，或 :memory:" if local else "数据库名称")
-        self.note.setText("SQLite 3 用户名、密码及加密扩展尚未实现。" if local else "")
+        self.note.setText("当前支持 Redis 单机连接；集群与哨兵尚未实现。" if driver == "redis" else "")
+        self.note.setVisible(driver == "redis")
+        self._active_driver = driver
+        self._ssl_state_changed()
         self.profile_toggle.blockSignals(True)
         self.profile_toggle.setChecked(local)
         self.profile_toggle.blockSignals(False)
         self._toggle_profiles(local)
+
+    def _read_only_driver_state(self, *_):
+        unsupported = self.driver_combo.currentData() == "sqlserver"
+        # A previously requested protection must never be silently cleared.
+        # Let the user explicitly remove that unsupported setting, then prevent
+        # re-enabling it until a real enforcement strategy is available.
+        self.read_only_check.setEnabled(not unsupported or self.read_only_check.isChecked())
+        self.read_only_check.setToolTip("此版本尚不能保证 SQL Server 的只读连接；请取消此设置后保存。" if unsupported else "")
+
+    def _set_ssl_modes(self, driver):
+        modes = (["allow", "prefer", "require", "verify-ca", "verify-full"] if driver == "postgresql"
+                 else ["require", "verify-ca", "verify-full"] if driver in {"redis", "sqlserver"}
+                 else ["prefer", "require", "verify-ca", "verify-full"])
+        current = self.ssl_combo.currentData()
+        original = self._original
+        if original and original.driver == driver and not getattr(self, "_original_ssl_restored", False):
+            current = original.ssl_mode if original.ssl_mode != "disable" else None
+            self._original_ssl_restored = True
+        default = "verify-full" if driver == "sqlserver" else "require" if driver == "redis" else "prefer"
+        self.ssl_combo.blockSignals(True)
+        self.ssl_combo.clear()
+        for mode in modes:
+            self.ssl_combo.addItem(mode, mode)
+            if driver == "sqlserver":
+                self.ssl_combo.setItemData(self.ssl_combo.count() - 1,
+                    "验证证书链，不提供跳过验证。verify-full 还验证原始服务器主机名。", Qt.ItemDataRole.ToolTipRole)
+        if current not in modes and original and original.driver == driver and original.ssl_mode not in ("disable", *modes):
+            self.ssl_combo.addItem(str(original.ssl_mode) + "（不支持）", original.ssl_mode)
+            item = self.ssl_combo.model().item(self.ssl_combo.count() - 1)
+            item.setEnabled(False)
+            item.setToolTip("此驱动不支持该 TLS 模式；请选择支持的模式。")
+            current = original.ssl_mode
+        selected = self.ssl_combo.findData(current)
+        self.ssl_combo.setCurrentIndex(selected if selected >= 0 else self.ssl_combo.findData(default))
+        self.ssl_combo.blockSignals(False)
 
     def _toggle_profiles(self, visible):
         self.profile_pane.setVisible(visible)
@@ -663,6 +750,22 @@ class ConnectionDialog(QDialog):
         database = self.database_edit.text().strip()
         driver = self.driver_combo.currentData()
         host = self.host_edit.text().strip()
+        if driver == "redis":
+            if self.redis_mode_combo.currentData() != "standalone":
+                raise ValueError("Redis 集群和哨兵尚未实现，请选择单机连接。")
+            if not database or not database.isascii() or not database.isdecimal():
+                raise ValueError("Redis 数据库编号必须是大于或等于 0 的整数。")
+            database = database.lstrip("0") or "0"
+        if driver == "sqlserver":
+            if self.sqlserver_auth_combo.currentData() != "sql":
+                raise ValueError("Windows 集成身份验证尚未实现，请使用 SQL Server 用户名和密码。")
+            if not self.user_edit.text().strip():
+                raise ValueError("请输入 SQL Server 登录名。")
+            if self.read_only_check.isChecked():
+                raise ValueError("此版本尚不能保证 SQL Server 的只读连接，请关闭只读选项。")
+            if any(getattr(self, field).text().strip() for field in
+                   ("ssl_cert_edit", "ssl_key_edit", "ssl_crl_edit", "ssl_key_password_edit")):
+                raise ValueError("SQL Server 当前不支持客户端证书、客户端密钥、证书撤消列表及密钥通行短语；请移除这些设置。")
         if not database or (not name and not testing):
             raise ValueError("请输入连接名及数据库。" if not testing else "请先选择数据库。")
         if driver != "sqlite" and not host:
@@ -679,6 +782,10 @@ class ConnectionDialog(QDialog):
             if self.read_only_check.isChecked() and not path.is_file():
                 raise ValueError("只读连接不能创建新的数据库文件。")
         ssl_mode = self.ssl_combo.currentData() if self.ssl_enabled_check.isChecked() else "disable"
+        if driver == "redis" and ssl_mode not in {"disable", "require", "verify-ca", "verify-full"}:
+            raise ValueError("Redis 不支持此 SSL 模式；请选择 require、verify-ca 或 verify-full。")
+        if driver == "sqlserver" and ssl_mode not in {"disable", "require", "verify-ca", "verify-full"}:
+            raise ValueError("SQL Server 不支持此 SSL 模式；请选择 require、verify-ca 或 verify-full。")
         custom_ssl = driver != "sqlite" and ssl_mode != "disable" and self.ssl_verify_check.isChecked()
         ssl_files = {name: "" for name in ("ssl_ca", "ssl_cert", "ssl_key", "ssl_crl")}
         ssl_password = ""
@@ -771,7 +878,7 @@ class ConnectionDialog(QDialog):
             session = DatabaseSession(config)
             try:
                 session.connect()
-                session.execute("SELECT 1", limit=1)
+                session.execute("PING" if config.driver == "redis" else "SELECT 1", limit=1)
                 if config.driver == "sqlite":
                     # SELECT 1 alone can succeed without reading a corrupt
                     # SQLite header. Read its real schema before reporting success.
@@ -891,7 +998,7 @@ class TableDesignerDialog(QDialog):
         layout.addWidget(buttons)
         self.name_edit.textChanged.connect(self._refresh_preview)
         self.add_column("id", "INTEGER" if self.driver in ("sqlite", "postgresql") else "INT", pk=True)
-        self.add_column("", "TEXT")
+        self.add_column("", "NVARCHAR(MAX)" if self.driver == "sqlserver" else "TEXT")
 
     def add_column(self, name="", datatype=None, pk=False):
         row = self.grid.rowCount()
@@ -899,7 +1006,7 @@ class TableDesignerDialog(QDialog):
         name_edit = QLineEdit(name)
         type_combo = QComboBox()
         type_combo.setEditable(True)
-        type_combo.addItems(self.TYPES.get(self.driver, self.TYPES["mysql"]))
+        type_combo.addItems(["INT", "BIGINT", "SMALLINT", "TINYINT", "BIT", "DECIMAL(18,2)", "FLOAT", "NVARCHAR(255)", "NVARCHAR(MAX)", "VARCHAR(255)", "VARBINARY(MAX)", "DATE", "TIME", "DATETIME2", "DATETIMEOFFSET", "UNIQUEIDENTIFIER"] if self.driver == "sqlserver" else self.TYPES.get(self.driver, self.TYPES["mysql"]))
         if datatype:
             type_combo.setCurrentText(datatype)
         key_check, null_check = QCheckBox(), QCheckBox()

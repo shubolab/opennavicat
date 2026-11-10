@@ -23,6 +23,9 @@ from typing import Any, Iterator
 import sqlparse
 
 
+SUPPORTED_DRIVERS = frozenset({"sqlite", "postgresql", "mysql", "mariadb", "sqlserver", "redis"})
+
+
 @dataclass
 class ConnectionConfig:
     id: str
@@ -127,9 +130,19 @@ def _tls_context(config):
 
 
 class DatabaseSession:
+    def __new__(cls, config):
+        if cls is DatabaseSession:
+            if config.driver == "redis":
+                from .redis_session import RedisSession
+                return object.__new__(RedisSession)
+            if config.driver == "sqlserver":
+                from .sqlserver_session import SqlServerSession
+                return object.__new__(SqlServerSession)
+        return object.__new__(cls)
+
     def __init__(self, config: ConnectionConfig):
         self.config = config
-        if config.driver not in {"sqlite", "postgresql", "mysql", "mariadb"}:
+        if config.driver not in SUPPORTED_DRIVERS:
             raise ValueError(f"Unsupported database driver: {config.driver}")
         self.connection: Any = None
         self._cancel_requested = threading.Event()

@@ -24,6 +24,8 @@ from ..tasks import Task
 from ..transfer import export_result, import_data
 from ..transport import SSHAuthenticationError, SSHHostKeyError, TLSKeyPasswordError
 from .. import schema as schema_tools
+from .. import schema_objects as object_schema_tools
+from .connection_manager import ConnectionManagerDialog
 from .dialogs import ConnectionDialog, RowDialog, TableDesignerDialog, confirm_ssh_host_key
 from .editor import SqlEditor, pretty_sql
 from .grid import DataGrid, DataModel
@@ -33,6 +35,10 @@ from .workspace import ObjectBrowser, Inspector
 from .icons import icon as workbench_icon, tool_icon
 from .query import QueryPage
 from .table_designer import TableDesignerPage
+from .schema_object_designer import IndexDesignerPage, TriggerDesignerPage
+from .redis_browser import RedisBrowserPage, RedisKeyPage
+
+DESIGNER_PAGES = (TableDesignerPage, IndexDesignerPage, TriggerDesignerPage)
 
 SAMPLE_QUERY = """-- Explore your sample workspace. Select SQL to run only that selection.
 SELECT
@@ -351,7 +357,7 @@ class TablePage(QWidget):
         def work():
             if session.in_transaction:
                 raise ValueError("Commit or roll back the SQL transaction before applying grid changes.")
-            session.execute("BEGIN")
+            session.execute("BEGIN TRANSACTION" if session.config.driver == "sqlserver" else "BEGIN")
             try:
                 for original, changed in changes:
                     session.update_row(self.schema, self.table, original, changed)
@@ -377,7 +383,8 @@ class TablePage(QWidget):
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         session = self.window.sessions[self.connection_id]
-        self.window.submit(lambda: session.insert_row(self.schema, self.table, dialog.values()), lambda _: self.refresh(check=False), label="Inserting row")
+        values, schema, table = dialog.values(), self.schema, self.table
+        self.window.submit(lambda: session.insert_row(schema, table, values), lambda _: self.refresh(check=False), label="Inserting row")
 
     def delete_row(self):
         if not self.model or not self.can_discard():
@@ -393,7 +400,7 @@ class TablePage(QWidget):
         def work():
             if session.in_transaction:
                 raise ValueError("Commit or roll back the SQL transaction before deleting rows.")
-            session.execute("BEGIN")
+            session.execute("BEGIN TRANSACTION" if session.config.driver == "sqlserver" else "BEGIN")
             try:
                 for original in originals:
                     session.delete_row(self.schema, self.table, original)
@@ -482,21 +489,10 @@ class MainWindow(QMainWindow):
         self.import_action.setIcon(tool_icon("import", 18))
         self.export_action.setIcon(tool_icon("export", 18))
         toolbar.addAction(self.new_connection_action)
-        connection_button = toolbar.widgetForAction(self.new_connection_action)
-        connection_menu = QMenu(connection_button)
-        for driver_name, driver, supported in [("MySQL", "mysql", True), ("PostgreSQL", "postgresql", True), ("SQL Server", "sqlserver", False), ("Oracle", "oracle", False), ("SQLite", "sqlite", True), ("MariaDB", "mariadb", True), ("MongoDB", "mongodb", False), ("Redis", "redis", False), ("Snowflake", "snowflake", False)]:
-            action = connection_menu.addAction(driver_name + "…")
-            action.setEnabled(supported)
-            if supported:
-                action.triggered.connect(lambda checked=False, d=driver: self.new_connection(driver=d))
-            else:
-                action.setToolTip("该驱动仍待实现，完整还原目标包含此项")
-        connection_button.setMenu(connection_menu)
-        connection_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         toolbar.addAction(self.query_action)
         toolbar.addSeparator()
         self.category_actions = {}
-        for label, kind, symbol, supported in [("表", "table", "table", True), ("视图", "view", "view", True), ("函数", "function", "function", False), ("索引", "index", "index", False), ("触发器", "trigger", "trigger", False), ("其它", "other", "other", True), ("用户", "user", "user", False), ("查询", "query", "query", True), ("备份", "backup", "backup", True), ("自动运行", "automation", "automation", False), ("模型", "model", "model", True), ("BI", "chart", "bi", False)]:
+        for label, kind, symbol, supported in [("表", "table", "table", True), ("视图", "view", "view", True), ("函数", "function", "function", False), ("索引", "index", "index", True), ("触发器", "trigger", "trigger", True), ("其它", "other", "other", True), ("用户", "user", "user", False), ("查询", "query", "query", True), ("备份", "backup", "backup", True), ("自动运行", "automation", "automation", False), ("模型", "model", "model", True), ("BI", "chart", "bi", False)]:
             if kind == "other":
                 action = self.action(label, self.show_other_tools, icon=symbol)
             elif kind == "model":
@@ -504,7 +500,7 @@ class MainWindow(QMainWindow):
                 action.setToolTip("当前可查看真实结构关系图；完整模型编辑仍待实现")
             else:
                 action = self.action(label, lambda checked=False, k=kind: self.show_objects(k), icon=symbol)
-            action.setCheckable(kind in {"table", "view", "query", "backup"})
+            action.setCheckable(kind in {"table", "view", "index", "trigger", "query", "backup"})
             if not supported:
                 action.setEnabled(False)
                 action.setToolTip("此项仍待完整实现")
@@ -684,6 +680,8 @@ class MainWindow(QMainWindow):
     def show_objects(self, kind="table"):
         if self.active_id not in self.sessions:
             return
+        if self.configs[self.active_id].driver == "redis" and kind == "table":
+            kind = "redis_data"
         for key, action in self.category_actions.items():
             if action.isCheckable():
                 action.setChecked(key == kind)
@@ -708,6 +706,9 @@ class MainWindow(QMainWindow):
             self.explain_query(page)
 
     def explain_query(self, page):
+        if not getattr(page, "supports_explain", True):
+            self.statusBar().showMessage("此数据库的执行计划尚待实现。", 5000)
+            return
         sql = page.editor.selected_sql().strip()
         if not sql:
             return
@@ -718,10 +719,42 @@ class MainWindow(QMainWindow):
         target.refresh_label()
         self.when_idle(lambda: self.run_query(target))
 
+    def open_redis_browser(self, connection_id, schema):
+        if connection_id not in self.sessions or self.configs[connection_id].driver != "redis":
+            return None
+        for index in range(self.tabs.count()):
+            page = self.tabs.widget(index)
+            if isinstance(page, RedisBrowserPage) and (page.connection_id, page.schema) == (connection_id, schema):
+                self.tabs.setCurrentWidget(page)
+                return page
+        page = RedisBrowserPage(self, connection_id, schema)
+        page.titleChanged.connect(lambda *_: self.update_redis_title(page))
+        page.focusRequested.connect(lambda enabled: self.focus_workspace(page, enabled))
+        self.tabs.addTab(page, workbench_icon("table", 20), "(所有数据)")
+        self.tabs.setCurrentWidget(page)
+        self.update_redis_title(page)
+        return page
+
+    def open_redis_key(self, connection_id, schema, key):
+        page = self.open_redis_browser(connection_id, schema)
+        return page.show_key(key) if page else None
+
+    def update_redis_title(self, page):
+        index = self.tabs.indexOf(page)
+        if index >= 0:
+            config = self.configs.get(page.connection_id)
+            title = f"{page.title} ({config.name if config else ''})"
+            self.tabs.setTabText(index, title)
+            if self.tabs.currentWidget() is page:
+                self.setWindowTitle(title)
+
     def design_object(self, info):
         config = self.configs.get(info["id"])
-        if config and config.driver == "sqlite" and info["kind"] == "table":
-            return self.open_designer(info["id"], info["schema"], info.get("name", info.get("table", "")))
+        if config and config.driver == "sqlite":
+            if info["kind"] in {"index", "trigger"}:
+                return self.open_object_designer(info["id"], info["schema"], info["kind"], info.get("name", ""))
+            if info["kind"] == "table":
+                return self.open_designer(info["id"], info["schema"], info.get("name", info.get("table", "")))
         # Other dialects still expose read-only metadata in their own document;
         # opening a design must never hide the data tab of an existing document.
         page = TablePage(self, info["id"], info["schema"], info.get("name", info["table"]), info["kind"])
@@ -765,6 +798,63 @@ class MainWindow(QMainWindow):
             page.load_snapshot(schema_tools.new_table(schema))
         return page
 
+    def open_object_designer(self, connection_id, schema, kind, name=""):
+        session = self.sessions.get(connection_id)
+        if session is None or self.configs[connection_id].driver != "sqlite" or kind not in {"index", "trigger"}:
+            return None
+        if name:
+            for index in range(self.tabs.count()):
+                page = self.tabs.widget(index)
+                if isinstance(page, (IndexDesignerPage, TriggerDesignerPage)) and (page.connection_id, page.schema, page.kind, page.object_name) == (connection_id, schema, kind, name):
+                    self.tabs.setCurrentWidget(page)
+                    return page
+        page = (IndexDesignerPage if kind == "index" else TriggerDesignerPage)(connection_id, schema, name)
+        page.save_action.setShortcut(QKeySequence())
+        page.set_read_only(self.configs[connection_id].read_only)
+        page.suppress_save_preview = bool(self.store.state.get("suppress_schema_save_preview", False))
+        page.loadRequested.connect(lambda: self.load_designer(page))
+        page.previewRequested.connect(lambda definition: self.preview_designer(page, definition))
+        page.saveRequested.connect(lambda definition: self.save_designer(page, definition))
+        page.titleChanged.connect(lambda _: self.update_designer_title(page))
+        page.focusRequested.connect(lambda enabled: self.focus_workspace(page, enabled))
+        page.savePreviewPreferenceChanged.connect(lambda value: self.store.state.update(suppress_schema_save_preview=value))
+        page.ownerChanged.connect(lambda owner_type, table: self.load_object_columns(page, owner_type, table))
+        self.tabs.addTab(page, workbench_icon(kind, 20), "无标题")
+        self.tabs.setCurrentWidget(page)
+        if name:
+            self.load_designer(page)
+        else:
+            page.load_snapshot((object_schema_tools.new_index if kind == "index" else object_schema_tools.new_trigger)(schema))
+        def owners_done(objects):
+            if self.tabs.indexOf(page) >= 0 and self.sessions.get(connection_id) is session:
+                page.set_owners([obj["name"] for obj in objects if obj["kind"] == "table"],
+                    [obj["name"] for obj in objects if obj["kind"] == "view"])
+        self.submit(lambda: session.objects(schema), owners_done, page.show_error, label="读取所属对象")
+        self.update_designer_title(page)
+        return page
+
+    def load_object_columns(self, page, owner_type, table):
+        session = self.sessions.get(page.connection_id)
+        if self._closed or session is None or not table or self.tabs.indexOf(page) < 0:
+            return
+        def done(columns):
+            if self.tabs.indexOf(page) >= 0 and self.sessions.get(page.connection_id) is session:
+                page.set_columns(table, columns, owner_type)
+        self.submit(lambda: session.columns(page.schema, table), done, page.show_error, label="读取字段")
+
+    @staticmethod
+    def _designer_api(page):
+        if isinstance(page, IndexDesignerPage):
+            return object_schema_tools.load_index, object_schema_tools.plan_index, object_schema_tools.apply_plan
+        if isinstance(page, TriggerDesignerPage):
+            return object_schema_tools.load_trigger, object_schema_tools.plan_trigger, object_schema_tools.apply_plan
+        return schema_tools.load_table, schema_tools.plan_table, schema_tools.apply_plan
+
+    def new_browser_object(self):
+        if self.object_page.kind in {"index", "trigger"}:
+            return self.open_object_designer(self.active_id, self.active_schema, self.object_page.kind)
+        return self.new_table()
+
     def update_designer_title(self, page):
         index = self.tabs.indexOf(page)
         if index < 0:
@@ -779,23 +869,25 @@ class MainWindow(QMainWindow):
         if self.tabs.currentWidget() is page:
             self.setWindowTitle(title)
             self.inspector.show_object({"name": name or "无标题", "schema": page.schema,
-                "kind": "table"}, config, page.snapshot.ddl if page.snapshot else "")
+                "kind": getattr(page, "kind", "table")}, config, page.snapshot.ddl if page.snapshot else "")
 
     def load_designer(self, page):
         session = self.sessions.get(page.connection_id)
-        if session is None or page.loading or self.tabs.indexOf(page) < 0:
+        if self._closed or session is None or page.loading or self.tabs.indexOf(page) < 0:
             return
-        schema, table = page.schema, page.table
-        page.set_busy(True, "正在读取表结构…")
+        schema = page.schema
+        table = page.object_name if isinstance(page, (IndexDesignerPage, TriggerDesignerPage)) else page.table
+        loader, _, _ = self._designer_api(page)
+        page.set_busy(True, "正在读取对象结构…")
         def done(snapshot):
             page.load_snapshot(snapshot)
             self.update_designer_title(page)
-        self.submit(lambda: schema_tools.load_table(session, schema, table), done,
+        self.submit(lambda: loader(session, schema, table), done,
             page.show_error, label="读取表设计", finished=lambda: page.set_busy(False))
 
     def preview_designer(self, page, definition):
         session = self.sessions.get(page.connection_id)
-        if session is None or page.snapshot is None or page.loading or self.tabs.indexOf(page) < 0:
+        if self._closed or session is None or page.snapshot is None or page.loading or self.tabs.indexOf(page) < 0:
             return
         snapshot, draft = deepcopy(page.snapshot), deepcopy(definition)
         def failed(error):
@@ -805,16 +897,20 @@ class MainWindow(QMainWindow):
             current = dialog.definition if dialog is not None else page.definition
             if current == draft and page.snapshot.fingerprint == snapshot.fingerprint:
                 page.show_error(error)
-        self.submit(lambda: schema_tools.plan_table(session, snapshot, draft),
+        _, planner, _ = self._designer_api(page)
+        self.submit(lambda: planner(session, snapshot, draft),
             page.show_plan, failed, label="生成结构变更预览")
 
     def save_designer(self, page, definition):
         session = self.sessions.get(page.connection_id)
-        if session is None or page.snapshot is None or page.loading or self.tabs.indexOf(page) < 0:
+        if self._closed or session is None or page.snapshot is None or page.loading or self.tabs.indexOf(page) < 0:
             return
+        original_table = page.snapshot.definition.table if isinstance(page, (IndexDesignerPage, TriggerDesignerPage)) else page.snapshot.table
+        _, planner, apply = self._designer_api(page)
+        affected_tables = {original_table, definition.table} if isinstance(page, (IndexDesignerPage, TriggerDesignerPage)) else {original_table}
         for index in range(self.tabs.count()):
             document = self.tabs.widget(index)
-            if isinstance(document, TablePage) and (document.connection_id, document.schema, document.table) == (page.connection_id, page.schema, page.snapshot.table) and document.model is not None and document.model.pending:
+            if isinstance(document, TablePage) and (document.connection_id, document.schema) == (page.connection_id, page.schema) and document.table in affected_tables and document.model is not None and document.model.pending:
                 page._after_save = None
                 page.show_error(ValueError("请先提交或取消该表数据页中的未保存记录，再保存结构变更。"))
                 return
@@ -822,8 +918,8 @@ class MainWindow(QMainWindow):
         confirmed = deepcopy(page.confirmed_plan)
         page.set_busy(True, "正在保存表结构…")
         def work():
-            plan = confirmed if confirmed is not None and confirmed.definition == draft else schema_tools.plan_table(session, snapshot, draft)
-            return schema_tools.apply_plan(session, plan)
+            plan = confirmed if confirmed is not None and confirmed.definition == draft else planner(session, snapshot, draft)
+            return apply(session, plan)
         def done(updated):
             page.save_succeeded(updated)
             self.update_designer_title(page)
@@ -831,10 +927,14 @@ class MainWindow(QMainWindow):
             # replacing another designer's unsaved draft.
             for index in range(self.tabs.count()):
                 document = self.tabs.widget(index)
-                if isinstance(document, TablePage) and (document.connection_id, document.schema, document.table) == (page.connection_id, page.schema, snapshot.table):
-                    document.table = updated.table
+                affected_tables = {original_table, updated.definition.table} if isinstance(page, (IndexDesignerPage, TriggerDesignerPage)) else {original_table}
+                if isinstance(document, TablePage) and (document.connection_id, document.schema) == (page.connection_id, page.schema) and document.table in affected_tables:
+                    if isinstance(page, TableDesignerPage):
+                        document.table = updated.table
                     self.when_idle(lambda p=document: p.refresh(check=False) if self.tabs.indexOf(p) >= 0 else None)
             self.when_idle(lambda: self.load_schemas(page.connection_id))
+            if self.object_page.connection_id == page.connection_id and self.object_page.schema == page.schema:
+                self.when_idle(self.object_page.refresh)
             retry = getattr(page, "_after_save", None)
             page._after_save = None
             if retry is not None:
@@ -859,7 +959,8 @@ class MainWindow(QMainWindow):
             self._focus_page = None
             for widget, visible in zip((self.sidebar, self.inspector, self.main_toolbar), self._focus_visibility):
                 widget.setVisible(visible)
-            previous.focus_action.setChecked(False)
+            if hasattr(previous, "focus_action"):
+                previous.focus_action.setChecked(False)
 
     def can_leave_designer(self, page, retry):
         if not page.dirty:
@@ -883,7 +984,13 @@ class MainWindow(QMainWindow):
         if not ok or name != info["name"]:
             return
         session = self.sessions[info["id"]]
-        sql = f"DROP {'VIEW' if info['kind'] == 'view' else 'TABLE'} {session.qualified_name(info['schema'], info['name'])}"
+        keyword = {"table": "TABLE", "view": "VIEW", "index": "INDEX", "trigger": "TRIGGER"}.get(info["kind"])
+        if keyword is None or info.get("automatic") or session.config.read_only:
+            return
+        sql = f"DROP {keyword} {session.qualified_name(info['schema'], info['name'])}"
+        if session.config.driver == "sqlserver" and keyword == "VIEW":
+            inner = f"DROP VIEW {session.quote_identifier(info['schema'])}.{session.quote_identifier(info['name'])}"
+            sql = f"EXEC {session.quote_identifier(session.config.database or 'master')}.sys.sp_executesql N'" + inner.replace("'", "''") + "'"
         def done(_):
             self.refresh_tree()
             self.object_page.refresh()
@@ -983,6 +1090,12 @@ class MainWindow(QMainWindow):
         if self.tasks:
             self.statusBar().showMessage("Wait for the current operation before editing connections", 5000)
             return
+        if config is None and driver is None:
+            manager = ConnectionManagerDialog(self)
+            self._connection_manager = manager
+            manager.selectionRequested.connect(self.connection_type_selected)
+            manager.open()
+            return manager
         dialog = ConnectionDialog(self, config)
         if driver:
             dialog.driver_combo.setCurrentIndex(max(0, dialog.driver_combo.findData(driver)))
@@ -1013,6 +1126,12 @@ class MainWindow(QMainWindow):
         self.populate_connections()
         self.set_active(result.id)
         self.connect_id(result.id)
+
+    def connection_type_selected(self, driver, preset):
+        # A selected URI remains in memory until the actual settings are saved.
+        # The settings dialog owns the explicit OS-keychain choices.
+        config = ConnectionConfig(id=str(uuid.uuid4()), **preset)
+        self.new_connection(config=config)
 
     def edit_connection(self):
         config = self.configs.get(self.active_id)
@@ -1179,11 +1298,17 @@ class MainWindow(QMainWindow):
         def done(objects):
             item.takeChildren()
             completions = []
-            for label, kind, symbol in [("表", "table", "table"), ("视图", "view", "view"), ("查询", "query", "query"), ("备份", "backup", "backup")]:
+            categories = [("数据", "redis_data", "table"), ("查询", "query", "query"), ("备份", "backup", "backup")] if session.config.driver == "redis" else [("表", "table", "table"), ("视图", "view", "view"), ("查询", "query", "query"), ("备份", "backup", "backup")]
+            for label, kind, symbol in categories:
                 category = QTreeWidgetItem([label])
                 category.setIcon(0, workbench_icon(symbol, 16))
                 category.setData(0, Qt.ItemDataRole.UserRole, {"type": "category", "id": info["id"], "schema": info["schema"], "kind": kind})
                 item.addChild(category)
+                if kind == "redis_data":
+                    child = QTreeWidgetItem(["(所有数据)"])
+                    child.setIcon(0, workbench_icon("table", 16))
+                    child.setData(0, Qt.ItemDataRole.UserRole, {"type": "object", "id": info["id"], "schema": info["schema"], "table": "(所有数据)", "name": "(所有数据)", "kind": "redis_data"})
+                    category.addChild(child)
                 if kind in {"table", "view"}:
                     for obj in objects:
                         if obj["kind"] != kind:
@@ -1204,7 +1329,7 @@ class MainWindow(QMainWindow):
             info["loaded"] = False
             item.setData(0, Qt.ItemDataRole.UserRole, info)
             self.error(exc)
-        self.submit(lambda: session.objects(info["schema"]), done, failed, "读取对象")
+        self.submit(lambda: [] if session.config.driver == "redis" else session.objects(info["schema"]), done, failed, "读取对象")
 
     def tree_selected(self, item, column=0):
         info = item.data(0, Qt.ItemDataRole.UserRole)
@@ -1234,6 +1359,8 @@ class MainWindow(QMainWindow):
             self.show_objects(info.get("kind", "table"))
 
     def open_table(self, info):
+        if info["kind"] == "redis_data":
+            return self.open_redis_browser(info["id"], info["schema"])
         for i in range(self.tabs.count()):
             page = self.tabs.widget(i)
             if isinstance(page, TablePage) and not getattr(page, "_structure_only", False) and (page.connection_id, page.schema, page.table) == (info["id"], info["schema"], info["table"]):
@@ -1252,7 +1379,9 @@ class MainWindow(QMainWindow):
         page = self.tabs.currentWidget()
         if isinstance(page, TablePage):
             page.refresh()
-        elif isinstance(page, TableDesignerPage):
+        elif isinstance(page, RedisBrowserPage):
+            page.refresh()
+        elif isinstance(page, DESIGNER_PAGES):
             if page.dirty:
                 self.statusBar().showMessage("表设计中有未保存的更改，请先保存或关闭此草稿。", 5000)
             elif page.snapshot and page.snapshot.exists:
@@ -1385,15 +1514,19 @@ class MainWindow(QMainWindow):
     def transaction(self, sql):
         session = self.sessions.get(self.active_id)
         if session:
-            self.submit(lambda: session.execute(sql), label=sql.title())
+            statement = "BEGIN TRANSACTION" if sql == "BEGIN" and session.config.driver == "sqlserver" else sql
+            self.submit(lambda: session.execute(statement), label=sql.title())
 
     def tab_changed(self, index):
         page = self.tabs.widget(index)
         if self._focus_page is not None and page is not self._focus_page:
             self.focus_workspace(self._focus_page, False)
-        if isinstance(page, TableDesignerPage):
+        if isinstance(page, DESIGNER_PAGES):
             self.set_active(page.connection_id, page.schema)
             self.update_designer_title(page)
+        if isinstance(page, RedisBrowserPage):
+            self.set_active(page.connection_id, page.schema)
+            self.update_redis_title(page)
         if isinstance(page, (QueryPage, TablePage)):
             self.set_active(page.connection_id, getattr(page, "schema", None))
             config = self.configs.get(page.connection_id)
@@ -1413,11 +1546,17 @@ class MainWindow(QMainWindow):
         if hasattr(self, "category_actions"):
             config = self.configs.get(self.active_id)
             sqlite = bool(config and config.driver == "sqlite")
-            self.category_actions["function"].setVisible(not sqlite)
-            self.category_actions["other"].setVisible(not sqlite)
+            redis = bool(config and config.driver == "redis")
+            self.category_actions["table"].setText("数据" if redis else "表")
+            for key in ("view", "function", "other", "index", "trigger"):
+                self.category_actions[key].setVisible(not redis)
             self.category_actions["index"].setVisible(sqlite)
             self.category_actions["trigger"].setVisible(sqlite)
-            for key in ("table", "view", "query", "backup", "model", "other"):
+            self.category_actions["function"].setVisible(not sqlite and not redis)
+            self.category_actions["other"].setVisible(not sqlite and not redis)
+            self.category_actions["index"].setVisible(sqlite)
+            self.category_actions["trigger"].setVisible(sqlite)
+            for key in ("table", "view", "index", "trigger", "query", "backup", "model", "other"):
                 self.category_actions[key].setEnabled(connected)
             other = self.category_actions["other"]
             user = self.category_actions["user"]
@@ -1427,8 +1566,10 @@ class MainWindow(QMainWindow):
             for action in ([user, other] if sqlite else [other, user]):
                 self.main_toolbar.insertAction(before, action)
         self.query_action.setEnabled(self.active_id in self.configs)
-        self.table_action.setEnabled(connected and not self.configs[self.active_id].read_only)
-        self.diagram_action.setEnabled(connected)
+        relational = connected and self.configs[self.active_id].driver != "redis"
+        self.table_action.setEnabled(relational and not self.configs[self.active_id].read_only)
+        self.diagram_action.setEnabled(relational)
+        self.category_actions["model"].setEnabled(relational)
         self.run_action.setEnabled(isinstance(page, QueryPage) and not page.running)
         self.stop_action.setEnabled(not self._cancelling and any(isinstance(self.tabs.widget(i), QueryPage) and self.tabs.widget(i).running for i in range(self.tabs.count())))
         self.import_action.setEnabled(isinstance(page, TablePage) and page.kind == "table" and not self.configs[page.connection_id].read_only)
@@ -1440,8 +1581,8 @@ class MainWindow(QMainWindow):
             self.status.setText(f"{len(page.current_result().rows)} 条记录")
         elif isinstance(page, TablePage) and page.model is not None and not page.loading:
             self.status.setText(f"{page.total} 条记录在第 {page.offset // int(page.page_size.currentText()) + 1} 页")
-        elif isinstance(page, TableDesignerPage) and page.definition is not None and not page.loading:
-            self.status.setText(f"字段数: {len(page.definition.columns)}" + (" · 已编辑" if page.dirty else ""))
+        elif isinstance(page, DESIGNER_PAGES) and page.definition is not None and not page.loading:
+            self.status.setText((f"字段数: {len(page.definition.columns)}" if hasattr(page.definition, "columns") else "触发器") + (" · 已编辑" if page.dirty else ""))
         elif page is self.object_page and not self.tasks:
             self.status.setText(f"{len(self.object_page.records)} " + {"table": "表", "view": "视图", "query": "查询", "backup": "备份"}.get(self.object_page.kind, "对象"))
 
@@ -1457,7 +1598,9 @@ class MainWindow(QMainWindow):
         for _, page in pages:
             if isinstance(page, TablePage) and not page.can_discard():
                 return False
-            if isinstance(page, TableDesignerPage) and not self.can_leave_designer(page, lambda: self.disconnect(connection_id)):
+            if isinstance(page, RedisBrowserPage) and not page.can_discard(lambda: self.disconnect(connection_id)):
+                return False
+            if isinstance(page, DESIGNER_PAGES) and not self.can_leave_designer(page, lambda: self.disconnect(connection_id)):
                 return False
         session = self.sessions.get(connection_id)
         if session and session.in_transaction:
@@ -1469,7 +1612,7 @@ class MainWindow(QMainWindow):
         if self.object_page.connection_id == connection_id:
             self.object_page.refresh()
         for index, page in reversed(pages):
-            if isinstance(page, (TablePage, TableDesignerPage)):
+            if isinstance(page, (TablePage, RedisBrowserPage, *DESIGNER_PAGES)):
                 self.tabs.removeTab(index)
                 page.deleteLater()
         item = self.connection_item(connection_id)
@@ -1496,7 +1639,9 @@ class MainWindow(QMainWindow):
             return
         if isinstance(page, TablePage) and not page.can_discard():
             return
-        if isinstance(page, TableDesignerPage) and not self.can_leave_designer(page, lambda: self.close_tab(self.tabs.indexOf(page))):
+        if isinstance(page, DESIGNER_PAGES) and not self.can_leave_designer(page, lambda: self.close_tab(self.tabs.indexOf(page))):
+            return
+        if isinstance(page, RedisBrowserPage) and not page.can_discard(lambda: self.close_tab(self.tabs.indexOf(page))):
             return
         if isinstance(page, QueryPage) and page.modified:
             answer = QMessageBox.question(self, "保存查询", "关闭前保存此查询？", QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel)
@@ -1523,14 +1668,15 @@ class MainWindow(QMainWindow):
 
     def save_sql(self, checked=False, page=None):
         page = page or self.tabs.currentWidget()
-        if isinstance(page, TableDesignerPage):
+        if isinstance(page, (RedisBrowserPage, *DESIGNER_PAGES)):
             page.request_save()
             return False  # schema writes are asynchronous, never a synchronous SQL-file save.
         if not isinstance(page, QueryPage):
             return False
         filename = page.filename
         if not filename:
-            filename, _ = QFileDialog.getSaveFileName(self, "保存查询", "query.sql", "SQL files (*.sql)")
+            redis = self.configs[page.connection_id].driver == "redis"
+            filename, _ = QFileDialog.getSaveFileName(self, "保存查询", "commands.redis" if redis else "query.sql", "Redis commands (*.redis *.txt)" if redis else "SQL files (*.sql)")
         if not filename:
             return False
         try:
@@ -1740,7 +1886,7 @@ class MainWindow(QMainWindow):
         QMessageBox.information(self, "Keyboard shortcuts", "Use Command on macOS and Control on Windows/Linux.\n\nNew connection: Ctrl+Shift+N\nNew query: Ctrl+N\nOpen SQL: Ctrl+O\nSave SQL: Ctrl+S\nRun selection / script: Ctrl+Enter\nFind in SQL: Ctrl+F\nFormat SQL: Ctrl+Shift+F\nQuery history: Ctrl+H\nRefresh: F5\nCopy grid selection: Ctrl+C")
 
     def about(self):
-        QMessageBox.about(self, "关于 OpenNavicat", f"<h2>OpenNavicat {__version__}</h2><p>原生桌面数据库工具。</p><p>SQLite · PostgreSQL · MySQL · MariaDB<br>Qt 6 / Python · MIT License</p><p>完整界面及工具功能还原进行中。</p>")
+        QMessageBox.about(self, "关于 OpenNavicat", f"<h2>OpenNavicat {__version__}</h2><p>原生桌面数据库工具。</p><p>SQLite · PostgreSQL · MySQL · MariaDB · SQL Server · Redis<br>Qt 6 / Python · MIT License</p><p>完整界面及工具功能还原进行中。</p>")
 
     def closeEvent(self, event):
         if self.tasks:
@@ -1750,10 +1896,13 @@ class MainWindow(QMainWindow):
             return
         for i in range(self.tabs.count()):
             page = self.tabs.widget(i)
-            if isinstance(page, TableDesignerPage) and not self.can_leave_designer(page, self.close):
+            if isinstance(page, DESIGNER_PAGES) and not self.can_leave_designer(page, self.close):
                 event.ignore()
                 return
             if isinstance(page, TablePage) and not page.can_discard():
+                event.ignore()
+                return
+            if isinstance(page, RedisBrowserPage) and not page.can_discard(self.close):
                 event.ignore()
                 return
         if any(session.in_transaction for session in self.sessions.values()):

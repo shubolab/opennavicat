@@ -6,7 +6,7 @@ from pathlib import Path
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
-    QAbstractItemView, QButtonGroup, QFormLayout, QHBoxLayout, QLabel, QLineEdit,
+    QAbstractItemView, QButtonGroup, QCheckBox, QFormLayout, QHBoxLayout, QLabel, QLineEdit,
     QPlainTextEdit, QSizePolicy, QStackedWidget, QTableWidget, QTableWidgetItem,
     QToolBar, QToolButton, QVBoxLayout, QWidget,
 )
@@ -32,7 +32,7 @@ class ObjectBrowser(QWidget):
         self.toolbar.setStyleSheet("QToolButton { min-width: 26px; max-width: 30px; padding: 1px; }")
         self.open_action = self.add_action("打开表", "open", self.open_selected)
         self.design_action = self.add_action("设计表", "design", self.design_selected)
-        self.new_action = self.add_action("新建表", "add", window.new_table)
+        self.new_action = self.add_action("新建表", "add", window.new_browser_object)
         self.delete_action = self.add_action("删除表", "delete", self.drop_selected)
         self.toolbar.addSeparator()
         self.import_action = self.add_action("导入向导", "import", self.import_selected)
@@ -51,6 +51,11 @@ class ObjectBrowser(QWidget):
         self.search.setFixedWidth(200)
         self.search.textChanged.connect(self.filter_rows)
         self.toolbar.addWidget(self.search)
+        self.system_indexes_check = QCheckBox("显示系统索引")
+        self.system_indexes_check.setObjectName("showSystemIndexes")
+        self.system_indexes_check.toggled.connect(self.refresh)
+        self.toolbar.addWidget(self.system_indexes_check)
+        self.system_indexes_check.hide()
         layout.addWidget(self.toolbar)
         self.table = QTableWidget(0, 5)
         self.table.setObjectName("objectList")
@@ -79,14 +84,24 @@ class ObjectBrowser(QWidget):
 
     def set_context(self, connection_id, schema, kind="table"):
         self.connection_id, self.schema, self.kind = connection_id, schema, kind
-        label = {"table": "表", "view": "视图", "query": "查询", "backup": "备份"}.get(kind, "对象")
+        label = {"table": "表", "view": "视图", "index": "索引", "trigger": "触发器", "redis_data": "数据", "query": "查询", "backup": "备份"}.get(kind, "对象")
         self.open_action.setText("打开" + label)
         self.design_action.setText("设计" + label)
         self.new_action.setText("新建" + label)
         self.delete_action.setText("删除" + label)
+        headers = {"index": ["名称", "唯一键", "自动索引", "表名称", "根页面"],
+                   "trigger": ["名称", "类型", "表名称", "触发", ""]}.get(kind,
+                   ["名称", "根页面", "有索引", "有触发器", ""])
+        self.table.setHorizontalHeaderLabels(headers)
+        self.system_indexes_check.setVisible(kind == "index")
+        if kind == "redis_data":
+            self.table.setHorizontalHeaderLabels(["名称", "创建日期", "修改日期", "", ""])
+        self.open_action.setVisible(kind not in {"index", "trigger"})
         self.refresh()
 
     def refresh(self):
+        if self.window._closed:
+            return
         session = self.window.sessions.get(self.connection_id)
         selected = self.selected()
         self._selection_hint = selected["name"] if selected and (selected["id"], selected["schema"], selected["kind"]) == (self.connection_id, self.schema, self.kind) else None
@@ -96,6 +111,9 @@ class ObjectBrowser(QWidget):
         if session is None:
             return
         schema, kind, connection_id = self.schema, self.kind, self.connection_id
+        if kind == "redis_data":
+            self.show_objects([dict(name="(所有数据)", kind=kind, schema=schema, id=connection_id)])
+            return
         if kind == "query":
             items = [{"name": entry["name"], "kind": "query", "schema": schema, "sql": entry["sql"], "id": connection_id} for entry in self.window.store.state["favorites"] if entry.get("connection_id") == connection_id]
             self.show_objects(items)
@@ -104,7 +122,30 @@ class ObjectBrowser(QWidget):
             items = [{"name": entry["name"], "kind": "backup", "schema": schema, "path": entry["path"], "id": connection_id} for entry in self.window.store.state.get("backups", []) if entry.get("connection_id") == connection_id]
             self.show_objects(items)
             return
+        show_system = self.system_indexes_check.isChecked()
         def work():
+            if session.config.driver == "sqlite" and kind in {"index", "trigger"}:
+                from ..schema_objects import load_trigger
+                rows = session._query(f"SELECT name,tbl_name,rootpage,sql FROM {session.quote_identifier(schema)}.sqlite_schema WHERE type=? ORDER BY name", (kind,))
+                objects = []
+                hidden = 0
+                for name, owner, rootpage, ddl in rows:
+                    obj = dict(name=name, table=owner, rootpage=rootpage, ddl=ddl or "", schema=schema, kind=kind, id=connection_id)
+                    if kind == "index":
+                        obj["automatic"] = ddl is None
+                        if obj["automatic"] and not show_system:
+                            hidden += 1
+                            continue
+                        metadata = session._query(f"PRAGMA {session.quote_identifier(schema)}.index_list({session.quote_identifier(owner)})")
+                        match = next((row for row in metadata if row[1] == name), None)
+                        obj["unique"] = bool(match and match[2])
+                    else:
+                        snapshot = load_trigger(session, schema, name)
+                        obj["owner_type"] = snapshot.definition.owner_type
+                        obj["event"] = snapshot.definition.event
+                        obj["timing"] = snapshot.definition.timing
+                    objects.append(obj)
+                return objects, hidden
             objects = [dict(obj, id=connection_id) for obj in session.objects(schema) if obj["kind"] == kind]
             if session.config.driver == "sqlite":
                 rootpages = dict(session._query(f"SELECT name,rootpage FROM {session.quote_identifier(schema)}.sqlite_schema WHERE type IN ('table','view')"))
@@ -113,9 +154,11 @@ class ObjectBrowser(QWidget):
                     obj["rootpage"] = rootpages.get(obj["name"], "")
                     obj["indexed"] = bool(session._query(f"PRAGMA {session.quote_identifier(schema)}.index_list({session.quote_identifier(obj['name'])})")) if kind == "table" else False
                     obj["triggers"] = obj["name"] in triggers
-            return objects
-        def done(objects):
+            return objects, 0
+        def done(result):
+            objects, hidden = result
             if (self.connection_id, self.schema, self.kind) == (connection_id, schema, kind):
+                self.hidden_system_indexes = hidden
                 self.show_objects(objects)
         self.window.submit(work, done, label="读取对象")
 
@@ -124,7 +167,11 @@ class ObjectBrowser(QWidget):
         self.table.setRowCount(len(objects))
         for row, entry in enumerate(objects):
             values = [entry["name"], entry.get("rootpage", ""), "是" if entry.get("indexed") else "否", "是" if entry.get("triggers") else "否", ""]
-            if self.kind in {"query", "backup"}:
+            if self.kind == "index":
+                values = [entry["name"], "是" if entry.get("unique") else "否", "是" if entry.get("automatic") else "否", entry["table"], entry.get("rootpage", "")]
+            elif self.kind == "trigger":
+                values = [entry["name"], "View" if entry.get("owner_type") == "view" else "Table", entry["table"], entry.get("timing", "") + " " + entry.get("event", ""), ""]
+            if self.kind in {"query", "backup", "redis_data"}:
                 values = [entry["name"], "", "", "", ""]
             for column, value in enumerate(values):
                 item = QTableWidgetItem(str(value))
@@ -139,7 +186,7 @@ class ObjectBrowser(QWidget):
                     self.table.setCurrentCell(row, 0)
                     break
         self.update_actions()
-        self.window.status.setText(f"{len(objects)} " + {"table": "表", "view": "视图", "query": "查询", "backup": "备份"}.get(self.kind, "对象"))
+        self.window.status.setText(f"{len(objects)} " + {"table": "表", "view": "视图", "index": "索引", "trigger": "触发器", "redis_data": "数据", "query": "查询", "backup": "备份"}.get(self.kind, "对象") + (f" · 隐藏 {getattr(self, 'hidden_system_indexes', 0)} 个系统索引" if self.kind == "index" else ""))
 
     def selected(self):
         row = self.table.currentRow()
@@ -163,12 +210,12 @@ class ObjectBrowser(QWidget):
         connected = self.connection_id in self.window.sessions
         writable = connected and not self.window.configs[self.connection_id].read_only
         self.open_action.setEnabled(selected)
-        self.design_action.setEnabled(selected and self.kind in {"table", "view"})
-        self.new_action.setEnabled(writable and self.kind == "table")
-        self.delete_action.setEnabled(writable and selected and self.kind in {"table", "view"})
+        self.design_action.setEnabled(selected and self.kind in {"table", "view", "index", "trigger"})
+        self.new_action.setEnabled(writable and self.kind in {"table", "index", "trigger"})
+        self.delete_action.setEnabled(writable and selected and self.kind in {"table", "view", "index", "trigger"} and not self.selected().get("automatic"))
         self.import_action.setEnabled(writable and selected and self.kind == "table")
         self.export_action.setEnabled(connected and selected and self.kind in {"table", "view"})
-        self.er_action.setEnabled(connected)
+        self.er_action.setEnabled(connected and self.window.configs[self.connection_id].driver != "redis")
 
     def filter_rows(self, text):
         text = text.casefold()
@@ -184,13 +231,17 @@ class ObjectBrowser(QWidget):
             self.window.new_query(sql=entry["sql"], connection_id=entry["id"])
         elif entry["kind"] == "backup":
             self.window.statusBar().showMessage(entry["path"], 10000)
+        elif entry["kind"] == "redis_data":
+            self.window.open_redis_browser(entry["id"], entry["schema"])
+        elif entry["kind"] in {"index", "trigger"}:
+            self.window.design_object(entry)
         else:
             self.window.open_table(dict(entry, table=entry["name"]))
 
     def design_selected(self):
         entry = self.selected()
         if entry:
-            self.window.design_object(dict(entry, table=entry["name"]))
+            self.window.design_object(dict(entry, table=entry["name"]) if entry["kind"] not in {"index", "trigger"} else entry)
 
     def import_selected(self):
         self.open_selected()
@@ -275,9 +326,9 @@ class Inspector(QWidget):
 
     def show_object(self, info, config=None, ddl=""):
         kind = info.get("kind", "query")
-        self.symbol.setPixmap(icon(kind if kind in {"table", "view", "backup"} else "query", 48).pixmap(48, 48))
+        self.symbol.setPixmap(icon(kind if kind in {"table", "view", "index", "trigger", "backup"} else "query", 48).pixmap(48, 48))
         self.title.setText(info.get("name", info.get("table", "无标题")))
-        self.kind.setText({"table": "表", "view": "视图", "query": "查询", "backup": "备份"}.get(kind, kind))
+        self.kind.setText({"table": "表", "view": "视图", "index": "索引", "trigger": "触发器", "redis_data": "数据", "query": "查询", "backup": "备份"}.get(kind, kind))
         self.connection.setText(config.name if config else "")
         self.schema.setText(info.get("schema", ""))
         details = []

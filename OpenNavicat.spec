@@ -26,6 +26,8 @@ except PackageNotFoundError:
 psycopg_binaries = collect_dynamic_libs("psycopg_binary") if binary_metadata else []
 hiddenimports = collect_submodules("keyring.backends")
 metadata = copy_metadata("keyring") + copy_metadata("psycopg") + binary_metadata
+metadata += copy_metadata("python-tds") + copy_metadata("redis") + copy_metadata("pyOpenSSL") + copy_metadata("certifi")
+hiddenimports += ["opennavicat.sqlserver_session", "opennavicat.redis_session", "pytds", "redis", "OpenSSL", "certifi"]
 if binary_metadata:
     hiddenimports += ["psycopg_binary.pq", "psycopg_binary._psycopg"]
 else:

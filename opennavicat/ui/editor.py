@@ -1,4 +1,4 @@
-"""A small native SQL editor with highlighting, completion and a line gutter."""
+"""Native SQL/command editor with completion, find and a line gutter."""
 
 from __future__ import annotations
 
@@ -29,6 +29,17 @@ INTEGER INT BIGINT SMALLINT REAL FLOAT DOUBLE NUMERIC DECIMAL TEXT VARCHAR CHAR
 BOOLEAN BOOL DATE TIME TIMESTAMP JSON JSONB BLOB BYTEA AUTOINCREMENT SERIAL
 """.split()
 
+REDIS_WORDS = """
+PING ECHO GET SET DEL UNLINK EXISTS TYPE TTL PTTL EXPIRE PEXPIRE PERSIST SCAN
+MGET MSET INCR INCRBY DECR DECRBY APPEND STRLEN GETRANGE SETRANGE GETDEL GETEX
+HGET HSET HGETALL HDEL HLEN HEXISTS HINCRBY HSCAN HKEYS HVALS
+LPUSH RPUSH LPOP RPOP LLEN LRANGE LINDEX LSET LREM LTRIM
+SADD SREM SMEMBERS SISMEMBER SCARD SSCAN SPOP SRANDMEMBER
+ZADD ZREM ZRANGE ZRANK ZSCORE ZCARD ZSCAN ZINCRBY
+XADD XRANGE XREVRANGE XREAD XLEN XDEL INFO DBSIZE SELECT CLIENT COMMAND
+EVAL EVAL_RO FCALL FCALL_RO
+""".split()
+
 
 def pretty_sql(sql: str) -> str:
     """Format SQL without changing string literals or quoted identifiers."""
@@ -52,6 +63,7 @@ class SqlHighlighter(QSyntaxHighlighter):
 
     def __init__(self, document):
         super().__init__(document)
+        self.enabled = True
         self.words = set(SQL_WORDS)
         self.set_palette(QApplication.palette())
 
@@ -65,6 +77,9 @@ class SqlHighlighter(QSyntaxHighlighter):
         self.rehighlight()
 
     def highlightBlock(self, text: str):
+        if not self.enabled:
+            self.setCurrentBlockState(0)
+            return
         # state 1: block comment, 2: single-quoted string. Quoted identifiers
         # deliberately stay local to a line; most dialects reject their newline.
         previous = self.previousBlockState()
@@ -156,6 +171,7 @@ class SqlEditor(QPlainTextEdit):
         self.setFont(font)
         self.setTabStopDistance(self.fontMetrics().horizontalAdvance(" ") * 4)
         self.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
+        self.language = "sql"
         self.highlighter = SqlHighlighter(self.document())
         self.line_area = _LineArea(self)
         self._base_color = self.palette().color(QPalette.ColorRole.Base)
@@ -182,9 +198,33 @@ class SqlEditor(QPlainTextEdit):
                 if cursor.hasSelection() else self.toPlainText())
 
     def set_completions(self, words: list[str]):
-        candidates = sorted(set(SQL_WORDS + list(words)), key=str.casefold)
-        self._completion_model = QStringListModel(candidates, self.completer)
-        self.completer.setModel(self._completion_model)
+        # Table-name callbacks may arrive after a connection/mode switch. Redis
+        # completion must stay a native command vocabulary, without SQL schema
+        # names or stale keywords supplied by those callbacks.
+        extras = list(words) if self.language != "redis" else []
+        base = SQL_WORDS if self.language == "sql" else REDIS_WORDS if self.language == "redis" else []
+        candidates = sorted(set(base + extras), key=str.casefold)
+        if not hasattr(self, "_completion_model"):
+            self._completion_model = QStringListModel(self.completer)
+            self.completer.setModel(self._completion_model)
+        self._completion_model.setStringList(candidates)
+
+    def set_language(self, language: str):
+        """Change lexical mode without touching text, cursor, undo or selection."""
+        if language not in {"sql", "redis", "text"}:
+            raise ValueError("Editor language must be sql, redis or text")
+        if language == self.language:
+            return
+        self.language = language
+        self.highlighter.enabled = language == "sql"
+        self.highlighter.rehighlight()
+        self.completer.popup().hide()
+        self.set_completions([])
+        if self._find_dialog is not None:
+            self._find_dialog.setWindowTitle(self._find_title())
+
+    def _find_title(self):
+        return "Find in Redis commands" if self.language == "redis" else "Find in SQL" if self.language == "sql" else "Find text"
 
     def line_area_width(self):
         digits = len(str(max(1, self.blockCount())))
@@ -297,7 +337,7 @@ class SqlEditor(QPlainTextEdit):
     def show_find(self):
         if self._find_dialog is None:
             dialog = QDialog(self)
-            dialog.setWindowTitle("Find in SQL")
+            dialog.setWindowTitle(self._find_title())
             layout = QVBoxLayout(dialog)
             self._find_input = QLineEdit(dialog)
             self._find_input.setPlaceholderText("Find text")

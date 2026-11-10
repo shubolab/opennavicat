@@ -109,7 +109,27 @@ Save→disconnect的时序上复现已排队schema刷新访问已关闭session�
 两个DMG均从实际挂载内容核对全部原生映像、symlink及主程序摘要。Linux最终公开ARM64 DEB另在
 干净Ubuntu24.04.5 ARM64/glibc2.39仅安装声明依赖和xvfb/xauth后运行，xcb依赖无缺，
 实际6×4查询、中文截图及crypto probe通过，apt purge及任务容器移除已完成。
-Windows本地RDP和Linux amd64 WSL验收在用户新授权后继续进行，不冒充已完成。
+
+用户授权的 Dell Windows AMD64 主机已完成本地 RDP 实际界面验证，使用 Beta 中已有的免密会话，
+没有改变远程桌面、网络或其它 Windows 工作。目标系统报告为
+`Microsoft Windows NT 10.0.26100.0 / AMD64`。公开 AMD64 安装器实际下载的长度为
+38,823,970 字节，SHA-256 与上表和发布清单一致；安装后主程序摘要另核对为
+`b0e27a4ebf110dcef7d90e7dc33875c9eb8edf966fbfc13624af4c37269d3eed`。
+
+在任务专用的隔离工作区中，实际通过桌面操作运行样例查询，获得 **6 行 × 4 列**，
+并打开包含七页的表设计器，随后关闭应用。另通过 SSH 启动同一个已安装的主程序运行
+默认 Windows 平台的 `--smoke-test`，退出码为 0；报告确认为 0.4.0、Windows/AMD64、
+Python 3.13.17、Qt 6.12.0、SQL 6×4、libpq 18.4，以及 `crypto_legacy_probe=true`。
+原始运行报告保存在本机忽略目录 `artifacts/dell-validation/runtime-smoke.json`，
+RDP/安装/卸载汇总为 `artifacts/dell-validation/final-receipt.json`。
+
+本地卸载退出码为 0。随后只读复核发现仅残留 `unins000.exe` 自删除程序；常规清理前再次核对
+没有该卸载器进程、没有其它文件或链接，并确认 verification AppId 的卸载登记在 HKCU/HKLM
+及对应 32 位视图均已移除。只删除这个任务工件及空的 Application 目录，保留父任务目录，
+最终只读复核确认应用目录已消失。原始检查与最终回执分别为
+`artifacts/dell-validation/cleanup-inspection.json` 和 `artifacts/dell-validation/cleanup-receipt.json`。
+Windows 其它工作、全局网络及桌面设置未变。Linux AMD64 的 WSL **GUI** 验收按用户明确要求暂缓；
+没有安装桌面，也不将后台协议测试计作 Linux 界面验收。
 
 继续沿用未签名/未Apple公证状态和Ubuntu24.04构建环境边界，Windows ARM64应用及库为原生ARM64，
 Inno引导程序为x86。用户已恢复目标，本轮里程碑交付后继续完整目标，不再次自动暂停。

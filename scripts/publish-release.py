@@ -65,7 +65,8 @@ def validate_assets(directory, version):
         normalized = {"x86_64": "amd64", "amd64": "amd64", "aarch64": "arm64", "arm64": "arm64"}.get(runtime.get("machine", "").lower())
         require(smoke.get("smoke") == "passed" and smoke.get("rows") == 6 and len(smoke.get("columns", [])) == 4, f"Installed SQL smoke did not pass: {installer.name}")
         require(runtime.get("version") == version and normalized == arch and runtime.get("os") == {"macos": "Darwin", "windows": "Windows", "linux": "Linux"}[system], f"Installed runtime is the wrong target: {installer.name}")
-        require(isinstance(runtime.get("libpq"), int) and runtime["libpq"] >= 170000 and all(runtime.get(field) for field in ("qt", "psycopg", "pymysql", "paramiko", "cryptography")), f"Installed database/SSH dependencies are incomplete: {installer.name}")
+        require(isinstance(runtime.get("libpq"), int) and runtime["libpq"] >= 170000 and all(runtime.get(field) for field in ("qt", "psycopg", "pymysql", "paramiko", "cryptography", "python_tds", "redis", "pyopenssl", "certifi", "sqlserver_default_ca_present")), f"Installed database/SSH dependencies are incomplete: {installer.name}")
+        require(all(runtime.get(field) is True for field in ("extra_adapters_constructed", "sqlserver_tls_context_ready")), f"Installed SQL Server/Redis adapter or TLS context probes did not pass: {installer.name}")
         require(runtime.get("crypto_legacy_probe") is True, f"Installed OpenSSL provider was not verified: {installer.name}")
         manifests.append(manifest)
     return manifests
@@ -99,9 +100,19 @@ def publish(tag, directory, verify_only=False):
         *map(str, installers), str(checksums), str(combined)], check=True)
     remote = subprocess.run(command + ["view", tag, "--repo", REPOSITORY,
         "--json", "assets"], check=True, capture_output=True, text=True)
-    uploaded = {asset["name"]: asset["size"] for asset in json.loads(remote.stdout)["assets"]}
-    for path in [*installers, checksums, combined]:
-        require(uploaded.get(path.name) == path.stat().st_size, f"GitHub asset upload is incomplete: {path.name}")
+    remote_assets = json.loads(remote.stdout).get("assets")
+    require(isinstance(remote_assets, list) and all(isinstance(asset, dict) and isinstance(asset.get("name"), str) for asset in remote_assets), "GitHub asset metadata is malformed")
+    uploaded = {asset["name"]: asset for asset in remote_assets}
+    expected_paths = [*installers, checksums, combined]
+    expected_names = {path.name for path in expected_paths}
+    actual_names = set(uploaded)
+    require(len(remote_assets) == len(expected_paths) and actual_names == expected_names,
+        f"GitHub asset set is incomplete or unexpected: missing={sorted(expected_names-actual_names)}, extra={sorted(actual_names-expected_names)}, duplicates={len(remote_assets)-len(uploaded)}")
+    for path in expected_paths:
+        asset = uploaded[path.name]
+        require(asset.get("size") == path.stat().st_size, f"GitHub asset upload size differs: {path.name}")
+        require(asset.get("state") == "uploaded", f"GitHub asset upload is not complete: {path.name}")
+        require(asset.get("digest") == "sha256:" + digest(path), f"GitHub asset upload checksum differs: {path.name}")
     subprocess.run(command + ["edit", tag, "--repo", REPOSITORY, "--draft=false"], check=True)
     return {"published": tag, "url": f"https://github.com/{REPOSITORY}/releases/tag/{tag}"}
 

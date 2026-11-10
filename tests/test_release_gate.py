@@ -2,6 +2,7 @@
 import importlib.util
 import json
 from pathlib import Path
+import subprocess
 
 import pytest
 
@@ -24,7 +25,10 @@ def assets(tmp_path):
                     "os": {"macos": "Darwin", "windows": "Windows", "linux": "Linux"}[system],
                     "version": VERSION, "machine": arch, "libpq": 180006,
                     "qt": "fixture", "psycopg": "fixture", "pymysql": "fixture",
-                    "paramiko": "fixture", "cryptography": "fixture", "crypto_legacy_probe": True}}}
+                    "paramiko": "fixture", "cryptography": "fixture", "crypto_legacy_probe": True,
+                    "python_tds": "1.17.1", "redis": "8.1.0", "pyopenssl": "26.4.0",
+                    "certifi": "2026.10.23", "sqlserver_default_ca_present": True,
+                    "extra_adapters_constructed": True, "sqlserver_tls_context_ready": True}}}
         manifest = {"name": "OpenNavicat", "version": VERSION, "os": system,
             "architecture": arch, "native_host_architecture": arch,
             "installer": installer.name, "bytes": installer.stat().st_size,
@@ -79,3 +83,153 @@ def test_relabeling_and_incomplete_verification_fail_closed(assets, change, expe
 def test_tag_must_match_source_version_before_publication(assets):
     with pytest.raises(ValueError, match="Tag must exactly match"):
         gate.publish("v9.9.9", assets, verify_only=True)
+
+
+@pytest.mark.parametrize("field", ["python_tds", "redis", "pyopenssl", "certifi", "sqlserver_default_ca_present"])
+def test_missing_new_driver_runtime_is_rejected(assets, field):
+    path, manifest = first_manifest(assets)
+    manifest["verification"]["runtime"]["runtime"].pop(field)
+    path.write_text(json.dumps(manifest), "utf-8")
+    installer = assets / manifest["installer"]
+    installer.with_suffix(".installed-smoke.json").write_text(json.dumps(manifest["verification"]), "utf-8")
+    with pytest.raises(ValueError, match="dependencies are incomplete"):
+        gate.validate_assets(assets, VERSION)
+
+
+@pytest.mark.parametrize("field", ["extra_adapters_constructed", "sqlserver_tls_context_ready"])
+@pytest.mark.parametrize("reported", [None, False, "true", 1])
+def test_adapter_and_tls_probe_must_be_actual_true_boolean(assets, field, reported):
+    path, manifest = first_manifest(assets)
+    runtime = manifest["verification"]["runtime"]["runtime"]
+    if reported is None:
+        runtime.pop(field)
+    else:
+        runtime[field] = reported
+    path.write_text(json.dumps(manifest), "utf-8")
+    installer = assets / manifest["installer"]
+    installer.with_suffix(".installed-smoke.json").write_text(json.dumps(manifest["verification"]), "utf-8")
+    with pytest.raises(ValueError, match="probes did not pass"):
+        gate.validate_assets(assets, VERSION)
+
+
+class MockGitHubRelease:
+    """A draft with gh --clobber semantics; no external command is executed."""
+
+    def __init__(self, *, exists=True, initial_assets=(), asset_change=None, fail_upload=False):
+        self.exists = exists
+        self.is_draft = True
+        self.asset_change = asset_change
+        self.fail_upload = fail_upload
+        self.assets = [dict(asset) for asset in initial_assets]
+        self.calls = []
+
+    def run(self, command, **kwargs):
+        self.calls.append(command)
+        assert command[:2] == ["gh", "release"]
+        action = command[2]
+        if action == "view" and command[-2:] == ["--json", "isDraft"]:
+            return subprocess.CompletedProcess(command, 0 if self.exists else 1,
+                                               stdout=json.dumps({"isDraft": self.is_draft}))
+        if action == "create":
+            assert "--draft" in command and "--verify-tag" in command
+            self.exists = True
+            return subprocess.CompletedProcess(command, 0)
+        if action == "upload":
+            assert self.is_draft and kwargs.get("check") is True
+            if self.fail_upload:
+                raise subprocess.CalledProcessError(1, command)
+            paths = [Path(value) for value in command[command.index("--clobber") + 1:]]
+            # gh --clobber replaces matching names while keeping unrelated
+            # assets already attached to a reused draft.
+            remote = {asset["name"]: asset for asset in self.assets}
+            remote.update({path.name: {"name": path.name, "size": path.stat().st_size,
+                                      "state": "uploaded", "digest": "sha256:" + gate.digest(path)} for path in paths})
+            self.assets = list(remote.values())
+            if self.asset_change:
+                self.asset_change(self.assets)
+            return subprocess.CompletedProcess(command, 0)
+        if action == "view" and command[-2:] == ["--json", "assets"]:
+            return subprocess.CompletedProcess(command, 0, stdout=json.dumps({"assets": self.assets}))
+        if action == "edit":
+            assert command[-1] == "--draft=false"
+            self.is_draft = False
+            return subprocess.CompletedProcess(command, 0)
+        pytest.fail(f"Unexpected mocked release command: {command}")
+
+
+@pytest.fixture
+def mock_release(monkeypatch, tmp_path):
+    project = tmp_path / "source"
+    notes = project / "docs/releases" / f"v{VERSION}.md"
+    notes.parent.mkdir(parents=True)
+    notes.write_text("Synthetic milestone notes; never published.\n", "utf-8")
+    (project / "pyproject.toml").write_text(f'[project]\nversion = "{VERSION}"\n', "utf-8")
+    monkeypatch.setattr(gate, "ROOT", project)
+    def install(**kwargs):
+        service = MockGitHubRelease(**kwargs)
+        monkeypatch.setattr(gate.subprocess, "run", service.run)
+        return service
+    return install
+
+
+@pytest.mark.parametrize("exists", [True, False])
+def test_exact_eight_uploaded_bytes_publish_only_after_verification(assets, mock_release, exists):
+    service = mock_release(exists=exists)
+    result = gate.publish(f"v{VERSION}", assets)
+    assert result == {"published": f"v{VERSION}", "url": f"https://github.com/shubolab/opennavicat/releases/tag/v{VERSION}"}
+    assert service.is_draft is False
+    assert len(service.assets) == 8
+    assert {asset["name"] for asset in service.assets} == {
+        *(gate.asset_name(VERSION, system, arch) for system, arch in gate.TARGETS),
+        "SHA256SUMS", "build-manifests.json",
+    }
+    assert [call[2] for call in service.calls] == (["view", "upload", "view", "edit"] if exists
+                                                   else ["view", "create", "upload", "view", "edit"])
+
+
+@pytest.mark.parametrize("change,expected", [
+    (lambda assets: assets.append({"name": "unexpected-stale.zip", "size": 123, "state": "uploaded", "digest": "sha256:" + "0" * 64}), "asset set"),
+    (lambda assets: assets.pop(), "asset set"),
+    (lambda assets: assets.append(dict(assets[0])), "asset set"),
+    (lambda assets: assets[0].update(size=assets[0]["size"] + 1), "size differs"),
+    (lambda assets: assets[0].update(digest="sha256:" + "0" * 64), "checksum differs"),
+    (lambda assets: assets[0].pop("digest"), "checksum differs"),
+    (lambda assets: assets[0].update(state="starter"), "not complete"),
+    (lambda assets: assets[0].pop("state"), "not complete"),
+    (lambda assets: assets[-2].update(digest="sha256:" + "0" * 64), "checksum differs"),
+    (lambda assets: assets[-1].update(digest="sha256:" + "0" * 64), "checksum differs"),
+])
+def test_reused_draft_is_never_published_with_unverified_remote_assets(assets, mock_release, change, expected):
+    service = mock_release(asset_change=change)
+    with pytest.raises(ValueError, match=expected):
+        gate.publish(f"v{VERSION}", assets)
+    assert service.is_draft is True
+    assert not any(call[2] == "edit" for call in service.calls)
+
+
+def test_stale_extra_asset_survives_clobber_but_cannot_be_published(assets, mock_release):
+    stale = {"name": "previous-attempt.zip", "size": 123, "state": "uploaded", "digest": "sha256:" + "0" * 64}
+    service = mock_release(initial_assets=[stale])
+    with pytest.raises(ValueError, match="extra=.*previous-attempt.zip"):
+        gate.publish(f"v{VERSION}", assets)
+    assert len(service.assets) == 9 and stale in service.assets
+    assert service.is_draft is True
+    assert not any(call[2] == "edit" for call in service.calls)
+
+
+def test_public_release_is_never_uploaded_or_republished(assets, mock_release):
+    service = mock_release()
+    service.is_draft = False
+    with pytest.raises(ValueError, match="already public release is immutable"):
+        gate.publish(f"v{VERSION}", assets)
+    assert service.is_draft is False
+    assert [call[2] for call in service.calls] == ["view"]
+
+
+@pytest.mark.parametrize("exists", [True, False])
+def test_failed_upload_keeps_release_draft_private(assets, mock_release, exists):
+    service = mock_release(exists=exists, fail_upload=True)
+    with pytest.raises(subprocess.CalledProcessError):
+        gate.publish(f"v{VERSION}", assets)
+    assert service.is_draft is True
+    assert [call[2] for call in service.calls] == (["view", "upload"] if exists else ["view", "create", "upload"])

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "opennavicat"
-version = "0.4.0"
+version = "0.5.0"
 description = "A native, local-first, cross-platform database workbench"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -18,6 +18,10 @@ dependencies = [
   "sqlparse>=0.5.3,<0.6",
   "keyring>=25,<26",
   "paramiko==5.1.0",
+  "python-tds==1.17.1",
+  "pyOpenSSL==26.4.0",
+  "certifi==2026.10.23",
+  "redis==8.1.0",
 ]
 
 [project.optional-dependencies]

@@ -14,6 +14,10 @@ authority for the exact version and accompanying license files on each build hos
 | Psycopg / psycopg-binary | PostgreSQL driver and bundled client libraries | LGPL-3.0-only for Psycopg. Binary wheels include client libraries with separate notices. [Psycopg source](https://github.com/psycopg/psycopg), [installation/build variants](https://www.psycopg.org/psycopg3/docs/basic/install.html). |
 | PostgreSQL libpq | PostgreSQL client runtime, bundled by binary driver | PostgreSQL License. [PostgreSQL license](https://www.postgresql.org/about/licence/). |
 | PyMySQL | MySQL and MariaDB driver | MIT. [Source and license](https://github.com/PyMySQL/PyMySQL). |
+| python-tds | SQL Server TDS protocol driver | MIT. [Source and license](https://github.com/denisenkom/pytds). |
+| redis-py | Redis RESP protocol client | MIT. [Source and license](https://github.com/redis/redis-py). |
+| pyOpenSSL | SQL Server TLS transport | Apache-2.0. [Source and license](https://github.com/pyca/pyopenssl). |
+| certifi | Default SQL Server trusted CA bundle | MPL-2.0. [Source and license](https://github.com/certifi/python-certifi). |
 | Paramiko | SSH authentication, host-key validation and TCP forwarding | LGPL-2.1-or-later (as stated in the shipped source headers). [Source and license](https://github.com/paramiko/paramiko). |
 | bcrypt / PyNaCl | Encrypted SSH private keys and SSH cryptographic algorithms | bcrypt: Apache-2.0; PyNaCl: Apache-2.0. [bcrypt source](https://github.com/pyca/bcrypt), [PyNaCl source](https://github.com/pyca/pynacl). Bundled libsodium retains its own ISC license and notices. |
 | cryptography / OpenSSL and associated runtime dependencies | Authentication and TLS support | cryptography: Apache-2.0 OR BSD-3-Clause. OpenSSL uses its version-specific license. [cryptography source](https://github.com/pyca/cryptography), [OpenSSL source](https://github.com/openssl/openssl). |

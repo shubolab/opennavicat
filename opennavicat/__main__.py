@@ -33,6 +33,11 @@ def main():
         import pymysql
         import paramiko
         import cryptography
+        import pytds
+        import redis
+        import OpenSSL
+        import certifi
+        import importlib.metadata
         import ssl
         from cryptography.hazmat.backends import default_backend
         from cryptography.hazmat.primitives.ciphers import Cipher, modes
@@ -43,11 +48,32 @@ def main():
         probe_bytes = probe.update(bytes(8)) + probe.finalize()
         if probe_bytes.hex() != "4ef997456198dd78":
             raise RuntimeError("OpenSSL legacy provider cipher probe failed")
+        from .database import ConnectionConfig, DatabaseSession
+        sqlserver = DatabaseSession(ConnectionConfig("native-smoke-sqlserver", "Generated smoke", driver="sqlserver",
+            host="localhost", database="master", username="smoke", ssl_mode="verify-full"))
+        redis_session = DatabaseSession(ConnectionConfig("native-smoke-redis", "Generated smoke", driver="redis",
+            database="0", ssl_mode="disable"))
+        adapters_constructed = (sqlserver.__class__.__module__ == "opennavicat.sqlserver_session"
+            and redis_session.__class__.__module__ == "opennavicat.redis_session")
+        if not adapters_constructed:
+            raise RuntimeError("Native SQL Server / Redis factory did not construct the actual adapters")
+        tls_options = sqlserver._connection_options()
+        import pytds.tls
+        tls_context = pytds.tls.create_context(tls_options["cafile"])
+        if tls_context is None:
+            raise RuntimeError("Native SQL Server TLS context did not initialize")
+        sqlserver.close()
+        redis_session.close()
         runtime = {"version": __version__, "os": platform.system(),
             "machine": platform.machine(), "python": platform.python_version(),
             "qt": QLibraryInfo.version().toString(), "psycopg": psycopg.__version__,
             "libpq": psycopg.pq.version(), "psycopg_impl": psycopg.pq.__impl__,
             "pymysql": pymysql.VERSION_STRING, "paramiko": paramiko.__version__,
+            "python_tds": importlib.metadata.version("python-tds"), "redis": redis.__version__,
+            "pyopenssl": OpenSSL.__version__, "certifi": certifi.__version__,
+            "sqlserver_default_ca_present": Path(certifi.where()).is_file(),
+            "extra_adapters_constructed": adapters_constructed,
+            "sqlserver_tls_context_ready": tls_context is not None,
             "cryptography": cryptography.__version__, "crypto_legacy_probe": True,
             "crypto_openssl": default_backend().openssl_version_text(),
             "stdlib_openssl": ssl.OPENSSL_VERSION,

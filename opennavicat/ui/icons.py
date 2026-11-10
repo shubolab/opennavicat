@@ -13,7 +13,7 @@ from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap
 NAMES = (
     "connection", "new_query", "table", "view", "function", "other", "user",
     "query", "backup", "automation", "model", "chart", "bi", "index", "trigger", "ai", "folder", "database",
-    "sqlite", "postgresql", "mysql", "mariadb", "open", "design", "add",
+    "sqlite", "postgresql", "mysql", "mariadb", "sqlserver", "redis", "oracle", "mongodb", "snowflake", "redis_data", "open", "design", "add",
     "delete", "import", "export", "refresh", "run", "stop", "save", "format",
     "filter", "list", "er", "info", "navigation", "commit", "rollback",
 )
@@ -123,7 +123,7 @@ def _draw(p: QPainter, name: str):
         _line(p, 17, 6, 21, 2, BLUE_LIGHT, 2.8)
         _line(p, 23, 12, 27, 8, BLUE_LIGHT, 2.8)
         _plus(p, 24, 25)
-    elif name == "table":
+    elif name in {"table", "redis_data"}:
         _table(p)
     elif name == "index":
         font = p.font()
@@ -210,8 +210,8 @@ def _draw(p: QPainter, name: str):
         _poly(p, [(3, 13), (30, 13), (26, 27), (3, 27)], "#ecc773", "#a37b34")
         if name == "open":
             _arrow(p, 11, 17, "right", "#fff3c9", 2, 12)
-    elif name in {"database", "sqlite", "postgresql", "mysql", "mariadb"}:
-        _database(p)
+    elif name in {"database", "sqlite", "postgresql", "mysql", "mariadb", "sqlserver", "redis", "oracle", "mongodb", "snowflake"}:
+        _database(p, color={"sqlserver": ORANGE, "redis": "#d4515a", "oracle": "#d4515a", "mongodb": GREEN, "snowflake": BLUE_LIGHT}.get(name, BLUE))
         if name == "sqlite":
             _poly(p, [(20, 15), (30, 9), (25, 25), (17, 29)], "#e5eef4", "#637c8d")
             _line(p, 18, 29, 27, 15, "#637c8d", 1)

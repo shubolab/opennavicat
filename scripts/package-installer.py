@@ -326,6 +326,25 @@ def smoke_installed(executable: Path, directory: Path, version: str, architectur
     return validate_smoke_report(report, version, architecture, operating_system)
 
 
+def detach_verification_volume(volume: Path) -> None:
+    """Drain transient DiskImages/indexer opens on our own read-only test mount."""
+    for attempt in range(4):
+        try:
+            run(["/usr/bin/hdiutil", "detach", volume], capture_output=True, text=True, timeout=30)
+            return
+        except subprocess.CalledProcessError as exc:
+            details = (exc.stdout or "") + (exc.stderr or "")
+            if exc.returncode != 16 and "resource busy" not in details.lower():
+                raise
+            if attempt < 3:
+                delay = 0.5 * (2 ** attempt)
+                print(f"Read-only installer verification volume is busy; retrying in {delay:g}s", flush=True)
+                time.sleep(delay)
+    # This function is called only for the unique read-only mount created by
+    # verify_macos. No user volume or application installation is targeted.
+    run(["/usr/bin/hdiutil", "detach", "-force", volume], timeout=30)
+
+
 def verify_macos(installer: Path, version: str, architecture: str) -> dict:
     with tempfile.TemporaryDirectory(prefix="opennavicat-dmg-install-") as temporary:
         directory = Path(temporary)
@@ -350,7 +369,7 @@ def verify_macos(installer: Path, version: str, architecture: str) -> dict:
                 raise PackagingError("Isolated macOS application removal failed")
         finally:
             if mounted or os.path.ismount(volume):
-                run(["/usr/bin/hdiutil", "detach", volume], timeout=90)
+                detach_verification_volume(volume)
     return {"status": "passed", "installed": True, "launched": True, "uninstalled": True,
             "scope": "read-only DMG and isolated Applications copy", "runtime": report}
 

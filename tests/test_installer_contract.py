@@ -3,6 +3,7 @@ import importlib.util
 import json
 from pathlib import Path
 import struct
+import subprocess
 import sys
 
 import pytest
@@ -153,3 +154,52 @@ def test_cli_refuses_cross_architecture_before_creating_any_installer(tmp_path, 
     with pytest.raises(installer.PackagingError, match="refusing a relabeled"):
         installer.main(["--output-dir", str(tmp_path), "--arch", "amd64"])
     assert list(tmp_path.iterdir()) == []
+
+
+def test_macos_owned_readonly_mount_retries_resource_busy_without_forcing_normal_success(tmp_path, monkeypatch):
+    calls = []
+
+    def detach(command, **_kwargs):
+        calls.append(command)
+        if len(calls) == 1:
+            raise subprocess.CalledProcessError(16, command, stderr="Resource busy")
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(installer, "run", detach)
+    monkeypatch.setattr(installer.time, "sleep", lambda _: None)
+    volume = tmp_path / "our-verification-volume"
+    installer.detach_verification_volume(volume)
+    assert len(calls) == 2
+    assert all("-force" not in command for command in calls)
+    assert all(command[-1] == volume for command in calls)
+
+
+def test_macos_persistent_busy_forces_only_its_owned_readonly_verification_mount(tmp_path, monkeypatch):
+    calls = []
+
+    def detach(command, **_kwargs):
+        calls.append(command)
+        if "-force" not in command:
+            raise subprocess.CalledProcessError(16, command, stderr="Resource busy")
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(installer, "run", detach)
+    monkeypatch.setattr(installer.time, "sleep", lambda _: None)
+    volume = tmp_path / "our-verification-volume"
+    installer.detach_verification_volume(volume)
+    assert len(calls) == 5
+    assert calls[-1] == ["/usr/bin/hdiutil", "detach", "-force", volume]
+
+
+def test_macos_detach_does_not_retry_or_force_unrelated_errors(tmp_path, monkeypatch):
+    calls = []
+
+    def detach(command, **_kwargs):
+        calls.append(command)
+        raise subprocess.CalledProcessError(1, command, stderr="Permission denied")
+
+    monkeypatch.setattr(installer, "run", detach)
+    with pytest.raises(subprocess.CalledProcessError):
+        installer.detach_verification_volume(tmp_path / "our-verification-volume")
+    assert len(calls) == 1
+    assert "-force" not in calls[0]

@@ -972,6 +972,7 @@ class MongoSession(DatabaseSession):
             raise DatabaseError('A nonempty GridFS filename is required')
         if metadata is not None:
             if not isinstance(metadata, dict): raise DatabaseError('GridFS metadata must be a document')
+            _validate_date_precision(metadata)
             metadata = BSON(BSON.encode(metadata, codec_options=BSON_CODEC)).decode(codec_options=BSON_CODEC)
         file_id, chunk_size = ObjectId(), 255 * 1024
         ids = None

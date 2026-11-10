@@ -652,3 +652,14 @@ def test_ejson_parse_constructor_obeys_json_nonfinite_syntax(token):
     from opennavicat.mongodb_session import parse_mongo_queries
     with pytest.raises(DatabaseError):
         parse_mongo_queries("db.docs.find(EJSON.parse('{\"x\":"+token+"}'))")
+
+
+def test_real_gridfs_metadata_dates_reject_precision_loss_before_bucket_creation(session,tmp_path):
+    db=session.config.database;bucket='metadata_dates'
+    source=tmp_path/'source';source.write_bytes(b'own bytes')
+    with pytest.raises(DatabaseError,match='millisecond'):
+        session.upload_file(db,bucket,source,metadata={'date':datetime(2026,1,2,3,4,5,123456,timezone.utc)})
+    assert bucket+'.files'not in session.connection[db].list_collection_names()
+    exact=datetime(2026,1,2,3,4,5,123000,timezone.utc)
+    saved=session.upload_file(db,bucket,source,metadata={'date':exact})
+    assert saved.document['metadata']['date']==exact

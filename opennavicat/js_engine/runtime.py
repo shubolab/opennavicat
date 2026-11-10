@@ -1,17 +1,18 @@
 """Controlled native child process; parent MongoDB operations remain authoritative.
 
-Experimental macOS ARM64 integration only. Not imported by the released UI.
+Experimental native qualification branch. Not imported by the released UI.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from contextlib import nullcontext
 import json
 import hashlib
 import os
 import platform
 from pathlib import Path
 import secrets
-import selectors
+import queue
 import signal
 import struct
 import subprocess
@@ -20,10 +21,17 @@ import threading
 import time
 
 from ..database import DatabaseError
-from .bridge import CommandReceipt, MongoDBBridge
+from .records import CommandReceipt
 from .codec import decode
 
 MAX_FRAME = 1024*1024
+
+
+class _NoDatabase:
+    receipts = ()
+    open_cursors = open_sessions = 0
+    def command(self, tree):
+        raise DatabaseError("This VM execution has no database capability")
 
 
 @dataclass(frozen=True)
@@ -38,7 +46,7 @@ class ExecutionLimits:
 
     def __post_init__(self):
         bounds = {"timeout_ms":(10,120000),"heap_bytes":(1024*1024,256*1024*1024),
-            "stack_bytes":(65536,8*1024*1024),"max_jobs":(1,100000),"max_commands":(1,64),
+            "stack_bytes":(65536,1024*1024),"max_jobs":(1,100000),"max_commands":(1,64),
             "max_rows":(1,100000),"max_bson_bytes":(1024,256*1024)}
         for name,(low,high) in bounds.items():
             value = getattr(self,name)
@@ -58,6 +66,7 @@ class JavaScriptResult:
     error: str = ""
     open_cursors: int = 0
     open_sessions: int = 0
+    native_state: dict = field(default_factory=dict)
 
     @property
     def uncertain_writes(self):
@@ -65,7 +74,12 @@ class JavaScriptResult:
 
     @property
     def confirmed_write_count(self):
-        return sum(row.affected for row in self.commands if row.writes and row.outcome in {"acknowledged","acknowledged_error"})
+        """Sum only server-reported n; e.g. $out has no affected-row count."""
+        return sum(row.affected or 0 for row in self.commands if row.writes and row.outcome in {"acknowledged","acknowledged_error"})
+
+    @property
+    def has_confirmed_writes(self):
+        return any(row.writes and row.outcome in {"acknowledged","acknowledged_error"}for row in self.commands)
 
 
 class JavaScriptError(DatabaseError):
@@ -83,13 +97,20 @@ def _frame(payload):
 class NativeJavaScript:
     def __init__(self, helper: str | Path):
         self.helper = Path(helper).resolve(strict=True)
-        if platform.system() != "Darwin" or platform.machine() != "arm64":
-            raise DatabaseError("This controlled native helper is qualified only on macOS ARM64")
+        machine=lambda value:{"arm64":"arm64","aarch64":"arm64","amd64":"amd64","x86_64":"amd64"}.get(value.lower())
+        if platform.system()not in {"Darwin","Linux","Windows"}or machine(platform.machine())is None:
+            raise DatabaseError("Unsupported controlled native helper target")
         receipt = json.loads(self.helper.with_name("build-receipt.json").read_text())
         if (receipt.get("source_revision") != "d7215b0ad3fc2c562e8317fd9bca058fd4863804"
             or receipt.get("archive_sha256") != "a49defe70cbcae9226d9fac025af116e87ebae2440dcff1ca3c80b79e1cdef0b"
+            or receipt.get("operating_system") != platform.system()
+            or receipt.get("native_image",{}).get("machine") != machine(platform.machine())
             or receipt.get("helper_sha256") != hashlib.sha256(self.helper.read_bytes()).hexdigest()):
             raise DatabaseError("The controlled helper does not match its pinned official-source build receipt")
+
+    def evaluate(self, source, *, limits=None, cancel_event=None):
+        """VM-only qualification. No database client or transport is imported."""
+        return self.execute(None,source,limits=limits,cancel_event=cancel_event)
 
     def execute(self, session, source, *, database=None, limits=None, cancel_event=None):
         limits = limits or ExecutionLimits()
@@ -100,14 +121,20 @@ class NativeJavaScript:
         external = cancel_event or threading.Event()
         started = time.monotonic()
         deadline = started + limits.timeout_ms/1000
-        bridge = MongoDBBridge(session, database or session._selected_schema or session.config.database,
-            deadline=deadline, cancelled=cancelled.is_set, max_rows=limits.max_rows, max_bson_bytes=limits.max_bson_bytes)
+        if session is None:
+            bridge = _NoDatabase()
+        else:
+            from .bridge import MongoDBBridge
+            bridge = MongoDBBridge(session, database or session._selected_schema or session.config.database,
+                deadline=deadline, cancelled=cancelled.is_set, max_rows=limits.max_rows, max_bson_bytes=limits.max_bson_bytes)
         token = secrets.token_hex(32)
         event = None
         failure = ""
         hard_killed = False
         process = None
-        selector = None
+        reader = None
+        temporary = None
+        incoming = queue.Queue(maxsize=32)
         cancellation_thread = None
         watchdog = None
         request_number = 0
@@ -116,7 +143,8 @@ class NativeJavaScript:
             nonlocal hard_killed
             if process.poll() is None:
                 try:
-                    os.killpg(process.pid, signal.SIGKILL)
+                    if os.name=="nt":process.kill()
+                    else:os.killpg(process.pid, signal.SIGKILL)
                     hard_killed = True
                 except ProcessLookupError:
                     pass
@@ -125,7 +153,7 @@ class NativeJavaScript:
             # The owning execute() waits for this thread before releasing the
             # outer session operation. Late cancellation cannot hit another run.
             try:
-                session.cancel()
+                if session is not None:session.cancel()
             except DatabaseError:
                 pass  # The result still reports interruption/uncertainty.
 
@@ -145,30 +173,43 @@ class NativeJavaScript:
                     cancellation_thread.start()
                     return
 
+        def read_output():
+            # Windows pipe handles are not select()-able sockets. A dedicated
+            # bounded reader works for native pipes on all three operating systems.
+            try:
+                while not finished.is_set():
+                    chunk=os.read(process.stdout.fileno(),65536)
+                    while not finished.is_set():
+                        try:incoming.put(chunk,timeout=.05);break
+                        except queue.Full:pass
+                    if not chunk:return
+            except OSError:
+                if not finished.is_set():
+                    try:incoming.put_nowait(b"")
+                    except queue.Full:pass
+
         try:
             if external.is_set():
                 cancelled.set()
                 raise DatabaseError("JavaScript execution cancelled before child launch")
-            with session._operation(), tempfile.TemporaryDirectory(prefix="opennavicat-js-") as directory:
+            temporary=tempfile.TemporaryDirectory(prefix="opennavicat-js-")
+            with session._operation()if session is not None else nullcontext():
+                options={"creationflags":subprocess.CREATE_NO_WINDOW}if os.name=="nt"else{"start_new_session":True}
                 process = subprocess.Popen([str(self.helper),str(limits.timeout_ms),str(limits.heap_bytes),
                     str(limits.stack_bytes),str(limits.max_jobs),token],stdin=subprocess.PIPE,stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,cwd=directory,env={"LANG":"C.UTF-8"},close_fds=True,start_new_session=True)
+                    stderr=subprocess.PIPE,cwd=temporary.name,env={"LANG":"C.UTF-8",**({"SystemRoot":os.environ["SystemRoot"]}if os.name=="nt"else{})},close_fds=True,**options)
                 watchdog = threading.Thread(target=watch,name="MongoJS-watchdog")
                 watchdog.start()
+                reader=threading.Thread(target=read_output,name="MongoJS-output");reader.start()
                 bootstrap = Path(__file__).with_name("bootstrap.js").read_bytes()
                 process.stdin.write(_frame(bootstrap)+_frame(source.encode()));process.stdin.flush()
-                selector = selectors.DefaultSelector();selector.register(process.stdout,selectors.EVENT_READ)
                 buffer = b""
                 cumulative = 0
                 while True:
                     if cancelled.is_set():
                         raise DatabaseError("JavaScript execution cancelled or timed out; committed writes are retained")
-                    ready = selector.select(.01)
-                    if not ready:
-                        if process.poll() is not None:
-                            break
-                        continue
-                    chunk = os.read(process.stdout.fileno(),65536)
+                    try:chunk=incoming.get(timeout=.01)
+                    except queue.Empty:continue
                     if not chunk:
                         break
                     cumulative += len(chunk)
@@ -217,20 +258,20 @@ class NativeJavaScript:
                 watchdog.join()
             if cancellation_thread is not None:
                 cancellation_thread.join()
-            if selector is not None:
-                selector.close()
             if process is not None:
                 try:
                     process.wait(timeout=.25)
                 except subprocess.TimeoutExpired:
                     stop_child();process.wait()
+                if reader is not None:reader.join()
                 stderr = process.stderr.read(8193).decode(errors="replace")[:8192]
                 for stream in (process.stdin,process.stdout,process.stderr):
                     stream.close()
             else:
                 stderr = ""
+            if temporary is not None:temporary.cleanup()
         result = JavaScriptResult(value,tuple(bridge.receipts),(time.monotonic()-started)*1000,
-            cancelled.is_set(),process is not None and process.poll() is not None,hard_killed,stderr,failure,bridge.open_cursors,bridge.open_sessions)
+            cancelled.is_set(),process is not None and process.poll() is not None,hard_killed,stderr,failure,bridge.open_cursors,bridge.open_sessions,event.get("native",{})if event else {})
         if failure:
             raise JavaScriptError(failure,result)
         return result

@@ -24,7 +24,7 @@
     define(obj,'valueOf',{value:()=>number?number():(()=>{throw new TypeError('Explicit BSON conversion required')})(),enumerable:false});
     return freeze(obj);
   }
-  function Long(value) {const n=i64(value);return tagged('int64',n,()=>n.toString(),()=>n);}
+  function Long(value) {const n=i64(value);return tagged('int64',n,()=>`Long("${n.toString()}")`,()=>n);}
   function Int32(value) {if(typeof value!=='number'||!isSafe(value)||value<-(2**31)||value>=2**31)throw new RangeError('Int32 range');return tagged('int32',value,()=>String(value),()=>value);}
   function Double(value) {const n=Number(value);return tagged('double',n,()=>String(n),()=>n);}
   function Decimal128(value) {if(typeof value!=='string')throw new TypeError('Decimal128 requires exact string');return tagged('decimal128',value,()=>value);}
@@ -57,8 +57,9 @@
     if(typeof value==='string')return ['string',value];
     if(typeof value==='bigint'){if(allowLargeBigInt)return ['js-bigint',value.toString()];return ['int64',i64(value).toString()];}
     if(typeof value==='number'){
-      if(isSafe(value)&&value>=-(2**31)&&value<2**31&&!Object.is(value,-0))return ['int32',value];
-      if(Number.isInteger(value)&&!isSafe(value))throw new RangeError('Unsafe integral Number: use explicit Long/BigInt or Double');
+      // Actual Navicat18 writes ordinary JS Number as BSON Double, including
+      // integers and unsafe literals already rounded by JavaScript itself.
+      // Explicit Int32/Long brands remain separate and exact.
       return ['double',doubleText(value)];
     }
     if(typeof value!=='object')throw new TypeError('Unsupported BSON value');
@@ -142,6 +143,6 @@
     });
   }
   const db=new Proxy(freeze({getCollection:collection,runCommand:command}),{get(target,name){if(typeof name!=='string')return undefined;return Object.prototype.hasOwnProperty.call(target,name)?target[name]:collection(name);}});
-  for(const [name,value]of Object.entries({db,Long,NumberLong:Long,Int32,NumberInt:Int32,Double,Decimal128,NumberDecimal:Decimal128,ObjectId,DateMS,Binary,BinData,BSONRegex,Timestamp,MinKey,MaxKey,Code,DBRef}))define(globalThis,name,{value,writable:false,configurable:false});
+  for(const [name,value]of Object.entries({db,Long,NumberLong:Long,Int32,NumberInt:Int32,Decimal128,NumberDecimal:Decimal128,ObjectId,Binary,BinData,BSONRegex,Timestamp,MinKey,MaxKey,Code,DBRef}))define(globalThis,name,{value,writable:false,configurable:false});
   return value => {guard();return stringify(encode(value,0,new WeakSet(),true));};
 })()

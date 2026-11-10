@@ -155,7 +155,7 @@ const one=db.docs.findOne({_id:0});
 """
     result=engine.execute(session,script)
     assert [r['_id'] for r in result.value['rows']]==[1,0]
-    expected={'_id':0,'stock':Int64(9007199254740993),'price':Decimal128('12.5000'),'payload':Binary(b'\x00\xff\r\n',128)}
+    expected={'_id':0.0,'stock':Int64(9007199254740993),'price':Decimal128('12.5000'),'payload':Binary(b'\x00\xff\r\n',128)}
     assert BSON.encode(result.value['one'],codec_options=BSON_CODEC)==BSON.encode(expected,codec_options=BSON_CODEC)
     assert result.value['none'] is None and result.confirmed_write_count==3
     assert all(c.outcome=='acknowledged' for c in result.commands)
@@ -188,6 +188,29 @@ const reply=db.runCommand({find:'docs',comment:{long:Long('9007199254740995')}})
     assert result.value['changed']['modifiedCount']==1 and result.value['deleted']['deletedCount']==1
     assert session.connection[session.config.database].docs.count_documents({})==1
     assert_clean(result)
+
+
+def test_real_reference_number_wire_policy_is_distinct_from_integer_controls(engine,session):
+    engine.execute(session,"""
+db.docs.insertOne({_id:Int32(1),one:1,large:2147483648,rounded:9007199254740995,negativeZero:-0,
+ explicit:Int32(1),exact:Long('9007199254740995'),data:{limit:1,batchSize:2,maxTimeMS:3,writeConcern:{w:1}}});
+db.docs.find({}).limit(1).skip(0).batchSize(1).toArray();
+""")
+    doc=session.connection.get_database(session.config.database,codec_options=BSON_CODEC).docs.find_one({'_id':1})
+    assert type(doc['one'])is float and type(doc['large'])is float and doc['rounded']==9007199254740996.0
+    import struct
+    assert struct.pack('<d',doc['negativeZero'])==b'\0\0\0\0\0\0\0\x80'
+    assert type(doc['explicit'])is int and isinstance(doc['exact'],Int64)
+    assert all(type(doc['data'][name])is float for name in ('limit','batchSize','maxTimeMS'))
+    assert type(doc['data']['writeConcern']['w'])is float
+
+
+def test_real_javascript_numeric_keys_follow_actual_reference_object_order(engine,session):
+    from bson import SON
+    session.connection[session.config.database].docs.insert_one({'_id':1,'numericKeys':SON([('2','two'),('1','one'),('a','letter')])})
+    result=engine.execute(session,"const doc=db.docs.findOne({_id:1});db.docs.updateOne({_id:1},{$set:{numericKeys:doc.numericKeys}});Object.keys(doc.numericKeys)")
+    assert result.value==['1','2','a']
+    assert list(session.connection[session.config.database].docs.find_one({'_id':1})['numericKeys'])==['1','2','a']
 
 
 def test_real_partial_writes_are_preserved_and_later_command_not_run(engine, session):
@@ -237,6 +260,7 @@ def test_real_terminal_out_is_not_rewritten_by_delivery_limit(engine, session):
     assert result.value==[]
     assert session.connection[session.config.database].out_generated.count_documents({})==8
     assert result.commands[0].writes and result.commands[0].outcome=='acknowledged'
+    assert result.commands[0].affected is None and result.has_confirmed_writes
     assert_clean(result)
 
 

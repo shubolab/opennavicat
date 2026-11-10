@@ -5,6 +5,11 @@ from datetime import datetime, timezone
 from enum import Enum
 from bson import Binary, Code, DBRef, Decimal128, Int64, MaxKey, MinKey, ObjectId, Regex, Timestamp
 from bson.datetime_ms import DatetimeMS
+from bson.binary import UuidRepresentation
+from bson.codec_options import CodecOptions, DatetimeConversion
+
+BSON_CODEC = CodecOptions(uuid_representation=UuidRepresentation.UNSPECIFIED,
+    tz_aware=True,tzinfo=timezone.utc,datetime_conversion=DatetimeConversion.DATETIME_AUTO)
 
 class JavaScriptUndefined(Enum):
     VALUE = "undefined"

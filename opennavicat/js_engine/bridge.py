@@ -8,8 +8,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from contextlib import nullcontext
 from copy import deepcopy
-from dataclasses import dataclass, field
 import time
+import math
 
 from bson import BSON, Int64
 from bson.raw_bson import RawBSONDocument
@@ -20,17 +20,9 @@ from ..database import DatabaseError
 from ..mongodb_query import _READ_COMMANDS, _bounded_command, _validate_command
 from ..mongodb_session import BSON_CODEC, RAW_CODEC
 from .codec import decode, encode
+from .records import CommandReceipt
 
 
-@dataclass(frozen=True)
-class CommandReceipt:
-    sequence: int
-    verb: str
-    writes: bool
-    outcome: str  # rejected, acknowledged, acknowledged_error, uncertain
-    affected: int = 0
-    error: str = ""
-    reply: dict | None = field(default=None, repr=False)
 
 
 class MongoDBBridge:
@@ -70,6 +62,24 @@ class MongoDBBridge:
         verb, writes, dispatched = "unknown", False, False
         sequence = len(self.receipts) + 1
         try:
+            # Command-control values have integer semantics, unlike JS Number
+            # values inside user documents/filters/pipelines. Coerce only this
+            # explicit protocol context; never recursively rewrite data fields.
+            def integer(value):
+                if isinstance(value,float)and math.isfinite(value)and value.is_integer()and abs(value)<=2**53-1:
+                    return int(value)
+                return value
+            requested_verb=next(iter(original),'').lower()
+            controls=['maxTimeMS']
+            if requested_verb in {'find','count'}:controls.extend(('limit','skip'))
+            if requested_verb=='find':controls.append('batchSize')
+            for name in controls:
+                if name in original:original[name]=integer(original[name])
+            if requested_verb in {'aggregate','listcollections','listindexes'}and isinstance(original.get('cursor'),dict):
+                if 'batchSize'in original['cursor']:original['cursor']['batchSize']=integer(original['cursor']['batchSize'])
+            if isinstance(original.get('writeConcern'),dict):
+                for name in ('w','wtimeout','wtimeoutMS'):
+                    if name in original['writeConcern']:original['writeConcern'][name]=integer(original['writeConcern'][name])
             verb = _validate_command(self.session, original)
             writes = verb not in _READ_COMMANDS or verb == "aggregate" and self._contains_write(original.get("pipeline"))
             # Copy/encode before any I/O; no unsupported value can be dropped.
@@ -120,7 +130,7 @@ class MongoDBBridge:
                         output = {"ok": reply.get("ok", 1), "cursor": {"id": Int64(0), "ns": namespace, "firstBatch": documents}}
                     else:
                         output, _ = self._lossless(reply)
-                    affected = int(reply.get("n", 0))
+                    affected = int(reply["n"]) if "n" in reply else None
                     uncertain = bool(reply.get("writeConcernError"))
                     failed = bool(reply.get("writeErrors"))
                     receipt = CommandReceipt(sequence, verb, writes,

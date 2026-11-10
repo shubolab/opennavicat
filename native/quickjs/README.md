@@ -9,10 +9,20 @@ installation or Python extension is required. The source license is retained in
 
 The engine's official platform documentation is
 <https://quickjs-ng.github.io/quickjs/supported_platforms/>. This prototype is
-qualified only on native macOS ARM64. POSIX framing/process control must be
-replaced and independently qualified on Windows, and tested on both Linux and
-the second Mac architecture before six-platform packaging. Upstream's pinned
+qualified initially on native macOS ARM64. The portable helper now uses bounded
+C buffers, Windows binary pipe mode/QPC or POSIX monotonic clocks, and a parent
+pipe-reader thread plus exact-process Windows kill/reap without a console popup.
+Other targets require `--allow-unqualified-platform` while the independent native
+qualification workflow establishes actual evidence. Upstream's pinned
 Linux ARM CI rows are commented out; do not infer acceptance from OS support.
+
+The feature branch's `js-engine-qualification.yml` has six native source/helper
+targets and a separate fresh-owned MongoDB protocol job. It never publishes or
+builds application installers and does not change the existing release workflow.
+Windows 2022 uses its installed Visual Studio 2022 x64 toolchain; Windows 11 ARM
+uses installed Visual Studio 2026/ARM64, matching the pinned NG native CI route.
+The build receipt parses the real PE/ELF/Mach-O header and checks its machine
+against the runner. A platform-support claim is not substituted for execution.
 
 The helper exposes no Python, filesystem, process, socket, or `std/os` module.
 It evaluates JavaScript source, never untrusted serialized bytecode. Removing

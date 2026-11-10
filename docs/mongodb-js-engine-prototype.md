@@ -66,9 +66,24 @@ Decimal128, ObjectId, binary subtype, millisecond dates beyond JS Date's range,
 Regex, Timestamp, Code/scope, DBRef and Min/Max. Literal `$date` and `__proto__`
 fields remain data. Every database response must re-encode to identical BSON
 bytes through both native BSON and the tagged bridge before delivery. Unsupported
-raw BSON, duplicate keys and lossy representations fail closed. Default unsafe
-integral JS Number is rejected; use Long/BigInt or explicit Double. ECMAScript
-Number/Date rounding that already occurred in the script cannot be recovered.
+raw BSON, duplicate keys and lossy representations fail closed at the native
+codec boundary. Actual Navicat18 own-probe wire evidence now establishes that
+fresh ordinary JS Number is BSON Double, including integral and already-rounded
+unsafe literals. Explicit Int32 and Long stay distinct. Only known command/API
+control positions (e.g. find limit/batchSize) receive integral conversion; user
+document fields named limit/batchSize/writeConcern are never recursively coerced.
+ECMAScript Number/Date rounding already in the script cannot be recovered.
+
+Ordinary JS integer-looking object keys follow the real reference's JS order:
+an existing BSON `['2','1','a']` object became `['1','2','a']` after original-UI
+findOne/replaceOne. This is an explicit limit to any blanket raw-BSON preservation
+claim. Original Int32 fields read as `typeof number` and `===1`, but a whole host
+document read/copy/insert still retained Int32 on the wire. The current prototype
+uses an explicit Int32 brand on decode; matching primitive typeof plus retained
+host-document metadata remains open. Extraction into a new object was not tested.
+The actual original exposed neither public Double nor DateMS, so both are private
+codec constructors here. Original `String(Long(...))` was `Long("...")`, now
+matched; the full Long arithmetic/constructor behavior is not yet qualified.
 
 ## Partial outcomes and cancellation
 
@@ -90,13 +105,22 @@ cannot undo confirmed writes. Cleanup time may extend beyond the execution
 deadline, and server cancellation can be denied; outcome receipts must remain
 authoritative in those cases.
 
-The current native process layer is POSIX and qualified only on macOS ARM64.
+The native process layer now has Windows binary pipe mode/QPC and exact Popen
+kill/reap with CREATE_NO_WINDOW; POSIX uses monotonic clocks and an owned process
+group. A bounded reader thread handles pipes on all three systems. Temporary
+directories are removed only after child reaping/handle close, including Windows.
+Only the local macOS ARM64 execution is established until the independent
+six-target feature-branch qualification job actually passes; none is packaging
+or installed-app acceptance. The helper runs without a DB via `engine.evaluate`
+for native syntax/typed-IPC/cancellation testing with only PyMongo/sqlparse/pytest.
 Runtime allocation limits cover QuickJS memory, not total process/parent RSS.
 No host APIs is not an OS sandbox or proof against C-engine vulnerabilities.
 The JS wrapper fails closed for several mutated intrinsics, but is not a complete
 hostile-proxy/primordial security audit. Complete shell globals, prototype
 semantics, lazy cursors, generated ObjectId, transactions, streaming, full
-Navicat helper/async behavior and all six native build/package paths remain open.
+Navicat helper/async behavior and six-platform installed-app paths remain open.
+The standalone engine has a public Promise, unlike the observed original's
+`typeof Promise === 'undefined'`; async completion/global parity is not closed.
 
 ## Reproducing actual tests safely
 

@@ -3,8 +3,7 @@ from bson import BSON, Binary, Code, DBRef, Decimal128, Int64, MaxKey, MinKey, O
 from bson.datetime_ms import DatetimeMS
 import pytest
 
-from opennavicat.mongodb_session import BSON_CODEC
-from opennavicat.js_engine.codec import decode, encode
+from opennavicat.js_engine.codec import BSON_CODEC,decode,encode
 
 
 @pytest.mark.parametrize("value", [Int64(9007199254740995), Decimal128("12.5000"), Binary(b"\x00\xff", 128),

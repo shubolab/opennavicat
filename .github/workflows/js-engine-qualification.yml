@@ -1,0 +1,90 @@
+name: Experimental native JavaScript qualification
+
+# Independent feature-branch qualification only. No installer/publisher/tag job.
+# New workflows cannot be dispatched until indexed on the default branch, so
+# this one feature branch also has an exact, path-limited push trigger.
+on:
+  workflow_dispatch:
+  push:
+    branches: [work/mongodb-js-engine]
+    paths:
+      - 'native/quickjs/**'
+      - 'opennavicat/js_engine/**'
+      - 'scripts/build-quickjs.py'
+      - 'scripts/test-js-engine.py'
+      - 'tests/test_js_*.py'
+      - '.github/workflows/js-engine-qualification.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    name: helper-${{ matrix.id }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {id: linux-amd64, os: ubuntu-24.04, python: x64}
+          - {id: linux-arm64, os: ubuntu-24.04-arm, python: arm64}
+          - {id: windows-amd64, os: windows-2022, python: x64}
+          - {id: windows-arm64, os: windows-11-arm, python: arm64}
+          - {id: macos-amd64, os: macos-15-intel, python: x64}
+          - {id: macos-arm64, os: macos-15, python: arm64}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    env:
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          architecture: ${{ matrix.python }}
+      - name: Install only native VM qualification dependencies
+        run: python -m pip install --only-binary=pymongo pymongo==4.19.0 "pytest>=8,<10" "sqlparse>=0.5.3,<0.6"
+      - name: Compile pinned official core and controlled helper
+        run: python scripts/build-quickjs.py --allow-unqualified-platform
+      - name: Execute every VM and typed IPC case with zero skips
+        run: python scripts/test-js-engine.py --mode vm --evidence artifacts/js-engine/qualification
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: js-engine-${{ matrix.id }}
+          path: |
+            artifacts/js-engine/build.log
+            artifacts/js-engine/build-receipt.json
+            artifacts/js-engine/LICENSE.quickjs-ng
+            artifacts/js-engine/qualification/
+          if-no-files-found: error
+
+  mongodb:
+    name: Authoritative MongoDB reads writes and cancellation
+    # Keep actual MongoDB8 on its accepted kernel; no server startup bypass.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    env:
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install headless parent protocol dependencies
+        run: python -m pip install --only-binary=pymongo pymongo==4.19.0 paramiko==5.1.0 "pytest>=8,<10" "sqlparse>=0.5.3,<0.6"
+      - name: Compile pinned native helper
+        run: python scripts/build-quickjs.py --allow-unqualified-platform
+      - name: Run fresh owned MongoDB protocol and native cases
+        run: python scripts/test-js-engine.py --mode protocol --evidence artifacts/js-engine/protocol
+      - name: Verify exact owned-run cleanup even after interruption
+        if: always()
+        run: python scripts/test-js-engine.py --mode protocol --evidence artifacts/js-engine/protocol --cleanup-interrupted
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: js-engine-mongodb-protocol
+          path: |
+            artifacts/js-engine/build.log
+            artifacts/js-engine/build-receipt.json
+            artifacts/js-engine/protocol/
+          if-no-files-found: error

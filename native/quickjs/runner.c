@@ -5,21 +5,55 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <signal.h>
+#include <stdarg.h>
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <io.h>
+#include <fcntl.h>
+#else
 #include <sys/resource.h>
+#endif
 
 #define FRAME_MAX (1024u * 1024u)
-static volatile sig_atomic_t cancelled = 0;
+/* Bounded output builder replaces POSIX open_memstream on every platform. */
+typedef struct {char *data; size_t length; int failed; char **result; size_t *size;} Buffer;
+static Buffer *new_buffer(char **result,size_t *size) {
+    Buffer *b=calloc(1,sizeof(*b));if(!b)exit(70);
+    b->data=malloc(FRAME_MAX+1);if(!b->data){free(b);exit(70);}
+    b->result=result;b->size=size;*result=b->data;*size=0;return b;
+}
+static void buf_write(const char *text,size_t length,Buffer *b) {
+    if(b->failed||length>FRAME_MAX-b->length){b->failed=1;return;}
+    memcpy(b->data+b->length,text,length);b->length+=length;
+}
+static void buf_putc(int c,Buffer *b){char v=(char)c;buf_write(&v,1,b);}
+static void buf_puts(const char *text,Buffer *b){buf_write(text,strlen(text),b);}
+static void buf_printf(Buffer *b,const char *format,...) {
+    if(b->failed)return;
+    va_list args;va_start(args,format);
+    int n=vsnprintf(b->data+b->length,FRAME_MAX+1-b->length,format,args);va_end(args);
+    if(n<0||(size_t)n>FRAME_MAX-b->length){b->failed=1;return;}
+    b->length+=(size_t)n;
+}
+static void buf_close(Buffer *b){*b->size=b->failed?FRAME_MAX+1:b->length;free(b);}
+
 typedef struct { double deadline; unsigned calls; unsigned jobs; int interrupted; int unhandled; JSValue reason; const char *token; } State;
-static double now_ms(void) { struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t); return t.tv_sec*1000.0+t.tv_nsec/1000000.0; }
-static void on_cancel(int sig) { (void)sig; cancelled=1; }
-static int interrupt(JSContext *ctx, void *opaque) { (void)ctx; State *s=opaque; if(cancelled || now_ms()>=s->deadline) { s->interrupted=1; return 1; } return 0; }
-static void quote(FILE *out, const char *text, size_t n) {
-    fputc('"',out);
+static double now_ms(void) {
+#ifdef _WIN32
+    LARGE_INTEGER value,frequency;QueryPerformanceCounter(&value);QueryPerformanceFrequency(&frequency);
+    return (double)value.QuadPart*1000.0/(double)frequency.QuadPart;
+#else
+    struct timespec t;clock_gettime(CLOCK_MONOTONIC,&t);return t.tv_sec*1000.0+t.tv_nsec/1000000.0;
+#endif
+}
+static int interrupt(JSContext *ctx, void *opaque) { (void)ctx; State *s=opaque; if(now_ms()>=s->deadline) { s->interrupted=1; return 1; } return 0; }
+static void quote(Buffer *out, const char *text, size_t n) {
+    buf_putc('"',out);
     for(size_t i=0;i<n;i++) { unsigned char c=(unsigned char)text[i];
-        if(c=='"'||c=='\\') { fputc('\\',out); fputc(c,out); }
-        else if(c<32) fprintf(out,"\\u%04x",c); else fputc(c,out);
-    } fputc('"',out);
+        if(c=='"'||c=='\\') { buf_putc('\\',out); buf_putc(c,out); }
+        else if(c<32) buf_printf(out,"\\u%04x",c); else buf_putc(c,out);
+    } buf_putc('"',out);
 }
 static int send_frame(const char *text, size_t n) {
     if(n>FRAME_MAX) return -1;
@@ -36,11 +70,11 @@ static char *read_frame(size_t *n) {
 }
 static void error_frame(JSContext *ctx, State *s, const char *category) {
     JSValue error=JS_GetException(ctx); const char *message=JS_ToCString(ctx,error);
-    char *out=NULL; size_t len=0; FILE *stream=open_memstream(&out,&len);
-    fprintf(stream,"{\"kind\":\"error\",\"category\":");quote(stream,category,strlen(category));
-    fputs(",\"message\":",stream);quote(stream,message?message:"exception unavailable",message?strlen(message):21);
-    fprintf(stream,",\"interrupted\":%s,\"jobs\":%u,\"calls\":%u}",s->interrupted?"true":"false",s->jobs,s->calls);
-    fclose(stream); send_frame(out,len);free(out);
+    char *out=NULL; size_t len=0; Buffer *stream=new_buffer(&out,&len);
+    buf_printf(stream,"{\"kind\":\"error\",\"category\":");quote(stream,category,strlen(category));
+    buf_puts(",\"message\":",stream);quote(stream,message?message:"exception unavailable",message?strlen(message):21);
+    buf_printf(stream,",\"interrupted\":%s,\"jobs\":%u,\"calls\":%u}",s->interrupted?"true":"false",s->jobs,s->calls);
+    buf_close(stream); send_frame(out,len);free(out);
     if(message)JS_FreeCString(ctx,message); JS_FreeValue(ctx,error);
 }
 static JSValue bridge(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
@@ -51,8 +85,8 @@ static JSValue bridge(JSContext *ctx, JSValueConst this_val, int argc, JSValueCo
     size_t size; const char *payload=JS_ToCStringLen(ctx,&size,argv[0]);
     if(!payload) return JS_EXCEPTION;
     if(size>262144) { JS_FreeCString(ctx,payload);return JS_ThrowRangeError(ctx,"bridge payload limit"); }
-    char *out=NULL;size_t n=0;FILE *stream=open_memstream(&out,&n);
-    fputs("{\"kind\":\"bridge\",\"operation\":",stream);quote(stream,s->token,64);fprintf(stream,",\"request\":%u,\"payload\":",s->calls);quote(stream,payload,size);fputc('}',stream);fclose(stream);
+    char *out=NULL;size_t n=0;Buffer *stream=new_buffer(&out,&n);
+    buf_puts("{\"kind\":\"bridge\",\"operation\":",stream);quote(stream,s->token,64);buf_printf(stream,",\"request\":%u,\"payload\":",s->calls);quote(stream,payload,size);buf_putc('}',stream);buf_close(stream);
     JS_FreeCString(ctx,payload);
     int status=send_frame(out,n);free(out);if(status) return JS_ThrowInternalError(ctx,"bridge write failed");
     // This blocking host boundary is intentionally covered by the *parent*
@@ -70,8 +104,12 @@ int main(int argc,char **argv) {
     if(argc!=6 || strlen(argv[5])!=64) return 64;
     double timeout_ms=strtod(argv[1],NULL);size_t heap=(size_t)strtoull(argv[2],NULL,10);size_t stack=(size_t)strtoull(argv[3],NULL,10);unsigned max_jobs=(unsigned)strtoul(argv[4],NULL,10);
     if(timeout_ms<=0||heap<1024||stack<16384||!max_jobs)return 64;
+#ifdef _WIN32
+    SetErrorMode(SEM_FAILCRITICALERRORS|SEM_NOGPFAULTERRORBOX);
+    if(_setmode(_fileno(stdin),_O_BINARY)<0||_setmode(_fileno(stdout),_O_BINARY)<0)return 74;
+#else
     struct rlimit core_limit={0,0};setrlimit(RLIMIT_CORE,&core_limit);
-    signal(SIGUSR1,on_cancel);signal(SIGINT,on_cancel);
+#endif
     size_t bootstrap_len,source_len;char *bootstrap=read_frame(&bootstrap_len);char *source=read_frame(&source_len);
     if(!bootstrap||!source) {free(bootstrap);free(source);return 65;}
     JSRuntime *rt=JS_NewRuntime();if(!rt)return 70;
@@ -104,10 +142,14 @@ int main(int argc,char **argv) {
         else {
             size_t n;const char *text=JS_ToCStringLen(ctx,&n,rendered);
             if(!text||n>262144){JS_ThrowRangeError(ctx,"result output limit");error_frame(ctx,&s,"output_limit");failed=1;}
-            else {JSMemoryUsage usage;JS_ComputeMemoryUsage(rt,&usage);char *out=NULL;size_t size=0;FILE *stream=open_memstream(&out,&size);
-                fputs("{\"kind\":\"result\",\"tree\":",stream);fwrite(text,1,n,stream);
-                fprintf(stream,",\"elapsed_ms\":%.3f,\"jobs\":%u,\"calls\":%u,\"js_memory_used\":%lld}",now_ms()-start,s.jobs,s.calls,(long long)usage.memory_used_size);
-                fclose(stream);send_frame(out,size);free(out);}
+            else {JSMemoryUsage usage;JS_ComputeMemoryUsage(rt,&usage);char *out=NULL;size_t size=0;Buffer *stream=new_buffer(&out,&size);
+                buf_puts("{\"kind\":\"result\",\"tree\":",stream);buf_write(text,n,stream);
+                buf_printf(stream,",\"elapsed_ms\":%.3f,\"jobs\":%u,\"calls\":%u,\"js_memory_used\":%lld,\"native\":{\"pointer_bits\":%u",now_ms()-start,s.jobs,s.calls,(long long)usage.memory_used_size,(unsigned)(sizeof(void*)*8));
+#ifdef _WIN32
+                buf_printf(stream,",\"windows_no_console\":%s",GetConsoleWindow()==NULL?"true":"false");
+#endif
+                buf_puts("}}",stream);
+                buf_close(stream);send_frame(out,size);free(out);}
             if(text)JS_FreeCString(ctx,text);
         }JS_FreeValue(ctx,rendered);
     }

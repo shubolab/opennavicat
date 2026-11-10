@@ -85,7 +85,7 @@ def test_categories_and_object_list_use_real_rootpages_indexes_and_triggers(qtbo
     assert [schema.child(i).text(0) for i in range(schema.childCount())] == ["表", "视图", "查询", "备份"]
     select_category(qtbot, window, "table")
     table = window.object_page.table
-    assert [table.horizontalHeaderItem(i).text() for i in range(4)] == ["名", "根页面", "有索引", "有触发器"]
+    assert [table.horizontalHeaderItem(i).text() for i in range(4)] == ["名称", "根页面", "有索引", "有触发器"]
     assert table.rowCount() == 3
     for row in range(table.rowCount()):
         name = table.item(row, 0).text()
@@ -134,7 +134,7 @@ def test_query_information_summary_real_grids_and_failure_remove_stale_results(q
     assert page.results.isHidden()
     page.editor.setPlainText("SELECT 17 AS previous_success;")
     assert run_query(qtbot, window, page).rows == [[17]]
-    assert [page.results.tabText(i) for i in range(page.results.count())] == ["信息", "摘要", "结果 1"]
+    assert [page.results.tabText(i) for i in range(page.results.count())] == ["消息", "摘要", "结果 1"]
     assert page.summary.rowCount() == 1
     assert "previous_success" in page.info.toPlainText()
     assert page.export_button.isEnabled()

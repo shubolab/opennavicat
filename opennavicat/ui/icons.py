@@ -12,7 +12,7 @@ from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap
 
 NAMES = (
     "connection", "new_query", "table", "view", "function", "other", "user",
-    "query", "backup", "automation", "model", "chart", "folder", "database",
+    "query", "backup", "automation", "model", "chart", "bi", "index", "trigger", "ai", "folder", "database",
     "sqlite", "postgresql", "mysql", "mariadb", "open", "design", "add",
     "delete", "import", "export", "refresh", "run", "stop", "save", "format",
     "filter", "list", "er", "info", "navigation", "commit", "rollback",
@@ -125,6 +125,20 @@ def _draw(p: QPainter, name: str):
         _plus(p, 24, 25)
     elif name == "table":
         _table(p)
+    elif name == "index":
+        font = p.font()
+        font.setPixelSize(17)
+        font.setBold(True)
+        p.setFont(font)
+        p.setPen(QColor(BLUE))
+        p.drawText(1, 23, "A-Z")
+    elif name == "trigger":
+        _poly(p, [(15, 2), (28, 2), (20, 13), (27, 13), (8, 31), (13, 18), (5, 18)], "#f3c444")
+    elif name == "bi":
+        for x, y, height, color in [(4, 9, 16, "#bb48ca"), (12, 3, 26, "#a74bcb"), (21, 7, 19, "#d05ddb")]:
+            _rect(p, x, y, 7, height, color, radius=2)
+    elif name == "ai":
+        _poly(p, [(16, 2), (20, 12), (30, 16), (20, 20), (16, 30), (12, 20), (2, 16), (12, 12)], "#b6c8f5", BLUE)
     elif name == "view":
         _table(p, y=4, h=20)
         # Two lenses and a bridge make this visibly distinct from a table.

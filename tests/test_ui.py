@@ -77,7 +77,7 @@ def run_query(qtbot, window, page):
     assert not page.running
     assert page.run_button.isEnabled()
     assert window.store.history()[0]["status"] == "success"
-    assert page.results.tabText(0) == "信息"
+    assert page.results.tabText(0) == "消息"
     assert page.results.tabText(1) == "摘要"
     return page.current_result()
 
@@ -191,38 +191,41 @@ def test_tree_filter_grid_edit_apply_persists_and_discard(qtbot, window):
 
 
 def test_designer_review_execute_and_table_browser(qtbot, window):
+    from opennavicat.ui.table_designer import TableDesignerPage
+
     open_sample(qtbot, window)
-
-    def fill_designer():
-        dialog = QApplication.activeModalWidget()
-        try:
-            assert isinstance(dialog, TableDesignerDialog)
-            dialog.name_edit.setText("designed_table")
-            dialog.grid.cellWidget(1, 0).setText("description")
-            assert '"main"."designed_table"' in dialog.preview.toPlainText()
-            dialog.accept()
-        finally:
-            # A callback assertion must also exit the nested modal event loop.
-            if isinstance(dialog, QDialog) and dialog.isVisible():
-                dialog.reject()
-
-    QTimer.singleShot(0, fill_designer)
-    window.new_table()
-    page = window.tabs.currentWidget()
-    assert isinstance(page, QueryPage)
-    assert not page.running
-    assert "CREATE TABLE" in page.editor.toPlainText()
-    # The form produces a reviewable query; creation starts only on Run.
+    page = window.new_table()
+    assert isinstance(page, TableDesignerPage)
+    assert window.tabs.currentWidget() is page
+    page.field_model.setData(page.field_model.index(0, 0), "id")
+    page.field_model.setData(page.field_model.index(0, 1), "INTEGER")
+    page.toggle_primary_key()
+    page.add_record()
+    page.field_model.setData(page.field_model.index(1, 0), "description")
+    page.request_save()
+    dialog = page._save_dialog
+    dialog.name_edit.setText("designed_table")
+    qtbot.waitUntil(lambda: dialog.save_button.isEnabled(), timeout=10000)
+    assert '"main"."designed_table"' in dialog.preview.toPlainText()
+    # The actual save sheet reviews the plan; no DDL runs before confirmation.
     with closing(sqlite3.connect(window.configs[page.connection_id].database)) as db, db:
         assert not db.execute("SELECT 1 FROM sqlite_master WHERE name='designed_table'").fetchall()
-    run_query(qtbot, window, page)
-    window.refresh_tree()
+    qtbot.mouseClick(dialog.save_button, Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda: page.table == "designed_table" and not page.dirty, timeout=10000)
     idle(qtbot, window)
-    schema = window.connection_item(page.connection_id).child(0)
-    tables = next(schema.child(i) for i in range(schema.childCount())
-                  if schema.child(i).text(0) == "表")
-    item = next(tables.child(i) for i in range(tables.childCount())
-                if tables.child(i).text(0) == "designed_table")
+    def table_item():
+        root = window.connection_item(page.connection_id)
+        if root is None or not root.childCount():
+            return None
+        schema = root.child(0)
+        for index in range(schema.childCount()):
+            category = schema.child(index)
+            if category.text(0) == "表":
+                return next((category.child(row) for row in range(category.childCount())
+                             if category.child(row).text(0) == "designed_table"), None)
+        return None
+    qtbot.waitUntil(lambda: table_item() is not None, timeout=10000)
+    item = table_item()
     window.tree_open(item)
     qtbot.waitUntil(lambda: isinstance(window.tabs.currentWidget(), TablePage)
                    and window.tabs.currentWidget().model is not None, timeout=10000)

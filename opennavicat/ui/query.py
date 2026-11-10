@@ -101,13 +101,22 @@ class QueryPage(QWidget):
         tools.addWidget(self.format_button)
         self.snippets_button = self._tool("代码片段库（尚未实现）", "query", available=False)
         tools.addWidget(self.snippets_button)
-        self.chart_button = self._tool("图表（尚未实现）", "chart", available=False)
-        tools.addWidget(self.chart_button)
+        self.ai_button = self._tool("询问 AI（尚未实现）", "ai", available=False)
+        tools.addWidget(self.ai_button)
         tools.addWidget(self._separator())
         self.export_button = self._tool("导出结果", "export", window.export_rows)
         self.export_button.setEnabled(False)
         tools.addWidget(self.export_button)
         tools.addStretch()
+        self.results_below_button = self._tool("在编辑器下方显示结果", "table", self.results_below)
+        self.results_beside_button = self._tool("在编辑器旁边显示结果", "navigation", self.results_beside)
+        tools.addWidget(self.results_below_button)
+        tools.addWidget(self.results_beside_button)
+        tools.addWidget(self._separator())
+        self.focus_action = self._tool("专注模式", "design")
+        self.focus_action.setCheckable(True)
+        self.focus_action.toggled.connect(lambda enabled: window.focus_workspace(self, enabled))
+        tools.addWidget(self.focus_action)
         layout.addWidget(self.toolbar)
 
         self.execution_bar = QFrame()
@@ -128,7 +137,9 @@ class QueryPage(QWidget):
         self.run_button.setObjectName("queryRun")
         self.run_button.setIcon(_execution_icon())
         self.run_button.setIconSize(QSize(16, 16))
-        self.run_button.setFixedSize(24, 24)
+        self.run_button.setText("运行")
+        self.run_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.run_button.setFixedSize(68, 26)
         self.run_button.setAutoRaise(True)
         self.run_button.setToolTip("运行（⌘ / Ctrl + Enter）")
         self.run_button.clicked.connect(lambda: window.run_query(self))
@@ -296,6 +307,14 @@ class QueryPage(QWidget):
     def format_sql(self):
         self.editor.setPlainText(pretty_sql(self.editor.toPlainText()))
 
+    def results_below(self):
+        self.split.setOrientation(Qt.Orientation.Vertical)
+        self.split.setSizes([55, 45])
+
+    def results_beside(self):
+        self.split.setOrientation(Qt.Orientation.Horizontal)
+        self.split.setSizes([55, 45])
+
     def _run_menu(self, position):
         menu = QMenu(self)
         limit = menu.addAction(f"限制返回记录…（当前 {self.limit.value():,}）")
@@ -331,7 +350,7 @@ class QueryPage(QWidget):
                          f"受影响的行数：{result.affected:,}    执行时间：{result.elapsed_ms:.3f} ms",
                          "已达到返回记录限制。" if result.truncated else "", ""])
         self.info.setPlainText("\n".join(info))
-        self.results.addTab(self.info, "信息")
+        self.results.addTab(self.info, "消息")
         self.summary = QTableWidget(len(results), 4)
         self.summary.setObjectName("querySummary")
         self.summary.setHorizontalHeaderLabels(["查询", "状态", "受影响的行数", "执行时间"])
@@ -359,7 +378,7 @@ class QueryPage(QWidget):
             index = self.results.addTab(grid, f"结果 {result_number}")
             if first_grid is None:
                 first_grid = index
-        self.results.setCurrentIndex(first_grid if first_grid is not None else 1)
+        self.results.setCurrentIndex(first_grid if first_grid is not None else 0)
         self.results.show()
         self._has_results = True
         if first_execution:

@@ -1,0 +1,86 @@
+{
+  "application": "OpenNavicat",
+  "version": "0.4.0",
+  "theme": "dark",
+  "capture": "Actual live Qt QWidget.grab frames; no generated artwork or reference screenshots",
+  "qt_platform": "offscreen",
+  "qt_version": "6.12.0",
+  "size": [
+    1440,
+    900
+  ],
+  "fps": 6,
+  "frames": 85,
+  "duration_seconds": 14.17,
+  "loop": "infinite",
+  "data": "All connection names, customer data, email addresses, dates and SQL generated for this demo",
+  "connection_name": "演示数据库 · 示例数据",
+  "database": "Temporary isolated SQLite fixture",
+  "user_workspace_accessed": false,
+  "keychain_accessed": false,
+  "reference_application_accessed": false,
+  "schema_preview_applied": false,
+  "info_pane_visible": true,
+  "designer_selected_field": "name",
+  "query_result": {
+    "rows": 6,
+    "columns": 4
+  },
+  "phases": [
+    {
+      "name": "objects",
+      "first_frame": 0,
+      "frames": 13
+    },
+    {
+      "name": "table_data",
+      "first_frame": 13,
+      "frames": 14
+    },
+    {
+      "name": "query_editor",
+      "first_frame": 27,
+      "frames": 15
+    },
+    {
+      "name": "query_results",
+      "first_frame": 42,
+      "frames": 15
+    },
+    {
+      "name": "table_designer",
+      "first_frame": 57,
+      "frames": 11
+    },
+    {
+      "name": "designer_sql_preview",
+      "first_frame": 68,
+      "frames": 17
+    }
+  ],
+  "captured_nominal_duration_seconds": 14.167,
+  "gif_probe": {
+    "frames": 85,
+    "duration_seconds": 14.17,
+    "r_frame_rate": "6/1",
+    "avg_frame_rate": "25/4",
+    "effective_frames_per_second": 5.998589,
+    "note": "GIF delays are quantized to centiseconds; fps is the requested capture rate."
+  },
+  "encoder": "ffmpeg version 8.0.1 Copyright (c) 2000-2025 the FFmpeg developers",
+  "gif_bytes": 336504,
+  "gif_sha256": "0e383846fc888fac79ee685f1a39a9b1ca2b6f7e28e036d5659b6b92aae95343",
+  "temporary_workspace_removed": true,
+  "temporary_frame_files_removed": true,
+  "visual_review": {
+    "reviewed": true,
+    "views": [
+      "final six-phase contact sheet",
+      "object information pane",
+      "full selected-name-field designer properties",
+      "full query results",
+      "full actual SQL preview"
+    ],
+    "result": "Only generated connection/customer/email/city/date/SQL data; Chinese labels and field properties visible; no local filesystem paths or real user/business data observed."
+  }
+}

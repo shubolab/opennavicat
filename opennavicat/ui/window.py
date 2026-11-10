@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 import uuid
+from copy import deepcopy
 from pathlib import Path
 
 from PySide6.QtCore import QByteArray, QSize, Qt, QThreadPool, QTimer, Signal
@@ -22,6 +23,7 @@ from ..storage import Store, create_sample
 from ..tasks import Task
 from ..transfer import export_result, import_data
 from ..transport import SSHAuthenticationError, SSHHostKeyError, TLSKeyPasswordError
+from .. import schema as schema_tools
 from .dialogs import ConnectionDialog, RowDialog, TableDesignerDialog, confirm_ssh_host_key
 from .editor import SqlEditor, pretty_sql
 from .grid import DataGrid, DataModel
@@ -30,6 +32,7 @@ from .diagram import SchemaDiagram
 from .workspace import ObjectBrowser, Inspector
 from .icons import icon as workbench_icon, tool_icon
 from .query import QueryPage
+from .table_designer import TableDesignerPage
 
 SAMPLE_QUERY = """-- Explore your sample workspace. Select SQL to run only that selection.
 SELECT
@@ -429,6 +432,7 @@ class MainWindow(QMainWindow):
         self.query_number = 0
         self._connecting = set()
         self._closed = False
+        self._focus_page = None
         self.setWindowTitle("OpenNavicat")
         self.resize(1512, 920)
         self.setMinimumSize(950, 620)
@@ -480,7 +484,7 @@ class MainWindow(QMainWindow):
         toolbar.addAction(self.new_connection_action)
         connection_button = toolbar.widgetForAction(self.new_connection_action)
         connection_menu = QMenu(connection_button)
-        for driver_name, driver, supported in [("MySQL", "mysql", True), ("PostgreSQL", "postgresql", True), ("Oracle", "oracle", False), ("SQLite", "sqlite", True), ("SQL Server", "sqlserver", False), ("MariaDB", "mariadb", True), ("MongoDB", "mongodb", False)]:
+        for driver_name, driver, supported in [("MySQL", "mysql", True), ("PostgreSQL", "postgresql", True), ("SQL Server", "sqlserver", False), ("Oracle", "oracle", False), ("SQLite", "sqlite", True), ("MariaDB", "mariadb", True), ("MongoDB", "mongodb", False), ("Redis", "redis", False), ("Snowflake", "snowflake", False)]:
             action = connection_menu.addAction(driver_name + "…")
             action.setEnabled(supported)
             if supported:
@@ -492,7 +496,7 @@ class MainWindow(QMainWindow):
         toolbar.addAction(self.query_action)
         toolbar.addSeparator()
         self.category_actions = {}
-        for label, kind, symbol, supported in [("表", "table", "table", True), ("视图", "view", "view", True), ("函数", "function", "function", False), ("其它", "other", "other", True), ("用户", "user", "user", False), ("查询", "query", "query", True), ("备份", "backup", "backup", True), ("自动运行", "automation", "automation", False), ("模型", "model", "model", True), ("图表", "chart", "chart", False)]:
+        for label, kind, symbol, supported in [("表", "table", "table", True), ("视图", "view", "view", True), ("函数", "function", "function", False), ("索引", "index", "index", False), ("触发器", "trigger", "trigger", False), ("其它", "other", "other", True), ("用户", "user", "user", False), ("查询", "query", "query", True), ("备份", "backup", "backup", True), ("自动运行", "automation", "automation", False), ("模型", "model", "model", True), ("BI", "chart", "bi", False)]:
             if kind == "other":
                 action = self.action(label, self.show_other_tools, icon=symbol)
             elif kind == "model":
@@ -517,6 +521,9 @@ class MainWindow(QMainWindow):
         self.info_action = self.action("信息", self.toggle_inspector, icon="info")
         self.info_action.setCheckable(True)
         self.info_action.setToolTip("隐藏或显示信息窗格")
+        self.ai_panel_action = self.action("AI 会话", lambda: None, icon="ai")
+        self.ai_panel_action.setEnabled(False)
+        self.ai_panel_action.setToolTip("AI 会话面板尚未实现")
         self.navigation_action.setIcon(tool_icon("navigation", 18))
         self.info_action.setIcon(tool_icon("info", 18))
         self.view_controls = QWidget()
@@ -526,7 +533,7 @@ class MainWindow(QMainWindow):
         view_buttons = QHBoxLayout()
         view_buttons.setContentsMargins(0, 0, 0, 0)
         view_buttons.setSpacing(9)
-        for action in (self.navigation_action, self.info_action):
+        for action in (self.info_action, self.ai_panel_action):
             button = QToolButton()
             button.setDefaultAction(action)
             button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
@@ -712,10 +719,164 @@ class MainWindow(QMainWindow):
         self.when_idle(lambda: self.run_query(target))
 
     def design_object(self, info):
-        page = self.open_table(info)
+        config = self.configs.get(info["id"])
+        if config and config.driver == "sqlite" and info["kind"] == "table":
+            return self.open_designer(info["id"], info["schema"], info.get("name", info.get("table", "")))
+        # Other dialects still expose read-only metadata in their own document;
+        # opening a design must never hide the data tab of an existing document.
+        page = TablePage(self, info["id"], info["schema"], info.get("name", info["table"]), info["kind"])
+        page._structure_only = True
         page.subtabs.setTabVisible(0, False)
         page.subtabs.tabBar().show()
         page.subtabs.setCurrentIndex(1)
+        self.tabs.setCurrentIndex(self.tabs.addTab(page, workbench_icon("design", 20),
+            f"{page.table}@{page.schema} ({config.name})"))
+        self.tabs.setTabToolTip(self.tabs.indexOf(page), "只读结构；此数据库的可编辑对象设计器仍待实现")
+        return page
+
+    def open_designer(self, connection_id, schema, table=""):
+        session = self.sessions.get(connection_id)
+        if session is None or self.configs[connection_id].driver != "sqlite":
+            return None
+        if table:
+            for index in range(self.tabs.count()):
+                page = self.tabs.widget(index)
+                if isinstance(page, TableDesignerPage) and (page.connection_id, page.schema, page.table) == (connection_id, schema, table):
+                    self.tabs.setCurrentWidget(page)
+                    return page
+        page = TableDesignerPage(connection_id, schema, table)
+        # The window's File/Save shortcut routes to the current document; avoid
+        # an ambiguous duplicate with the standalone page's shortcut.
+        page.save_action.setShortcut(QKeySequence())
+        page.set_read_only(self.configs[connection_id].read_only)
+        page.suppress_save_preview = bool(self.store.state.get("suppress_schema_save_preview", False))
+        page.loadRequested.connect(lambda: self.load_designer(page))
+        page.previewRequested.connect(lambda definition: self.preview_designer(page, definition))
+        page.saveRequested.connect(lambda definition: self.save_designer(page, definition))
+        page.titleChanged.connect(lambda _: self.update_designer_title(page))
+        page.focusRequested.connect(lambda enabled: self.focus_workspace(page, enabled))
+        page.savePreviewPreferenceChanged.connect(lambda value: self.store.state.update(suppress_schema_save_preview=value))
+        self.tabs.addTab(page, workbench_icon("design", 20), "无标题")
+        self.tabs.setCurrentWidget(page)
+        self.update_designer_title(page)
+        if table:
+            self.load_designer(page)
+        else:
+            page.load_snapshot(schema_tools.new_table(schema))
+        return page
+
+    def update_designer_title(self, page):
+        index = self.tabs.indexOf(page)
+        if index < 0:
+            return
+        config = self.configs.get(page.connection_id)
+        name = page.definition.name if page.definition else page.table
+        title = f"{name or '无标题'}@{page.schema} ({config.name if config else ''})"
+        if page.dirty:
+            title += " — 已编辑"
+        self.tabs.setTabText(index, title)
+        self.tabs.setTabToolTip(index, title)
+        if self.tabs.currentWidget() is page:
+            self.setWindowTitle(title)
+            self.inspector.show_object({"name": name or "无标题", "schema": page.schema,
+                "kind": "table"}, config, page.snapshot.ddl if page.snapshot else "")
+
+    def load_designer(self, page):
+        session = self.sessions.get(page.connection_id)
+        if session is None or page.loading or self.tabs.indexOf(page) < 0:
+            return
+        schema, table = page.schema, page.table
+        page.set_busy(True, "正在读取表结构…")
+        def done(snapshot):
+            page.load_snapshot(snapshot)
+            self.update_designer_title(page)
+        self.submit(lambda: schema_tools.load_table(session, schema, table), done,
+            page.show_error, label="读取表设计", finished=lambda: page.set_busy(False))
+
+    def preview_designer(self, page, definition):
+        session = self.sessions.get(page.connection_id)
+        if session is None or page.snapshot is None or page.loading or self.tabs.indexOf(page) < 0:
+            return
+        snapshot, draft = deepcopy(page.snapshot), deepcopy(definition)
+        def failed(error):
+            if self.tabs.indexOf(page) < 0 or page.loading:
+                return
+            dialog = page._save_dialog
+            current = dialog.definition if dialog is not None else page.definition
+            if current == draft and page.snapshot.fingerprint == snapshot.fingerprint:
+                page.show_error(error)
+        self.submit(lambda: schema_tools.plan_table(session, snapshot, draft),
+            page.show_plan, failed, label="生成结构变更预览")
+
+    def save_designer(self, page, definition):
+        session = self.sessions.get(page.connection_id)
+        if session is None or page.snapshot is None or page.loading or self.tabs.indexOf(page) < 0:
+            return
+        for index in range(self.tabs.count()):
+            document = self.tabs.widget(index)
+            if isinstance(document, TablePage) and (document.connection_id, document.schema, document.table) == (page.connection_id, page.schema, page.snapshot.table) and document.model is not None and document.model.pending:
+                page._after_save = None
+                page.show_error(ValueError("请先提交或取消该表数据页中的未保存记录，再保存结构变更。"))
+                return
+        snapshot, draft = deepcopy(page.snapshot), deepcopy(definition)
+        confirmed = deepcopy(page.confirmed_plan)
+        page.set_busy(True, "正在保存表结构…")
+        def work():
+            plan = confirmed if confirmed is not None and confirmed.definition == draft else schema_tools.plan_table(session, snapshot, draft)
+            return schema_tools.apply_plan(session, plan)
+        def done(updated):
+            page.save_succeeded(updated)
+            self.update_designer_title(page)
+            # Refresh live data documents after the DDL, without silently
+            # replacing another designer's unsaved draft.
+            for index in range(self.tabs.count()):
+                document = self.tabs.widget(index)
+                if isinstance(document, TablePage) and (document.connection_id, document.schema, document.table) == (page.connection_id, page.schema, snapshot.table):
+                    document.table = updated.table
+                    self.when_idle(lambda p=document: p.refresh(check=False) if self.tabs.indexOf(p) >= 0 else None)
+            self.when_idle(lambda: self.load_schemas(page.connection_id))
+            retry = getattr(page, "_after_save", None)
+            page._after_save = None
+            if retry is not None:
+                self.when_idle(retry)
+        def failed(error):
+            page._after_save = None
+            page.show_error(error)
+        self.submit(work, done, failed, label="保存表设计", finished=lambda: page.set_busy(False))
+
+    def focus_workspace(self, page, enabled):
+        if enabled:
+            if self.tabs.currentWidget() is not page:
+                return
+            if self._focus_page is None:
+                self._focus_visibility = (self.sidebar.isVisible(), self.inspector.isVisible(), self.main_toolbar.isVisible())
+            self._focus_page = page
+            self.sidebar.hide()
+            self.inspector.hide()
+            self.main_toolbar.hide()
+        elif self._focus_page is not None:
+            previous = self._focus_page
+            self._focus_page = None
+            for widget, visible in zip((self.sidebar, self.inspector, self.main_toolbar), self._focus_visibility):
+                widget.setVisible(visible)
+            previous.focus_action.setChecked(False)
+
+    def can_leave_designer(self, page, retry):
+        if not page.dirty:
+            return True
+        answer = QMessageBox.question(self, "是否保存更改？", "如果你不保存更改，你的更改将会丢失。",
+            QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel)
+        if answer == QMessageBox.StandardButton.Cancel:
+            return False
+        if answer == QMessageBox.StandardButton.Save:
+            # Closing and disconnecting resume only after a successful save;
+            # cancelling the preview leaves both draft and connection intact.
+            page._after_save = retry
+            page.request_save()
+            if page._save_dialog is not None:
+                page._save_dialog.rejected.connect(lambda: setattr(page, "_after_save", None))
+            return False
+        return True
 
     def drop_object(self, info):
         name, ok = QInputDialog.getText(self, "删除对象", f"输入对象名称 {info['name']} 以确认删除：")
@@ -977,16 +1138,26 @@ class MainWindow(QMainWindow):
         item = self.connection_item(connection_id)
         if item is None:
             return
+        expanded = {item.child(index).text(0) for index in range(item.childCount())
+            if item.child(index).isExpanded()}
+        if self.active_id == connection_id:
+            expanded.add(self.active_schema)
         item.takeChildren()
+        children = []
         for schema in schemas:
             child = QTreeWidgetItem([schema])
             child.setData(0, Qt.ItemDataRole.UserRole, {"type": "schema", "id": connection_id, "schema": schema, "loaded": False})
             child.setIcon(0, workbench_icon("database", 16))
             child.addChild(QTreeWidgetItem([""]))
             item.addChild(child)
+            children.append(child)
         item.setExpanded(True)
-        if len(schemas) == 1:
-            item.child(0).setExpanded(True)
+        # Preflight DDL may open SQLite's temp schema. Preserve the active and
+        # previously expanded schemas instead of collapsing main once temp exists.
+        for child in children:
+            if child.text(0) in expanded or len(schemas) == 1:
+                child.setExpanded(True)
+                self.tree_expand(child)
         self.update_schema_picker()
 
     def tree_expand(self, item):
@@ -1060,7 +1231,7 @@ class MainWindow(QMainWindow):
     def open_table(self, info):
         for i in range(self.tabs.count()):
             page = self.tabs.widget(i)
-            if isinstance(page, TablePage) and (page.connection_id, page.schema, page.table) == (info["id"], info["schema"], info["table"]):
+            if isinstance(page, TablePage) and not getattr(page, "_structure_only", False) and (page.connection_id, page.schema, page.table) == (info["id"], info["schema"], info["table"]):
                 self.tabs.setCurrentIndex(i)
                 return page
         page = TablePage(self, info["id"], info["schema"], info["table"], info["kind"])
@@ -1076,6 +1247,11 @@ class MainWindow(QMainWindow):
         page = self.tabs.currentWidget()
         if isinstance(page, TablePage):
             page.refresh()
+        elif isinstance(page, TableDesignerPage):
+            if page.dirty:
+                self.statusBar().showMessage("表设计中有未保存的更改，请先保存或关闭此草稿。", 5000)
+            elif page.snapshot and page.snapshot.exists:
+                self.load_designer(page)
 
     def filter_tree(self, text):
         text = text.casefold()
@@ -1208,6 +1384,11 @@ class MainWindow(QMainWindow):
 
     def tab_changed(self, index):
         page = self.tabs.widget(index)
+        if self._focus_page is not None and page is not self._focus_page:
+            self.focus_workspace(self._focus_page, False)
+        if isinstance(page, TableDesignerPage):
+            self.set_active(page.connection_id, page.schema)
+            self.update_designer_title(page)
         if isinstance(page, (QueryPage, TablePage)):
             self.set_active(page.connection_id, getattr(page, "schema", None))
             config = self.configs.get(page.connection_id)
@@ -1228,6 +1409,9 @@ class MainWindow(QMainWindow):
             config = self.configs.get(self.active_id)
             sqlite = bool(config and config.driver == "sqlite")
             self.category_actions["function"].setVisible(not sqlite)
+            self.category_actions["other"].setVisible(not sqlite)
+            self.category_actions["index"].setVisible(sqlite)
+            self.category_actions["trigger"].setVisible(sqlite)
             for key in ("table", "view", "query", "backup", "model", "other"):
                 self.category_actions[key].setEnabled(connected)
             other = self.category_actions["other"]
@@ -1251,6 +1435,8 @@ class MainWindow(QMainWindow):
             self.status.setText(f"{len(page.current_result().rows)} 条记录")
         elif isinstance(page, TablePage) and page.model is not None and not page.loading:
             self.status.setText(f"{page.total} 条记录在第 {page.offset // int(page.page_size.currentText()) + 1} 页")
+        elif isinstance(page, TableDesignerPage) and page.definition is not None and not page.loading:
+            self.status.setText(f"字段数: {len(page.definition.columns)}" + (" · 已编辑" if page.dirty else ""))
         elif page is self.object_page and not self.tasks:
             self.status.setText(f"{len(self.object_page.records)} " + {"table": "表", "view": "视图", "query": "查询", "backup": "备份"}.get(self.object_page.kind, "对象"))
 
@@ -1266,6 +1452,8 @@ class MainWindow(QMainWindow):
         for _, page in pages:
             if isinstance(page, TablePage) and not page.can_discard():
                 return False
+            if isinstance(page, TableDesignerPage) and not self.can_leave_designer(page, lambda: self.disconnect(connection_id)):
+                return False
         session = self.sessions.get(connection_id)
         if session and session.in_transaction:
             if QMessageBox.question(self, "事务尚未结束", "回滚尚未提交的事务并关闭连接？", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel) != QMessageBox.StandardButton.Yes:
@@ -1276,7 +1464,7 @@ class MainWindow(QMainWindow):
         if self.object_page.connection_id == connection_id:
             self.object_page.refresh()
         for index, page in reversed(pages):
-            if isinstance(page, TablePage):
+            if isinstance(page, (TablePage, TableDesignerPage)):
                 self.tabs.removeTab(index)
                 page.deleteLater()
         item = self.connection_item(connection_id)
@@ -1303,6 +1491,8 @@ class MainWindow(QMainWindow):
             return
         if isinstance(page, TablePage) and not page.can_discard():
             return
+        if isinstance(page, TableDesignerPage) and not self.can_leave_designer(page, lambda: self.close_tab(self.tabs.indexOf(page))):
+            return
         if isinstance(page, QueryPage) and page.modified:
             answer = QMessageBox.question(self, "保存查询", "关闭前保存此查询？", QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel)
             if answer == QMessageBox.StandardButton.Cancel:
@@ -1328,6 +1518,9 @@ class MainWindow(QMainWindow):
 
     def save_sql(self, checked=False, page=None):
         page = page or self.tabs.currentWidget()
+        if isinstance(page, TableDesignerPage):
+            page.request_save()
+            return False  # schema writes are asynchronous, never a synchronous SQL-file save.
         if not isinstance(page, QueryPage):
             return False
         filename = page.filename
@@ -1353,6 +1546,8 @@ class MainWindow(QMainWindow):
         session = self.sessions.get(self.active_id)
         if not session:
             return
+        if session.config.driver == "sqlite":
+            return self.open_designer(self.active_id, self.active_schema)
         dialog = TableDesignerDialog(self, session, self.active_schema)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
@@ -1550,6 +1745,9 @@ class MainWindow(QMainWindow):
             return
         for i in range(self.tabs.count()):
             page = self.tabs.widget(i)
+            if isinstance(page, TableDesignerPage) and not self.can_leave_designer(page, self.close):
+                event.ignore()
+                return
             if isinstance(page, TablePage) and not page.can_discard():
                 event.ignore()
                 return

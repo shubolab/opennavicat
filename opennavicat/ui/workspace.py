@@ -54,7 +54,7 @@ class ObjectBrowser(QWidget):
         layout.addWidget(self.toolbar)
         self.table = QTableWidget(0, 5)
         self.table.setObjectName("objectList")
-        self.table.setHorizontalHeaderLabels(["名", "根页面", "有索引", "有触发器", ""])
+        self.table.setHorizontalHeaderLabels(["名称", "根页面", "有索引", "有触发器", ""])
         self.table.verticalHeader().hide()
         self.table.verticalHeader().setDefaultSectionSize(20)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)

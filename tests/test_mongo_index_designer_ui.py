@@ -10,7 +10,7 @@ from bson import Binary, Int64
 from pymongo import MongoClient
 import pytest
 from PySide6.QtCore import QThreadPool, Qt, QTimer
-from PySide6.QtGui import QFontMetricsF
+from PySide6.QtGui import QFont, QFontMetricsF
 from PySide6.QtTest import QSignalSpy
 from PySide6.QtWidgets import QApplication, QDialogButtonBox, QStyle, QStyleFactory, QStyleOptionButton, QStyleOptionComboBox, QWidget
 
@@ -77,7 +77,7 @@ def combo_geometry(combo):
     return {"platform": QApplication.platformName(), "style": combo.style().metaObject().className(),
             "font": combo.font().toString(), "dpr": combo.devicePixelRatioF(),
             "text": combo.currentText(), "size": combo.size().toTuple(),
-            "hint": combo.sizeHint().toTuple(), "edit": edit.getRect(),
+            "hint": combo.sizeHint().toTuple(), "maximum_width": combo.maximumWidth(), "edit": edit.getRect(),
             "required_text": required, "required_inset": inset}
 
 
@@ -134,7 +134,9 @@ def test_async_collection_and_index_version_fit_actual_native_edit_field(
     for combo, maximum in ((page.collection_combo, 300), (page.version_combo, 160)):
         assert_combo_fits(qtbot, combo)
         assert combo.font().pixelSize() == pixels
-        assert combo.width() <= maximum
+        # Keep the compact reference bound at 12px, while allowing the same
+        # field to grow with larger fonts instead of clipping its text at 300.
+        assert combo.width() <= combo.maximumWidth() <= math.ceil(maximum * max(1, pixels / 12))
     assert page.version_combo.currentText() == "2"
     assert page.draft() == original and page.snapshot.definition == original
 
@@ -165,6 +167,30 @@ def test_collection_and_version_relayout_after_live_font_style_and_metadata_chan
     assert_combo_fits(qtbot, page.collection_combo)
     assert page.collection_combo.currentText() == "products" and page.draft() == original
     assert changes.count() == 0
+
+
+def test_combo_uses_own_live_font_metrics_and_bounds_long_catalog_names(qtbot, offline, combo_environment):
+    page, _ = offline
+    page.set_collections(["products"])
+    page.collection_combo.setCurrentText("products")
+    page.version_combo.setCurrentText("2")
+    original = page.draft()
+    for combo in (page.collection_combo, page.version_combo):
+        font = combo.font()
+        font.setPixelSize(36)
+        # Exercise label tracking independently of the page/parent font: the
+        # native CT_ComboBox hint alone does not prove this edit area fits.
+        font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 12)
+        combo.setFont(font)
+        assert_combo_fits(qtbot, combo)
+        assert combo.font().pixelSize() == 36 and page.font().pixelSize() != 36
+    previous = page.collection_combo.maximumWidth()
+    long_name = "generated_" + "x" * 110
+    page.set_collections([long_name, "products"])
+    assert_combo_fits(qtbot, page.collection_combo)
+    assert page.collection_combo.maximumWidth() == previous
+    assert page.collection_combo.findText(long_name) >= 0
+    assert page.collection_combo.currentText() == "products" and page.draft() == original
 
 
 def test_six_real_pages_ordered_keys_advanced_options_and_invalid_json_gate(qtbot, offline):

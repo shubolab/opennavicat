@@ -4,10 +4,11 @@ from __future__ import annotations
 from copy import deepcopy
 import math
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QEvent, QRect, QSize, Qt, QTimer
+from PySide6.QtGui import QFontMetricsF
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout, QLabel, QLineEdit,
-    QPushButton, QTableWidget, QTableWidgetItem, QTabWidget, QVBoxLayout, QWidget,
+    QPushButton, QStyle, QStyleOptionComboBox, QTableWidget, QTableWidgetItem, QTabWidget, QVBoxLayout, QWidget,
 )
 
 from opennavicat.database import DatabaseError
@@ -57,6 +58,78 @@ def _table(headers):
     table.setColumnWidth(0, 240)
     table.setColumnWidth(1, 110)
     return table
+
+
+class _IndexComboBox(QComboBox):
+    """Fit text inside native combo chrome, while bounding long owner names.
+
+    CT_ComboBox can underestimate the edit rectangle and its label inset on
+    Windows. Measure with the actual font and invert SC_ComboBoxEditField,
+    rather than trusting the first-show or minimum-characters size hints.
+    """
+
+    def __init__(self, minimum_characters, reference_maximum, parent=None):
+        super().__init__(parent)
+        self._reference_maximum = reference_maximum
+        self.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
+        self.setMinimumContentsLength(minimum_characters)
+        self._update_width_limit()
+
+    def _text_widths(self):
+        metrics = QFontMetricsF(self.font())
+        inset = 2 * math.ceil(metrics.horizontalAdvance(" "))
+        minimum = math.ceil(max(metrics.averageCharWidth(), metrics.horizontalAdvance("0"))
+                            * self.minimumContentsLength()) + inset
+        content = max([metrics.horizontalAdvance(self.itemText(row)) for row in range(self.count())]
+                      + [metrics.horizontalAdvance(self.currentText()), 0])
+        return minimum, max(minimum, math.ceil(content) + inset)
+
+    def _fitted_width(self, required, hint):
+        width = hint.width()
+        option = QStyleOptionComboBox()
+        self.initStyleOption(option)
+        for _ in range(8):
+            option.rect = QRect(0, 0, width, hint.height())
+            edit = self.style().subControlRect(
+                QStyle.ComplexControl.CC_ComboBox, option,
+                QStyle.SubControl.SC_ComboBoxEditField, self,
+            )
+            deficit = required - edit.width()
+            if deficit <= 0:
+                break
+            width += deficit
+        return width
+
+    def _width_limit(self, hint):
+        minimum, _ = self._text_widths()
+        # The reference's compact 300/160px bounds must not clip even the
+        # minimum character area when font/style/DPI increases. Long catalog
+        # names alone do not remove the bound or force a full-window field.
+        baseline = QSize(self._reference_maximum, hint.height())
+        return self._fitted_width(minimum, baseline)
+
+    def sizeHint(self):
+        hint = super().sizeHint()
+        _, required = self._text_widths()
+        hint.setWidth(min(self._fitted_width(required, hint), self._width_limit(hint)))
+        return hint
+
+    def minimumSizeHint(self):
+        return self.sizeHint()
+
+    def _update_width_limit(self):
+        self.setMaximumWidth(self._width_limit(super().sizeHint()))
+        self.updateGeometry()
+
+    def event(self, event):
+        result = super().event(event)
+        if hasattr(self, "_reference_maximum") and event.type() in (
+            QEvent.Type.FontChange, QEvent.Type.ApplicationFontChange,
+            QEvent.Type.StyleChange, QEvent.Type.Polish,
+            QEvent.Type.ScreenChangeInternal, QEvent.Type.DevicePixelRatioChange,
+        ):
+            self._update_width_limit()
+        return result
 
 
 class MongoIndexSaveDialog(TableSaveDialog):
@@ -147,12 +220,7 @@ class MongoIndexDesignerPage(_ObjectDesignerPage):
         layout = QVBoxLayout(self.general)
         layout.setContentsMargins(12, 12, 12, 12)
         form = self._form()
-        self.table_combo = self.collection_combo = QComboBox()
-        # Owners arrive after the page has already been shown. The default
-        # first-show policy otherwise keeps the empty selector's cached width.
-        self.collection_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
-        self.collection_combo.setMinimumContentsLength(12)
-        self.collection_combo.setMaximumWidth(300)
+        self.table_combo = self.collection_combo = _IndexComboBox(12, 300)
         self.collection_combo.currentTextChanged.connect(self._owner_selected)
         form.addRow("集合名称", self.collection_combo)
         row = QWidget(); boxes = QHBoxLayout(row); boxes.setContentsMargins(0, 0, 0, 0)
@@ -264,12 +332,8 @@ class MongoIndexDesignerPage(_ObjectDesignerPage):
         return widget
 
     def _choice(self, form, label, name, values, kind):
-        widget = QComboBox()
+        widget = _IndexComboBox(3, 160)
         widget.addItems(values)
-        widget.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
-        # A lone digit still needs room beside the native arrow and text inset.
-        widget.setMinimumContentsLength(3)
-        widget.setMaximumWidth(160)
         self._widgets[name] = widget
         widget.currentTextChanged.connect(lambda value, key=name, parser=kind: self._scalar_edited(key, value, parser))
         form.addRow(label, widget)

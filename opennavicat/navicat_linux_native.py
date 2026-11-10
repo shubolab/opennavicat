@@ -123,6 +123,10 @@ def _records(data, candidate, issues):
                 if not isinstance(server, dict):
                     invalid();continue
                 typ, name, native = server.get("ConnType"), server.get("Name"), server.get("ConnectionUUID")
+                if not _plain(name) or not name:
+                    # A generated display label is not a source identity and
+                    # cannot prove that group name-based links are unique.
+                    invalid()
                 # IDs are scoped to the exact file/user/project even when a
                 # future source writes a nonempty UUID. No cross-scope alias.
                 token = ["uuid", native] if _plain(native) and native else ["name", name if _plain(name) else ["position", si]]
@@ -196,7 +200,7 @@ def _profile(identity, record, scope_complete, candidate, issues):
             config.port = port
         else:
             uncertain("Port")
-        config.database = text("InitialDatabase")
+        config.database = text("InitialDatabase") if driver in {"postgresql", "sqlserver"} else ""
         if driver in {"postgresql", "sqlserver"} and not _plain(record.get("InitialDatabase")):
             uncertain("InitialDatabase")
         # No Linux TLS/SSH auth or active-profile enum is inferred from macOS.
@@ -209,6 +213,13 @@ def _profile(identity, record, scope_complete, candidate, issues):
             uncertain("UseSSH")
     if driver in {"sqlite", "postgresql", "mysql", "mariadb"} and record.get("UseHTTP") is not False:
         uncertain("UseHTTP")
+    for flag in ("UseSSL", "UseSSH", "UseHTTP"):
+        # A field can be projected for another family without having accepted
+        # active semantics here. Inactive opaque subtrees remain untouched.
+        if flag in record and record[flag] is not False:
+            uncertain(flag)
+    if "InitialDatabase" in record and driver not in {"postgresql", "sqlserver"}:
+        uncertain("driver_specific_settings")
     for flag in ("UseSocketFile", "UseCompatibilityMode", "UseCustomDBList"):
         if flag in record and record[flag] is not False:
             uncertain(flag)
@@ -230,6 +241,8 @@ def _profile(identity, record, scope_complete, candidate, issues):
         if record.get("ReadPreference") != "Primary":
             uncertain("ReadPreference")
         config.mongo_auth_source = text("AuthSource")
+        if not _plain(record.get("AuthSource")):
+            uncertain("AuthSource")
         for field, target in (("RetryReads", "mongo_retry_reads"), ("RetryWrites", "mongo_retry_writes")):
             if type(record.get(field)) is bool:
                 setattr(config, target, record[field])
@@ -277,6 +290,9 @@ def _groups_for(candidate, entries, issues):
     if not isinstance(data, dict) or data.get("version") != "1.1" or not _empty(data.get("connections"), "array"):
         issues.append(ImportIssue("unsupported_groups", "The Linux virtual-group version or structure needs review."))
         return {}, False, 1
+    if getattr(data, "unknown_fields", False):
+        issues.append(ImportIssue("unsupported_groups", "Additional Linux group-root semantics require review."))
+        return {}, False, 1
     # This Linux checkpoint observed exact ConnType tokens in group members.
     # Do not widen native acceptance using the macOS reader's alias spellings.
     accepted = dict(data)
@@ -286,11 +302,18 @@ def _groups_for(candidate, entries, issues):
     if isinstance(data.get("vgroups"), list):
         accepted["vgroups"] = []
         for group in data["vgroups"]:
+            if getattr(group, "unknown_fields", False):
+                complete = False
+                issues.append(ImportIssue("unsupported_group", "Additional Linux group semantics require review."))
+                continue
             value = dict(group) if isinstance(group, dict) else group
             if isinstance(group, dict) and isinstance(group.get("items"), list):
                 value["items"] = []
                 for item in group["items"]:
-                    if isinstance(item, dict) and item.get("server_type") not in _DRIVERS:
+                    if getattr(item, "unknown_fields", False):
+                        complete = False
+                        issues.append(ImportIssue("unsupported_group_member", "Additional Linux membership semantics require review."))
+                    elif isinstance(item, dict) and item.get("server_type") not in _DRIVERS:
                         complete = False
                         issues.append(ImportIssue("unsupported_group_member", "A Linux group member uses an unaccepted native family token."))
                     else:

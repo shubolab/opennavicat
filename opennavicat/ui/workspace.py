@@ -278,6 +278,9 @@ class ObjectBrowser(QWidget):
         if entry:
             self.window.inspector.show_object(entry, self.window.configs.get(self.connection_id))
             session = self.window.sessions.get(self.connection_id)
+            if (self.window._closed or getattr(self.window, "_closing_mongo", False)
+                    or self.connection_id in getattr(self.window, "_closing_connections", ())):
+                return
             if self.window.inspector.isVisible() and session and entry["kind"] in {"table", "view"}:
                 def done(ddl):
                     if self.selected() == entry and self.window.tabs.currentWidget() is self:
@@ -287,7 +290,9 @@ class ObjectBrowser(QWidget):
                 from ..mongodb_indexes import load_index
                 def done(snapshot):
                     if (self.selected() == entry and self.window.tabs.currentWidget() is self
-                            and self.window.sessions.get(entry["id"]) is session):
+                            and self.window.sessions.get(entry["id"]) is session
+                            and entry["id"] not in self.window._closing_connections
+                            and not self.window._closing_mongo):
                         self.window.inspector.show_object(entry, self.window.configs.get(entry["id"]), snapshot.ddl)
                 self.window.submit(lambda: load_index(session, entry["schema"], entry["collection"], entry["name"]),
                     done, label="读取索引信息")

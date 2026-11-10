@@ -1,13 +1,87 @@
 # 0.3.0 安全连接与六平台安装包验证记录
 
-日期：2026-11-10（Asia/Shanghai）。本记录区分已运行的测试、已经生成并验证的安装包、
-尚未完成的发布门槛。当前是第一版 MVP 里程碑，**完整工具功能和 1:1 UI 验收仍未完成**。
+日期：2026-11-10（Asia/Shanghai）。本记录区分最终公开版本、实际验证结果与历史失败。
+当前是第一版 MVP 里程碑，**完整工具功能和 1:1 UI 验收仍未完成**。
 范围继续以 [parity-matrix.md](parity-matrix.md) 为准：保留数据库认证、用户、角色、权限和
 云托管数据库连接，排除 Navicat 产品账号、登录、订阅、授权和云账号协作体系。
 
 当前观察参考为本机 **Navicat Premium 16.1.1**。用户计划在第一版含六个安装包的 Release
 发布后更新 Navicat；本次尚未重新观察更新后的参考，不能宣称已对照最新版。按用户指示，完成这次 Release
 后暂停目标，待用户更新并明确恢复后再继续观察和实现完整目标。
+
+## 最终公开版本与原生验收
+
+[v0.3.0 Release](https://github.com/shubolab/opennavicat/releases/tag/v0.3.0)
+于 **2026-11-10 12:08:39（Asia/Shanghai）** 公开，状态为非草稿、预发行版本。
+标签准确指向 `b73eb02a3f0e961e743b8a6882e6d3f647910ff9`。
+[最终发布运行 42753518840](https://github.com/shubolab/opennavicat/actions/runs/42753518840)
+的八个作业全部成功：六个原生目标、独立真实数据库安全测试、完整资产校验与发布。
+以下结果属于该标签本次执行，不由先前失败作业或普通 main 分支推算。
+
+| 目标 / 原生主机 | 最终作业 | 包内原生镜像数 | 实际安装后运行 |
+| --- | --- | ---: | --- |
+| Linux amd64 / Ubuntu 24.04 | [129622440047](https://github.com/shubolab/opennavicat/actions/runs/42753518840/job/129622440047) | 242 ELF | xcb，安装、SQL、加密运算、卸载通过 |
+| Linux arm64 / Ubuntu 24.04 ARM | [129622439958](https://github.com/shubolab/opennavicat/actions/runs/42753518840/job/129622439958) | 238 ELF | xcb，安装、SQL、加密运算、卸载通过 |
+| Windows amd64 / Windows Server 2022 | [129622439840](https://github.com/shubolab/opennavicat/actions/runs/42753518840/job/129622439840) | 123 PE | windows，安装、SQL、加密运算、卸载通过 |
+| Windows arm64 / Windows 11 ARM | [129622439930](https://github.com/shubolab/opennavicat/actions/runs/42753518840/job/129622439930) | 121 PE | windows，安装、SQL、加密运算、卸载通过 |
+| macOS amd64 / macOS 15 Intel | [129622439948](https://github.com/shubolab/opennavicat/actions/runs/42753518840/job/129622439948) | 111 Mach-O | cocoa，DMG 安装、SQL、加密运算、移除通过 |
+| macOS arm64 / macOS 15 Apple Silicon | [129622439873](https://github.com/shubolab/opennavicat/actions/runs/42753518840/job/129622439873) | 110 Mach-O | cocoa，DMG 安装、SQL、加密运算、移除通过 |
+
+所有安装后报告均为 SQL **6 行 × 4 列**、`crypto_legacy_probe=true`，
+Python、Qt、数据库与 SSH/加密依赖实际加载成功。libpq 分别为 Windows 18.4、
+macOS/Linux 18.6，满足安全取消所需的 17+。发布步骤重新检查安装包完整集合、字节数、
+SHA-256、全部原生镜像的目标架构、原生构建主机、运行时架构和安装/运行/卸载回执。
+
+最终 tag 的 Linux、macOS 两架构默认测试各为 **143 passed / 133 skipped / 0 failed**，
+Windows 两架构各为 **142 passed / 134 skipped / 0 failed**。
+Linux JUnit 时间分别为 amd64 14.194 秒、arm64 13.040 秒；
+Windows pytest 日志时间分别为 amd64 19.50 秒、arm64 20.73 秒。
+跳过项是未启用的外部服务或平台用例，
+不表示通过。独立 [TLS/SSH 作业 129622439694](https://github.com/shubolab/opennavicat/actions/runs/42753518840/job/129622439694)
+实际运行 PostgreSQL、MySQL、MariaDB，每驱动 25 项，共 **75 passed / 0 skipped / 0 failed**，
+JUnit 54.283 秒。六个平台的真实桌面 smoke 与 Ubuntu 上的真实网络数据库集成测试是不同证据；
+未将后者宣称为每个平台都执行了 75 项。
+
+Release 上传资产为六份安装包加
+[SHA256SUMS](https://github.com/shubolab/opennavicat/releases/download/v0.3.0/SHA256SUMS)
+和 [build-manifests.json](https://github.com/shubolab/opennavicat/releases/download/v0.3.0/build-manifests.json)，
+共八项，不包含源码 ZIP 充当安装包。
+
+| 最终公开文件 | 字节数 | SHA-256 |
+| --- | ---: | --- |
+| `OpenNavicat-0.3.0-linux-amd64.deb` | 71,531,110 | `8998bd28a88dd850da5a87abdfdb7b7bf8f83904e1bbb1fe55ec97ec857126be` |
+| `OpenNavicat-0.3.0-linux-arm64.deb` | 70,261,484 | `db05b1170367d4548867ac111537f128108a44b3e1dd8f532b720b1ae696b3f3` |
+| `OpenNavicat-0.3.0-macos-amd64.dmg` | 45,536,359 | `f9dbfdad28ad423dbc6b0c76b362ae45154dc5a38297a149045ca6840aea7edf` |
+| `OpenNavicat-0.3.0-macos-arm64.dmg` | 44,911,746 | `c7607eaa75fa51ae8748f000c492312614399f4e9026a781201997877c1de2a5` |
+| `OpenNavicat-0.3.0-windows-amd64-setup.exe` | 38,735,277 | `d6af460a007fdbcfdcf821867828f1f8c8d1655ac2716debe88627860d1bd43e` |
+| `OpenNavicat-0.3.0-windows-arm64-setup.exe` | 30,212,757 | `83676309efad529626d1ba0df495748f912e2ad685793aadcc7158fca9dd111b` |
+
+公开后又使用**不带 GitHub Authorization 或登录 Cookie 的 HTTPS 请求**，完整下载了
+六份安装包和两份元数据，均返回 HTTP 200。三组独立下载的校验和与清单字节一致；
+下载后的每份安装包均重新计算 SHA-256，同时匹配 `SHA256SUMS`、
+`build-manifests.json` 和 GitHub asset digest，字节数也全部一致。
+这一步证明公开资产实际可下载，不只是 CI artifact 或已创建的 Release 页面。
+
+对已经公开并下载的最终 ARM64 文件另做两次隔离安装检查：
+
+- **macOS 27.2 Apple Silicon**：最终 DMG 只读装载、核对 Applications 链接、
+  复制到独立临时目录，实际 Cocoa 启动、SQL 6×4、全部驱动和加密探测通过，
+  随后移除副本并成功卸载该任务卷，未覆盖已有应用或工作区。
+- **干净 Ubuntu 24.04.5 LTS ARM64 / glibc 2.39**：安装最终公开 DEB，
+  除测试显示所需 Xvfb/xauth 外仅由 DEB 声明拉取运行依赖，未另补 Qt 库。
+  实际 xcb 启动、SQL 6×4、全部驱动和加密探测通过，`ldd` 无缺库；实际截图中的
+  中文菜单、分类和状态栏可读。随后 `apt purge` 成功并确认临时容器已移除。
+
+本机复核证据保存在忽略的 `artifacts/release-v0.3.0/`：
+`final/verification.json` 记录六份最终文件的重新计算结果，
+`windows/verification.json`、`macos/public-download-verification.json` 和
+`linux/public-verification.json` 记录各组匿名下载与核对；最终 tag 的原始 JUnit/日志
+也保存在对应子目录。macOS 的额外安装回执为
+`macos/published-arm64-local-install-verification.json`，Linux 的汇总回执为
+`linux/final-receipt.json`，截图、依赖和运行报告位于 `linux/clean-ubuntu/`。
+运行所需安装包和清单已公开，不依赖这些本机诊断文件才能取得。
+
+以下保留本地安全测试与发布前调试的历史过程；其中失败、待重跑和候选资产摘要不能覆盖上面的最终结果。
 
 ## 独立的真实 TLS / SSH 集成验证
 
@@ -94,7 +168,7 @@ Windows ARM64 首次成功构建的 vcpkg revision 为
 
 最终本地默认测试另发现 Python SQLite 上下文管理器只结束事务而不关闭连接。配置、
 历史、样例创建及测试夹具已补上显式关闭，重新执行完整 warnings-as-errors 检查通过。
-当前默认套件为 **129 passed / 133 skipped**（需要显式启用的外部服务用例不在默认执行范围），
+该次本地默认套件为 **129 passed / 133 skipped**（需要显式启用的外部服务用例不在默认执行范围），
 18.70 秒，零警告和错误；真实安全连接的 75 项另行实际执行，并非以这些跳过项代表通过。
 
 第二次运行 [42743679346](https://github.com/shubolab/opennavicat/actions/runs/42743679346)
@@ -146,8 +220,8 @@ Inno Setup 的 x86 包装器，应用、Python、Qt、数据库及加密原生�
 libpq 版本，以及 installed / launched / uninstalled 三项结果；源码和 ZIP 不能替代安装包。
 完整约束见 [release-policy.md](release-policy.md) 与 [packaging/README.md](../packaging/README.md)。
 
-**最终 CI / Release 结果：待修复提交的六个原生作业和安全作业完成后补录。**
-首次运行中四个已验证安装包不构成六目标发布完成，上传 CI artifact 也不等于已发布 Release。
+最终结果见本文开头的公开 Release、最终 tag 作业和资产摘要。历史首次运行中四个已验证
+安装包并未构成六目标发布完成；只有后来全部门禁通过、完整上传并公开才完成此次发布。
 
 ## 运行环境与当前边界
 
@@ -169,5 +243,6 @@ libpq 版本，以及 installed / launched / uninstalled 三项结果；源码�
   设计器、导入导出向导、结构同步、建模、自动运行、图表等能力仍以 parity matrix 的具体
   证据门槛验收，不能由本轮 TLS / SSH 或安装器测试替代。
 
-第一版 MVP Release 发布且六个安装包可用后，按用户要求暂停继续开发。完整目标保持未完成，
-等待用户更新参考端并恢复后继续。
+第一版 MVP Release 已公开，六个安装包均实际匿名下载并校验完成；按用户要求交付后暂停继续开发。
+完整目标保持未完成，等待用户更新参考端并明确恢复后，按 [恢复说明](resume-after-first-release.md)
+重新调查届时安装的最新版本，再继续完整界面和功能还原。

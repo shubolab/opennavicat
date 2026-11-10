@@ -35,6 +35,7 @@
 | S-T | [transfer.py](../opennavicat/transfer.py)、[compare.py](../opennavicat/compare.py)、[ui/compare.py](../opennavicat/ui/compare.py) | CSV/JSON、有限数据比较和应用；不等于完整导入导出/传输/同步。 |
 | S-M | [diagram.py](../opennavicat/ui/diagram.py) | 只读 metadata 关系图、布局和 PNG/SVG 输出。 |
 | V | [现有验证记录](validation.md)、`tests/` | 97 passed / 1 skipped 及已有构建/smoke，验证当前实现；不证明参考 UI 或完整工具对齐。 |
+| V03 | [0.3 原生安装与连接安全验证](validation-0.3.md)、[v0.3.0 Release](https://github.com/shubolab/opennavicat/releases/tag/v0.3.0) | 六个目标的原生安装/运行/卸载、架构及加密依赖检查，以及独立真实数据库 TLS/SSH 测试；不关闭任何完整工具或 1:1 UI 门禁。 |
 
 L1 已观察的主工具栏顺序：**连接 / 新建查询 / 表 / 视图 / 函数 / 其它 / 用户 / 查询 / 备份 / 自动运行 / 模型 / 图表**。函数等入口受驱动能力影响。导航已观察到 **表 / 视图 / 查询 / 备份** 分类；对象列表含名称、rootpage、索引、触发器等列。真实结构优先于此前自定义深色侧栏和简化工具栏。
 

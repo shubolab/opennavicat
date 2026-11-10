@@ -48,6 +48,12 @@
 
 ## 现有成果的使用方式
 
-已有四驱动核心、SQL 工作区、主键数据编辑、CSV/JSON、元数据、有限比较、只读关系图、SQLite 快照及 macOS/Linux 原生包可作为基础。[验证记录](validation.md)中的 97 passed / 1 skipped 验证既有行为，不证明参考 UI 已还原、全部驱动已具备或所有工具已完成。
+首个可用里程碑 [v0.3.0](https://github.com/shubolab/opennavicat/releases/tag/v0.3.0)
+提供六个原生目标的安装包。已有四驱动核心、SQL 工作区、主键数据编辑、CSV/JSON、元数据、
+有限比较、只读关系图、SQLite 快照，以及 SSH/TLS 连接可作为继续开发的基础。
+[0.3 验证记录](validation-0.3.md) 区分原生安装验收、实际数据库安全测试和仍未通过的完整对齐门禁。
+
+按用户要求，本次交付后暂停，等待用户更新本机 Navicat 并明确恢复。恢复时先执行
+[新参考确认与交接步骤](resume-after-first-release.md)，不直接把 16.1.1 的观察套用到新版。
 
 只有矩阵清单封闭、所有适用 UI/功能门禁和三个操作系统验收全部通过，才能声明目标完成。

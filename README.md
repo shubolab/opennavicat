@@ -7,9 +7,26 @@ Python + Qt Widgets（PySide6），数据库连接、SQL 和结果均在本机�
 项目从本机 Navicat Premium 的功能资源调查开始，以独立实现逐步覆盖完整的
 数据库管理工作流。
 
-当前源码：**0.3.0，连接安全与安装包里程碑开发中**。SQLite、PostgreSQL、MySQL、MariaDB
+首个可用里程碑 **[v0.3.0](https://github.com/shubolab/opennavicat/releases/tag/v0.3.0)**
+已发布为早期预发行版本，提供三个操作系统、两种架构的六份安装包。SQLite、PostgreSQL、MySQL、MariaDB
 已实现驱动与核心工作流，使用隔离服务进行真实读写和界面集成验证。完整 Navicat Premium 能力仍在持续实现中，
 详细范围见 [功能路线图](docs/roadmap.md)。
+
+| 安装包 | amd64 / Intel、x64 | arm64 / Apple Silicon、Windows ARM |
+| --- | --- | --- |
+| macOS | [DMG](https://github.com/shubolab/opennavicat/releases/download/v0.3.0/OpenNavicat-0.3.0-macos-amd64.dmg) | [DMG](https://github.com/shubolab/opennavicat/releases/download/v0.3.0/OpenNavicat-0.3.0-macos-arm64.dmg) |
+| Windows | [Setup EXE](https://github.com/shubolab/opennavicat/releases/download/v0.3.0/OpenNavicat-0.3.0-windows-amd64-setup.exe) | [Setup EXE](https://github.com/shubolab/opennavicat/releases/download/v0.3.0/OpenNavicat-0.3.0-windows-arm64-setup.exe) |
+| Linux（Debian/Ubuntu） | [DEB](https://github.com/shubolab/opennavicat/releases/download/v0.3.0/OpenNavicat-0.3.0-linux-amd64.deb) | [DEB](https://github.com/shubolab/opennavicat/releases/download/v0.3.0/OpenNavicat-0.3.0-linux-arm64.deb) |
+
+[SHA256SUMS](https://github.com/shubolab/opennavicat/releases/download/v0.3.0/SHA256SUMS)
+和 [构建与安装验证清单](https://github.com/shubolab/opennavicat/releases/download/v0.3.0/build-manifests.json)
+随版本发布。当前安装包没有发布者签名或 Apple 公证；Windows ARM64 安装引导器使用 x86，
+安装后的应用、Python、Qt 及原生库为 ARM64。实际系统验证范围和功能边界见
+[0.3 验证记录](docs/validation-0.3.md)。
+
+按用户要求，首个可用版本交付后暂停继续开发，等待更新本机 Navicat 并明确恢复。
+恢复时重新检查届时安装的版本及实际界面，继续原定完整功能和 1:1 UI 目标；
+当前 16.1.1 的参考记录保留为历史证据。交接步骤见 [恢复说明](docs/resume-after-first-release.md)。
 
 0.1 的自定义界面没有满足还原要求。0.2 开始实际打开参考应用，以同一个本地样例库
 观察并重建主工具栏、分类导航、对象列表、信息面板、查询/结果区和连接对话框。

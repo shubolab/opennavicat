@@ -303,6 +303,30 @@ def test_actual_mouse_save_handoff_preserves_highlight_until_write_then_selects_
     assert len([name for name,_args in session.calls if name=="replace"])==1
 
 
+def test_cancelled_navigation_double_click_never_opens_an_unhighlighted_document(qtbot,ui):
+    host,session=ui;widget=page(qtbot,ui);original=widget.selected_document()
+    dialog=widget.edit_document();changed=deepcopy(original.document);changed["draft"]=True
+    dialog.editor.setPlainText(canonical_dumps(changed))
+    assert dialog.isModal() and dialog.windowModality()==Qt.WindowModality.WindowModal
+    target=widget.grid.visualRect(widget.model.index(1,0)).center()
+    # QTest can deliver directly to the blocked parent viewport. Exercise its
+    # double-click callback defensively despite normal window-modal routing.
+    QTest.mouseClick(widget.grid.viewport(),Qt.MouseButton.LeftButton,pos=target)
+    QTest.mouseDClick(widget.grid.viewport(),Qt.MouseButton.LeftButton,pos=target)
+    assert widget._dialog is dialog and dialog.modified
+    assert widget.grid.currentIndex().row()==widget._selected_row==0
+    assert [index.row() for index in widget.grid.selectionModel().selectedRows()]==[0]
+    assert canonical_loads(dialog.editor.toPlainText())["_id"]==original.document["_id"]
+    QTest.mouseClick(dialog.buttons.button(QDialogButtonBox.StandardButton.Cancel),Qt.MouseButton.LeftButton)
+    # A subsequent full mouse sequence may now select and edit the target.
+    QTest.mouseClick(widget.grid.viewport(),Qt.MouseButton.LeftButton,pos=target)
+    QTest.mouseDClick(widget.grid.viewport(),Qt.MouseButton.LeftButton,pos=target)
+    assert widget.grid.currentIndex().row()==widget._selected_row==1
+    assert [index.row() for index in widget.grid.selectionModel().selectedRows()]==[1]
+    assert canonical_loads(widget._dialog.editor.toPlainText())["_id"]==session.records[1].document["_id"]
+    assert [name for name,_args in session.calls]==["fetch"]
+
+
 def test_actual_shift_discard_and_clean_keyboard_navigation_keep_single_matching_highlight(qtbot,ui,monkeypatch):
     host,session=ui;widget=page(qtbot,ui)
     dialog=widget.edit_document();changed=deepcopy(widget.selected_document().document);changed["draft"]=True

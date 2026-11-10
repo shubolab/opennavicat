@@ -58,6 +58,7 @@ SSH 使用每客户端原生 pool/TLS context 适配；初期 SOCKS 参数路线
 
 | 实际运行范围 | 结果 | 证据及边界 |
 | --- | ---: | --- |
+| 0.6.1 最终源码全量 | 873 passed，231 skipped，0 failed，41.51 秒，`-Werror` | 包含三项实际 pytest-qt 关闭顺序回归；`artifacts/mongodb/source-0.6.1-final.xml` |
 | 独立审查修补后源码全量 | 870 passed，231 skipped，0 failed，41.66 秒，`-Werror` | 显式启用自建 MongoDB 协议夹具，包含新增录制器与键盘回归；其它未启用端点、平台和安全专项保留跳过；`artifacts/mongodb/source-reviewed-final.xml` |
 | 首轮整合源码 checkpoint | 819 passed，231 skipped，0 failed，39.77 秒，`-Werror` | 后续审查前的历史范围；`artifacts/mongodb/source-final.xml` |
 | 修补后 CI MongoDB 协议 runner | 152 passed，0 skipped，`-Werror` | 102 后端、38 原生命令、12 MainWindow；原生 amd64、Ubuntu 22.04、实际内核 6.8.0-1070-azure；3 个本次新建容器均认证就绪并核验删除；`artifacts/mongodb/main-c6859b4-ci/security/mongodb-protocol/` |
@@ -185,6 +186,15 @@ Windows 753 passed、297 skipped；冻结程序的 MongoDB 适配器、BSON 原�
 该目标未进入打包阶段，依赖门禁阻止了公开 Release。修补在 Qt 自动关闭窗口前释放受控等待、
 排空后台任务并完成页面收尾，不以忽略已销毁对象来掩盖未完成 I/O。使用 **0.6.1** 新标签，旧 tag 不移动。
 最终结果以新的正式 CI 为准；原失败报告保留。
+
+修补后的文档页和 GridFS 专项 41 passed、0 skipped、`-Werror`，
+三项新增回归真实调用 pytest-qt 的关闭流程，在实际 worker 持续等待期间开始关闭，
+确认 I/O、结果回调、串行 owner 关闭的顺序，并在 Qt 删除宿主和线程池后再次执行幂等收尾。
+0.6.1 源码全量 873 项通过；该版本另实际完成 SQLite 6×4 smoke 与全部驱动探针，
+见 `artifacts/mongodb/source-0.6.1-runtime-smoke.json`。
+README 的唯一 GIF 也以 0.6.1 实际重录：1440×900、126 帧、21 秒，SHA-256 为
+`caf781fcd4b24a2c9fce76e0a2a846818390f8de8ff25fb6dae3d4b1d1104e2c`；
+只使用生成的 SQLite/MongoDB 数据和图像，原生窗口、后台任务、自有容器及临时目录均确认清理。
 
 | 本轮最终目标 | 原生构建及安装/运行/卸载 | 公开资产下载核验 |
 | --- | --- | --- |

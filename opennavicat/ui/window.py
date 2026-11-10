@@ -1131,8 +1131,13 @@ class MainWindow(QMainWindow):
             callback()
 
     def load_schemas(self, connection_id):
-        session = self.sessions[connection_id]
-        self.submit(session.schemas, lambda schemas: self.fill_schemas(connection_id, schemas), label="Loading schemas")
+        session = self.sessions.get(connection_id)
+        if session is None or self._closed:
+            return
+        def done(schemas):
+            if self.sessions.get(connection_id) is session:
+                self.fill_schemas(connection_id, schemas)
+        self.submit(session.schemas, done, label="Loading schemas")
 
     def fill_schemas(self, connection_id, schemas):
         item = self.connection_item(connection_id)

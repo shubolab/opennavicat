@@ -245,10 +245,10 @@ def test_old_failed_preview_does_not_replace_current_success_or_enable_wrong_sav
     original = schema_tools.plan_table
     old_failures = []
     original_submit = window.submit
-    def capture_preview_failure(function, success=None, failure=None, **kwargs):
+    def capture_preview_failure(function, success=None, failure=None, *args, **kwargs):
         if kwargs.get("label") == "生成结构变更预览":
             old_failures.append(failure)
-        return original_submit(function, success, failure, **kwargs)
+        return original_submit(function, success, failure, *args, **kwargs)
     monkeypatch.setattr(window, "submit", capture_preview_failure)
     def controlled_plan(session, source, definition):
         if definition.name == "old_invalid":
@@ -296,3 +296,71 @@ def test_suppress_preview_preference_still_plans_and_saves_later_edits(qtbot, wo
     assert page._save_dialog is None
     qtbot.waitUntil(lambda: not page.dirty and not page.loading, timeout=10000)
     assert "second_note" in names(window.fixture_path)
+
+
+@pytest.mark.parametrize("operation", ["disconnect", "exit"])
+def test_queued_post_save_reload_after_connection_close_is_a_noop(qtbot, workspace, monkeypatch, operation):
+    window = workspace
+    page = designer(qtbot, window)
+    add_note(page)
+    page.request_save()
+    dialog = page._save_dialog
+    qtbot.waitUntil(lambda: dialog.save_button.isEnabled(), timeout=10000)
+    # Capture the real post-save callback, then choose a deterministic ordering
+    # where the document/connection is closed before that callback is delivered.
+    deferred = []
+    monkeypatch.setattr(window, "when_idle", deferred.append)
+    qtbot.mouseClick(dialog.save_button, Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda: not page.dirty and not page.loading, timeout=10000)
+    idle(qtbot, window)
+    assert deferred and "designer_note" in names(window.fixture_path)
+    session = window.sessions[window.fixture_id]
+    leave(window, page, operation)
+    assert left(window, operation)
+    assert session.connection is None
+    assert window.fixture_id not in window.sessions if operation == "disconnect" else window._closed
+    invoked = []
+    for callback in deferred:
+        def deliver(cb=callback):
+            cb()
+            invoked.append(True)
+        QTimer.singleShot(0, deliver)
+    qtbot.waitUntil(lambda: len(invoked) == len(deferred))
+    assert not window.tasks and not window.pool.activeThreadCount()
+    assert session.connection is None  # an exit must not reopen its old session.
+    assert not window.test_errors
+
+
+def test_schema_response_from_replaced_session_cannot_fill_reconnected_tree(qtbot, workspace, monkeypatch):
+    window = workspace
+    old_session = window.sessions[window.fixture_id]
+    original_submit = window.submit
+    delayed = []
+    def hold_old_response(function, success=None, failure=None, *args, **kwargs):
+        if kwargs.get("label") == "Loading schemas" and getattr(function, "__self__", None) is old_session:
+            def hold(result):
+                delayed.append((success, result))
+            return original_submit(function, hold, failure, *args, **kwargs)
+        return original_submit(function, success, failure, *args, **kwargs)
+    monkeypatch.setattr(window, "submit", hold_old_response)
+    window.load_schemas(window.fixture_id)
+    qtbot.waitUntil(lambda: bool(delayed))
+    idle(qtbot, window)
+    assert delayed[0][1]  # the old session really read schema names successfully.
+    assert window.disconnect(window.fixture_id)
+    window.connect_id(window.fixture_id)
+    qtbot.waitUntil(lambda: window.fixture_id in window.sessions and window.sessions[window.fixture_id] is not old_session)
+    idle(qtbot, window)
+    new_session = window.sessions[window.fixture_id]
+    filled = []
+    original_fill = window.fill_schemas
+    def observe_fill(connection_id, schemas):
+        filled.append((connection_id, schemas))
+        return original_fill(connection_id, schemas)
+    monkeypatch.setattr(window, "fill_schemas", observe_fill)
+    callback, result = delayed[0]
+    callback(result)
+    assert filled == []
+    assert window.sessions[window.fixture_id] is new_session
+    assert old_session.connection is None and new_session.connection is not None
+    assert not window.test_errors

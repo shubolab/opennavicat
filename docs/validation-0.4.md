@@ -29,8 +29,8 @@ QT_QPA_PLATFORM=offscreen .venv/bin/python -Werror -m pytest -q \
   --junitxml=artifacts/validation-0.4/pytest-results.xml
 ```
 
-当前实现的SQLite引擎专项43项、页面组件12项、真实主窗口集成18项均实际执行通过。
-最终本机完整默认为 **216 passed / 133 skipped / 0 failed，14.60秒**，`-W error` 下通过。
+当前实现的SQLite引擎专项43项、页面组件12项、真实主窗口集成21项均实际执行通过。
+修复后最终本机完整默认为 **219 passed / 133 skipped / 0 failed，14.46秒**，`-W error` 下通过。
 默认套件中的远程服务/平台跳过项不作为协议集成通过，原有独立75项TLS/SSH的历史证据见
 [0.3验证](validation-0.3.md)，本轮发布仍会重新执行该独立安全作业。
 
@@ -61,6 +61,12 @@ AI、Profiling/Masking/Dictionary、权限、自动任务、模型与BI及三平
 全部门禁见 [parity-matrix.md](parity-matrix.md)，不得以此里程碑缩小最终范围。
 
 ## 原生安装与发布
+
+首次原生运行 [42772595932](https://github.com/shubolab/opennavicat/actions/runs/42772595932)
+中，Linux/macOS四个目标的真实安装验证与独立75项安全作业均成功；Windows两架构均在
+Save→disconnect的时序上复现已排队schema刷新访问已关闭session的KeyError，整条流水线失败，未发布。
+修复为断开/退出后忽略排队刷新，并用session identity拒绝同ID重连后的旧响应；
+三个确定性真实主窗口回归覆盖了断开、退出和旧响应后到，不能以其它平台局部成功替代完整门禁。
 
 发布仍要求六个原生OS/架构目标的测试、二进制架构检查、实际桌面后端smoke、安装及卸载，
 加上独立真实安全连接作业。每份安装包使用SHA256SUMS和build-manifests.json，公开后另核对实际下载。

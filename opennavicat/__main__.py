@@ -86,6 +86,17 @@ def main():
         sqlserver.close()
         redis_session.close()
         mongo_session.close()
+        windows_registry_ready = None
+        if sys.platform == "win32":
+            # Bind the actual bundled Windows APIs without opening any key or
+            # discovering user profiles in isolated smoke mode.
+            from .navicat_windows import NativeRegistry
+            registry_probe = NativeRegistry(root=r"Software\OpenNavicatTests\UnopenedSmokeProbe")
+            windows_registry_ready = all(callable(api) for api in (
+                registry_probe.enumerate_value, registry_probe.query_value,
+            ))
+            if not windows_registry_ready:
+                raise RuntimeError("The packaged Windows registry metadata APIs did not initialize")
         runtime = {"version": __version__, "os": platform.system(),
             "machine": platform.machine(), "python": platform.python_version(),
             "qt": QLibraryInfo.version().toString(), "psycopg": psycopg.__version__,
@@ -96,6 +107,7 @@ def main():
             "pymongo": pymongo.version,
             "mongodb_adapter_constructed": mongo_constructed, "mongodb_bson_probe": bool(bson_probe),
             "mongodb_tls_context_ready": mongo_tls_ready,
+            "navicat_windows_api_ready": windows_registry_ready,
             "sqlserver_default_ca_present": Path(certifi.where()).is_file(),
             "extra_adapters_constructed": adapters_constructed,
             "sqlserver_tls_context_ready": tls_context is not None,

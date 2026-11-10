@@ -30,7 +30,8 @@ def assets(tmp_path):
                     "certifi": "2026.10.23", "sqlserver_default_ca_present": True,
                     "extra_adapters_constructed": True, "sqlserver_tls_context_ready": True,
                     "pymongo": "4.19.0", "mongodb_adapter_constructed": True,
-                    "mongodb_bson_probe": True, "mongodb_tls_context_ready": True}}}
+                    "mongodb_bson_probe": True, "mongodb_tls_context_ready": True,
+                    "navicat_windows_api_ready": True if system == "windows" else None}}}
         manifest = {"name": "OpenNavicat", "version": VERSION, "os": system,
             "architecture": arch, "native_host_architecture": arch,
             "installer": installer.name, "bytes": installer.stat().st_size,
@@ -111,6 +112,22 @@ def test_adapter_and_tls_probe_must_be_actual_true_boolean(assets, field, report
     installer = assets / manifest["installer"]
     installer.with_suffix(".installed-smoke.json").write_text(json.dumps(manifest["verification"]), "utf-8")
     with pytest.raises(ValueError, match="probes did not pass"):
+        gate.validate_assets(assets, VERSION)
+
+
+@pytest.mark.parametrize("reported", [None, False, "true", 1])
+def test_windows_registry_probe_must_be_actual_true_boolean(assets, reported):
+    path = assets / gate.asset_name(VERSION, "windows", "arm64")
+    manifest_path = path.with_suffix(".manifest.json")
+    manifest = json.loads(manifest_path.read_text("utf-8"))
+    runtime = manifest["verification"]["runtime"]["runtime"]
+    if reported is None:
+        runtime.pop("navicat_windows_api_ready")
+    else:
+        runtime["navicat_windows_api_ready"] = reported
+    manifest_path.write_text(json.dumps(manifest), "utf-8")
+    path.with_suffix(".installed-smoke.json").write_text(json.dumps(manifest["verification"]), "utf-8")
+    with pytest.raises(ValueError, match="Windows registry"):
         gate.validate_assets(assets, VERSION)
 
 

@@ -16,6 +16,18 @@ NETWORK_DEFAULTS = {
 }
 
 
+@pytest.fixture(autouse=True)
+def isolate_application_stylesheet(qapp):
+    # Other workbench tests apply a global 12px stylesheet. Native-style
+    # geometry must exercise the font chosen here, then restore that state.
+    previous = qapp.styleSheet()
+    qapp.setStyleSheet("")
+    try:
+        yield
+    finally:
+        qapp.setStyleSheet(previous)
+
+
 def apply_style(dialog, name):
     style = QStyleFactory.create(name)
     assert style is not None

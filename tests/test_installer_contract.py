@@ -140,6 +140,26 @@ def test_installed_mongodb_probe_cannot_be_missing_or_truthy_text(tmp_path, fiel
         installer.validate_smoke_report(path, "0.3.0", "arm64", "windows")
 
 
+@pytest.mark.parametrize("value", [None, False, "true", 1])
+def test_new_windows_package_requires_real_registry_api_probe(tmp_path, value):
+    payload = report(version="0.7.0")
+    if value is not None:
+        payload["runtime"]["navicat_windows_api_ready"] = value
+    path = tmp_path / "report.json"
+    path.write_text(json.dumps(payload))
+    with pytest.raises(installer.PackagingError, match="Windows registry"):
+        installer.validate_smoke_report(path, "0.7.0", "arm64", "windows")
+    payload["runtime"]["navicat_windows_api_ready"] = True
+    path.write_text(json.dumps(payload))
+    assert installer.validate_smoke_report(path, "0.7.0", "arm64", "windows")["smoke"] == "passed"
+
+
+def test_old_windows_release_does_not_claim_a_later_registry_probe(tmp_path):
+    path = tmp_path / "report.json"
+    path.write_text(json.dumps(report(version="0.6.1")))
+    assert installer.validate_smoke_report(path, "0.6.1", "arm64", "windows")["smoke"] == "passed"
+
+
 def test_inno_native_architecture_and_verification_install_are_explicit(tmp_path):
     source = installer.render_inno(tmp_path / "Payload", tmp_path / "Output", "OpenNavicat-0.3.0-windows-arm64-setup", "0.3.0", "arm64")
     assert "ArchitecturesAllowed=arm64" in source

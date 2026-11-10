@@ -10,8 +10,8 @@ Python + Qt Widgets（PySide6），数据库连接、SQL 和结果均在本机�
 下面是一段 OpenNavicat 实际运行演示：浏览示例表、编写并执行查询、查看结果、编辑表结构、
 检查 SQL 预览，再查看 MongoDB 文档网格、精确 BSON 类型树及 GridFS 图像预览。
 连接名、客户、邮箱、日期、订单、商品、BSON、SQL 和图像均由隔离演示工作区生成，
-不读取本机真实连接或业务数据库。单段 GIF 对应 **0.6.1** 的实际 Qt 界面，约 21 秒；
-验证范围见 [0.6 验证记录](docs/validation-0.6.md)，下方提供已发布的安装包。
+不读取本机真实连接或业务数据库。单段 GIF 对应 **0.7.0 源码**的实际 Qt 界面，约 21 秒；
+验证范围见 [0.7 验证记录](docs/validation-0.7.md)，下方提供已发布的安装包。
 
 ![OpenNavicat 示例数据工作流演示](docs/assets/opennavicat-demo.gif)
 
@@ -39,6 +39,10 @@ Python + Qt Widgets（PySide6），数据库连接、SQL 和结果均在本机�
 0.5 公开版本另完成 macOS ARM64、干净 Ubuntu ARM64 XCB 及 Windows AMD64 RDP 的 6×4 示例查询，
 并在 Windows 实际打开 SQL Server/Redis 的连接设置；该次远程桌面没有连接真实 SQL Server/Redis 服务。
 0.6.1 的公开安装包补充验收范围单独记录在对应验证文档中。
+
+当前 0.7.0 源码新增单当前文档 BSON 树、短页记录导航、GridFS 下方预览/进度、
+Windows 历史连接候选的只读发现和不完整重载保护。Windows 候选需要复核认证与安全设置；
+原版 Windows 18 来源格式和用户现场 GUI 仍待验收。正式六目标发布门禁执行后再更新下载链接。
 
 首个可用版本交付后曾按要求暂停。用户更新本机 Navicat 后已于 2026-11-10 明确恢复；
 当前参考为 **Navicat Premium 18.0.5 build 321**，已重新实际打开并验证新建表、修改表、
@@ -111,7 +115,8 @@ SSH 转发后仍校验数据库原始主机名。首次未知 SSH 主机需要�
   查看或修改 TTL、重命名和删除键。当前支持 standalone；集群、哨兵和 PubSub 尚未实现。
 - MongoDB standalone 提供精确 BSON 网格、树和 Canonical Extended JSON 文档编辑、冲突保护、
   原生命令与已实现的 shell 语法片段。GridFS 支持后台传输、筛选、分页及有界图像预览。
-  完整 JavaScript 引擎、单当前文档树编辑/记录导航、聚合构建器及更多拓扑仍在对齐。
+  当前源码提供单当前文档树及记录导航；树字段双击使用 Extended JSON 编辑器。
+  原版行内编辑/类型 popup、完整 JavaScript 引擎、聚合构建器及更多拓扑仍在对齐。
 - 导入 CSV / JSON 数据，导出当前结果；收藏查询并通过历史记录重新打开 SQL。
 - 使用 SQLite 备份保留可独立打开的数据库快照。
 - 点击 **模型** 从当前 schema 的真实表和外键生成关系图；可拖动、缩放，
@@ -146,8 +151,11 @@ macOS Navicat 18 的实际连接及分组格式已验证，保留分组关系，
 可以使用 OpenNavicat 自己的系统钥匙串保存选项。
 无法准确映射的认证或安全设置会保留为待复核，尚未实现的驱动也保留可见，不能静默换成其它连接类型。
 原生 UUID 为空的来源按名称空间、数据库类型、位置和名称生成稳定身份；此时原版重命名会成为新来源项。
-来源删除不会删除本地连接。Windows 原生发现仍待接入，Linux JSON 仅支持已识别格式；
-这两端的原版资料迁移尚未完成实际来源和原生界面验收。详细实现和范围见 [0.5 验证记录](docs/validation-0.5.md)。
+来源删除不会删除本地连接。0.7.0 源码接入 Windows 当前用户注册表的元数据候选发现，
+只读明确白名单的非秘密字段，保留可见驱动和已知分组；未知认证、TLS/SSH 与格式均保持待复核，
+确认设置前阻止连接。重复加载保护本地修改，读取不完整时保留已有配置和分组。
+Linux JSON 仅支持已识别格式；Windows 18 实际原生格式和 Linux 完整迁移尚未完成来源与原生界面验收。
+范围见 [Windows 元数据发现](docs/windows-navicat-discovery.md)、[0.7 验证记录](docs/validation-0.7.md)及 [0.5 验证记录](docs/validation-0.5.md)。
 
 ## 数据和密码
 

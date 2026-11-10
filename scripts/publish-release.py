@@ -68,6 +68,9 @@ def validate_assets(directory, version):
         require(isinstance(runtime.get("libpq"), int) and runtime["libpq"] >= 170000 and all(runtime.get(field) for field in ("qt", "psycopg", "pymysql", "paramiko", "cryptography", "python_tds", "redis", "pyopenssl", "certifi", "sqlserver_default_ca_present", "pymongo")), f"Installed database/SSH dependencies are incomplete: {installer.name}")
         require(all(runtime.get(field) is True for field in ("extra_adapters_constructed", "sqlserver_tls_context_ready")), f"Installed SQL Server/Redis adapter or TLS context probes did not pass: {installer.name}")
         require(all(runtime.get(field) is True for field in ("mongodb_adapter_constructed", "mongodb_bson_probe", "mongodb_tls_context_ready")), f"Installed MongoDB adapter, BSON or TLS probes did not pass: {installer.name}")
+        if system == "windows" and tuple(map(int, version.split("."))) >= (0, 7, 0):
+            require(runtime.get("navicat_windows_api_ready") is True,
+                f"Installed Windows registry metadata APIs did not initialize: {installer.name}")
         require(runtime.get("crypto_legacy_probe") is True, f"Installed OpenSSL provider was not verified: {installer.name}")
         manifests.append(manifest)
     return manifests

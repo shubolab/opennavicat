@@ -316,6 +316,28 @@ def test_short_page_previous_cancel_and_failed_read_do_not_pop_history(qtbot,ui,
     assert widget._page_history==[0,2] and widget.offset==2 and widget.selected_document().document["_id"]==4
 
 
+@pytest.mark.parametrize("view",[0,1])
+def test_known_total_last_locates_actual_record_without_assuming_full_pages(qtbot,ui,monkeypatch,view):
+    host,session=ui;widget=short_pages(qtbot,ui,monkeypatch)
+    widget.go_page(0);ready(qtbot,host,widget)
+    widget.load_page(replace(widget.page,total=6));widget.set_view(view)
+    assert widget.last_button.isEnabled()
+    if view==0:assert "实际边界未知" in widget.last_button.toolTip()
+    qtbot.mouseClick(widget.last_button,Qt.MouseButton.LeftButton);ready(qtbot,host,widget)
+    assert widget.offset==5 and widget.selected_document().document["_id"]==6
+    assert widget._page_history==[5] and not widget.previous_button.isEnabled()
+    assert widget.first_button.isEnabled()
+
+
+def test_known_total_last_inside_current_short_page_does_not_fetch(qtbot,ui,monkeypatch):
+    host,session=ui;widget=short_pages(qtbot,ui,monkeypatch)
+    widget.load_page(replace(widget.page,total=6))
+    before=len(session.calls)
+    qtbot.mouseClick(widget.last_button,Qt.MouseButton.LeftButton)
+    assert widget.offset==4 and widget.selected_document().document["_id"]==6
+    assert len(session.calls)==before
+
+
 @pytest.mark.parametrize("change",["refresh","filter","sort","projection","limit","reconnect"])
 def test_short_page_history_is_not_reused_after_query_identity_changes(qtbot,ui,monkeypatch,change):
     host,session=ui;widget=short_pages(qtbot,ui,monkeypatch)

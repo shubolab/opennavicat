@@ -584,10 +584,10 @@ class MongoCollectionPage(QWidget):
         elif direction=="next":
             if self._selected_row+1<len(self.page.documents):self.select_record(self._selected_row+1)
             elif history and self.page.has_more:self.go_page(self.page.next_offset)
-        elif direction=="last" and self.page.total:
-            last=self.page.total-1;offset=last//self.page_size.value()*self.page_size.value()
-            if offset==self.offset:self.select_record(last-offset)
-            else:self.go_page(offset,selected_row=last-offset)
+        elif direction=="last" and history and self.page.total:
+            last=self.page.total-1
+            if self.offset<=last<self.offset+len(self.page.documents):self.select_record(last-self.offset)
+            else:self.go_page(last)
 
     def page_settings(self):
         if self.loading or not self.can_discard(self.page_settings):return
@@ -595,7 +595,9 @@ class MongoCollectionPage(QWidget):
         if accepted:self.page_size.setValue(value);self.go_page(0)
 
     def last_page(self):
-        if self.page and self.page.total is not None:self.go_page(max(0,(self.page.total-1)//self.page_size.value())*self.page_size.value())
+        # A known count does not reveal byte-budget page boundaries. Locate
+        # the actual final record, rather than inventing a full last page.
+        if self._known_history() and self.page.total:self.go_page(self.page.total-1)
 
     def choose_columns(self):
         menu=QMenu(self)
@@ -702,7 +704,7 @@ class MongoCollectionPage(QWidget):
         self.first_button.setEnabled(not self.loading and (self.offset>0 or (tree and self._selected_row>0)))
         self.previous_button.setEnabled(not self.loading and has_previous)
         self.next_button.setEnabled(not self.loading and has_next)
-        has_last=bool(self.page and self.page.total is not None and (has_next if tree else self.page.has_more))
+        has_last=bool(history and self.page.total is not None and (has_next if tree else self.page.has_more))
         self.last_button.setEnabled(not self.loading and has_last)
         for control,name in ((self.first_button,"第一"),(self.previous_button,"上一"),(self.next_button,"下一"),(self.last_button,"最后一")):
             control.setToolTip(name+("条记录" if tree else "页"))
@@ -712,6 +714,8 @@ class MongoCollectionPage(QWidget):
             self.page_number.setMaximum(max(1,len(history)+int(bool(history) and self.page.has_more)))
             self.page_number.setValue(max(1,len(history)))
         if tree and self.page and self.page.total is None:self.last_button.setToolTip("文档总数未知，无法定位最后一条记录。")
+        elif not tree and self.page and self.page.total is not None:
+            self.last_button.setToolTip("定位最后一条记录（最后一页的实际边界未知）。")
         self.page_number.setVisible(not tree);self.record_position.setVisible(tree)
         self.record_position.setText(f"第 {self.offset+self._selected_row+1:,} 条记录" if document else "没有文档")
         self.settings_button.setEnabled(not self.loading)

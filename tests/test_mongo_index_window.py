@@ -358,6 +358,33 @@ def test_real_window_index_builtin_and_readonly_are_viewable_without_mutation(qt
     assert list(database.docs.index_information()["same_name"]["key"]) == [("name", 1)]
 
 
+def test_real_window_index_inspector_never_queues_reads_after_disconnect_started(qtbot, indexed, monkeypatch):
+    window, config, database, *_ = indexed
+    objects, _ = browser(qtbot, window, config)
+    window.inspector.show()
+    entered, release = threading.Event(), threading.Event()
+    original = MongoSession.close
+    def close(self):
+        if self is window.sessions.get(config.id):
+            entered.set()
+            assert release.wait(15)
+        return original(self)
+    monkeypatch.setattr(MongoSession, "close", close)
+    assert window.disconnect(config.id)
+    qtbot.waitUntil(entered.is_set, timeout=10000)
+    try:
+        pending = set(window.tasks)
+        row = next(i for i, entry in enumerate(objects.records)
+                   if (entry["collection"], entry["name"]) == ("other", "same_name"))
+        objects.table.setCurrentCell(row, 0)
+        assert set(window.tasks) == pending
+        assert config.id in window._closing_connections
+    finally:
+        release.set()
+    settle(qtbot, window)
+    assert config.id not in window.sessions and not window._closing_connections
+
+
 def test_real_window_preview_preference_only_accepted_and_existing_index_saves_without_sheet(qtbot, indexed):
     window, config, database, *_ = indexed
     other = designer(qtbot, window, config, "other")

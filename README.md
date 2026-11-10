@@ -117,10 +117,12 @@ SSH 转发后仍校验数据库原始主机名。首次未知 SSH 主机需要�
   不安全或无法完整解析的对象明确保持只读。
 - Redis 使用原生命令查询页和键数据工作区，读取或编辑 string/hash/list/set/zset/stream，
   查看或修改 TTL、重命名和删除键。当前支持 standalone；集群、哨兵和 PubSub 尚未实现。
-- MongoDB standalone 提供精确 BSON 网格、树和 Canonical Extended JSON 文档编辑、冲突保护、
-  原生命令与已实现的 shell 语法片段。GridFS 支持后台传输、筛选、分页及有界图像预览。
+- MongoDB standalone 提供精确 BSON 网格、树和 Canonical Extended JSON 文档编辑、冲突保护。
+  0.8 源码的新建查询使用原生 JavaScript，支持变量、函数、循环和已实现的 BSON/数据库接口；
+  既有查询保留原来的命令语义。GridFS 支持后台传输、筛选、分页及有界图像预览。
   本版提供单当前文档树及记录导航；树字段双击使用 Extended JSON 编辑器。
-  原版行内编辑/类型 popup、完整 JavaScript 引擎、聚合构建器及更多拓扑仍在对齐。
+  索引支持六页设计和保存/删除；将“执行脚本（集合 UUID）”复制到默认 JS 查询可运行，辅助脚本用于 mongosh。
+  原版行内编辑/类型 popup、完整参考 JS 全局/API、聚合构建器及更多拓扑仍在对齐。
 - 导入 CSV / JSON 数据，导出当前结果；收藏查询并通过历史记录重新打开 SQL。
 - 使用 SQLite 备份保留可独立打开的数据库快照。
 - 点击 **模型** 从当前 schema 的真实表和外键生成关系图；可拖动、缩放，

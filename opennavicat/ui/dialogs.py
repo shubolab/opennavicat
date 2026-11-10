@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
     QButtonGroup, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout,
     QFrame, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QListWidget, QMessageBox, QPlainTextEdit,
     QPushButton, QRadioButton, QScrollArea, QSizePolicy, QSpinBox, QTableWidget, QTableWidgetItem,
-    QStyle, QStyleOptionSpinBox, QTabWidget, QVBoxLayout, QWidget,
+    QStyle, QStyleOptionFrame, QStyleOptionSpinBox, QTabWidget, QVBoxLayout, QWidget,
 )
 
 from opennavicat.database import ConnectionConfig
@@ -34,8 +34,7 @@ class _PortSpinBox(QSpinBox):
 
     Some native styles' CT_SpinBox size hints do not reserve the space that
     their SC_SpinBoxEditField subsequently takes away at large font sizes.
-    Invert the latter geometry instead. The line edit's own minimum hint also
-    includes its frame, text margins and internal cursor/scrolling padding.
+    Invert the latter geometry and the line edit's actual content rectangle.
     No fixed pixel width or cached font measurement survives a style change.
     """
 
@@ -53,24 +52,30 @@ class _PortSpinBox(QSpinBox):
         # every five-digit port, not only today's value or the string 65535.
         digit_width = max(metrics.horizontalAdvance(str(n)) for n in range(10))
         text_width = math.ceil(digit_width * len(str(self.maximum())))
-        minimum = line.minimumSizeHint()
-        # QLineEdit's public minimum hint is one maximum-width character plus
-        # all of its drawing insets. Keep those insets without duplicating
-        # Qt's private padding constants or depending on a particular theme.
-        insets = max(0, minimum.width() - line.fontMetrics().maxWidth())
+        # Leave font-scaled editing space at both ends as well as the native
+        # cursor. QLineEdit has internal horizontal scrolling padding beyond
+        # SE_LineEditContents; its minimumSizeHint can itself underestimate the
+        # native Windows 11 + stylesheet frame at fractional DPI.
+        text_width += math.ceil(metrics.horizontalAdvance("  "))
         cursor = max(1, line.style().pixelMetric(QStyle.PixelMetric.PM_TextCursorWidth, None, line))
-        editor_width = text_width + insets + cursor
-        hint.setHeight(max(hint.height(), minimum.height()))
+        text_width += cursor
+        hint.setHeight(max(hint.height(), line.minimumSizeHint().height()))
         option = QStyleOptionSpinBox()
         self.initStyleOption(option)
         option.subControls = QStyle.SubControl.SC_SpinBoxEditField
+        frame = QStyleOptionFrame()
+        line.initStyleOption(frame)
+        margins = line.textMargins()
         for _ in range(8):
             option.rect = QRect(0, 0, hint.width(), hint.height())
             edit = self.style().subControlRect(
                 QStyle.ComplexControl.CC_SpinBox, option,
                 QStyle.SubControl.SC_SpinBoxEditField, self,
             )
-            deficit = editor_width - edit.width()
+            frame.rect = QRect(0, 0, edit.width(), edit.height())
+            content = line.style().subElementRect(QStyle.SubElement.SE_LineEditContents, frame, line)
+            available = content.width() - margins.left() - margins.right()
+            deficit = text_width - available
             if deficit <= 0:
                 break
             hint.setWidth(hint.width() + deficit)

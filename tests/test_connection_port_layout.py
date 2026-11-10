@@ -65,11 +65,15 @@ def fits(spin):
 
 def geometry(spin):
     line = spin.findChild(QLineEdit)
+    frame = QStyleOptionFrame()
+    line.initStyleOption(frame)
+    content = line.style().subElementRect(QStyle.SubElement.SE_LineEditContents, frame, line)
     return {
         "style": spin.style().metaObject().className(), "dpr": spin.devicePixelRatioF(),
         "font": spin.font().toString(), "editor_font": line.font().toString(),
         "size": spin.size().toTuple(), "hint": spin.sizeHint().toTuple(),
         "editor": line.geometry().getRect(), "editor_hint": line.minimumSizeHint().toTuple(),
+        "editor_content": content.getRect(), "cursor": line.cursorRect().getRect(),
         "text_margins": [line.textMargins().left(), line.textMargins().right()],
         "available": available_port_width(spin),
         "required": QFontMetricsF(line.font()).horizontalAdvance(spin.text()), "text": spin.text(),

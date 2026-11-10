@@ -7,7 +7,7 @@ import base64
 import pytest
 
 from PySide6.QtCore import QPoint, Qt, QThread
-from PySide6.QtWidgets import QDialog, QMessageBox
+from PySide6.QtWidgets import QDialog, QFormLayout, QMessageBox
 
 from opennavicat.database import ConnectionConfig, DatabaseSession
 from opennavicat.ui.dialogs import ConnectionDialog, confirm_ssh_host_key
@@ -33,7 +33,15 @@ def test_native_connection_tabs_profiles_and_config(qtbot):
     assert "尚未实现" in dialog.sqlite_legacy_radio.toolTip()
     password_bottom = dialog.password_edit.mapTo(dialog, QPoint(0, dialog.password_edit.height())).y()
     assert dialog.remember_check.mapTo(dialog, QPoint()).y() > password_bottom
-    assert dialog.remember_check.mapTo(dialog, QPoint()).x() == dialog.password_edit.mapTo(dialog, QPoint()).x()
+    form = next(layout for layout in dialog.findChildren(QFormLayout)
+                if layout.indexOf(dialog.password_edit) >= 0 and layout.indexOf(dialog.remember_check) >= 0)
+    password_row, password_role = form.getWidgetPosition(dialog.password_edit)
+    remember_row, remember_role = form.getWidgetPosition(dialog.remember_check)
+    assert remember_row == password_row + 1
+    assert password_role == remember_role == QFormLayout.ItemRole.FieldRole
+    # Native Cocoa draws a checkbox outside its layout item by a small style
+    # inset. Compare the aligned form items, not the widgets' painting bounds.
+    assert form.itemAt(form.indexOf(dialog.remember_check)).geometry().x() == form.itemAt(form.indexOf(dialog.password_edit)).geometry().x()
     assert [dialog.tabs.tabText(i) for i in range(dialog.tabs.count())] == ["常规", "高级", "数据库", "HTTP"]
     assert not dialog.user_edit.isEnabled()
     dialog.driver_combo.setCurrentIndex(dialog.driver_combo.findData("postgresql"))

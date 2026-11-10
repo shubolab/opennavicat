@@ -10,7 +10,7 @@ Python + Qt Widgets（PySide6），数据库连接、SQL 和结果均在本机�
 下面是一段 OpenNavicat 实际运行演示：浏览示例表、编写并执行查询、查看结果、编辑表结构、
 检查 SQL 预览，再查看 MongoDB 文档网格、精确 BSON 类型树及 GridFS 图像预览。
 连接名、客户、邮箱、日期、订单、商品、BSON、SQL 和图像均由隔离演示工作区生成，
-不读取本机真实连接或业务数据库。单段 GIF 对应 **0.7.0 源码**的实际 Qt 界面，约 21 秒；
+不读取本机真实连接或业务数据库。单段 GIF 对应 **0.7.1 源码**的实际 Qt 界面，约 21 秒；
 验证范围见 [0.7 验证记录](docs/validation-0.7.md)，下方提供已发布的安装包。
 
 ![OpenNavicat 示例数据工作流演示](docs/assets/opennavicat-demo.gif)

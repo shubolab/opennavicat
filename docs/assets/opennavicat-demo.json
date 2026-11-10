@@ -1,6 +1,6 @@
 {
   "application": "OpenNavicat",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "theme": "dark",
   "capture": "Actual live Qt QWidget.grab frames; no reference screenshots, composited UI or image generation service",
   "qt_platform": "offscreen",
@@ -10,8 +10,8 @@
     900
   ],
   "fps": 6,
-  "frames": 127,
-  "duration_seconds": 21.17,
+  "frames": 126,
+  "duration_seconds": 21.0,
   "loop": "infinite",
   "data": "All profiles, customer/product data, email addresses, BSON, dates, SQL and images are generated for this demo",
   "connection_name": "演示数据库 · 示例数据",
@@ -35,41 +35,41 @@
     {
       "name": "table_data",
       "first_frame": 12,
-      "frames": 14
+      "frames": 13
     },
     {
       "name": "query_editor",
-      "first_frame": 26,
-      "frames": 13
+      "first_frame": 25,
+      "frames": 14
     },
     {
       "name": "query_results",
       "first_frame": 39,
-      "frames": 16
+      "frames": 15
     },
     {
       "name": "table_designer",
-      "first_frame": 55,
+      "first_frame": 54,
       "frames": 11
     },
     {
       "name": "designer_sql_preview",
-      "first_frame": 66,
+      "first_frame": 65,
       "frames": 17
     },
     {
       "name": "mongodb_collection_grid",
-      "first_frame": 83,
+      "first_frame": 82,
       "frames": 13
     },
     {
       "name": "mongodb_typed_tree",
-      "first_frame": 96,
+      "first_frame": 95,
       "frames": 13
     },
     {
       "name": "mongodb_gridfs_preview",
-      "first_frame": 109,
+      "first_frame": 108,
       "frames": 18
     }
   ],
@@ -84,13 +84,13 @@
   "sqlite_closed_in_worker": true,
   "native_window_closed_before_quit": true,
   "background_io_completed_before_quit": true,
-  "captured_nominal_duration_seconds": 21.167,
+  "captured_nominal_duration_seconds": 21.0,
   "gif_probe": {
-    "frames": 127,
-    "duration_seconds": 21.17,
+    "frames": 126,
+    "duration_seconds": 21.0,
     "r_frame_rate": "6/1",
     "avg_frame_rate": "25/4",
-    "effective_frames_per_second": 5.999055,
+    "effective_frames_per_second": 6.0,
     "note": "GIF delays are quantized to centiseconds; fps is the requested capture rate."
   },
   "mongodb_service": {
@@ -103,8 +103,8 @@
     "credentials_generated_in_memory": true
   },
   "encoder": "ffmpeg version 8.0.1 Copyright (c) 2000-2025 the FFmpeg developers",
-  "gif_bytes": 556561,
-  "gif_sha256": "3bfcf6408145305433c7181426b00a7b6497f65ef6df625d6caf43a3030268a2",
+  "gif_bytes": 562801,
+  "gif_sha256": "2cc55728157a879171dbfa72af1e7ef7800d68bed261369dbaa8c10aae9cbdd3",
   "temporary_workspace_removed": true,
   "temporary_frame_files_removed": true
 }

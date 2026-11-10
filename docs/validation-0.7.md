@@ -1,6 +1,6 @@
 # 0.7：当前文档树、导航与 Windows 连接候选发现
 
-记录日期：2026-11-11，Asia/Shanghai。此记录在 0.7.0 源码集成阶段建立；正式六目标 CI、安装包和公开下载结果另行补充。当前公开可用版本仍为 [v0.6.1](https://github.com/shubolab/opennavicat/releases/tag/v0.6.1)。源码、参考运行、原生 API 测试、最终安装包和用户现场 GUI 的证据各自有明确范围。
+记录日期：2026-11-11，Asia/Shanghai。此记录覆盖 0.7.0 初始集成及失败门禁、0.7.1 修补与后续验证；正式六目标 CI、安装包和公开下载结果另行补充。当前公开可用版本仍为 [v0.6.1](https://github.com/shubolab/opennavicat/releases/tag/v0.6.1)。源码、参考运行、原生 API 测试、最终安装包和用户现场 GUI 的证据各自有明确范围。
 
 ## 行为与实际参考
 
@@ -34,7 +34,7 @@ macOS 既有实际来源支持继续保留。Linux 的现有识别格式与 Linu
 
 0.7.0 源码 smoke 在 macOS ARM64 实际返回 SQLite **6 行 × 4 列**，MongoDB 原生 BSON、TLS context、SQL Server/Redis 适配器与加密探针均通过。报告是 `artifacts/integration-v0.7/source-0.7.0-runtime-smoke.json`。本机不支持 Windows API，因此其探针为 `null`，没有伪造为 `true`；Windows 安装门禁须在真实 Windows 主机获得结果。源码 smoke 未连接外部数据库，也不读取历史来源。
 
-唯一公开 GIF 由当前 **0.7.0** 源码实际录制：**1440×900、127 帧、21.17 秒、556,561 字节**，SHA256 为 `3bfcf6408145305433c7181426b00a7b6497f65ef6df625d6caf43a3030268a2`。九段连续 Qt 帧覆盖 SQLite 对象/数据/查询/设计器及 MongoDB 网格/当前 BSON 树/GridFS 下方预览。树里的 Int64 完整显示；GridFS 帧已目视核验预览在下方。来源和数据均为程序生成，不访问用户 workspace、Navicat 来源或钥匙串；独有 loopback MongoDB 8.0.34 服务、临时工作区和帧文件清理均已核验。公开回执为 [opennavicat-demo.json](assets/opennavicat-demo.json)。这是 offscreen Qt 录制，不代表三平台原生 GUI 已完成对照。
+唯一公开 GIF 已由 **0.7.1** 源码重新实际录制：**1440×900、126 帧、21 秒、562,801 字节**，SHA256 为 `2cc55728157a879171dbfa72af1e7ef7800d68bed261369dbaa8c10aae9cbdd3`。九段连续 Qt 帧覆盖 SQLite 对象/数据/查询/设计器及 MongoDB 网格/当前 BSON 树/GridFS 下方预览。树里的 Int64 完整显示；GridFS 帧已目视核验预览在下方。来源和数据均为程序生成，不访问用户 workspace、Navicat 来源或钥匙串；独有 loopback MongoDB 8.0.34 服务、临时工作区和帧文件清理均已核验。公开回执为 [opennavicat-demo.json](assets/opennavicat-demo.json)。这是 offscreen Qt 录制，不代表三平台原生 GUI 已完成对照。0.7.0 的早期录制随其原 tag 保留，未用修改版本字段代替重录。
 
 ## 平台和完整目标边界
 
@@ -46,6 +46,12 @@ macOS 既有实际来源支持继续保留。Linux 的现有识别格式与 Linu
 
 正式 tag `v0.7.0` 固定在 `d86170759fc11fba9a5a729b8371b22f899e4b17`，运行 [42853745883](https://github.com/shubolab/opennavicat/actions/runs/42853745883)。Linux 两目标和数据库安全 job 已通过；Windows 两目标在端口布局测试失败，未进入打包。AMD64 结果为 22 failed、926 passed、319 skipped，22 项均属于端口布局；两个真实 Windows 注册表 API 用例已实际通过，不能把整体失败描述成所有功能均通过。
 
-这些测试暴露了两类问题：Windows 原生大字体下实际宽度可比 `sizeHint` 大 1–3px，测试不应要求二者逐像素相等；Windows 11 样式的 36px 字体及动态字体场景则未满足实际可用文本区要求，需要继续检查产品布局。Mac Intel 的应用测试阶段长时间未结束，其原因仍待定向资格定位。为避免保留已知不能发布的重复构建，root 在保留日志、JUnit 和 job 状态后取消该运行的剩余任务。原 tag 不移动，不重跑后冒充首次通过，**没有发布 0.7.0 Release**。
+这些测试暴露了两类问题：Windows 原生大字体下实际宽度可比 `sizeHint` 大 1–3px，测试不应要求二者逐像素相等；Windows 11 样式的 36px 字体及动态字体场景则未满足实际可用文本区要求，需要产品布局修补。Mac Intel 当时的应用测试耗时较长，最终已完整通过测试、打包、安装和卸载，没有确认新的卡死问题。为避免保留已知不能发布的重复构建，root 在保留日志、JUnit 和 job 状态后取消剩余任务；Mac ARM64 未执行完，发布 job 未成功。原 tag 不移动，不重跑后冒充首次通过，**没有发布 0.7.0 Release**，GitHub Release API 也已确认 404。
 
 后续修补使用新的 **0.7.1** 版本，先在独立分支执行各原生样式/大字体的定向资格，再重新执行全部六目标发布门禁。用户现场 Dell 验收继续延期，修补验证使用托管 CI，不操作该现场。实际结果完成后再补充本记录。
+
+定向资格已按同一产品及测试文件完成四种真实主机：托管 Windows amd64、Windows arm64 各在 offscreen ×1 和实际 Windows ×1.25 下 **124 passed、0 skipped**；托管 macOS Intel 与本机 macOS ARM64 27.2 各在 offscreen ×1 和 Cocoa ×1.25 下 **115 passed、0 skipped**。覆盖所有可用原生样式、12/24/36px、大字体动态变化、内部编辑器独立 42px、深浅主题及实际光标和 stepper 几何；实际平台后端的最小文字净空均为 8px。root 已独立比对三个相关源码/测试文件的字节哈希与资格 head `5e7f0bd` 一致。托管资格运行 [42857556241](https://github.com/shubolab/opennavicat/actions/runs/42857556241) 的 Windows 双目标和 Intel job 成功；其 Mac ARM64 排队状态没有被记成通过，本机 ARM64 仅补充这次定向源码资格，正式六安装包仍须实际完成该目标。早期资格暴露的 Windows 11 内容区与测试等待问题也保留原记录，没有重跑旧记录冒充首次通过。
+
+修补后的 `_PortSpinBox` 按实际子编辑器字体、原生 stepper 的 `SC_SpinBoxEditField`、`SE_LineEditContents`、文本边距及光标留白反算建议尺寸；保留原生步进控件，不使用固定端口像素宽度。字体、样式、屏幕和 DPI 变化会重新参与布局。测试检查实际文本可见、光标/内容区和布局回流，不要求尺寸建议与实际像素逐点相等；原生 Cocoa checkbox 的对齐也改为检查表单项列与行，保留布局语义。
+
+0.7.1 产品修补集成后的全源测试为 **1025 passed、234 skipped、0 failed/error，78.15 秒，`-Werror`**。三份独有真实 MongoDB fixture 的就绪、归属和清理均核验，XML 为 `artifacts/integration-v0.7/source-0.7.1-final.xml`。随后只修正一处字体收缩测试的等待条件，使“文本适合”和“布局已收缩”同时成立，不修改产品；该文件另执行 **29 passed**。0.7.1 源码 smoke 再次返回 **6×4**，已有数据库/BSON/TLS/加密探针通过，Windows API 在本机为 `null`。新版实际 GIF 也完成临时服务及文件清理。正式冻结 tag 的全套测试仍须在六个目标重新运行。

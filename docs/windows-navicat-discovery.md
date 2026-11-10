@@ -62,6 +62,8 @@ Windows 的静态 `usessh` 与已观察 macOS 的 `usetunnel` 不同。实现不
 
 两个测试根及本轮新建的空 `OpenNavicatTests` 父键已删除，临时运行目录已移除，自有进程为零。没有读取 PremiumSoft、既有 profile 或凭证值，没有数据库连接，也未操作现有 GUI 应用和其他任务夹具。macOS 全源回归为 **878 passed、314 skipped**，其中两个原生 Windows 用例按平台跳过；元数据/Store/MainWindow 相关合成回归为 **194 passed、2 skipped**。这些计数不包含未启用的外部协议夹具验收。原生 API 的两项实跑对应 `939fa9e`；后续配置保全和 Store alias 调和由跨平台合成测试验证，仍需最终 Windows 原生 CI 验证集成。
 
-**上述 Windows AMD64 结果证明原生 API 和自有合成来源读取机制，不能替代 Windows Navicat18 save-only 格式或 Windows GUI 验收。Windows ARM64 API 路径仍待后续原生 CI；用户现场 Windows 后续验收已延期，不因本机制测试推进现场操作。**
+0.7.0 正式 tag 的 Windows amd64、arm64 源码 job 中，这两项原生 HKCU 用例也已各自实际通过；整体 job 因另外的原生端口布局测试失败，未进入安装包阶段。修补后的冻结包和最终六目标集成由新的 0.7.1 门禁验证，不把原生 API 单项成功表述为整个旧 job 成功。
+
+**这些结果证明原生 API 和自有合成来源读取机制，不能替代 Windows Navicat18 save-only 格式或 Windows GUI 验收。用户现场 Windows 后续验收已延期，不因本机制测试推进现场操作。**
 
 完成 Windows 18 来源验收仍需要受控原版 save-only 样例：逐驱动验证实际活跃路径、REG 类型、身份稳定性、32/64 视图行为、认证与 SSL/SSH 枚举、可配置 Profiles Location、分组格式及重启后的存量加载。只有这些证据允许以后逐项缩小复核门禁。六目标安装包、实际用户 Windows GUI 和完整工具/UI 对齐仍是独立门禁。

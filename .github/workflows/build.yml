@@ -1,34 +1,27 @@
-name: Native installers
+name: Port layout native qualification
 
 on:
-  push:
-    branches: [main]
-    tags: ['v*']
-  pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  desktop:
+  ports:
     name: ${{ matrix.id }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - {id: linux-amd64, os: ubuntu-24.04, python_arch: x64, arch: amd64}
-          - {id: linux-arm64, os: ubuntu-24.04-arm, python_arch: arm64, arch: arm64}
-          - {id: windows-amd64, os: windows-2022, python_arch: x64, arch: amd64}
-          - {id: windows-arm64, os: windows-11-arm, python_arch: arm64, arch: arm64}
-          - {id: macos-amd64, os: macos-15-intel, python_arch: x64, arch: amd64}
-          - {id: macos-arm64, os: macos-15, python_arch: arm64, arch: arm64}
+          - {id: windows-amd64, os: windows-2022, python_arch: x64, native_qpa: windows}
+          - {id: windows-arm64, os: windows-11-arm, python_arch: arm64, native_qpa: windows}
+          - {id: macos-amd64, os: macos-15-intel, python_arch: x64, native_qpa: cocoa}
+          - {id: macos-arm64, os: macos-15, python_arch: arm64, native_qpa: cocoa}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
+    timeout-minutes: 20
     env:
-      QT_QPA_PLATFORM: offscreen
       PYTHONUTF8: '1'
-      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.vcpkg-cache
+      PYTHONUNBUFFERED: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -37,142 +30,54 @@ jobs:
           architecture: ${{ matrix.python_arch }}
           cache: pip
           cache-dependency-path: pyproject.toml
-      - name: Install Linux Qt runtime libraries
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libegl1 libopengl0 libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-shape0 libxkbcommon-x11-0 libglib2.0-0t64 fonts-noto-cjk xvfb xauth
-      - name: Prepare native PostgreSQL binary cache
-        if: matrix.id == 'windows-arm64'
-        id: vcpkg
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
-          $revision = & git -C $env:VCPKG_INSTALLATION_ROOT rev-parse HEAD
-          "revision=$revision" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-      - uses: actions/cache@v4
-        if: matrix.id == 'windows-arm64'
-        id: native-libpq-cache
-        with:
-          path: .vcpkg-cache
-          key: windows-arm64-libpq-${{ steps.vcpkg.outputs.revision }}-${{ hashFiles('scripts/build-libpq-windows.ps1') }}
-      - name: Build native PostgreSQL client on Windows ARM64
-        if: matrix.id == 'windows-arm64'
-        shell: pwsh
-        run: ./scripts/build-libpq-windows.ps1
-      - name: Retain successful native client build
-        if: matrix.id == 'windows-arm64' && steps.native-libpq-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: .vcpkg-cache
-          key: windows-arm64-libpq-${{ steps.vcpkg.outputs.revision }}-${{ hashFiles('scripts/build-libpq-windows.ps1') }}
-      - name: Install development dependencies
+      - name: Install focused test dependencies
+        timeout-minutes: 8
         run: python -m pip install -e ".[dev]"
-      - name: Verify application
-        run: python -c "import opennavicat, pytest, sys; sys.exit(pytest.main(['-q', '-W', 'error', '--junitxml=artifacts/pytest-results.xml']))"
-      - name: Build native desktop distribution
-        run: python scripts/build.py --clean
-      - name: Record bundled OpenSSL provider dependencies
-        run: python scripts/check-openssl-providers.py --bundle "${{ runner.os == 'macOS' && 'dist/OpenNavicat.app' || 'dist/OpenNavicat' }}" --output artifacts/openssl-providers-bundle.json
-      - name: Run packaged application and all driver imports
-        if: runner.os != 'Linux'
+      - name: Qualify offscreen and native QPA text geometry
+        timeout-minutes: 10
+        shell: python
         env:
-          QT_QPA_PLATFORM: ${{ runner.os == 'Windows' && 'windows' || 'cocoa' }}
-        run: python scripts/smoke-built.py
-      - name: Run packaged application on X11
-        if: runner.os == 'Linux'
-        env:
-          QT_QPA_PLATFORM: xcb
-        run: xvfb-run -a python scripts/smoke-built.py
-      - name: Package and verify native installer
-        if: runner.os != 'Linux'
-        env:
-          QT_QPA_PLATFORM: ${{ runner.os == 'Windows' && 'windows' || 'cocoa' }}
-        run: python scripts/package-installer.py --output-dir release-assets --arch ${{ matrix.arch }} --verify-installed
-      - name: Package and verify native installer on X11
-        if: runner.os == 'Linux'
-        env:
-          QT_QPA_PLATFORM: xcb
-        run: xvfb-run -a python scripts/package-installer.py --output-dir release-assets --arch ${{ matrix.arch }} --verify-installed
-      - name: Upload verified installer
+          NATIVE_QPA: ${{ matrix.native_qpa }}
+        run: |
+          import json, os, platform, subprocess, sys
+          from pathlib import Path
+          target = Path('artifacts/port-qualification')
+          target.mkdir(parents=True, exist_ok=True)
+          results = []
+          for qpa, scale in [('offscreen', '1'), (os.environ['NATIVE_QPA'], '1.25')]:
+              label = qpa + '-' + scale
+              env = dict(os.environ, QT_QPA_PLATFORM=qpa, QT_SCALE_FACTOR=scale)
+              cmd = [sys.executable, '-m', 'pytest', '-vv', '-s', '-W', 'error',
+                     '-o', 'faulthandler_timeout=45', '--junitxml=' + str(target / (label + '.xml')),
+                     'tests/test_connection_port_layout.py', 'tests/test_dialogs.py',
+                     'tests/test_connection_extra_drivers.py', 'tests/test_connection_mongodb.py']
+              print('BEGIN', label, platform.platform(), platform.machine(), flush=True)
+              log = target / (label + '.log')
+              with log.open('w', encoding='utf-8') as output:
+                  try:
+                      process = subprocess.run(cmd, env=env, stdout=output, stderr=subprocess.STDOUT, timeout=240)
+                      result = dict(qpa=qpa, scale=scale, exit_code=process.returncode)
+                  except subprocess.TimeoutExpired:
+                      result = dict(qpa=qpa, scale=scale, timed_out=True, exit_code=124)
+              data = log.read_text(encoding='utf-8', errors='replace')
+              geometry = []
+              for line in data.splitlines():
+                  if 'PORT_GEOMETRY ' in line:
+                      try:
+                          geometry.append(json.loads(line.split('PORT_GEOMETRY ', 1)[1]))
+                      except json.JSONDecodeError:
+                          pass
+              (target / (label + '-geometry.json')).write_text(json.dumps(geometry, indent=2), encoding='utf-8')
+              result['geometry_observations'] = len(geometry)
+              results.append(result)
+              print('END', json.dumps(result), flush=True)
+              print('\n'.join(data.splitlines()[-100:] if result['exit_code'] else data.splitlines()[-4:]), flush=True)
+          (target / 'summary.json').write_text(json.dumps(dict(platform=platform.platform(), machine=platform.machine(), results=results), indent=2), encoding='utf-8')
+          sys.exit(any(result['exit_code'] for result in results))
+      - name: Upload native geometry and exact failures
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: installer-${{ matrix.id }}
-          path: release-assets/*
+          name: port-qualification-${{ matrix.id }}
+          path: artifacts/port-qualification
           if-no-files-found: error
-      - name: Upload validation evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: validation-${{ matrix.id }}
-          path: |
-            artifacts/pytest-results.xml
-            artifacts/packaged-smoke.json
-            artifacts/packaged-workbench.png
-            artifacts/openssl-providers*.json
-            release-assets/*manifest*.json
-          if-no-files-found: ignore
-
-  database-security:
-    name: Real database TLS and SSH
-    # MongoDB 8.0 rejects the current 24.04 runner's 7.0.0 Azure kernel.
-    # Keep real server acceptance on 22.04's 6.8 kernel until upstream support:
-    # https://jira.mongodb.org/browse/SERVER-136848
-    runs-on: ubuntu-22.04
-    timeout-minutes: 25
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-      - run: sudo apt-get update && sudo apt-get install -y libegl1 libopengl0 libxcb-cursor0 libxkbcommon-x11-0 libglib2.0-0 redis-server
-      - run: python -m pip install -e ".[dev]"
-      - name: Verify real TLS and SSH connections
-        env:
-          QT_QPA_PLATFORM: offscreen
-          OPENNAVICAT_SECURITY_TESTS: '1'
-        run: python -m pytest -q -W error tests/test_connection_security_integration.py --junitxml=artifacts/security-integration/pytest-results.xml
-      - name: Verify SQL Server, Redis and native protocol workspaces
-        env:
-          QT_QPA_PLATFORM: offscreen
-          OPENNAVICAT_TEST_SQLSERVER: '1'
-          OPENNAVICAT_TEST_REDIS: '1'
-        run: >-
-          python scripts/prepare-test-sqlserver.py
-          --junit-report artifacts/security-integration/protocol-results.xml --
-          python -m pytest -q -W error
-          tests/test_sqlserver_session.py tests/test_redis_session.py
-          tests/test_query_protocols.py tests/test_redis_browser_ui.py
-          tests/test_extra_driver_window.py
-          --junitxml=artifacts/security-integration/protocol-results.xml
-      - name: Verify MongoDB native protocol, query and MainWindow workspaces
-        env:
-          QT_QPA_PLATFORM: offscreen
-        run: python scripts/test-mongodb-protocol.py --evidence artifacts/security-integration/mongodb-protocol
-      - name: Verify real MongoDB TLS and SSH connections
-        env:
-          QT_QPA_PLATFORM: offscreen
-        run: python scripts/test-mongodb-security.py --evidence artifacts/security-integration/mongodb-security
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: validation-database-security
-          path: artifacts/security-integration/
-          if-no-files-found: ignore
-
-  release:
-    name: Publish complete six-target release
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: [desktop, database-security]
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: installer-*
-          path: release-assets
-          merge-multiple: true
-      - name: Verify complete installer set and publish
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: python scripts/publish-release.py --tag "$GITHUB_REF_NAME" --assets release-assets

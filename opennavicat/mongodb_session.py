@@ -87,6 +87,13 @@ def _unique_pairs(pairs):
     return result
 
 
+def _finite_json_float(token):
+    value = float(token)
+    if not math.isfinite(value):
+        raise DatabaseError("A JSON number exceeds the BSON double range; use an explicit Extended JSON nonfinite value")
+    return value
+
+
 def _validate_date_precision(value, depth=0):
     if depth > _MAX_DEPTH:
         raise DatabaseError("The BSON document is too deeply nested")
@@ -125,7 +132,7 @@ def canonical_loads(text: str) -> dict[str, Any]:
     try:
         # The JSON library's object_pairs_hook suppresses object_hook, so validate
         # duplicates separately before json_util performs BSON wrapper decoding.
-        raw = json.loads(text, object_pairs_hook=_unique_pairs,
+        raw = json.loads(text, object_pairs_hook=_unique_pairs, parse_float=_finite_json_float,
                    parse_constant=lambda value: (_ for _ in ()).throw(ValueError("Use Extended JSON for nonfinite numbers")))
         _validate_json_date_literals(raw)
         result = json_util.loads(text, json_options=JSON_OPTIONS)
@@ -456,7 +463,7 @@ class _MongoLiteralParser:
                 if not isinstance(flags,str) or any(x not in 'imsxlu' for x in flags):raise ValueError
                 return Regex(args[0],flags)
             if name == 'EJSON.parse' and len(args)==1 and isinstance(args[0],str):
-                parsed=json.loads(args[0],object_pairs_hook=_unique_pairs,
+                parsed=json.loads(args[0],object_pairs_hook=_unique_pairs,parse_float=_finite_json_float,
                     parse_constant=lambda value: (_ for _ in ()).throw(ValueError('Use Extended JSON for nonfinite numbers')))
                 _validate_json_date_literals(parsed)
                 return json_util.loads(args[0],json_options=JSON_OPTIONS)

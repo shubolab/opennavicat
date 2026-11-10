@@ -5,17 +5,18 @@ from __future__ import annotations
 import json
 import base64
 import hashlib
+import math
 import re
 import uuid
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QThreadPool, QTimer, QSize, Signal, QRegularExpression
-from PySide6.QtGui import QRegularExpressionValidator
+from PySide6.QtCore import Qt, QEvent, QRect, QThreadPool, QTimer, QSize, Signal, QRegularExpression
+from PySide6.QtGui import QFontMetricsF, QRegularExpressionValidator
 from PySide6.QtWidgets import (
     QButtonGroup, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout,
     QFrame, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QListWidget, QMessageBox, QPlainTextEdit,
     QPushButton, QRadioButton, QScrollArea, QSizePolicy, QSpinBox, QTableWidget, QTableWidgetItem,
-    QTabWidget, QVBoxLayout, QWidget,
+    QStyle, QStyleOptionSpinBox, QTabWidget, QVBoxLayout, QWidget,
 )
 
 from opennavicat.database import ConnectionConfig
@@ -26,6 +27,72 @@ def _hint(text: str) -> QLabel:
     label.setWordWrap(True)
     label.setStyleSheet("color: #738096; font-size: 11px;")
     return label
+
+
+class _PortSpinBox(QSpinBox):
+    """Fit the complete port in the *editor*, including native stepper chrome.
+
+    Some native styles' CT_SpinBox size hints do not reserve the space that
+    their SC_SpinBoxEditField subsequently takes away at large font sizes.
+    Invert the latter geometry instead. The line edit's own minimum hint also
+    includes its frame, text margins and internal cursor/scrolling padding.
+    No fixed pixel width or cached font measurement survives a style change.
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setRange(1, 65535)
+        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.lineEdit().installEventFilter(self)
+
+    def sizeHint(self):
+        hint = super().sizeHint()
+        line = self.lineEdit()
+        metrics = QFontMetricsF(line.font())
+        # Port digits can have unequal advances in user-selected fonts. Cover
+        # every five-digit port, not only today's value or the string 65535.
+        digit_width = max(metrics.horizontalAdvance(str(n)) for n in range(10))
+        text_width = math.ceil(digit_width * len(str(self.maximum())))
+        minimum = line.minimumSizeHint()
+        # QLineEdit's public minimum hint is one maximum-width character plus
+        # all of its drawing insets. Keep those insets without duplicating
+        # Qt's private padding constants or depending on a particular theme.
+        insets = max(0, minimum.width() - line.fontMetrics().maxWidth())
+        cursor = max(1, line.style().pixelMetric(QStyle.PixelMetric.PM_TextCursorWidth, None, line))
+        editor_width = text_width + insets + cursor
+        hint.setHeight(max(hint.height(), minimum.height()))
+        option = QStyleOptionSpinBox()
+        self.initStyleOption(option)
+        option.subControls = QStyle.SubControl.SC_SpinBoxEditField
+        for _ in range(8):
+            option.rect = QRect(0, 0, hint.width(), hint.height())
+            edit = self.style().subControlRect(
+                QStyle.ComplexControl.CC_SpinBox, option,
+                QStyle.SubControl.SC_SpinBoxEditField, self,
+            )
+            deficit = editor_width - edit.width()
+            if deficit <= 0:
+                break
+            hint.setWidth(hint.width() + deficit)
+        return hint
+
+    def minimumSizeHint(self):
+        return self.sizeHint()
+
+    def eventFilter(self, watched, event):
+        if event.type() in (
+            QEvent.Type.FontChange, QEvent.Type.StyleChange,
+            QEvent.Type.ApplicationFontChange, QEvent.Type.Polish,
+            QEvent.Type.ContentsRectChange, QEvent.Type.DevicePixelRatioChange,
+        ):
+            self.updateGeometry()
+        return super().eventFilter(watched, event)
+
+    def event(self, event):
+        result = super().event(event)
+        if event.type() in (QEvent.Type.ScreenChangeInternal, QEvent.Type.DevicePixelRatioChange):
+            self.updateGeometry()
+        return result
 
 
 def _pin_fingerprint(pin: str) -> str:
@@ -241,12 +308,7 @@ class ConnectionDialog(QDialog):
         self.browse_button.clicked.connect(self._browse)
         self.create_button.clicked.connect(self._new_file)
         self.host_edit = QLineEdit(config.host if config else "localhost")
-        self.port_spin = QSpinBox()
-        self.port_spin.setRange(1, 65535)
-        # Qt's sizeHint includes all five digits and the current style's step
-        # controls. Fixed policy keeps that native width compact while allowing
-        # layout recalculation on font/style changes; fixed pixels truncate it.
-        self.port_spin.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.port_spin = _PortSpinBox()
         self.user_edit = QLineEdit(config.username if config else "")
         self.password_edit = QLineEdit(config.password if config else "")
         self.password_edit.setEchoMode(QLineEdit.EchoMode.Password)
@@ -447,10 +509,8 @@ class ConnectionDialog(QDialog):
         self.ssh_form.setSpacing(8)
         self.ssh_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.ssh_host_edit = QLineEdit(getattr(config, "ssh_host", "") if config else "")
-        self.ssh_port_spin = QSpinBox()
-        self.ssh_port_spin.setRange(1, 65535)
+        self.ssh_port_spin = _PortSpinBox()
         self.ssh_port_spin.setValue(getattr(config, "ssh_port", 22) if config else 22)
-        self.ssh_port_spin.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.ssh_user_edit = QLineEdit(getattr(config, "ssh_username", "") if config else "")
         self.ssh_auth_combo = QComboBox()
         for label, method in [("密码", "password"), ("公钥", "key"),

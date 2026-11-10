@@ -22,6 +22,70 @@ _NAVICAT_NAMESPACE = uuid.UUID("9e8f2378-d17a-56f5-a6e1-2cb52b166378")
 _METADATA_FIELD = re.compile(r"[A-Za-z_][A-Za-z_0-9.-]{0,119}\Z")
 
 
+def _registry_alias_profiles(profiles, imports, platform):
+    """Reconcile proven registry view aliases without deleting stored profiles.
+
+    Logical IDs remain view/key based. A current positive alias can target an
+    earlier single-view import; retained alias bindings survive API outages,
+    but a current report showing separate views revokes that binding. Multiple
+    existing profiles are retained independently, including all local reviews.
+    This mutates only the caller's atomic candidate, never source or secrets.
+    """
+    if platform != "win32":
+        return profiles
+    def scope(profile):
+        return (profile.source_format, str(profile.source_path))
+    def aliases(values):
+        if not isinstance(values, (list, tuple)) or len(values) > 4:
+            raise ValueError("Invalid native registry alias metadata")
+        if any(not isinstance(value, str) or not value or len(value) > 2048
+               or any(ord(char) < 32 for char in value) for value in values):
+            raise ValueError("Invalid native registry source alias")
+        return set(values)
+    native = [p for p in profiles if p.source_format == "windows-registry"]
+    claims = {(scope(p), p.source_id): {p.source_id, *aliases(getattr(p, "source_aliases", ()))} for p in native}
+    def separated(origin, first, second):
+        return ((origin, first) in claims and (origin, second) in claims
+                and second not in claims[origin, first] and first not in claims[origin, second])
+    owners, primaries = {}, {}
+    for identifier, metadata in imports.items():
+        if metadata.get("source_format") != "windows-registry" or metadata.get("platform") != "win32":
+            continue
+        origin = ("windows-registry", str(metadata.get("provenance", "")))
+        primary = metadata["source_id"]
+        previous = aliases(metadata.get("source_aliases", ()))
+        previous = {value for value in previous if not separated(origin, primary, value)}
+        metadata["source_aliases"] = sorted(previous)
+        primaries.setdefault(origin, set()).add(primary)
+        for source in previous | {primary}:
+            owners.setdefault((origin, source), set()).add(identifier)
+    result = []
+    for profile in profiles:
+        if profile.source_format != "windows-registry":
+            result.append(profile)
+            continue
+        origin = scope(profile)
+        proof = aliases(getattr(profile, "source_aliases", ())) | {profile.source_id}
+        matches = set().union(*(owners.get((origin, source), set()) for source in proof))
+        if not matches:
+            result.append(profile)
+            continue
+        for identifier in sorted(matches):
+            previous = imports[identifier]
+            canonical = previous["source_id"]
+            retained = aliases(previous.get("source_aliases", ())) | proof
+            # Other stored primary IDs must remain independent. Neither a
+            # favorite reference nor a locally reviewed connection is removed.
+            retained -= primaries.get(origin, set()) - {canonical}
+            retained.discard(canonical)
+            unsupported = profile.unsupported_fields
+            if len(matches) > 1:
+                unsupported = tuple(sorted(set(unsupported) | {"windows_alias_review"}))
+            result.append(replace(profile, source_id=canonical,
+                                  source_aliases=tuple(sorted(retained)), unsupported_fields=unsupported))
+    return tuple(result)
+
+
 def data_directory() -> Path:
     override = os.environ.get("OPENNAVICAT_DATA_DIR")
     path = Path(override) if override else Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation))
@@ -182,10 +246,11 @@ class Store:
         now = datetime.now(timezone.utc).isoformat(timespec="microseconds")
         seen, seen_ids = set(), set()
         platform = str(getattr(report, "platform", ""))
+        profiles = _registry_alias_profiles(report.profiles, imports, platform)
         def safe_fields(values):
             return sorted({value if isinstance(value, str) and _METADATA_FIELD.fullmatch(value)
                            else "unknown_field" for value in values})
-        for profile in report.profiles:
+        for profile in profiles:
             source_id = profile.source_id
             if not isinstance(source_id, str) or not source_id or len(source_id) > 2048 or any(ord(c) < 32 for c in source_id):
                 raise ValueError("Invalid Navicat source identity")
@@ -246,6 +311,8 @@ class Store:
                 "group_paths": group_paths, "blocked": blocked,
                 "groups_complete": groups_complete,
                 "groups_authoritative_seen": groups_complete or group_history,
+                "config_complete": getattr(profile, "config_complete", True) is True,
+                "source_aliases": sorted(getattr(profile, "source_aliases", ())),
                 "unsupported_fields": unsupported, "requires_secrets": requires,
                 "locally_edited": edited, "last_seen": now, "source_missing": False,
                 "source_blocked": blocked, "source_unsupported_fields": unsupported,
@@ -260,6 +327,11 @@ class Store:
                 if by_id[identifier]["driver"] not in SUPPORTED_DRIVERS:
                     metadata["blocked"] = True
                     metadata["unsupported_fields"] = sorted(set(metadata["unsupported_fields"]) | {"driver"})
+                counts["preserved"] += 1
+            elif not metadata["config_complete"] and identifier in by_id:
+                # A failed allowlisted read is not evidence that a previously
+                # known host, port, user or path became empty. First imports
+                # remain visible and blocked; only complete snapshots update.
                 counts["preserved"] += 1
             elif identifier not in by_id:
                 positions[identifier] = len(rows)

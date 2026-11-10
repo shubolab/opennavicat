@@ -1,6 +1,6 @@
 # 0.7：当前文档树、导航与 Windows 连接候选发现
 
-记录日期：2026-11-11，Asia/Shanghai。此记录覆盖 0.7.0 初始集成及失败门禁、0.7.1 修补与后续验证；正式六目标 CI、安装包和公开下载结果另行补充。当前公开可用版本仍为 [v0.6.1](https://github.com/shubolab/opennavicat/releases/tag/v0.6.1)。源码、参考运行、原生 API 测试、最终安装包和用户现场 GUI 的证据各自有明确范围。
+记录日期：2026-11-11，Asia/Shanghai。**[v0.7.1](https://github.com/shubolab/opennavicat/releases/tag/v0.7.1) 已于 2026-11-10 16:58:53 UTC（北京时间 11 月 11 日）发布为预发行里程碑，Release ID 440648069。** 此记录覆盖 0.7.0 初始集成及失败门禁、0.7.1 修补与最终验证。六份安装包及两份校验资料均已匿名实际下载核验；源码、参考运行、原生 API 测试、最终安装包和用户现场 GUI 的证据各自有明确范围。
 
 ## 行为与实际参考
 
@@ -22,7 +22,7 @@ Windows 实现和静态/官方证据详见 [Windows 元数据发现](windows-nav
 
 macOS 既有实际来源支持继续保留。Linux 的现有识别格式与 Linux 18 官方原生文件兼容性仍分开跟踪，不能套用 macOS SSH/TLS 字段来宣称 Linux 迁移验收。
 
-原生 Windows AMD64 的自有 HKCU 机制测试此前实际完成 **2 passed、0 skipped**，范围是合成来源及真实 API，并非 Windows Navicat 18 原始保存格式。Windows ARM64 集成和冻结包探针等待正式原生 CI。本版新增的冻结 smoke 只绑定 `RegEnumValueW` / `RegQueryValueExW`，不打开任何注册表键；两个 Windows 安装目标及发布门禁都要求探针为严格布尔 `true`。旧 0.6.1 校验仍使用该版本原有合同。
+原生 Windows AMD64 的自有 HKCU 机制测试此前实际完成 **2 passed、0 skipped**，范围是合成来源及真实 API，并非 Windows Navicat 18 原始保存格式。Windows 双架构的最终集成和冻结包探针已由文末正式 0.7.1 门禁实际完成。本版新增的冻结 smoke 只绑定 `RegEnumValueW` / `RegQueryValueExW`，不打开任何注册表键；两个 Windows 安装目标及发布门禁都要求探针为严格布尔 `true`。旧 0.6.1 校验仍使用该版本原有合同。
 
 ## 源码验证与演示
 
@@ -40,7 +40,7 @@ macOS 既有实际来源支持继续保留。Linux 的现有识别格式与 Linu
 
 用户已明确要求保留 Dell Windows 现场，Windows 后续再验收。本轮不继续操作远程应用、UU 防护或自有服务，也不清理该现场。此前 0.6.1 已观察的 SQLite、MongoDB 连接/浏览/类型展示仍是原版本的有界证据；MongoDB 编辑/原生命令/GridFS 补充 GUI 和卸载未完成。WSL 没有桌面，其 GUI 验收也仍延期。托管原生 CI 与用户现场验收分别记录。
 
-六目标安装包、原生依赖架构、已安装应用启动、卸载及实际公开下载尚待本次正式标签运行；未完成前不提供虚构的 0.7 下载链接。产品账号体系持续排除，全部数据库工具和三平台 1:1 UI 的[完整门禁](parity-matrix.md)继续开放。
+0.7.1 最终六目标安装包与公开下载结果见下文。产品账号体系持续排除，全部数据库工具和三平台 1:1 UI 的[完整门禁](parity-matrix.md)继续开放。
 
 ## 首次 0.7.0 正式门禁及后续修补
 
@@ -55,3 +55,26 @@ macOS 既有实际来源支持继续保留。Linux 的现有识别格式与 Linu
 修补后的 `_PortSpinBox` 按实际子编辑器字体、原生 stepper 的 `SC_SpinBoxEditField`、`SE_LineEditContents`、文本边距及光标留白反算建议尺寸；保留原生步进控件，不使用固定端口像素宽度。字体、样式、屏幕和 DPI 变化会重新参与布局。测试检查实际文本可见、光标/内容区和布局回流，不要求尺寸建议与实际像素逐点相等；原生 Cocoa checkbox 的对齐也改为检查表单项列与行，保留布局语义。
 
 0.7.1 产品修补集成后的全源测试为 **1025 passed、234 skipped、0 failed/error，78.15 秒，`-Werror`**。三份独有真实 MongoDB fixture 的就绪、归属和清理均核验，XML 为 `artifacts/integration-v0.7/source-0.7.1-final.xml`。随后只修正一处字体收缩测试的等待条件，使“文本适合”和“布局已收缩”同时成立，不修改产品；该文件另执行 **29 passed**。0.7.1 源码 smoke 再次返回 **6×4**，已有数据库/BSON/TLS/加密探针通过，Windows API 在本机为 `null`。新版实际 GIF 也完成临时服务及文件清理。正式冻结 tag 的全套测试仍须在六个目标重新运行。
+
+## 0.7.1 正式六目标与公开资产
+
+正式源为 `39598f5e405f9b42bc1dfe474b5107e9105b2743`，tag `v0.7.1`，运行 [42858523286](https://github.com/shubolab/opennavicat/actions/runs/42858523286)。六个原生目标、数据库安全与发布 job **八项全部成功，首次正式运行通过，没有 rerun**。同源重复 main 运行已取消，未用于发布。
+
+| 原生目标 | 测试通过 / 条件跳过 | 原生映像数 | 实际安装、运行、卸载 |
+| --- | --- | --- | --- |
+| macOS amd64 | 940 / 319 | 113 | 通过 |
+| macOS arm64 | 940 / 319 | 112 | 通过 |
+| Windows amd64 | 949 / 319 | 125 | 通过 |
+| Windows arm64 | 949 / 319 | 123 | 通过 |
+| Linux amd64 | 931 / 319 | 244 | 通过 |
+| Linux arm64 | 931 / 319 | 240 | 通过 |
+
+全部目标零失败、零错误。总数因可用原生样式不同而变化：端口测试 macOS 29、Windows 38、Linux 20，其余 1,230 项一致。Windows 两目标各实际执行两项 HKCU API 测试，冻结应用及已安装应用的 `navicat_windows_api_ready` 均为严格布尔 `true`；六个目标的 MongoDB 适配器、原生 BSON、TLS 与已有加密/SQL Server/Redis 探针也通过，SQLite smoke 均为 **6×4**。所有随包原生映像都匹配目标架构，未用模拟版应用替代 ARM64。
+
+独立真实数据库安全 job 为 **380 passed、0 skipped**：既有 TLS/SSH 75、SQL Server/Redis 与原生工作区 131、MongoDB 协议/查询/MainWindow 152、MongoDB TLS/SSH 22。五份独有 MongoDB fixture、私有证书和 SQL Server fixture 的最终清理均已验证。验证摘要为 ignored 的 `artifacts/release-v0.7.1/ci-verification.json`。
+
+八项公开资产均匿名 HTTPS **200** 实际下载：六份 EXE/DMG/DEB，加 `SHA256SUMS` 和 `build-manifests.json`。逐项核对字节数、SHA256、GitHub 上传摘要及 checksum 文件；六份公开 manifest 与本次正式 CI 内的安装验证 manifest 完全相同，绑定到上述源。不是用 ZIP 代替安装包。回执为 `artifacts/release-v0.7.1/public-verification.json`。
+
+公开 macOS 双 DMG 又只读装载并核对完整原生 payload；ARM64 独立复制安装后以 Cocoa 启动，实际完成 6×4 smoke 和全部驱动探针。另执行两次普通启动，完整历史源加载及分组结果一致、无重复、四类秘密和 remembered secrets 均空、进程无数据库 TCP 连接。原用户旧应用进程仍在运行，临时应用/私有工作区已移除，卷全部卸载。只发布布尔结果，不发布原连接名、主机或配置内容；回执为 `artifacts/release-v0.7.1/macos/final-receipt.json` 及 `cleanup-independent.json`。
+
+用户现场 Windows 补充 GUI 与 WSL GUI 仍按要求延期，未安装新版去覆盖保留现场。签名、公证、Windows 18 原生保存格式、Linux 18 完整迁移及完整 Navicat 工具/UI 门禁仍开放，**本里程碑不表示完整目标完成或暂停**。

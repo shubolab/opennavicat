@@ -2,7 +2,7 @@
 
 这项实现把 Windows 当前用户的 Navicat 存量连接作为**待复核配置**显示，不代表已经验收 Windows Navicat 18 的原生存储格式。它不运行 Navicat、不打开数据库、不自动连接、不解密密码、不查凭证库，也不写入来源。用户在现有连接设置中编辑并保存后，既有本地编辑保护会保留其确认后的配置。
 
-此变更在独立 `work/windows-navicat-discovery` 分支开发，并已合入 0.7.0 候选源码；原生来源格式和用户现场验收仍按下文边界记录。
+此变更在独立 `work/windows-navicat-discovery` 分支开发，并已随 0.7.1 发布；原生来源格式和用户现场验收仍按下文边界记录。
 
 ## 证据边界
 
@@ -41,7 +41,7 @@ Windows 的静态 `usessh` 与已观察 macOS 的 `usetunnel` 不同。实现不
 
 - 两个视图中的相同来源键，只有取得非空、相同的原生 key identity，并且白名单值、全部字段的名称/类型/尺寸、键修改时间和读取错误状态一致时，才合并为一条。相同 metadata 和时间不能单独证明 alias；opaque 值本身不会为了比较而读取。
 - 原生 identity 使用 `NtQueryKey(KeyNameInformation)` 获取同一已打开句柄的 canonical key-name 元数据，仅保留其 SHA256，不记录 SID 或原始键名。Microsoft 明确说明用户态使用 `NtQueryKey`，结构为字节长度加非 NUL 结尾 UTF-16 名称。实现固定 64 KiB 上限并检查实际长度；API 缺失/失败时保留两个 view 来源。它不是已观察的 Navicat UUID，也不证明配置格式已验收。[官方契约](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/wdm/nf-wdm-zwquerykey)、[名称结构](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntddk/ns-ntddk-_key_name_information)
-- 已调查 [CompareObjectHandles](https://learn.microsoft.com/en-us/windows/win32/api/handleapi/nf-handleapi-compareobjecthandles)：TRUE 是同一 kernel object 的直接证据，最低 Windows 10/Server 2016；FALSE 不能用来猜 alias。当前实现没有用它代替稳定的 key-name 元数据；原生机制的 Windows AMD64 测试见下文，Windows ARM64 仍待原生 CI。
+- 已调查 [CompareObjectHandles](https://learn.microsoft.com/en-us/windows/win32/api/handleapi/nf-handleapi-compareobjecthandles)：TRUE 是同一 kernel object 的直接证据，最低 Windows 10/Server 2016；FALSE 不能用来猜 alias。当前实现没有用它代替稳定的 key-name 元数据；原生机制的 Windows AMD64 测试见下文，Windows ARM64 的实际 API 和冻结初始化结果见文末 0.7.1 正式门禁。
 - 逻辑来源 ID 始终由驱动、键路径和视图的结构化输入生成，不包含可选原生 identity API 的返回值；同一视图在 API 可用/不可用之间切换不会改变 ID。视图标识不会和合法连接名中的 `#view=64` 等文本碰撞。
 - 当前确证两个视图是同一物理键且快照相同时，报告附带显式 `source_aliases`。Store 可沿用此前仅在 32 位视图发现的本地 ID、原始来源 ID 和收藏引用，不因后来优先显示 64 位视图而新建项。当前双视图缺少 proof 或存在冲突时撤回合并绑定，保留先前确认项及另一待复核来源；API 暂时不可用可能因此显示两个来源，不凭旧 metadata/时间推断 opaque 值相同。
 - 如果两个来源已经各自存在，之后取得 alias proof 也不删除或合并任何本地记录、确认配置或秘密，不新增第三条，并将两条均标记为仍可见来源及 alias 待复核。视图不一致时保留两条，并发出 `windows_registry_view_conflict`。
@@ -62,7 +62,7 @@ Windows 的静态 `usessh` 与已观察 macOS 的 `usetunnel` 不同。实现不
 
 两个测试根及本轮新建的空 `OpenNavicatTests` 父键已删除，临时运行目录已移除，自有进程为零。没有读取 PremiumSoft、既有 profile 或凭证值，没有数据库连接，也未操作现有 GUI 应用和其他任务夹具。macOS 全源回归为 **878 passed、314 skipped**，其中两个原生 Windows 用例按平台跳过；元数据/Store/MainWindow 相关合成回归为 **194 passed、2 skipped**。这些计数不包含未启用的外部协议夹具验收。原生 API 的两项实跑对应 `939fa9e`；后续配置保全和 Store alias 调和由跨平台合成测试验证，仍需最终 Windows 原生 CI 验证集成。
 
-0.7.0 正式 tag 的 Windows amd64、arm64 源码 job 中，这两项原生 HKCU 用例也已各自实际通过；整体 job 因另外的原生端口布局测试失败，未进入安装包阶段。修补后的冻结包和最终六目标集成由新的 0.7.1 门禁验证，不把原生 API 单项成功表述为整个旧 job 成功。
+0.7.0 正式 tag 的 Windows amd64、arm64 源码 job 中，这两项原生 HKCU 用例也已各自实际通过；整体 job 因另外的原生端口布局测试失败，未进入安装包阶段。修补后的冻结包和最终六目标集成已由新的 0.7.1 门禁实际通过，不把原生 API 单项成功表述为整个旧 job 成功。
 
 **这些结果证明原生 API 和自有合成来源读取机制，不能替代 Windows Navicat18 save-only 格式或 Windows GUI 验收。用户现场 Windows 后续验收已延期，不因本机制测试推进现场操作。**
 

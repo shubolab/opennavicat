@@ -15,35 +15,34 @@ Python + Qt Widgets（PySide6），数据库连接、SQL 和结果均在本机�
 
 ![OpenNavicat 示例数据工作流演示](docs/assets/opennavicat-demo.gif)
 
-最新可用里程碑 **[v0.6.1](https://github.com/shubolab/opennavicat/releases/tag/v0.6.1)**
-已于 2026-11-10 发布为早期预发行版本，提供三个操作系统、两种架构的六份安装包。
+最新可用里程碑 **[v0.7.1](https://github.com/shubolab/opennavicat/releases/tag/v0.7.1)**
+已于 2026-11-11（北京时间）发布为早期预发行版本，提供三个操作系统、两种架构的六份安装包。
 现有 **SQLite、PostgreSQL、MySQL、MariaDB、SQL Server、Redis、MongoDB** 七种核心驱动，
-使用隔离数据库进行了真实协议、读写及界面集成验证。新增 MongoDB 精确 BSON 文档工作区、原生命令与 GridFS，
-保留新版连接管理器、SQLite 独立索引/触发器设计及 macOS Navicat 历史连接自动加载、分组和去重。
+使用隔离数据库进行了真实协议、读写及界面集成验证。本版加入 MongoDB 单当前文档 BSON 树与记录导航、
+GridFS 下方预览/进度、Windows 历史连接候选发现、配置/分组重载保护，并修复原生大字体端口裁字。
+保留 MongoDB 原生命令、新版连接管理器、SQLite 独立索引/触发器设计及 macOS 历史连接自动加载、分组和去重。
 完整 Navicat Premium 能力和 1:1 界面仍在持续实现中，
-详细范围见 [功能路线图](docs/roadmap.md) 和 [0.6 验证记录](docs/validation-0.6.md)。
+详细范围见 [功能路线图](docs/roadmap.md) 和 [0.7 验证记录](docs/validation-0.7.md)。
 
 | 安装包 | amd64 / Intel、x64 | arm64 / Apple Silicon、Windows ARM |
 | --- | --- | --- |
-| macOS | [DMG](https://github.com/shubolab/opennavicat/releases/download/v0.6.1/OpenNavicat-0.6.1-macos-amd64.dmg) | [DMG](https://github.com/shubolab/opennavicat/releases/download/v0.6.1/OpenNavicat-0.6.1-macos-arm64.dmg) |
-| Windows | [Setup EXE](https://github.com/shubolab/opennavicat/releases/download/v0.6.1/OpenNavicat-0.6.1-windows-amd64-setup.exe) | [Setup EXE](https://github.com/shubolab/opennavicat/releases/download/v0.6.1/OpenNavicat-0.6.1-windows-arm64-setup.exe) |
-| Linux（Debian/Ubuntu） | [DEB](https://github.com/shubolab/opennavicat/releases/download/v0.6.1/OpenNavicat-0.6.1-linux-amd64.deb) | [DEB](https://github.com/shubolab/opennavicat/releases/download/v0.6.1/OpenNavicat-0.6.1-linux-arm64.deb) |
+| macOS | [DMG](https://github.com/shubolab/opennavicat/releases/download/v0.7.1/OpenNavicat-0.7.1-macos-amd64.dmg) | [DMG](https://github.com/shubolab/opennavicat/releases/download/v0.7.1/OpenNavicat-0.7.1-macos-arm64.dmg) |
+| Windows | [Setup EXE](https://github.com/shubolab/opennavicat/releases/download/v0.7.1/OpenNavicat-0.7.1-windows-amd64-setup.exe) | [Setup EXE](https://github.com/shubolab/opennavicat/releases/download/v0.7.1/OpenNavicat-0.7.1-windows-arm64-setup.exe) |
+| Linux（Debian/Ubuntu） | [DEB](https://github.com/shubolab/opennavicat/releases/download/v0.7.1/OpenNavicat-0.7.1-linux-amd64.deb) | [DEB](https://github.com/shubolab/opennavicat/releases/download/v0.7.1/OpenNavicat-0.7.1-linux-arm64.deb) |
 
-[SHA256SUMS](https://github.com/shubolab/opennavicat/releases/download/v0.6.1/SHA256SUMS)
-和 [构建与安装验证清单](https://github.com/shubolab/opennavicat/releases/download/v0.6.1/build-manifests.json)
+[SHA256SUMS](https://github.com/shubolab/opennavicat/releases/download/v0.7.1/SHA256SUMS)
+和 [构建与安装验证清单](https://github.com/shubolab/opennavicat/releases/download/v0.7.1/build-manifests.json)
 随版本发布。当前安装包没有发布者签名或 Apple 公证；Windows ARM64 安装引导器使用 x86，
 安装后的应用、Python、Qt 及原生库为 ARM64。实际系统验证范围和功能边界见
-[0.6 验证记录](docs/validation-0.6.md)。本版六个原生 CI 目标均实际完成测试、安装、运行和卸载，
+[0.7 验证记录](docs/validation-0.7.md)。本版六个原生 CI 目标均实际完成测试、安装、运行和卸载，
 公开的六份安装包也已匿名下载并核对摘要。Linux DEB 基于 Ubuntu 24.04，要求 glibc 2.39 或更新版本，
 通过包管理器安装声明的 Qt 图形库及 Noto CJK 字体。
 0.5 公开版本另完成 macOS ARM64、干净 Ubuntu ARM64 XCB 及 Windows AMD64 RDP 的 6×4 示例查询，
 并在 Windows 实际打开 SQL Server/Redis 的连接设置；该次远程桌面没有连接真实 SQL Server/Redis 服务。
-0.6.1 的公开安装包补充验收范围单独记录在对应验证文档中。
-
-当前 0.7.1 候选源码新增单当前文档 BSON 树、短页记录导航、GridFS 下方预览/进度、
-Windows 历史连接候选的只读发现和不完整重载保护。Windows 候选需要复核认证与安全设置；
-原版 Windows 18 来源格式和用户现场 GUI 仍待验收。0.7.0 门禁发现原生大字体问题，未发布 Release；
-修补版完成正式六目标发布门禁后再更新下载链接。
+0.7.1 公开 macOS ARM64 安装包补充完成两次普通启动的历史加载、分组、去重和不自动连接检查。
+Windows 候选需要复核认证与安全设置；原版 Windows 18 来源格式和 Linux 18 原生资料完整迁移仍待验收。
+用户现场 Windows/WSL GUI 按要求延期，Dell 现场保留，托管 CI 的结果与该现场验收分开记录。
+0.7.0 门禁发现原生大字体问题，未发布 Release；原标签和失败证据保留，0.7.1 以新标签通过全部门禁。
 
 首个可用版本交付后曾按要求暂停。用户更新本机 Navicat 后已于 2026-11-10 明确恢复；
 当前参考为 **Navicat Premium 18.0.5 build 321**，已重新实际打开并验证新建表、修改表、
@@ -116,7 +115,7 @@ SSH 转发后仍校验数据库原始主机名。首次未知 SSH 主机需要�
   查看或修改 TTL、重命名和删除键。当前支持 standalone；集群、哨兵和 PubSub 尚未实现。
 - MongoDB standalone 提供精确 BSON 网格、树和 Canonical Extended JSON 文档编辑、冲突保护、
   原生命令与已实现的 shell 语法片段。GridFS 支持后台传输、筛选、分页及有界图像预览。
-  当前源码提供单当前文档树及记录导航；树字段双击使用 Extended JSON 编辑器。
+  本版提供单当前文档树及记录导航；树字段双击使用 Extended JSON 编辑器。
   原版行内编辑/类型 popup、完整 JavaScript 引擎、聚合构建器及更多拓扑仍在对齐。
 - 导入 CSV / JSON 数据，导出当前结果；收藏查询并通过历史记录重新打开 SQL。
 - 使用 SQLite 备份保留可独立打开的数据库快照。
@@ -144,7 +143,7 @@ MySQL/MariaDB 目标必须是 InnoDB。它同步预览中列出的行，不锁�
 macOS Navicat 18 的实际连接及分组格式已验证，保留分组关系，重复加载按来源身份去重；
 你在 OpenNavicat 里手工创建或修改的配置会保留。已打开的会话继续使用原配置，来源更新在断开后生效。
 工具菜单提供“从 Navicat 重新加载连接”和自动加载开关。演示、smoke 和截图模式不读取历史连接。
-0.6.1 公开 macOS ARM64 安装包已完成两次普通启动，核验完整历史源加载、分组、无重复项，
+0.7.1 公开 macOS ARM64 安装包已完成两次普通启动，核验完整历史源加载、分组、无重复项，
 四类秘密字段均为空，且没有自动建立数据库网络连接。
 
 加载只读取来源文件，不修改 Navicat，也不会自动连接数据库或读取已保存密码。
@@ -152,7 +151,7 @@ macOS Navicat 18 的实际连接及分组格式已验证，保留分组关系，
 可以使用 OpenNavicat 自己的系统钥匙串保存选项。
 无法准确映射的认证或安全设置会保留为待复核，尚未实现的驱动也保留可见，不能静默换成其它连接类型。
 原生 UUID 为空的来源按名称空间、数据库类型、位置和名称生成稳定身份；此时原版重命名会成为新来源项。
-来源删除不会删除本地连接。0.7.0 源码接入 Windows 当前用户注册表的元数据候选发现，
+来源删除不会删除本地连接。0.7.1 接入 Windows 当前用户注册表的元数据候选发现，
 只读明确白名单的非秘密字段，保留可见驱动和已知分组；未知认证、TLS/SSH 与格式均保持待复核，
 确认设置前阻止连接。重复加载保护本地修改，读取不完整时保留已有配置和分组。
 Linux JSON 仅支持已识别格式；Windows 18 实际原生格式和 Linux 完整迁移尚未完成来源与原生界面验收。
@@ -218,7 +217,7 @@ SQL Server/MongoDB TLS context 并检查原生 BSON 和加密 cipher；这些探
 构建）与 psycopg 的 Python 绑定，运行源码时需把 libpq DLL 目录放入 PATH 并设置
 `OPENNAVICAT_LIBPQ_DIR`；该脚本也配置加密库的 OpenSSL 源码构建路径。安装包直接包含运行库。
 `--demo` 则打开可交互的持久示例工作区。具体环境、测试数量、已构建产物及尚未验收项
-见 [0.6 验证记录](docs/validation-0.6.md)（[0.5](docs/validation-0.5.md)、[0.4](docs/validation-0.4.md)、[0.3](docs/validation-0.3.md)、[0.2](docs/validation-0.2.md)、[0.1 历史记录](docs/validation.md)）。Linux 容器构建可执行 `scripts/build-linux.sh`，
+见 [0.7 验证记录](docs/validation-0.7.md)（[0.6](docs/validation-0.6.md)、[0.5](docs/validation-0.5.md)、[0.4](docs/validation-0.4.md)、[0.3](docs/validation-0.3.md)、[0.2](docs/validation-0.2.md)、[0.1 历史记录](docs/validation.md)）。Linux 容器构建可执行 `scripts/build-linux.sh`，
 它在独立环境中测试、打包并运行产物，输出到 `artifacts/linux/`。
 
 README 演示可用 `.venv/bin/python scripts/record-demo.py --include-mongodb --output docs/assets/opennavicat-demo.gif`

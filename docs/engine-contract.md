@@ -27,7 +27,7 @@ Extra capability allowed; communicate contract changes to root immediately. No U
 
 GridFS APIs are `list_files`, `upload_file`, `download_file` and `delete_file`. They retain bounded previews, progress/cancellation, collection identity and file snapshot checks. Downloads commit only after content validation and do not overwrite an existing destination by default. Standalone cleanup can be partially applied; its real outcome must remain visible.
 
-`opennavicat/mongodb_query.py` prevalidates the whole script, executes supported native commands through the parent session, and uses official cursors with explicit delivery limits and cancellation. The separate native JavaScript prototype is not part of 0.7.0 or its installers. A future engine must preserve typed BSON and confirmed write outcomes without exposing Python objects or host filesystem/process/network APIs to scripts.
+`opennavicat/mongodb_query.py` prevalidates the whole script, executes supported native commands through the parent session, and uses official cursors with explicit delivery limits and cancellation. The separate native JavaScript prototype is not part of the published 0.7.1 or its installers. A future engine must preserve typed BSON and confirmed write outcomes without exposing Python objects or host filesystem/process/network APIs to scripts.
 
 ## Imported connection metadata
 

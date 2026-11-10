@@ -9,6 +9,7 @@ import subprocess
 import threading
 import time
 import traceback
+from copy import deepcopy
 
 import pytest
 from PySide6.QtWidgets import QPushButton, QToolButton, QVBoxLayout, QWidget
@@ -21,6 +22,33 @@ def recorder():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+@pytest.mark.parametrize("corruption", [None, "rounded_stock", "wrong_price", "wrong_sku", "wrong_display"])
+def test_generated_javascript_demo_requires_exact_bson_and_actual_display(recorder, corruption):
+    from bson import Decimal128, Int64
+    from opennavicat.js_engine.codec import encode
+    from opennavicat.js_engine.presentation import display_value
+
+    values = [{"sku": "DEMO-001", "stock": Int64(9007199254740994), "price": Decimal128("1299.95")},
+              {"sku": "DEMO-002", "stock": Int64(9007199254740995), "price": Decimal128("349.50")},
+              {"sku": "DEMO-003", "stock": Int64(9007199254740996), "price": Decimal128("79.00")}]
+    if corruption == "rounded_stock":
+        values[1]["stock"] = float(values[1]["stock"])
+    elif corruption == "wrong_price":
+        values[0]["price"] = "1299.95"
+    elif corruption == "wrong_sku":
+        values[2]["sku"] = "WRONG-SAMPLE"
+    tree = encode(values)
+    rows = [list(display_value(child)) for child in tree[1]]
+    if corruption == "wrong_display":
+        altered = deepcopy(values[0]); altered["stock"] = 0
+        rows[0] = list(display_value(encode(altered)))
+    if corruption is None:
+        recorder.verify_mongo_query_values(tree, rows)
+    else:
+        with pytest.raises(RuntimeError, match="exact generated BSON"):
+            recorder.verify_mongo_query_values(tree, rows)
 
 
 @pytest.mark.parametrize("button_class",[QPushButton,QToolButton])

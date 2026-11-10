@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Explicit zero-skip native VM / fresh-owned MongoDB development qualification.
+"""Explicit zero-skip native VM / fresh-owned MongoDB release qualification.
 
-No publisher/installer workflow calls this prototype. Evidence contains native
+The native installer workflow executes these declared scopes. Evidence contains native
 metadata, JUnit and redacted own-fixture receipts, never config/keys/URIs.
 """
 from __future__ import annotations
@@ -26,7 +26,7 @@ from pathlib import Path
 class Capture:
  def pytest_collection_finish(self,session):
   Path(sys.argv[1]).write_text(json.dumps([v.nodeid for v in session.items]),encoding='utf-8')
-raise SystemExit(pytest.main(['--collect-only','-q','-W','error',*sys.argv[2:]],plugins=[Capture()]))
+raise SystemExit(pytest.main(['--collect-only','-q','-W','error','-o','addopts=',*sys.argv[2:]],plugins=[Capture()]))
 """
 
 
@@ -49,7 +49,9 @@ def protocol_module():
 def source_environment():
     # Preserve native DLL bootstrap sitecustomize before pytest/hashlib runs.
     pythonpath=os.pathsep.join(value for value in (str(ROOT),os.environ.get('PYTHONPATH',''))if value)
-    return dict(os.environ,PYTHONPATH=pythonpath,PYTEST_DISABLE_PLUGIN_AUTOLOAD='1')
+    environment=dict(os.environ,PYTHONPATH=pythonpath,PYTEST_DISABLE_PLUGIN_AUTOLOAD='1')
+    environment.pop('PYTEST_ADDOPTS',None)
+    return environment
 
 
 def main(argv=None):
@@ -110,7 +112,7 @@ def main(argv=None):
             subprocess.run([sys.executable,'-c',COLLECT,str(required),*test_arguments],cwd=ROOT,env=environment,
                 stdout=log,stderr=subprocess.STDOUT,check=True,timeout=60)
         with (directory/'pytest.log').open('w',encoding='utf-8')as log:
-            process=subprocess.Popen([sys.executable,'-m','pytest','-q','-W','error',*test_arguments,'--junitxml='+str(report)],
+            process=subprocess.Popen([sys.executable,'-m','pytest','-q','-W','error','-o','addopts=',*test_arguments,'--junitxml='+str(report)],
                 cwd=ROOT,env=environment,stdout=log,stderr=subprocess.STDOUT,start_new_session=os.name=='posix')
             status=process.wait(timeout=180)
         if status:raise RuntimeError('Native engine pytest process failed')

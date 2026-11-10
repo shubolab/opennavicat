@@ -148,6 +148,10 @@ class MongoIndexDesignerPage(_ObjectDesignerPage):
         layout.setContentsMargins(12, 12, 12, 12)
         form = self._form()
         self.table_combo = self.collection_combo = QComboBox()
+        # Owners arrive after the page has already been shown. The default
+        # first-show policy otherwise keeps the empty selector's cached width.
+        self.collection_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
+        self.collection_combo.setMinimumContentsLength(12)
         self.collection_combo.setMaximumWidth(300)
         self.collection_combo.currentTextChanged.connect(self._owner_selected)
         form.addRow("集合名称", self.collection_combo)
@@ -262,6 +266,9 @@ class MongoIndexDesignerPage(_ObjectDesignerPage):
     def _choice(self, form, label, name, values, kind):
         widget = QComboBox()
         widget.addItems(values)
+        widget.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
+        # A lone digit still needs room beside the native arrow and text inset.
+        widget.setMinimumContentsLength(3)
         widget.setMaximumWidth(160)
         self._widgets[name] = widget
         widget.currentTextChanged.connect(lambda value, key=name, parser=kind: self._scalar_edited(key, value, parser))

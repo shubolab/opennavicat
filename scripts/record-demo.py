@@ -49,6 +49,27 @@ JOIN orders AS o ON o.customer_id = c.id
 JOIN products AS p ON p.id = o.product_id
 GROUP BY c.id
 ORDER BY revenue DESC;"""
+MONGO_QUERY = '''// 此数据库与商品均为程序生成的示例数据
+const products = db.getCollection("products").find({}).sort({sku: 1}).limit(3).toArray();
+function sampleRow(product) {
+    return {sku: product.sku, stock: product.stock, price: product.price};
+}
+products.map(sampleRow);'''
+
+
+def verify_mongo_query_values(tree, rows):
+    from bson import BSON, Decimal128, Int64
+    from opennavicat.js_engine.codec import BSON_CODEC, decode
+    from opennavicat.mongodb_session import canonical_loads
+
+    expected = [{"sku": f"DEMO-{number:03}", "stock": Int64(9007199254740993 + number),
+                 "price": Decimal128(price)} for number, price in enumerate(("1299.95", "349.50", "79.00"), 1)]
+    def raw(values):
+        return BSON.encode({"values": values}, codec_options=BSON_CODEC)
+    if (raw(decode(tree)) != raw(expected) or len(rows) != 3
+            or any(len(row) != 2 or row[0] != "Canonical Extended JSON" for row in rows)
+            or raw([canonical_loads(row[1]) for row in rows]) != raw(expected)):
+        raise RuntimeError("The JavaScript demo results did not preserve the exact generated BSON values.")
 
 
 def dependencies(include_mongodb=False):
@@ -190,6 +211,7 @@ class OwnedMongoDemo:
             "tags": ["generated", "sample"], "binary": Binary(b"\x00\x01\xfe\xff", 128)}
             for number, price in enumerate(prices, 1)]
         collection.insert_many(products)
+        collection.create_index([("stock", -1), ("sku", 1)], name="demo_stock_sku")
         remaining_seconds(deadline)
         image = QImage(480, 300, QImage.Format.Format_RGB32)
         image.fill(QColor("#f0f4fa"))
@@ -363,8 +385,9 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
                 return mongo.password
             return getattr(config, field)
 
-        def record(self, config, sql, elapsed, status):
-            background_io(Store.record, self, deepcopy(config), sql, elapsed, status)
+        def record(self, config, sql, elapsed, status, **metadata):
+            captured = deepcopy(config), deepcopy(metadata)
+            background_io(lambda: Store.record(self, captured[0], sql, elapsed, status, **captured[1]))
 
         def flush(self):
             # MainWindow's close path requests a flush synchronously. Keep its
@@ -414,7 +437,8 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
     background_io(frames.mkdir).result()
     state = {"recording": False, "count": 0, "error": None,
              "phases": [], "query": None, "designer": None, "shutdown": False,
-             "mongo_page": None, "gridfs_page": None, "sqlite_closed_in_worker": False}
+             "mongo_page": None, "gridfs_page": None, "mongo_query": None,
+             "mongo_index_page": None, "sqlite_closed_in_worker": False}
     deadline = time.monotonic() + 120
     capture_timer = QTimer(app)
     capture_timer.setInterval(round(1000 / args.fps))
@@ -675,18 +699,83 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
 
     def gridfs_ready():
         phase("mongodb_gridfs_preview")
-        hold(3.0, finish)
+        hold(2.5, open_mongo_query)
+
+    def open_mongo_query():
+        from opennavicat.ui.mongo_native_query import NativeMongoQueryPage
+
+        page = window.new_query(sql=MONGO_QUERY, connection_id=MONGO_CONNECTION_ID)
+        if not isinstance(page, NativeMongoQueryPage):
+            raise RuntimeError("The demo did not open the integrated JavaScript query page.")
+        state["mongo_query"] = page
+        phase("mongodb_javascript_editor")
+        hold(2.2, run_mongo_query)
+
+    def run_mongo_query():
+        page = state["mongo_query"]
+        if not page.run_native():
+            raise RuntimeError("The generated JavaScript query did not start.")
+        wait_for(lambda: not page.running and idle(), mongo_query_ready,
+                 "running JavaScript on the generated MongoDB fixture")
+
+    def mongo_query_ready():
+        page = state["mongo_query"]
+        execution = page.last_execution
+        result = page.current_result()
+        if (execution is None or execution.error or not execution.child_reaped
+                or result is None or len(result.rows) != 3 or execution.has_confirmed_writes):
+            raise RuntimeError("The generated JavaScript read did not complete with three exact results.")
+        verify_mongo_query_values(execution.value_tree, result.rows)
+        phase("mongodb_javascript_results")
+        hold(2.5, open_mongo_index)
+
+    def open_mongo_index():
+        from opennavicat.ui.mongo_index_designer import MongoIndexDesignerPage
+
+        page = window.open_mongo_index_designer(MONGO_CONNECTION_ID, MONGO_DATABASE,
+                                                MONGO_COLLECTION, "demo_stock_sku")
+        if not isinstance(page, MongoIndexDesignerPage):
+            raise RuntimeError("The demo did not open the integrated index designer.")
+        state["mongo_index_page"] = page
+        wait_for(lambda: page.snapshot is not None and not page.loading and idle(), mongo_index_ready,
+                 "reading the generated compound index")
+
+    def mongo_index_ready():
+        page = state["mongo_index_page"]
+        if [(key.field, key.order) for key in page.definition.keys] != [("stock", -1), ("sku", 1)]:
+            raise RuntimeError("The generated compound index order changed.")
+        page.sparse_check.setChecked(True)
+        phase("mongodb_index_designer")
+        hold(2.2, preview_mongo_index)
+
+    def preview_mongo_index():
+        page = state["mongo_index_page"]
+        page.tabs.setCurrentIndex(5)
+        wait_for(lambda: page._plan is not None and idle(), mongo_index_preview_ready,
+                 "previewing the generated index draft without applying it")
+
+    def mongo_index_preview_ready():
+        if "createIndex(" not in state["mongo_index_page"].sql_preview.toPlainText():
+            raise RuntimeError("The demo index did not render its actual helper preview.")
+        phase("mongodb_index_script_preview")
+        hold(2.5, finish)
 
     def finish():
         capture()
         capture_timer.stop()
         if state["error"] is not None:
             return
+        mongo_session = window.sessions.get(MONGO_CONNECTION_ID)
         def verify_preview():
             with closing(sqlite3.connect(sample)) as database:
                 names = {row[0] for row in database.execute("SELECT name FROM sqlite_master WHERE type='table'")}
                 if "customers" not in names or "customers_demo" in names:
                     raise RuntimeError("The preview unexpectedly changed the demo database.")
+            if mongo is not None:
+                entry = mongo_session.connection[MONGO_DATABASE][MONGO_COLLECTION]
+                actual = entry.index_information().get("demo_stock_sku", {})
+                if actual.get("sparse") or list(actual.get("key", ())) != [("stock", -1), ("sku", 1)]:
+                    raise RuntimeError("The index preview unexpectedly changed the generated database.")
         window.submit(verify_preview, lambda _result: shutdown(), label="验证生成的演示数据")
 
     def shutdown():
@@ -702,12 +791,18 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
             nonlocal discarded, forced_cleanup
             try:
                 if not idle():
+                    query = state.get("mongo_query")
+                    if state["error"] and query is not None and query.running:
+                        query.request_cancel()
                     current = state.get("gridfs_page")
                     if state["error"] and current is not None and current.loading:
                         current.cancel_transfer()
                 elif not window._closed:
                     if not discarded:
                         page = state.get("designer")
+                        if page is not None and page.snapshot is not None:
+                            page.load_snapshot(page.snapshot)
+                        page = state.get("mongo_index_page")
                         if page is not None and page.snapshot is not None:
                             page.load_snapshot(page.snapshot)
                         discarded = True
@@ -754,7 +849,7 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
         raise RuntimeError(state["error"] or "Demo application failed.")
     if not window._closed or not idle():
         raise RuntimeError("The demo exited before its native sessions and window had closed.")
-    if state["count"] < 2 or len(state["phases"]) != (9 if mongo is not None else 6):
+    if state["count"] < 2 or len(state["phases"]) != (13 if mongo is not None else 6):
         raise RuntimeError("The demo did not capture all required workflows.")
     for index, item in enumerate(state["phases"]):
         stop = state["phases"][index + 1]["first_frame"] if index + 1 < len(state["phases"]) else state["count"]
@@ -775,6 +870,8 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
         "mongodb_products": 6 if mongo is not None else 0,
         "mongodb_bson_types_checked": ["Int64","Decimal128"] if mongo is not None else [],
         "mongodb_gridfs_image_previewed": state["gridfs_page"] is not None,
+        "mongodb_javascript_read_completed": state["mongo_query"] is not None,
+        "mongodb_index_preview_applied": False,
         "visible_text_privacy_guard": "labels, editors, titles, actions, combos, tree/table display fields; paths/endpoints/credentials rejected before frame save",
         "sqlite_closed_in_worker": state["sqlite_closed_in_worker"],
         "native_window_closed_before_quit": bool(window._closed),

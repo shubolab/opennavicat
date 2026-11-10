@@ -36,3 +36,21 @@ def test_source_qualification_child_keeps_early_bootstrap_before_hashlib(tmp_pat
         env=environment,cwd=tmp_path,capture_output=True,text=True,check=True,timeout=10)
     assert result.stdout.strip()=='early'
     assert str(tmp_path)in environment['PYTHONPATH'].split(os.pathsep)
+
+
+def test_source_qualification_cannot_inherit_pytest_selection(monkeypatch):
+    monkeypatch.setenv('PYTEST_ADDOPTS','-k test_source_qualification_child_keeps_early_bootstrap_before_hashlib')
+    environment=runner().source_environment()
+    assert 'PYTEST_ADDOPTS' not in environment
+
+
+def test_real_collector_overrides_ini_test_filters(tmp_path):
+    import json
+    (tmp_path/'pytest.ini').write_text('[pytest]\naddopts = -k only_selected\n')
+    source=tmp_path/'test_owned_selection.py'
+    source.write_text('def test_only_selected(): pass\ndef test_other_required(): pass\n')
+    target=tmp_path/'collection.json'
+    result=subprocess.run([sys.executable,'-c',runner().COLLECT,str(target),'-c',str(tmp_path/'pytest.ini'),str(source)],
+        env=runner().source_environment(),cwd=tmp_path,capture_output=True,text=True,timeout=30)
+    assert result.returncode==0,result.stderr
+    assert {value.split('::')[-1] for value in json.loads(target.read_text())}=={'test_only_selected','test_other_required'}

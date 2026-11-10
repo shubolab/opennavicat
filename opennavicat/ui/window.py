@@ -1002,9 +1002,15 @@ class MainWindow(QMainWindow):
         self.tabs.setTabToolTip(index, title + (f"\n集合: {page.collection}" if isinstance(page, MongoIndexDesignerPage) else ""))
         if self.tabs.currentWidget() is page:
             self.setWindowTitle(title)
-            self.inspector.show_object({"name": name or "无标题", "schema": page.schema,
-                "kind": page.kind if isinstance(page, (IndexDesignerPage, TriggerDesignerPage, MongoIndexDesignerPage)) else "table",
-                **({"collection": page.collection} if isinstance(page, MongoIndexDesignerPage) else {})}, config, page.snapshot.ddl if page.snapshot else "")
+            info = {"name": name or "无标题", "schema": page.schema,
+                "kind": page.kind if isinstance(page, (IndexDesignerPage, TriggerDesignerPage, MongoIndexDesignerPage)) else "table"}
+            if isinstance(page, MongoIndexDesignerPage):
+                definition = page.definition
+                info.update(collection=page.collection,
+                    keys=[(key.field, key.order) for key in definition.keys] if definition else [],
+                    options=deepcopy(definition.options) if definition else {},
+                    unique=bool(definition and definition.options.get("unique")))
+            self.inspector.show_object(info, config, page.snapshot.ddl if page.snapshot else "")
 
     def load_designer(self, page):
         if isinstance(page, MongoIndexDesignerPage):

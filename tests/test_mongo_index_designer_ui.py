@@ -1,21 +1,25 @@
 """Real Qt edits and serial-worker MongoDB saves using synthetic owned fixtures."""
 from copy import deepcopy
 from dataclasses import replace
+import json
+import math
 import threading
 import uuid
 
 from bson import Binary, Int64
 from pymongo import MongoClient
 import pytest
-from PySide6.QtCore import QThreadPool, Qt
+from PySide6.QtCore import QThreadPool, Qt, QTimer
+from PySide6.QtGui import QFontMetricsF
 from PySide6.QtTest import QSignalSpy
-from PySide6.QtWidgets import QApplication, QDialogButtonBox, QStyle, QStyleOptionButton, QWidget
+from PySide6.QtWidgets import QApplication, QDialogButtonBox, QStyle, QStyleFactory, QStyleOptionButton, QStyleOptionComboBox, QWidget
 
 from opennavicat.database import ConnectionConfig, DatabaseError
 from opennavicat.mongodb_session import MongoSession
 from opennavicat import mongodb_indexes as tools
 from opennavicat.tasks import Task
 from opennavicat.ui.mongo_index_designer import MongoIndexDeleteDialog, MongoIndexDesignerPage, index_error_text
+from opennavicat.ui.theme import LIGHT_STYLESHEET, STYLESHEET
 from test_mongodb_session import mongodb_service
 
 
@@ -46,6 +50,121 @@ def add_keys(qtbot, page, fields):
     for row, (name, order) in enumerate(fields):
         page.add_action.trigger()
         edit_field(qtbot, page, row, name, order)
+
+
+@pytest.fixture
+def combo_environment(qapp):
+    previous = qapp.styleSheet()
+    qapp.setStyleSheet("")
+    try:
+        yield
+    finally:
+        qapp.setStyleSheet(previous)
+
+
+def combo_geometry(combo):
+    option = QStyleOptionComboBox()
+    combo.initStyleOption(option)
+    edit = combo.style().subControlRect(
+        QStyle.ComplexControl.CC_ComboBox, option,
+        QStyle.SubControl.SC_ComboBoxEditField, combo,
+    )
+    metrics = QFontMetricsF(combo.font())
+    # The label renderer also needs its text inset, not merely an arrow-free
+    # rectangle exactly as wide as the glyphs. Leave one space on either side.
+    required = math.ceil(metrics.horizontalAdvance(combo.currentText()))
+    inset = math.ceil(metrics.horizontalAdvance(" ")) * 2
+    return {"platform": QApplication.platformName(), "style": combo.style().metaObject().className(),
+            "font": combo.font().toString(), "dpr": combo.devicePixelRatioF(),
+            "text": combo.currentText(), "size": combo.size().toTuple(),
+            "hint": combo.sizeHint().toTuple(), "edit": edit.getRect(),
+            "required_text": required, "required_inset": inset}
+
+
+def assert_combo_fits(qtbot, combo):
+    def fits():
+        actual = combo_geometry(combo)
+        # Font/style changes post a layout request. A stale, formerly larger
+        # rectangle can fit the new text before that request has been applied.
+        compact = combo.width() <= min(combo.maximumWidth(), combo.sizeHint().width() + combo.fontMetrics().maxWidth())
+        return (combo.isVisible() and compact
+                and actual["edit"][2] >= actual["required_text"] + actual["required_inset"])
+    try:
+        qtbot.waitUntil(fits, timeout=2000)
+    except Exception:
+        pytest.fail(json.dumps(combo_geometry(combo), ensure_ascii=True))
+    print("INDEX_COMBO_GEOMETRY " + json.dumps(combo_geometry(combo), ensure_ascii=True), flush=True)
+
+
+def set_combo_style(page, name):
+    style = QStyleFactory.create(name)
+    assert style is not None
+    style.setParent(page)  # QWidget.setStyle does not transfer ownership.
+    page.setStyle(style)
+    for combo in (page.collection_combo, page.version_combo):
+        combo.setStyle(style)
+
+
+@pytest.mark.parametrize("style_name", QStyleFactory.keys())
+@pytest.mark.parametrize("pixels", [12, 24, 36])
+@pytest.mark.parametrize("stylesheet", [None, STYLESHEET, LIGHT_STYLESHEET], ids=["native", "dark", "light"])
+def test_async_collection_and_index_version_fit_actual_native_edit_field(
+    qtbot, monkeypatch, combo_environment, style_name, pixels, stylesheet,
+):
+    monkeypatch.setattr(MongoSession, "connect", lambda *_: pytest.fail("Geometry must not connect"))
+    session = MongoSession(ConnectionConfig("generated-layout", "Generated", driver="mongodb", ssl_mode="disable"))
+    snapshot = tools.new_index(session, "demo_catalog")
+    snapshot.definition.collection = "products"
+    snapshot.definition.keys = [tools.IndexKey("stock", -1)]
+    snapshot.definition.options["v"] = 2
+    original = deepcopy(snapshot.definition)
+    page = MongoIndexDesignerPage("generated-layout", "demo_catalog")
+    qtbot.addWidget(page)
+    set_combo_style(page, style_name)
+    font = page.font(); font.setPixelSize(pixels); page.setFont(font)
+    if stylesheet is not None:
+        page.setStyleSheet(stylesheet + f"\nQWidget {{ font-size: {pixels}px; }}")
+    page.resize(1080, 740); page.show()
+    QApplication.processEvents()  # First expose happens before worker metadata.
+    def loaded():
+        page.set_collections(["products"])
+        page.load_snapshot(snapshot)
+    QTimer.singleShot(0, loaded)
+    qtbot.waitUntil(lambda: page.collection_combo.currentText() == "products")
+    for combo, maximum in ((page.collection_combo, 300), (page.version_combo, 160)):
+        assert_combo_fits(qtbot, combo)
+        assert combo.font().pixelSize() == pixels
+        assert combo.width() <= maximum
+    assert page.version_combo.currentText() == "2"
+    assert page.draft() == original and page.snapshot.definition == original
+
+
+def test_collection_and_version_relayout_after_live_font_style_and_metadata_changes(
+    qtbot, offline, combo_environment,
+):
+    page, _ = offline
+    page.set_collections(["docs", "products"])
+    page.collection_combo.setCurrentText("products")
+    page.version_combo.setCurrentText("2")
+    original = page.draft()
+    changes = QSignalSpy(page.dirtyChanged)
+    for style_name in QStyleFactory.keys():
+        set_combo_style(page, style_name)
+        widths = {}
+        for pixels in (12, 36, 18, 12):
+            font = page.font(); font.setPixelSize(pixels); page.setFont(font)
+            QApplication.processEvents()
+            for name, combo in (("collection", page.collection_combo), ("version", page.version_combo)):
+                assert_combo_fits(qtbot, combo)
+                widths[pixels, name] = combo.width()
+            assert page.draft() == original and page.version_combo.currentText() == "2"
+        for name in ("collection", "version"):
+            assert widths[36, name] > widths[12, name]
+    # Late catalog refresh retains the selected owner and does not edit BSON.
+    page.set_collections(["other", "products", "docs"])
+    assert_combo_fits(qtbot, page.collection_combo)
+    assert page.collection_combo.currentText() == "products" and page.draft() == original
+    assert changes.count() == 0
 
 
 def test_six_real_pages_ordered_keys_advanced_options_and_invalid_json_gate(qtbot, offline):

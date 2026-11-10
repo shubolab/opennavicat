@@ -148,7 +148,10 @@ def test_real_window_index_save_preserves_open_document_and_exact_draft(qtbot, i
     edit.editor.setPlainText(text)
     assert data.dirty
     page = designer(qtbot, window, config)
+    assert "字段\nname\n" in window.inspector.details.text()
+    assert "版本\n2\n" in window.inspector.details.text()
     page.sparse_check.setChecked(True)
+    assert "稀疏\n是\n" in window.inspector.details.text()
     accept_save(qtbot, window, page)
     assert database.docs.index_information()["same_name"]["sparse"] is True
     assert data.dirty and data._dialog is edit and edit.editor.toPlainText() == text

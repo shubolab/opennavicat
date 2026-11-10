@@ -271,3 +271,137 @@ def test_unknown_provider_or_database_authentication_is_not_silently_password(so
     write_source(source, {"PostgreSQL": {"Authentication": profile(**extra)}})
     p = discover(source).profiles[0]
     assert p.blocked and field in p.unsupported_fields
+
+
+def test_unobserved_numeric_tls_mode_cannot_be_lost_as_empty_text(source):
+    write_source(source, {"PostgreSQL": {"Numeric TLS": profile(usessl=True, ssl_param=dict(mode=99, verifyca=False))}})
+    p = discover(source).profiles[0]
+    assert p.blocked and p.config.ssl_mode == "verify-full"
+    assert "ssl_param.mode" in p.unsupported_fields
+
+
+def test_empty_native_uuid_does_not_merge_same_name_across_source_namespaces(source):
+    path = source / "Common/conn.plist"
+    content = {"workspace-a": {"PostgreSQL": {"Same display name": profile(native_id="", host="a.invalid")}},
+               "workspace-b": {"PostgreSQL": {"Same display name": profile(native_id="", host="b.invalid")}}}
+    path.write_bytes(plistlib.dumps(content))
+    first = discover(source)
+    assert len(first.profiles) == 2
+    ids = {r.config.host: r.source_id for r in first.profiles}
+    assert ids["a.invalid"] != ids["b.invalid"]
+    # Another connection and a different dictionary order must not shift IDs.
+    content["workspace-a"]["PostgreSQL"]["Added"] = profile(native_id="extra")
+    path.write_bytes(plistlib.dumps(dict(reversed(list(content.items())))))
+    later = discover(source)
+    assert {r.config.host: r.source_id for r in later.profiles if r.config.name == "Same display name"} == ids
+    assert "workspace-a" not in repr(first) and "a.invalid" not in repr(first)
+
+
+def test_ambiguous_name_based_group_member_is_not_assigned_to_wrong_namespace(source):
+    path = source / "Common/conn.plist"
+    path.write_bytes(plistlib.dumps({"a": {"PostgreSQL": {"Same": profile(native_id="a")}},
+                                    "b": {"PostgreSQL": {"Same": profile(native_id="b")}}}))
+    groups = source / "Navicat Premium/Profiles/vgroup.json"
+    groups.parent.mkdir(parents=True)
+    groups.write_text(json.dumps({"vgroups": [{"vgroup_name": "Example", "vgroup_type": "CONNECTION", "items": [
+        {"name": "Same", "server_type": "PGSQL", "type": "CONNECTION"}]}]}))
+    r = discover(source)
+    assert len(r.profiles) == 2 and all(not p.group_path for p in r.profiles)
+    assert "ambiguous_group_members" in {i.code for i in r.issues}
+
+
+@pytest.mark.parametrize("flag", ["usessl", "usetunnel"])
+def test_missing_remote_transport_state_is_unknown_not_insecure_default(source, flag):
+    row = profile()
+    del row[flag]
+    write_source(source, {"PostgreSQL": {"Incomplete transport": row}})
+    p = discover(source).profiles[0]
+    assert p.blocked and flag in p.unsupported_fields
+    if flag == "usessl":
+        assert p.config.ssl_mode == "verify-full"
+
+
+@pytest.mark.parametrize("native,expected", [(0,"password"),(1,"key"),(2,"password+key"),("0","password"),("1","key"),("2","password+key")])
+def test_observed_mac_ssh_numeric_enums_and_historic_text_numerals(source, native, expected):
+    write_source(source, {"PostgreSQL": {"Synthetic": profile(usetunnel=True, ssh_param=dict(authtype=native,host="jump.invalid",username="probe",pkeyfile="/synthetic/unused-key",usecompression=True))}})
+    p = discover(source).profiles[0]
+    assert not p.blocked and p.config.ssh_auth_method == expected
+    assert p.config.ssh_compression
+    assert not p.config.ssh_password and not p.config.ssh_key_passphrase
+
+
+@pytest.mark.parametrize("native,expected", [("允许","allow"),("prefer","prefer"),("require","require"),("verify-ca","verify-ca"),("verify-full","verify-full")])
+def test_observed_mac_pg_tls_modes_override_inactive_generic_validation_flags(source, native, expected):
+    ssl = dict(mode=native,verifyca=False,allowinvalidhostname=False,weakcertvalidation=True,useauth=False,
+               rootcert="",cacert="",clientcert="",clientkeyfile="",crlfile="")
+    write_source(source, {"PostgreSQL": {"Synthetic": profile(usessl=True,ssl_param=ssl)}})
+    p = discover(source).profiles[0]
+    assert not p.blocked and p.config.ssl_mode == expected
+
+
+@pytest.mark.parametrize("enabled", [False,True])
+def test_observed_mac_pg_custom_certificate_toggle_gates_retained_paths(source, enabled):
+    ssl = dict(mode="verify-full",verifyca=False,weakcertvalidation=True,useauth=enabled,
+               rootcert="/synthetic/ca.pem",clientcert="/synthetic/client.pem",clientkeyfile="/synthetic/key.pem",
+               crlfile="/synthetic/crl.pem",saveclientkeypassword=True,pemclientkeypassword="CIPHERTEXT")
+    write_source(source, {"PostgreSQL": {"Synthetic": profile(usessl=True,ssl_param=ssl)}})
+    p = discover(source).profiles[0]
+    assert not p.blocked
+    assert (p.config.ssl_ca,p.config.ssl_cert,p.config.ssl_key,p.config.ssl_crl) == (
+        ("/synthetic/ca.pem","/synthetic/client.pem","/synthetic/key.pem","/synthetic/crl.pem") if enabled else ("","","",""))
+    assert ("ssl_key_password" in p.requires_secrets) is enabled
+    assert p.config.ssl_key_password == ""
+
+
+def test_numeric_ssh_mapping_is_not_invented_for_unaccepted_registry_or_json(source):
+    row = profile(usetunnel=True,ssh_param=dict(authtype=1,host="jump.invalid",username="probe",pkeyfile="/synthetic/key"))
+    reg = discover_navicat_profiles(platform="win32",registry_reader=lambda:[RegistryProfile("PostgreSQL","Example",row)])
+    assert reg.profiles[0].blocked and "ssh_param.authtype" in reg.profiles[0].unsupported_fields
+    (source/"Common/connections.json").write_text(json.dumps({"PostgreSQL":{"Example":row}}))
+    linux = discover_navicat_profiles(source,platform="linux")
+    assert linux.profiles[0].blocked and "ssh_param.authtype" in linux.profiles[0].unsupported_fields
+
+
+def test_pg_tls_custom_file_toggle_unknown_state_remains_blocked(source):
+    write_source(source, {"PostgreSQL": {"Synthetic": profile(usessl=True,ssl_param=dict(mode="verify-full",useauth="unknown",rootcert="/synthetic/ca.pem"))}})
+    p = discover(source).profiles[0]
+    assert p.blocked and "ssl_param.useauth" in p.unsupported_fields
+    assert p.config.ssl_ca == ""
+
+
+def test_generic_weak_validation_flag_is_not_assumed_inactive_for_other_drivers(source):
+    write_source(source, {"MySQL": {"Synthetic": profile(usessl=True,ssl_param=dict(mode="verify-full",weakcertvalidation=True))}})
+    p = discover(source).profiles[0]
+    assert p.blocked and "ssl_param.weakcertvalidation" in p.unsupported_fields
+
+
+@pytest.mark.parametrize("field,value", [("type",99),("type",None),("authenticationmode",99),("authenticationmode",None)])
+def test_redis_unknown_typed_topology_or_auth_is_not_defaulted_to_single_no_auth(source, field, value):
+    row = profile(type="Standalone",authenticationmode="None")
+    row[field] = value
+    if value is None:
+        (source/"Common/connections.json").write_text(json.dumps({"REDIS":{"Synthetic":row}}))
+        p = discover_navicat_profiles(source,platform="linux").profiles[0]
+    else:
+        write_source(source,{"REDIS":{"Synthetic":row}})
+        p = discover(source).profiles[0]
+    assert p.blocked and field in p.unsupported_fields
+
+
+@pytest.mark.parametrize("database,expected", [(0,"0"),(2,"2"),("12","12")])
+def test_redis_explicit_database_number_is_preserved(source,database,expected):
+    write_source(source,{"REDIS":{"Synthetic":profile(type="Standalone",authenticationmode="None",database=database)}})
+    p = discover(source).profiles[0]
+    assert not p.blocked and p.config.database == expected
+
+
+@pytest.mark.parametrize("database", [-1,True,"other",None])
+def test_redis_invalid_database_is_blocked_before_default_database_can_be_used(source,database):
+    row = profile(type="Standalone",authenticationmode="None",database=database)
+    if database is None:
+        (source/"Common/connections.json").write_text(json.dumps({"REDIS":{"Synthetic":row}}))
+        p = discover_navicat_profiles(source,platform="linux").profiles[0]
+    else:
+        write_source(source,{"REDIS":{"Synthetic":row}})
+        p = discover(source).profiles[0]
+    assert p.blocked and "database" in p.unsupported_fields

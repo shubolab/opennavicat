@@ -1,6 +1,6 @@
 {
   "application": "OpenNavicat",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "theme": "dark",
   "capture": "Actual live Qt QWidget.grab frames; no generated artwork or reference screenshots",
   "qt_platform": "offscreen",
@@ -10,8 +10,8 @@
     900
   ],
   "fps": 6,
-  "frames": 85,
-  "duration_seconds": 14.17,
+  "frames": 88,
+  "duration_seconds": 14.67,
   "loop": "infinite",
   "data": "All connection names, customer data, email addresses, dates and SQL generated for this demo",
   "connection_name": "演示数据库 · 示例数据",
@@ -50,37 +50,26 @@
     {
       "name": "table_designer",
       "first_frame": 57,
-      "frames": 11
+      "frames": 12
     },
     {
       "name": "designer_sql_preview",
-      "first_frame": 68,
-      "frames": 17
+      "first_frame": 69,
+      "frames": 19
     }
   ],
-  "captured_nominal_duration_seconds": 14.167,
+  "captured_nominal_duration_seconds": 14.667,
   "gif_probe": {
-    "frames": 85,
-    "duration_seconds": 14.17,
+    "frames": 88,
+    "duration_seconds": 14.67,
     "r_frame_rate": "6/1",
     "avg_frame_rate": "25/4",
-    "effective_frames_per_second": 5.998589,
+    "effective_frames_per_second": 5.998637,
     "note": "GIF delays are quantized to centiseconds; fps is the requested capture rate."
   },
   "encoder": "ffmpeg version 8.0.1 Copyright (c) 2000-2025 the FFmpeg developers",
-  "gif_bytes": 336504,
-  "gif_sha256": "0e383846fc888fac79ee685f1a39a9b1ca2b6f7e28e036d5659b6b92aae95343",
+  "gif_bytes": 326571,
+  "gif_sha256": "b30decae253f4164f42600d4842ebc7db90122101fae8c6d5b2a344c80705500",
   "temporary_workspace_removed": true,
-  "temporary_frame_files_removed": true,
-  "visual_review": {
-    "reviewed": true,
-    "views": [
-      "final six-phase contact sheet",
-      "object information pane",
-      "full selected-name-field designer properties",
-      "full query results",
-      "full actual SQL preview"
-    ],
-    "result": "Only generated connection/customer/email/city/date/SQL data; Chinese labels and field properties visible; no local filesystem paths or real user/business data observed."
-  }
+  "temporary_frame_files_removed": true
 }

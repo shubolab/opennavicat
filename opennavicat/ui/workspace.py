@@ -54,8 +54,8 @@ class ObjectBrowser(QWidget):
         self.system_indexes_check = QCheckBox("显示系统索引")
         self.system_indexes_check.setObjectName("showSystemIndexes")
         self.system_indexes_check.toggled.connect(self.refresh)
-        self.toolbar.addWidget(self.system_indexes_check)
-        self.system_indexes_check.hide()
+        self.system_indexes_action = self.toolbar.addWidget(self.system_indexes_check)
+        self.system_indexes_action.setVisible(False)
         layout.addWidget(self.toolbar)
         self.table = QTableWidget(0, 5)
         self.table.setObjectName("objectList")
@@ -93,7 +93,7 @@ class ObjectBrowser(QWidget):
                    "trigger": ["名称", "类型", "表名称", "触发", ""]}.get(kind,
                    ["名称", "根页面", "有索引", "有触发器", ""])
         self.table.setHorizontalHeaderLabels(headers)
-        self.system_indexes_check.setVisible(kind == "index")
+        self.system_indexes_action.setVisible(kind == "index")
         if kind == "redis_data":
             self.table.setHorizontalHeaderLabels(["名称", "创建日期", "修改日期", "", ""])
         self.open_action.setVisible(kind not in {"index", "trigger"})

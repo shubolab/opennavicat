@@ -1,5 +1,6 @@
 """Real selector interactions and URI handoff; not a claim of UI parity."""
 from dataclasses import fields
+from pathlib import Path
 
 import pytest
 
@@ -179,7 +180,8 @@ def test_uri_dialog_real_handoff_is_masked_and_never_creates_sqlite_file(qtbot, 
     qtbot.mouseClick(uri.next_button, Qt.MouseButton.LeftButton)
     assert spy.count() == 1
     kind, preset = spy.at(0)
-    assert kind == "sqlite" and preset["database"] == str(target)
+    assert kind == "sqlite"
+    assert Path(preset["database"]) == target
     assert preset["read_only"] is True
     assert not target.exists()
     assert uri.uri_edit.text() == ""

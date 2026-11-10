@@ -256,7 +256,7 @@ class QueryPage(QWidget):
 
     @property
     def supports_explain(self):
-        return self.protocol_driver not in {"redis", "sqlserver"} and callable(getattr(self.window, "explain_query", None))
+        return self.protocol_driver in {"sqlite", "postgresql", "mysql", "mariadb"} and callable(getattr(self.window, "explain_query", None))
 
     def _initial_schema(self, connection_id):
         config = self.window.configs[connection_id]

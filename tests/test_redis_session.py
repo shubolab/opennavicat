@@ -387,12 +387,19 @@ def tls_service(tmp_path_factory):
            .add_extension(x509.BasicConstraints(ca=True,path_length=None),critical=True).sign(other_key,hashes.SHA256()))
     (directory/"wrong-ca.pem").write_bytes(other.public_bytes(serialization.Encoding.PEM))
     identifier="opennavicat-redis-tls-"+uuid.uuid4().hex[:12]
-    container=_docker("run","--detach","--rm","--name",identifier,"--label","opennavicat.test=true",
-        "--label","opennavicat.task=redis-adapter-tests","--user","0:0","--publish","127.0.0.1::6379",
-        "--mount",f"type=bind,source={directory},target=/owned-certs,readonly","redis:7-alpine","redis-server",
-        "--save","","--appendonly","no","--port","0","--tls-port","6379","--tls-cert-file","/owned-certs/server.pem",
-        "--tls-key-file","/owned-certs/server.key","--tls-ca-cert-file","/owned-certs/ca.pem","--tls-auth-clients","yes","--requirepass","owned-tls-password")
+    container=identifier
     try:
+        # The image's default entrypoint drops UID 0 to redis, even with --user
+        # 0:0. Native Linux pytest directories are 0700 and owned by the runner;
+        # that UID cannot traverse this read-only mount. Run redis-server as the
+        # explicitly selected fixture user without relaxing any TLS option.
+        # Keep failed containers until diagnostics are collected below.
+        container=_docker("run","--detach","--name",identifier,"--label","opennavicat.test=true",
+            "--label","opennavicat.task=redis-adapter-tests","--user","0:0","--publish","127.0.0.1::6379",
+            "--mount",f"type=bind,source={directory},target=/owned-certs,readonly",
+            "--entrypoint","redis-server","redis:7-alpine",
+            "--save","","--appendonly","no","--port","0","--tls-port","6379","--tls-cert-file","/owned-certs/server.pem",
+            "--tls-key-file","/owned-certs/server.key","--tls-ca-cert-file","/owned-certs/ca.pem","--tls-auth-clients","yes","--requirepass","owned-tls-password")
         port=int(_docker("port",container,"6379/tcp").rsplit(":",1)[1])
         config=ConnectionConfig(identifier,"Owned Redis TLS",driver="redis",host="localhost",port=port,database="0",password="owned-tls-password",
             ssl_mode="verify-full",ssl_ca=str(directory/"ca.pem"),ssl_cert=str(directory/"client.pem"),ssl_key=str(directory/"client.key"),
@@ -406,6 +413,14 @@ def tls_service(tmp_path_factory):
                 time.sleep(.1)
             finally:probe.close()
         yield config,directory
+    except BaseException as error:
+        with contextlib.suppress(Exception):
+            logs=subprocess.run(["docker","logs","--tail","80",container],capture_output=True,text=True,timeout=10)
+            diagnostic=Path("artifacts/security-integration") / f"{identifier}-startup.log"
+            diagnostic.parent.mkdir(parents=True,exist_ok=True)
+            diagnostic.write_text(logs.stdout+logs.stderr,"utf-8")
+            error.add_note(f"Owned Redis TLS startup diagnostics retained before cleanup: {diagnostic}")
+        raise
     finally:
         subprocess.run(["docker","rm","--force",container],capture_output=True,timeout=15)
 

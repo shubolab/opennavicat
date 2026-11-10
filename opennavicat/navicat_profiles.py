@@ -132,29 +132,29 @@ def _load(path: Path, kind: str):
 def _records(data: object):
     """Yield primary records under recognized driver families, not SSH dicts."""
     found = 0
-    def walk(value, driver=None, name="", depth=0):
+    def walk(value, driver=None, name="", depth=0, path=()):
         nonlocal found
         if depth > _MAX_DEPTH or found >= _MAX_PROFILES:
             raise ValueError("source_structure_limit")
         if isinstance(value, dict):
             if driver and "connection_uuid" in value:
                 found += 1
-                yield driver, name, value
+                yield driver, name, value, path[:-1]
                 return
             for key, child in value.items():
                 drv = None if driver and isinstance(child, dict) and "connection_uuid" in child else _driver(key)
                 # Source profile display names can happen to equal 'MySQL'. A
                 # primary record is anchored by UUID before interpreting keys.
-                yield from walk(child, drv or driver, str(key), depth + 1)
+                yield from walk(child, drv or driver, str(key), depth + 1, path + (str(key),))
         elif isinstance(value, list):
             for child in value:
                 if isinstance(child, dict) and "connection_uuid" in child:
                     drv = _driver(child.get("server_type") or child.get("driver")) or driver
                     if drv:
                         found += 1
-                        yield drv, _text(child.get("name")), child
+                        yield drv, _text(child.get("name")), child, path
                 else:
-                    yield from walk(child, driver, name, depth + 1)
+                    yield from walk(child, driver, name, depth + 1, path)
     yield from walk(data)
 
 
@@ -196,9 +196,10 @@ def _groups(data: object, issues: list[ImportIssue]):
 
 
 def _convert(driver: str, name: str, original: Mapping, source: str, source_format: str,
-             group_paths: tuple[tuple[str, ...], ...], issues: list[ImportIssue]) -> ImportedProfile:
+             group_paths: tuple[tuple[str, ...], ...], issues: list[ImportIssue],
+             identity_scope: tuple[str, ...] = ()) -> ImportedProfile:
     native_id = _text(original.get("connection_uuid"))
-    identity = f"{driver}\0{native_id}" if native_id else f"{driver}\0{source}\0{name}"
+    identity = f"{driver}\0{native_id}" if native_id else json.dumps([driver, source, identity_scope, name], ensure_ascii=False, separators=(",", ":"))
     source_id = "navicat:" + str(uuid.uuid5(_NAMESPACE, identity))
     config = ConnectionConfig("navicat-" + source_id[8:], name or "Imported connection", driver=driver,
                               host="", ssl_mode="disable")
@@ -268,7 +269,7 @@ def _convert(driver: str, name: str, original: Mapping, source: str, source_form
                 issue("unsupported_database_authentication", "The database authentication mode needs review.", (field_name,))
     if record.get("unknownjsonproperties"):
         issue("unknown_connection_options", "The source contains additional connection options that need review.", ("unknownjsonproperties",))
-    tls = _enabled(record.get("usessl", False))
+    tls = _enabled(record.get("usessl", False if driver == "sqlite" else None))
     if tls is None:
         issue("unknown_tls_state", "The source TLS enablement state is not recognized.", ("usessl",))
     if tls is not False:
@@ -276,10 +277,15 @@ def _convert(driver: str, name: str, original: Mapping, source: str, source_form
         params = record.get("ssl_param", {})
         if not isinstance(params, dict):
             params = {}
-        mode = _text(params.get("mode")).lower().replace("_", "-")
+        raw_mode = params.get("mode")
+        mode = _text(raw_mode).lower().replace("_", "-")
+        # Navicat 18.0.5/macOS saves the localized label for PG's allow mode.
+        # The other four choices are stored as their libpq mode strings.
+        if source_format == "macos-plist" and driver == "postgresql" and mode == "允许":
+            mode = "allow"
         if mode in {"allow", "prefer", "require", "verify-ca", "verify-full"}:
             config.ssl_mode = mode
-        elif not mode and "verifyca" in params and _enabled(params["verifyca"]) is not None:
+        elif raw_mode in (None, "") and "verifyca" in params and _enabled(params["verifyca"]) is not None:
             verify = _enabled(params["verifyca"])
             invalid = _enabled(params.get("allowinvalidhostname", False))
             if invalid is None:
@@ -287,18 +293,34 @@ def _convert(driver: str, name: str, original: Mapping, source: str, source_form
             config.ssl_mode = "require" if not verify else "verify-ca" if invalid else "verify-full"
         else:
             issue("unknown_tls_mode", "The selected TLS mode cannot be mapped safely.", ("ssl_param.mode",))
-        for target, keys in (("ssl_ca", ("cacert", "rootcert")), ("ssl_cert", ("clientcert",)),
-                             ("ssl_key", ("clientkeyfile",)), ("ssl_crl", ("crlfile",))):
-            values = {_text(params.get(k)) for k in keys} - {""}
-            if len(values) > 1:
-                issue("ambiguous_tls_files", "Multiple incompatible TLS file settings need review.", tuple("ssl_param." + k for k in keys))
-            elif values:
-                setattr(config, target, next(iter(values)))
-        if bool(config.ssl_cert) != bool(config.ssl_key):
-            issue("incomplete_client_certificate", "Both TLS client certificate and key are required.", ("ssl_param.clientcert", "ssl_param.clientkeyfile"))
-        if params.get("pemclientkeypassword") or _enabled(params.get("saveclientkeypassword", False)):
-            secrets.add("ssl_key_password")
+        files_enabled = True
+        if source_format == "macos-plist" and driver == "postgresql" and "useauth" in params:
+            # Observed on/off in the owned 18.0.5 PG profile: turning this off
+            # disables all four inputs but leaves their old paths in the plist.
+            selected = _enabled(params["useauth"])
+            files_enabled = selected is True
+            if selected is None:
+                issue("unknown_tls_file_state", "The custom TLS file enablement state is not recognized.", ("ssl_param.useauth",))
+        if files_enabled:
+            ca_keys = ("rootcert",) if source_format == "macos-plist" and driver == "postgresql" else ("cacert", "rootcert")
+            if source_format == "macos-plist" and driver == "postgresql" and params.get("cacert"):
+                issue("unsupported_tls_option", "An additional TLS certificate option needs review.", ("ssl_param.cacert",))
+            for target, keys in (("ssl_ca", ca_keys), ("ssl_cert", ("clientcert",)),
+                                 ("ssl_key", ("clientkeyfile",)), ("ssl_crl", ("crlfile",))):
+                values = {_text(params.get(k)) for k in keys} - {""}
+                if len(values) > 1:
+                    issue("ambiguous_tls_files", "Multiple incompatible TLS file settings need review.", tuple("ssl_param." + k for k in keys))
+                elif values:
+                    setattr(config, target, next(iter(values)))
+            if bool(config.ssl_cert) != bool(config.ssl_key):
+                issue("incomplete_client_certificate", "Both TLS client certificate and key are required.", ("ssl_param.clientcert", "ssl_param.clientkeyfile"))
+            if params.get("pemclientkeypassword") or _enabled(params.get("saveclientkeypassword", False)):
+                secrets.add("ssl_key_password")
         for flag in ("weakcertvalidation",):
+            # The generic field remains True across all five observed PG modes,
+            # including verify-full; PG's mode is the authoritative setting.
+            if source_format == "macos-plist" and driver == "postgresql":
+                continue
             if _enabled(params.get(flag, False)) is not False:
                 issue("unsupported_tls_option", "A custom TLS validation option needs review.", ("ssl_param." + flag,))
         for flag in ("cipher", "servernameindication"):
@@ -306,7 +328,7 @@ def _convert(driver: str, name: str, original: Mapping, source: str, source_form
                 issue("unsupported_tls_option", "A custom TLS option needs review.", ("ssl_param." + flag,))
         if (driver == "redis" and config.ssl_mode in {"allow", "prefer"}) or (driver != "postgresql" and config.ssl_mode == "allow"):
             issue("unsupported_tls_mode", "This adapter cannot use opportunistic TLS.", ("ssl_param.mode",))
-    tunnel = _enabled(record.get("usetunnel", False))
+    tunnel = _enabled(record.get("usetunnel", False if driver == "sqlite" else None))
     if tunnel is None:
         issue("unknown_ssh_state", "The SSH enablement state is not recognized.", ("usetunnel",))
     if tunnel is not False:
@@ -326,10 +348,13 @@ def _convert(driver: str, name: str, original: Mapping, source: str, source_form
         except (ValueError, TypeError, OverflowError):
             issue("invalid_ssh_port", "The SSH port is invalid.", ("ssh_param.port",))
         method = str(ssh.get("authtype", "")).lower()
-        # Textual values are unambiguous. Numeric reference enums are enabled
-        # only after a controlled saved-profile observation establishes them.
+        # Numeric values were observed by saving the three choices in an owned
+        # macOS 18.0.5 profile. Historic macOS records use text numerals instead
+        # of ints. Do not assume an unaccepted native registry/JSON mapping.
         methods = {"password": "password", "key": "key", "publickey": "key",
                    "password+key": "password+key", "agent": "agent"}
+        if source_format == "macos-plist":
+            methods.update({"0": "password", "1": "key", "2": "password+key"})
         if method in methods:
             config.ssh_auth_method = methods[method]
         else:
@@ -345,11 +370,22 @@ def _convert(driver: str, name: str, original: Mapping, source: str, source_form
         # Host-key pins are never invented or copied from a different format.
         # The application's existing explicit trust workflow handles first use.
     if driver == "redis":
-        config.database = _text(record.get("database"), "0") or "0"
-        topology = _text(record.get("type"), "Standalone").lower()
+        raw_database = record.get("database", "0")
+        if ((isinstance(raw_database, int) and not isinstance(raw_database, bool)) or
+                (isinstance(raw_database, str) and re.fullmatch(r"[0-9]+", raw_database))):
+            number = int(raw_database)
+            if 0 <= number <= 2147483647:
+                config.database = str(number)
+            else:
+                config.database = "0"
+                issue("invalid_redis_database", "The source Redis database number is invalid.", ("database",))
+        else:
+            config.database = "0"
+            issue("invalid_redis_database", "The source Redis database number is invalid.", ("database",))
+        topology = _text(record.get("type")).lower()
         if topology not in {"standalone", "single"}:
             issue("unsupported_redis_topology", "The Redis topology requires an adapter that is not yet available.", ("type",))
-        auth = _text(record.get("authenticationmode"), "None").lower()
+        auth = _text(record.get("authenticationmode")).lower()
         if auth in {"none", "no authentication"}:
             config.username = ""
             secrets.discard("password")
@@ -443,12 +479,19 @@ def discover_navicat_profiles(root: str | os.PathLike | None = None, *, platform
             sources += 1
         except Exception:
             issues.append(ImportIssue("groups_read_failed", "The virtual-group metadata source could not be read safely."))
-    identities = {(drv, name) for drv, name, _ in records}
+    identity_counts: dict[tuple[str, str], int] = {}
+    for drv, name, _, _ in records:
+        identity_counts[(drv, name)] = identity_counts.get((drv, name), 0) + 1
+    identities = set(identity_counts)
+    for key in set(groups) & identities:
+        if identity_counts[key] > 1:
+            groups.pop(key)
+            issues.append(ImportIssue("ambiguous_group_members", "A group member matches multiple source namespaces and was left ungrouped."))
     if set(groups) - identities:
         issues.append(ImportIssue("unresolved_group_members", "Some virtual-group members do not match a discovered connection."))
-    for driver, name, record in records:
+    for driver, name, record, scope in records:
         try:
-            profiles.append(_convert(driver, name, record, str(path), "macos-plist" if path.suffix.lower() == ".plist" else "linux-json", tuple(groups.get((driver, name), ())), issues))
+            profiles.append(_convert(driver, name, record, str(path), "macos-plist" if path.suffix.lower() == ".plist" else "linux-json", tuple(groups.get((driver, name), ())), issues, scope))
         except Exception:
             # No raw exception text: malformed content can include credentials.
             issues.append(ImportIssue("profile_read_failed", "A connection metadata entry could not be converted safely."))

@@ -3,6 +3,7 @@ from __future__ import annotations
 import time
 import uuid
 from copy import deepcopy
+from dataclasses import replace
 from pathlib import Path
 
 from PySide6.QtCore import QByteArray, QSize, Qt, QThreadPool, QTimer, Signal
@@ -16,7 +17,8 @@ from PySide6.QtWidgets import (
     QTableWidgetItem, QToolBar, QToolButton, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget,
 )
 
-from ..database import ConnectionConfig, DatabaseSession
+from ..database import ConnectionConfig, DatabaseSession, SUPPORTED_DRIVERS
+from ..navicat_profiles import discover_navicat_profiles
 from .. import __version__
 from ..compare import compare_tables
 from ..storage import Store, create_sample
@@ -423,6 +425,8 @@ class TablePage(QWidget):
 
 
 class MainWindow(QMainWindow):
+    navicat_discovery_finished = Signal(dict)
+
     def __init__(self, store=None):
         super().__init__()
         self.store = store or Store()
@@ -439,6 +443,11 @@ class MainWindow(QMainWindow):
         self.query_number = 0
         self._connecting = set()
         self._closed = False
+        self._navicat_discovering = False
+        self._navicat_pending_configs = set()
+        self.last_navicat_counts = None
+        self._tree_generation = 0
+        self._loading_object_nodes = set()
         self._focus_page = None
         self.setWindowTitle("OpenNavicat")
         self.resize(1512, 920)
@@ -662,6 +671,14 @@ class MainWindow(QMainWindow):
         tools.addAction(self.action("数据同步…", self.compare_data))
         tools.addSeparator()
         tools.addAction(self.action("备份数据库…", self.backup_sqlite))
+        tools.addSeparator()
+        self.navicat_reload_action = self.action("从 Navicat 重新加载连接", self.start_navicat_discovery)
+        tools.addAction(self.navicat_reload_action)
+        self.navicat_auto_action = QAction("启动时自动加载 Navicat 连接", self)
+        self.navicat_auto_action.setCheckable(True)
+        self.navicat_auto_action.setChecked(bool(self.store.state.get("navicat_auto_discover", True)))
+        self.navicat_auto_action.toggled.connect(self._set_navicat_auto_discover)
+        tools.addAction(self.navicat_auto_action)
         help_menu = self.menuBar().addMenu("帮助")
         help_menu.addAction(self.action("键盘快捷键", self.shortcuts))
         help_menu.addAction(self.action("关于 OpenNavicat", self.about))
@@ -869,7 +886,7 @@ class MainWindow(QMainWindow):
         if self.tabs.currentWidget() is page:
             self.setWindowTitle(title)
             self.inspector.show_object({"name": name or "无标题", "schema": page.schema,
-                "kind": getattr(page, "kind", "table")}, config, page.snapshot.ddl if page.snapshot else "")
+                "kind": page.kind if isinstance(page, (IndexDesignerPage, TriggerDesignerPage)) else "table"}, config, page.snapshot.ddl if page.snapshot else "")
 
     def load_designer(self, page):
         session = self.sessions.get(page.connection_id)
@@ -1019,28 +1036,186 @@ class MainWindow(QMainWindow):
     def error(self, exc):
         QMessageBox.critical(self, "操作失败", str(exc))
 
+    def _set_navicat_auto_discover(self, enabled):
+        had_value = "navicat_auto_discover" in self.store.state
+        previous = self.store.state.get("navicat_auto_discover", True)
+        self.store.state["navicat_auto_discover"] = bool(enabled)
+        try:
+            self.store.flush()
+        except Exception as error:
+            if had_value:
+                self.store.state["navicat_auto_discover"] = previous
+            else:
+                self.store.state.pop("navicat_auto_discover", None)
+            self.navicat_auto_action.blockSignals(True)
+            self.navicat_auto_action.setChecked(bool(previous))
+            self.navicat_auto_action.blockSignals(False)
+            self.error(error)
+
+    def start_navicat_discovery(self, checked=False):
+        """Explicit metadata-only startup/manual refresh, with no implicit login."""
+        if self._closed or self._navicat_discovering:
+            return False
+        self._navicat_discovering = True
+        self.navicat_reload_action.setEnabled(False)
+        def failed(_error):
+            if self._closed:
+                return
+            self.last_navicat_counts = {"failed": 1}
+            self.statusBar().showMessage("无法重新加载 Navicat 连接；现有连接和分组保持不变。", 8000)
+            self.navicat_discovery_finished.emit(self.last_navicat_counts)
+        def done(report):
+            if self._closed:
+                return
+            unavailable = {"source_read_failed", "registry_read_failed", "unsupported_source_structure",
+                           "windows_discovery_pending", "unsupported_platform"}
+            if not report.profiles and any(issue.code in unavailable for issue in report.issues):
+                failed(None)
+                return
+            try:
+                counts = self.store.sync_navicat_profiles(report)
+                configs = {config.id: config for config in self.store.connections()}
+            except Exception:
+                failed(None)
+                return
+            pending = set()
+            for identifier, session in self.sessions.items():
+                stored = configs.get(identifier)
+                current = replace(session.config, **{field: "" for field in self.store.SECRET_FIELDS})
+                if stored is not None and stored != current and identifier in self.store.state.get("navicat_imports", {}):
+                    pending.add(identifier)
+                # The executing session and every UI operation retain exactly
+                # the same endpoint/config until an explicit disconnect.
+                configs[identifier] = session.config
+            self._navicat_pending_configs = pending
+            self.configs = configs
+            self.populate_connections()
+            self.update_schema_picker()
+            self.refresh_actions()
+            self.last_navicat_counts = dict(counts, pending=len(pending))
+            message = (f"已加载 {counts['total']} 个 Navicat 连接：新增 {counts['added']}，更新 {counts['updated']}，"
+                       f"保留本地编辑 {counts['preserved']}，待复核 {counts['blocked']}。")
+            if pending:
+                message += f" {len(pending)} 个已连接配置将在关闭连接后更新。"
+            self.statusBar().showMessage(message, 10000)
+            self.navicat_discovery_finished.emit(self.last_navicat_counts)
+        def finished():
+            self._navicat_discovering = False
+            if not self._closed:
+                self.navicat_reload_action.setEnabled(True)
+        self.submit(discover_navicat_profiles, done, failed, "加载 Navicat 连接元数据", finished)
+        return True
+
+    def _connection_tooltip(self, config):
+        lines = [f"{config.driver} · {config.database}"]
+        imported = self.store.state.get("navicat_imports", {}).get(config.id)
+        if imported:
+            if imported.get("source_missing"):
+                lines.append("来源已移除；保留本地连接")
+            if config.driver not in SUPPORTED_DRIVERS:
+                lines.append("未实现驱动；仅保留连接元数据")
+            elif imported.get("blocked"):
+                fields = imported.get("unsupported_fields", [])
+                lines.append("待复核：请先编辑并确认连接设置" + ("（" + "、".join(fields) + "）" if fields else ""))
+            if imported.get("requires_secrets"):
+                lines.append("需补充凭据；不会读取 Navicat 已保存的密码")
+            if config.id in self._navicat_pending_configs:
+                lines.append("来源配置已更新；关闭当前连接后生效")
+        lines.append("双击以打开连接")
+        return "\n".join(lines)
+
     def populate_connections(self):
+        snapshots = {}
+        def capture(item):
+            # PySide ties QTreeWidgetItem.clone() wrappers to the source tree;
+            # even detached clones can die with tree.clear(). Keep plain values.
+            info = deepcopy(item.data(0, Qt.ItemDataRole.UserRole))
+            if info and info.get("type") == "schema":
+                pending_key = (info["id"], info["schema"], self._tree_generation, id(self.sessions.get(info["id"])))
+                if pending_key in self._loading_object_nodes:
+                    # Its old callback will be discarded after the rebuild.
+                    # Expanded replacement nodes must request a fresh snapshot.
+                    info["loaded"] = False
+            return {"text": item.text(0), "data": info,
+                    "icon": QIcon(item.icon(0)), "tooltip": item.toolTip(0), "expanded": item.isExpanded(),
+                    "children": [capture(item.child(index)) for index in range(item.childCount())]}
+        def restore(parent, records):
+            for record in records:
+                child = QTreeWidgetItem([record["text"]])
+                child.setData(0, Qt.ItemDataRole.UserRole, deepcopy(record["data"]))
+                child.setIcon(0, record["icon"])
+                child.setToolTip(0, record["tooltip"])
+                parent.addChild(child)
+                restore(child, record["children"])
+                child.setExpanded(record["expanded"])
+        for identifier in self.sessions:
+            old = self.connection_item(identifier)
+            if old:
+                snapshots[identifier] = [capture(old.child(index)) for index in range(old.childCount())]
+        self._tree_generation += 1
         self.tree.clear()
         previous = self.active_id
         self.connection_picker.blockSignals(True)
         self.connection_picker.clear()
         self.connection_picker.addItem("选择连接…", None)
+        imports = self.store.state.get("navicat_imports", {})
+        imported_root, folders = None, {}
         for config in self.configs.values():
             self.connection_picker.addItem(config.name, config.id)
-            item = QTreeWidgetItem([config.name])
-            item.setData(0, Qt.ItemDataRole.UserRole, {"type": "connection", "id": config.id})
-            item.setToolTip(0, f"{config.driver} · {config.database}\nDouble-click to connect")
-            item.setIcon(0, workbench_icon(config.driver, 16))
-            item.addChild(QTreeWidgetItem(["双击以打开连接"]))
-            self.tree.addTopLevelItem(item)
-            if config.id in self.sessions:
-                self.load_schemas(config.id)
+            parents = [None]
+            if config.id in imports:
+                if imported_root is None:
+                    imported_root = QTreeWidgetItem(["Navicat 连接"])
+                    imported_root.setData(0, Qt.ItemDataRole.UserRole, {"type": "navicat_root"})
+                    imported_root.setIcon(0, workbench_icon("folder", 16))
+                    self.tree.addTopLevelItem(imported_root)
+                    imported_root.setExpanded(True)
+                parents = []
+                paths = imports[config.id].get("group_paths") or [[]]
+                for path in paths:
+                    parent = imported_root
+                    for depth, label in enumerate(path):
+                        key = tuple(path[:depth+1])
+                        if key not in folders:
+                            folder = QTreeWidgetItem([label])
+                            folder.setData(0, Qt.ItemDataRole.UserRole, {"type": "navicat_group", "group_path": key})
+                            folder.setIcon(0, workbench_icon("folder", 16))
+                            parent.addChild(folder)
+                            folder.setExpanded(True)
+                            folders[key] = folder
+                        parent = folders[key]
+                    if parent not in parents:
+                        parents.append(parent)
+            for parent in parents:
+                item = QTreeWidgetItem([config.name])
+                item.setData(0, Qt.ItemDataRole.UserRole, {"type": "connection", "id": config.id})
+                item.setToolTip(0, self._connection_tooltip(config))
+                item.setIcon(0, workbench_icon(config.driver, 16))
+                if parent is None:
+                    self.tree.addTopLevelItem(item)
+                else:
+                    parent.addChild(item)
+                if config.id in snapshots:
+                    restore(item, snapshots[config.id])
+                    item.setExpanded(True)
+                else:
+                    item.addChild(QTreeWidgetItem(["双击以打开连接"]))
+        # Manual profiles keep their original positions before the import root.
+        if imported_root is not None:
+            position = self.tree.indexOfTopLevelItem(imported_root)
+            self.tree.takeTopLevelItem(position)
+            self.tree.addTopLevelItem(imported_root)
+            imported_root.setExpanded(True)
+            for folder in folders.values():
+                folder.setExpanded(True)
         self.connection_picker.setCurrentIndex(max(0, self.connection_picker.findData(previous)))
         self.connection_picker.blockSignals(False)
+        self.filter_tree(self.tree_filter.text())
 
     def selected_info(self):
         item = self.tree.currentItem()
-        return item.data(0, Qt.ItemDataRole.UserRole) if item else None
+        info = item.data(0, Qt.ItemDataRole.UserRole) if item else None
+        return info if info and "id" in info else None
 
     def select_connection(self, index):
         self.active_id = self.connection_picker.itemData(index)
@@ -1080,13 +1255,39 @@ class MainWindow(QMainWindow):
         self.update_schema_picker()
         self.refresh_actions()
 
+    def connection_items(self, connection_id):
+        result = []
+        def visit(item):
+            info = item.data(0, Qt.ItemDataRole.UserRole)
+            if info and info.get("type") == "connection":
+                if info.get("id") == connection_id:
+                    result.append(item)
+                return
+            for index in range(item.childCount()):
+                visit(item.child(index))
+        for index in range(self.tree.topLevelItemCount()):
+            visit(self.tree.topLevelItem(index))
+        return result
+
     def connection_item(self, connection_id):
-        for i in range(self.tree.topLevelItemCount()):
-            item = self.tree.topLevelItem(i)
-            if item.data(0, Qt.ItemDataRole.UserRole)["id"] == connection_id:
-                return item
+        selected = self.tree.currentItem()
+        while selected is not None:
+            info = selected.data(0, Qt.ItemDataRole.UserRole)
+            if info and info.get("type") == "connection" and info.get("id") == connection_id:
+                return selected
+            selected = selected.parent()
+        return next(iter(self.connection_items(connection_id)), None)
+
+    def _schema_items(self, connection_id, schema):
+        return [root.child(index) for root in self.connection_items(connection_id)
+                for index in range(root.childCount())
+                if (root.child(index).data(0, Qt.ItemDataRole.UserRole) or {}).get("schema") == schema]
 
     def new_connection(self, checked=False, config=None, driver=None):
+        selected_driver = config.driver if config is not None else driver
+        if selected_driver is not None and selected_driver not in SUPPORTED_DRIVERS:
+            QMessageBox.information(self, "未实现驱动", "此连接驱动尚未实现；原始元数据会保留，无法在其他驱动的设置中编辑。")
+            return
         if self.tasks:
             self.statusBar().showMessage("Wait for the current operation before editing connections", 5000)
             return
@@ -1125,7 +1326,8 @@ class MainWindow(QMainWindow):
         self.active_id = result.id
         self.populate_connections()
         self.set_active(result.id)
-        self.connect_id(result.id)
+        if result.id not in self.store.state.get("navicat_imports", {}):
+            self.connect_id(result.id)
 
     def connection_type_selected(self, driver, preset):
         # A selected URI remains in memory until the actual settings are saved.
@@ -1136,6 +1338,9 @@ class MainWindow(QMainWindow):
     def edit_connection(self):
         config = self.configs.get(self.active_id)
         if config:
+            if config.driver not in SUPPORTED_DRIVERS:
+                QMessageBox.information(self, "未实现驱动", "此连接驱动尚未实现；连接元数据已保留，当前无法编辑。")
+                return
             self.new_connection(config=self.store.hydrate(config))
 
     def connect_active(self):
@@ -1147,7 +1352,15 @@ class MainWindow(QMainWindow):
             if after:
                 after()
             return
-        if connection_id in self._connecting:
+        if connection_id in self._connecting or connection_id not in self.configs:
+            return
+        original = self.configs[connection_id]
+        imported = self.store.state.get("navicat_imports", {}).get(connection_id, {})
+        if original.driver not in SUPPORTED_DRIVERS:
+            QMessageBox.information(self, "未实现驱动", "此连接驱动尚未实现；已保留连接元数据，尚不能打开连接。")
+            return
+        if imported.get("blocked"):
+            QMessageBox.information(self, "待复核连接", "此 Navicat 连接包含尚未确认的选项。请先编辑、复核并保存连接设置，再手动打开连接。")
             return
         # Empty passwords can be intentional (certificate, local authentication,
         # or an account with an empty password). Try the configured method first.
@@ -1259,29 +1472,29 @@ class MainWindow(QMainWindow):
         self.submit(session.schemas, done, label="Loading schemas")
 
     def fill_schemas(self, connection_id, schemas):
-        item = self.connection_item(connection_id)
-        if item is None:
+        items = self.connection_items(connection_id)
+        if not items:
             return
-        expanded = {item.child(index).text(0) for index in range(item.childCount())
-            if item.child(index).isExpanded()}
-        if self.active_id == connection_id:
-            expanded.add(self.active_schema)
-        item.takeChildren()
-        children = []
-        for schema in schemas:
-            child = QTreeWidgetItem([schema])
-            child.setData(0, Qt.ItemDataRole.UserRole, {"type": "schema", "id": connection_id, "schema": schema, "loaded": False})
-            child.setIcon(0, workbench_icon("database", 16))
-            child.addChild(QTreeWidgetItem([""]))
-            item.addChild(child)
-            children.append(child)
-        item.setExpanded(True)
-        # Preflight DDL may open SQLite's temp schema. Preserve the active and
-        # previously expanded schemas instead of collapsing main once temp exists.
-        for child in children:
-            if child.text(0) in expanded or len(schemas) == 1:
-                child.setExpanded(True)
-                self.tree_expand(child)
+        schemas = list(schemas)
+        for item in items:
+            expanded = {item.child(index).text(0) for index in range(item.childCount())
+                        if item.child(index).isExpanded()}
+            if self.active_id == connection_id:
+                expanded.add(self.active_schema)
+            item.takeChildren()
+            children = []
+            for schema in schemas:
+                child = QTreeWidgetItem([schema])
+                child.setData(0, Qt.ItemDataRole.UserRole, {"type": "schema", "id": connection_id, "schema": schema, "loaded": False})
+                child.setIcon(0, workbench_icon("database", 16))
+                child.addChild(QTreeWidgetItem([""]))
+                item.addChild(child)
+                children.append(child)
+            item.setExpanded(True)
+            for child in children:
+                if child.text(0) in expanded or len(schemas) == 1:
+                    child.setExpanded(True)
+                    self.tree_expand(child)
         self.update_schema_picker()
 
     def tree_expand(self, item):
@@ -1295,7 +1508,15 @@ class MainWindow(QMainWindow):
             return
         info["loaded"] = True
         item.setData(0, Qt.ItemDataRole.UserRole, info)
-        def done(objects):
+        generation = self._tree_generation
+        key = (info["id"], info["schema"], generation, id(session))
+        if key in self._loading_object_nodes:
+            return
+        self._loading_object_nodes.add(key)
+        def current():
+            return not self._closed and self._tree_generation == generation and self.sessions.get(info["id"]) is session
+        def render(item, objects):
+            expanded = {item.child(i).text(0) for i in range(item.childCount()) if item.child(i).isExpanded()}
             item.takeChildren()
             completions = []
             categories = [("数据", "redis_data", "table"), ("查询", "query", "query"), ("备份", "backup", "backup")] if session.config.driver == "redis" else [("表", "table", "table"), ("视图", "view", "view"), ("查询", "query", "query"), ("备份", "backup", "backup")]
@@ -1304,6 +1525,7 @@ class MainWindow(QMainWindow):
                 category.setIcon(0, workbench_icon(symbol, 16))
                 category.setData(0, Qt.ItemDataRole.UserRole, {"type": "category", "id": info["id"], "schema": info["schema"], "kind": kind})
                 item.addChild(category)
+                category.setExpanded(label in expanded)
                 if kind == "redis_data":
                     child = QTreeWidgetItem(["(所有数据)"])
                     child.setIcon(0, workbench_icon("table", 16))
@@ -1318,22 +1540,38 @@ class MainWindow(QMainWindow):
                         child.setIcon(0, workbench_icon(kind, 16))
                         category.addChild(child)
                         completions.append(obj["name"])
-            for i in range(self.tabs.count()):
-                page = self.tabs.widget(i)
+            return completions
+        def done(objects):
+            self._loading_object_nodes.discard(key)
+            if not current():
+                return
+            completions = []
+            for target in self._schema_items(info["id"], info["schema"]):
+                target_info = target.data(0, Qt.ItemDataRole.UserRole)
+                target_info["loaded"] = True
+                target.setData(0, Qt.ItemDataRole.UserRole, target_info)
+                completions = render(target, objects)
+            for index in range(self.tabs.count()):
+                page = self.tabs.widget(index)
                 if isinstance(page, QueryPage) and page.connection_id == info["id"]:
                     page.editor.set_completions(completions)
             self.filter_tree(self.tree_filter.text())
             if self.tabs.currentWidget() is self.object_page and self.active_id == info["id"]:
                 self.show_objects("table")
-        def failed(exc):
-            info["loaded"] = False
-            item.setData(0, Qt.ItemDataRole.UserRole, info)
-            self.error(exc)
+        def failed(error):
+            self._loading_object_nodes.discard(key)
+            if not current():
+                return
+            for target in self._schema_items(info["id"], info["schema"]):
+                target_info = target.data(0, Qt.ItemDataRole.UserRole)
+                target_info["loaded"] = False
+                target.setData(0, Qt.ItemDataRole.UserRole, target_info)
+            self.error(error)
         self.submit(lambda: [] if session.config.driver == "redis" else session.objects(info["schema"]), done, failed, "读取对象")
 
     def tree_selected(self, item, column=0):
         info = item.data(0, Qt.ItemDataRole.UserRole)
-        if not info:
+        if not info or "id" not in info:
             return
         self.set_active(info["id"], info.get("schema"))
         if info["type"] == "category":
@@ -1348,7 +1586,7 @@ class MainWindow(QMainWindow):
         if not info:
             parent = item.parent()
             info = parent.data(0, Qt.ItemDataRole.UserRole) if parent else None
-        if not info:
+        if not info or "id" not in info:
             return
         self.set_active(info["id"], info.get("schema"))
         if info["type"] == "connection":
@@ -1389,22 +1627,23 @@ class MainWindow(QMainWindow):
 
     def filter_tree(self, text):
         text = text.casefold()
-        def apply(item):
+        active_only = self.active_only.isChecked()
+        def apply(item, inherited=False):
+            info = item.data(0, Qt.ItemDataRole.UserRole) or {}
+            if info.get("type") == "connection" and active_only and info.get("id") not in self.sessions:
+                item.setHidden(True)
+                return False
             match = text in item.text(0).casefold()
             child_match = False
-            for i in range(item.childCount()):
-                child_match = apply(item.child(i)) or child_match
-            item.setHidden(not (match or child_match))
-            if match:
-                for i in range(item.childCount()):
-                    item.child(i).setHidden(False)
-            return match or child_match
-        for i in range(self.tree.topLevelItemCount()):
-            root = self.tree.topLevelItem(i)
-            apply(root)
-            info = root.data(0, Qt.ItemDataRole.UserRole)
-            if self.active_only.isChecked() and info and info["id"] not in self.sessions:
-                root.setHidden(True)
+            for index in range(item.childCount()):
+                child_match = apply(item.child(index), inherited or match) or child_match
+            visible = match or inherited or child_match
+            if info.get("type") in {"navicat_root", "navicat_group"} and active_only:
+                visible = child_match
+            item.setHidden(not visible)
+            return visible
+        for index in range(self.tree.topLevelItemCount()):
+            apply(self.tree.topLevelItem(index))
 
     def tree_menu(self, pos):
         item = self.tree.itemAt(pos)
@@ -1423,8 +1662,17 @@ class MainWindow(QMainWindow):
                 menu.addAction("新建查询", self.new_query)
                 menu.addAction("刷新", self.refresh_tree)
             if info["type"] == "object":
-                menu.addAction("打开表", lambda: self.open_table(info))
-                menu.addAction("新建 SELECT 查询", lambda: self.new_query(sql=f"SELECT * FROM {self.sessions[info['id']].qualified_name(info['schema'], info['table'])} LIMIT 1000;"))
+                redis = self.configs[info["id"]].driver == "redis"
+                menu.addAction("打开数据" if redis else "打开表", lambda: self.open_table(info))
+                if redis:
+                    menu.addAction("新建 Redis 命令", lambda: self.new_query(connection_id=info["id"]))
+                else:
+                    def select_query():
+                        session = self.sessions[info["id"]]
+                        table = session.qualified_name(info["schema"], info["table"])
+                        sql = f"SELECT TOP (1000) * FROM {table};" if session.config.driver == "sqlserver" else f"SELECT * FROM {table} LIMIT 1000;"
+                        self.new_query(sql=sql, connection_id=info["id"])
+                    menu.addAction("新建 SELECT 查询", select_query)
                 menu.addAction("复制名称", lambda: QApplication.clipboard().setText(info["table"]))
         menu.addSeparator()
         menu.addAction(self.new_connection_action)
@@ -1565,7 +1813,7 @@ class MainWindow(QMainWindow):
             before = self.category_actions["query"]
             for action in ([user, other] if sqlite else [other, user]):
                 self.main_toolbar.insertAction(before, action)
-        self.query_action.setEnabled(self.active_id in self.configs)
+        self.query_action.setEnabled(self.active_id in self.configs and self.configs[self.active_id].driver in SUPPORTED_DRIVERS)
         relational = connected and self.configs[self.active_id].driver != "redis"
         self.table_action.setEnabled(relational and not self.configs[self.active_id].read_only)
         self.diagram_action.setEnabled(relational)
@@ -1615,10 +1863,26 @@ class MainWindow(QMainWindow):
             if isinstance(page, (TablePage, RedisBrowserPage, *DESIGNER_PAGES)):
                 self.tabs.removeTab(index)
                 page.deleteLater()
-        item = self.connection_item(connection_id)
-        if item:
+        if connection_id in self._navicat_pending_configs:
+            saved = next((config for config in self.store.connections() if config.id == connection_id), None)
+            if saved is not None:
+                self.configs[connection_id] = saved
+                index = self.connection_picker.findData(connection_id)
+                if index >= 0:
+                    self.connection_picker.setItemText(index, saved.name)
+                for tab in range(self.tabs.count()):
+                    page = self.tabs.widget(tab)
+                    if isinstance(page, QueryPage) and page.connection_id == connection_id:
+                        page.refresh_label()
+            self._navicat_pending_configs.discard(connection_id)
+        for item in self.connection_items(connection_id):
             item.takeChildren()
             item.addChild(QTreeWidgetItem(["双击以打开连接"]))
+            config = self.configs.get(connection_id)
+            if config:
+                item.setText(0, config.name)
+                item.setToolTip(0, self._connection_tooltip(config))
+        self.filter_tree(self.tree_filter.text())
         self.update_schema_picker()
         self.refresh_actions()
         return True

@@ -104,6 +104,8 @@ def main():
         return 1
     window = MainWindow(store)
     window.show()
+    if not (args.demo or args.smoke_test or args.screenshot) and store.state.get("navicat_auto_discover", True):
+        QTimer.singleShot(0, window.start_navicat_discovery)
     if args.demo or args.smoke_test:
         QTimer.singleShot(50, window.sample_workspace)
     if args.smoke_test:

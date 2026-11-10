@@ -7,6 +7,15 @@
   const freeze=Object.freeze, create=Object.create, big=BigInt, isSafe=Number.isSafeInteger;
   const brands=new WeakMap(), epoch=Date.prototype.getTime, dateISO=Date.prototype.toISOString;
   const NativeDate=Date, NativeRegExp=RegExp, NativeArray=Array, NativeU8=Uint8Array;
+  const ObjectProto=Object.prototype, ArrayProto=Array.prototype, NativeObject=Object, NativeNumber=Number;
+  const NativeWeakMap=WeakMap, NativeWeakSet=WeakSet, NativeJSON=JSON, arrayMap=ArrayProto.map;
+  const weakGet=WeakMap.prototype.get, weakSet=WeakMap.prototype.set, weakHas=WeakSet.prototype.has, weakAdd=WeakSet.prototype.add, weakDelete=WeakSet.prototype.delete;
+  function guard() {
+    if(Object!==NativeObject||Number!==NativeNumber||WeakMap!==NativeWeakMap||WeakSet!==NativeWeakSet||JSON!==NativeJSON||JSON.stringify!==stringify||JSON.parse!==parse||
+      ArrayProto.map!==arrayMap||ObjectProto.toJSON!==undefined||ArrayProto.toJSON!==undefined||WeakMap.prototype.get!==weakGet||WeakMap.prototype.set!==weakSet||
+      WeakSet.prototype.has!==weakHas||WeakSet.prototype.add!==weakAdd||WeakSet.prototype.delete!==weakDelete)
+      throw new TypeError('Mutated bridge intrinsics are not supported by this prototype');
+  }
   const min64=-(1n<<63n), max64=(1n<<63n)-1n;
   const i64 = value => { if(typeof value==='number'&&!isSafe(value))throw new RangeError('Use a string or BigInt for exact Int64');const n=big(value);if(n<min64||n>max64)throw new RangeError('BSON Int64 range');return n; };
   function tagged(kind,data,text,number) {
@@ -42,6 +51,7 @@
   function doubleText(n) {return Object.is(n,-0)?'-0':Number.isNaN(n)?'NaN':n===Infinity?'Infinity':n===-Infinity?'-Infinity':String(n);}
   function encode(value,depth=0,seen=new WeakSet(),allowLargeBigInt=false) {
     if(depth>80)throw new RangeError('BSON bridge depth');
+    if(value===undefined&&allowLargeBigInt)return ['js-undefined'];
     if(value===null)return ['null'];
     if(typeof value==='boolean')return ['bool',value];
     if(typeof value==='string')return ['string',value];
@@ -97,15 +107,41 @@
     }
   }
   function command(value) {
+    guard();
     const reply=parse(host(stringify({kind:'command',tree:encode(value)})));
     if(reply.ok!==true)throw new Error(reply.error||'Parent rejected command');
     return decode(reply.tree);
   }
-  function collection(name) {if(typeof name!=='string'||!name||name.includes('\0'))throw new TypeError('Collection name');return freeze({
-    find(filter={}) {const cmd={find:name,filter};return {sort(value){cmd.sort=value;return this;},limit(value){cmd.limit=value;return this;},toArray(){return command(cmd).documents;}};},
-    aggregate(pipeline){return {toArray(){return command({aggregate:name,pipeline,cursor:{}}).documents;}};}
-  });}
-  const db=freeze({getCollection:collection,runCommand:command});
+  function cursor(cmd) {
+    let documents=null,index=0;
+    function set(key,value){if(documents!==null)throw new Error('Cursor already executed');cmd[key]=value;return api;}
+    function load(){if(documents===null)documents=command(cmd).cursor.firstBatch;}
+    const api={sort(value){return set('sort',value);},skip(value){return set('skip',value);},
+      limit(value){return set('limit',value);},batchSize(value){if(cmd.aggregate){if(documents!==null)throw new Error('Cursor already executed');cmd.cursor.batchSize=value;return api;}return set('batchSize',value);},
+      maxTimeMS(value){return set('maxTimeMS',value);},
+      hasNext(){load();return index<documents.length;},next(){load();if(index>=documents.length)throw new Error('Cursor exhausted');return documents[index++];},
+      toArray(){load();const result=documents.slice(index);index=documents.length;return result;},
+      forEach(fn){if(typeof fn!=='function')throw new TypeError('Cursor callback');while(api.hasNext())fn(api.next());},
+      map(fn){if(typeof fn!=='function')throw new TypeError('Cursor callback');const result=[];while(api.hasNext())result.push(fn(api.next()));return result;},
+      close(){documents=[];index=0;}};
+    return api;
+  }
+  function options(value,allowed){if(!value||typeof value!=='object')throw new TypeError('Options document required');for(const key of keys(value))if(!allowed.includes(key))throw new TypeError('Unsupported prototype option: '+key);return value;}
+  function collection(name) {if(typeof name!=='string'||!name||name.includes('\0'))throw new TypeError('Collection name');
+    function update(filter,value,opts,multi){const settings=options(opts,['upsert','collation','arrayFilters','hint']);const reply=command({update:name,updates:[{q:filter,u:value,multi,...settings}],ordered:true});return {acknowledged:true,matchedCount:reply.n,modifiedCount:reply.nModified,upserted:reply.upserted||[]};}
+    function remove(filter,opts,limit){const settings=options(opts,['collation','hint']);const reply=command({delete:name,deletes:[{q:filter,limit,...settings}],ordered:true});return {acknowledged:true,deletedCount:reply.n};}
+    return freeze({
+      find(filter={},projection){const cmd={find:name,filter};if(projection!==undefined)cmd.projection=projection;return cursor(cmd);},
+      findOne(filter={},projection){const cmd={find:name,filter,limit:1,singleBatch:true};if(projection!==undefined)cmd.projection=projection;const docs=command(cmd).cursor.firstBatch;return docs.length?docs[0]:null;},
+      aggregate(pipeline,opts={}){const settings=options(opts,['allowDiskUse','maxTimeMS','collation','hint']);return cursor({aggregate:name,pipeline,cursor:{},...settings});},
+      insertOne(document){if(!document||!Object.prototype.hasOwnProperty.call(document,'_id'))throw new TypeError('Prototype insertOne requires an explicit _id');command({insert:name,documents:[document],ordered:true});return {acknowledged:true,insertedId:document._id};},
+      insertMany(documents,opts={}){options(opts,['ordered']);for(const doc of documents)if(!doc||!Object.prototype.hasOwnProperty.call(doc,'_id'))throw new TypeError('Prototype insertMany requires explicit _id values');command({insert:name,documents,ordered:opts.ordered!==false});return {acknowledged:true,insertedIds:documents.map(doc=>doc._id)};},
+      updateOne(filter,value,opts={}){return update(filter,value,opts,false);},updateMany(filter,value,opts={}){return update(filter,value,opts,true);},
+      deleteOne(filter,opts={}){return remove(filter,opts,1);},deleteMany(filter,opts={}){return remove(filter,opts,0);},
+      countDocuments(filter={}){return command({count:name,query:filter}).n;},getName(){return name;}
+    });
+  }
+  const db=new Proxy(freeze({getCollection:collection,runCommand:command}),{get(target,name){if(typeof name!=='string')return undefined;return Object.prototype.hasOwnProperty.call(target,name)?target[name]:collection(name);}});
   for(const [name,value]of Object.entries({db,Long,NumberLong:Long,Int32,NumberInt:Int32,Double,Decimal128,NumberDecimal:Decimal128,ObjectId,DateMS,Binary,BinData,BSONRegex,Timestamp,MinKey,MaxKey,Code,DBRef}))define(globalThis,name,{value,writable:false,configurable:false});
-  return value => stringify(encode(value,0,new WeakSet(),true));
+  return value => {guard();return stringify(encode(value,0,new WeakSet(),true));};
 })()

@@ -2,8 +2,14 @@
 from __future__ import annotations
 import base64, math, re
 from datetime import datetime, timezone
+from enum import Enum
 from bson import Binary, Code, DBRef, Decimal128, Int64, MaxKey, MinKey, ObjectId, Regex, Timestamp
 from bson.datetime_ms import DatetimeMS
+
+class JavaScriptUndefined(Enum):
+    VALUE = "undefined"
+
+JS_UNDEFINED = JavaScriptUndefined.VALUE
 
 def integer(value,lo,hi):
     if not isinstance(value,int) or isinstance(value,bool) or not lo<=value<=hi:raise ValueError('Integer range')
@@ -15,6 +21,10 @@ def decode(t,depth=0,allow_big=False):
     def arity(n):
         if len(t)!=n:raise ValueError('Invalid typed data arity')
     if tag=='null':arity(1);return None
+    if tag=='js-undefined':
+        arity(1)
+        if not allow_big:raise ValueError('Undefined is not a BSON value')
+        return JS_UNDEFINED
     if tag=='bool':
         arity(2)
         if type(a)is not bool:raise ValueError('Boolean required')

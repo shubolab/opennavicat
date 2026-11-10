@@ -1,111 +1,88 @@
-# Linux Navicat 原生元数据发现与复核门禁
+# Linux Navicat 连接元数据加载
 
-本独立分支先以 `ea2cd34` 完成保守的默认来源发现和安全前缀检查，随后基于 Linux18.0.3 的自有离线 save-only 记录，实现 **PascalCase 原生 JSON 的非秘密元数据投影**。默认 Linux 路由不调用 macOS `_convert`，不迁移密码、启动原版或访问数据库。已识别记录会显示为待复核连接，**全部 `blocked=True`，必须由用户编辑、确认并保存设置后才解除导入门禁**；未知认证、SSH/TLS、附加或活动配置不会被猜测为可用连接。最初源码基于 `dd7f8ab`；当前另建 `work/linux-native-integration` 从已发布 0.7.1 文档基线 `c2896f9` 集成，保留原调查分支，未改产品版本、UI、README 或发布资产。
+这是下一候选集成中的 Linux 迁移范围，需完成组合代码与原生发布验证后提供。它加载连接的非秘密字段和已确认的分组结构；**所有 Linux 原生来源连接都保持待复核、禁止直接连接的状态**。用户检查连接设置、补齐认证和传输配置并保存确认后，才解除支持驱动的导入门禁。完整 Navicat 迁移与界面、工具功能还原仍在进行。
 
-## 路径与 API
+## 参考版本与证据范围
 
-官方支持资料给出的连接来源为 `~/.config/navicat/Common/connections.json`；Linux18 手册 p360 给出的分组文件为 `~/.config/navicat/Premium/Profiles/vgroup.json`。大小写是 `Common`、`Premium`、`Profiles`。这与 macOS `Navicat Premium/Profiles` 不同。[官方连接存储说明](https://help.navicat.com/hc/en-us/articles/219566088-How-secure-is-Navicat)、[Linux18 手册](https://www.navicat.com/manual/pdf_manual/en/navicat_18/linux_manual/navicat_en.pdf)
+各平台的参考版本分别限定，不能把同名字段或版本号视为相同存储协议。
 
-`opennavicat.navicat_linux` 提供：
-
-- `linux_source_candidates(home=None, environ=None)`：只生成默认目录、有效绝对 `XDG_CONFIG_HOME` 和一个已由官方 flatpakref 确认的 `com.navicat.premium.en` 候选，不扫描目录或猜测其他 app ID/Wine 前缀。相同字面路径去重，`candidate.source_id` 不依赖它来自哪个路由。
-- `inspect_linux_source(candidate)`：使用 POSIX `dir_fd`、`O_NOFOLLOW` 和普通文件检查，拒绝父/最终链接、非普通文件、超限和读取竞态。只读取 BOM/有限空白后的一个容器前缀字节；不会读取 JSON 键或值。32 MiB 文件上限、64 KiB 前导前缀上限并不代表任何 schema 已接受。
-- `discover_linux_sources(home=None, environ=None)`：返回路径隐藏的 inspection/report 与脱敏问题；路径不存在、不可安全读取和需要复核分别表示，不以读取失败冒充有效空来源。
-
-Flatpak 的额外候选是 `~/.var/app/com.navicat.premium.en/config/navicat/Common/connections.json`。它由官方 app ID 与 Flatpak `XDG_CONFIG_HOME` 规则推导，尚未做 Navicat Flatpak 运行验收。环境变量相对路径、父目录回退、NUL 和 UNC 形式被拒绝，不展开环境变量或跟随链接。[Flatpak 官方目录规则](https://docs.flatpak.org/en/latest/conventions.html)
-
-全局 Linux Profiles Location 的可配置键和值仍未知；Windows `ProfilesPath` 不能移植。每连接 Settings Location 主要容纳查询/备份等文件，不等于全局连接 JSON 或分组目录。[官方分平台迁移说明](https://help.navicat.com/hc/en-us/articles/218281627-How-to-get-the-connection-information-when-migrating-Navicat-to-new-computer)
-
-显式 `discover_navicat_profiles(root=..., platform='linux')` 保留原来的 recognized-shape **legacy/synthetic 兼容 API**，来源改标 `linux-legacy-json`，始终 `blocked=True`、包含 `linux_native_format`、`config_complete=False`。它不从默认原生发现调用，不能用来绕过默认门禁，也不代表 Linux18 写入该形状。既有 local-review/config/groups 保全契约继续生效。
-
-## 受控参考实证：Linux18.0.3
-
-2026-11-11 在唯一自有 ARM64 Ubuntu24 容器中，以只读官方 AppImage 解包内容、隔离 HOME/XDG 和完全断开的容器网络，运行原生 Qt/XCB 应用。没有安装桌面，也未操作 Dell、WSL、用户现存 profile 或许可。首次可行性探针停在 Trial Reminder 并清理；获得普通继续按钮属于参考运行范围的明确授权后，新建独立环境继续既有评估窗口。没有接受新条款、注册账号、付款或导入许可。
-
-- 当前下载页面指向 `navicat18-premium-en-aarch64.AppImage`，347,193,624 字节，SHA256 `d89cc67ea31587053d07deb2cffbf3b1d96a572d3f58b143eab491f398aa01bf`。
-- 运行 splash 实际显示 **Version18.0.3 - Unregistered**。macOS 指定参考仍为 18.0.5 build321，不能混用平台 patch 号。官方 Linux 发布记录也列出 18.0.3。[官方下载入口](https://www.navicat.com/en/download/navicat-premium)、[发布记录](https://www.navicat.com/en/products/navicat-premium-release-note.html?layout=blog)
-- 通过 UI 的 OK 保存一个生成的 PostgreSQL profile、一个使用自有临时 SQLite 文件的 profile，密码留空并取消保存密码；未点击 Test Connection 或 Open Connection。
-- 真实写入路径是上述 `Common/connections.json`，结构为 `Users[] → {UserUUID, Projects[]} → {Name, ProjectUUID, Servers[]} → server`。
-- server 使用 PascalCase：`ConnType`、`Name`、`Hostname`、`Port`、`InitialDatabase`、`Username`、`ConnectionUUID`、`UseSSL`/`SSL`、`UseSSH`/`SSH` 等。SQLite 使用 `DatabaseFile`、`IsEncrypted` 等。两个生成记录的 `ConnectionUUID` 都是空字符串，`Profiles=[]`、`ActiveServerSettings=''`。
-- 创建一个 `CONNECTION` 组并通过 Manage Group → Move To 加入 PostgreSQL profile。实际 `Premium/Profiles/vgroup.json` 为 `version='1.1'`、`vgroups[]`、`vgroup_name/vgroup_type/items`，成员为 `name/type/server_type`；另有 `connections=[]`。
-- File → Exit 后以相同隔离 HOME 重启，UI 显示两条 profile 和已保存分组；两个元数据文件 SHA256 在重启前后保持一致。随后再次正常退出，精确核验并删除容器、操作 HOME、评估状态和临时 SQLite 文件，只保留脱敏结构、生成数据回执及私有证据图。
-
-这些受控记录证明了两种生成 profile 的容器结构和一个连接分组的保存/重载。它们**不证明九驱动字段、SSH/TLS/认证枚举、附加/活动 profile、非空 UUID、跨命名空间身份、Flatpak 或完整迁移已经验收**。尤其是包内静态小写 `usessh` 字符串不能替代实际 PascalCase 文件写入证据；已有 macOS reader 不能直接用于该文件。
-
-原始 REA 与运行证据保留在 ignored `artifacts/navicat-linux-discovery/`。静态 REA 已导出6条记录并关闭；两个受控运行环境均已按完整容器 ID、名称和 ownership label 清理。没有将 Navicat 图像或原始用户配置放进本分支。
-
-## 验证与后续门禁
-
-新增40项合成反例通过，均使用临时生成的 HOME/文件：精确路由、稳定来源 ID、链接/非普通文件/大小限制、权限与读取竞态、仅前缀读取、默认路由禁止 macOS 转换器，以及 Store 的既有配置、秘密、review 和分组保全。元数据相关回归共234项通过，`-Werror`。
-
-基于旧 `dd7f8ab` 的全量运行结果为955 passed、315 skipped、7 failed；7项属于该基线已知的 port 样式/字体测试隔离问题，由其他分支的独立修复处理，本分支没有修改对话框或该测试来掩盖结果。最终集成仍需在更新后的基线和原生 Linux CI 重跑；未宣称六平台发布通过。
-
-上述数量是基础 checkpoint 的历史结果，不能代替后续原生 parser 的测试。默认路径基础和原生元数据可见，都不等于完整迁移、认证或六平台验收完成。
-
-
-## 原生投影 checkpoint
-
-后续在另一唯一自有 ARM64 Ubuntu24 容器中，使用相同只读官方 artifact、全新隔离 HOME 和断开的网络，额外通过 UI 只保存 MySQL、MariaDB、SQL Server、MongoDB 和 Redis 五条生成记录。没有输入密码，也未点击 Test Connection、Open Connection 或访问服务器。正常 File → Exit 后重启，五条记录均可见且 `connections.json` SHA256 完全相同。此轮证据独立存放，没有覆盖先前 PostgreSQL/SQLite/分组记录。
-
-| UI 家族 | 实际 `ConnType` | 本 checkpoint 映射范围 |
+| 平台参考 | 已确认范围 | 未据此确认的范围 |
 | --- | --- | --- |
-| MySQL | `MYSQL` | 名称、主机、端口、用户名 |
-| MariaDB | `MARIADB` | 名称、主机、端口、用户名 |
-| PostgreSQL | `PGSQL` | 名称、主机、端口、用户名、初始数据库 |
-| SQLite | `SQLITE` | 名称、未加密本地文件路径；不打开文件 |
-| SQL Server | `MSSQL` | 名称、主机、端口、用户名、初始数据库；认证/TLS 仍须复核 |
-| MongoDB | `MONGODB` | 基本端点；仅实存的 `None`/`Standalone`/`Primary` 和 retry 布尔值被识别，其他设置不猜测 |
-| Redis | `REDIS` | 基本端点；仅实存的 `None`/`Standalone` 被识别，默认数据库 0 仍须复核 |
+| Linux Premium 18.0.3，官方 ARM64 AppImage | 隔离、断网、只保存样例的七类驱动；原生 JSON 容器、字段大小写；一个连接分组；退出并重启后的文件稳定性 | 主动 SSH/TLS、完整认证枚举、附加/活动配置、复杂 namespace 和非空连接 UUID、Flatpak 运行、完整存量迁移 |
+| macOS Premium 18.0.5 build321 | 独立观察的 macOS 元数据与界面参考 | Linux reader 不采用 macOS 的 SSH/TLS 枚举或 plist 形状 |
+| Windows Premium 18.0.6，官方 PE 静态参考 | 存储/字段入口线索；注册表读取机制另有隔离原生 API 测试 | 当前 Windows18 实际活跃存储、真实保存后的完整格式仍未受控接受；静态声明和 API 测试不能替代这一资格 |
 
-新增五条记录同样使用 `Profiles=[]`、`ActiveServerSettings=''`、`ConnectionUUID=''`。Mongo 的 `AuthMechanism='None'`、`ConnMethod='Standalone'`，Redis 的 `AuthenticationMode='None'`、`Type='Standalone'` 是 save-only 元数据观察，不是认证协议验收。SQL Server 准备设置页时两次出现原版可恢复 `SIGSEGV / L80003134130` 提示，普通 OK 后仍可保存；不能把该隔离环境中的错误推广为所有 Linux 安装问题，也不能把其 `AuthType='SQLServer'`、`UseEncryption=True`、`TrustServerCertificate=False` 当成完整 TLS 策略已接受。
+Linux 参考通过 UI 保存生成的连接，密码留空，没有执行 Test Connection 或 Open Connection。七类样例退出、重启后的结果来自受控参考运行，不能扩大为真实数据库认证成功。SQL Server 设置页准备时出现过可恢复的原版错误提示，关闭提示后保存成功；本模块没有据此承诺其 Linux 认证或 TLS 行为。
 
-实现入口为 `navicat_linux_native.discover_native_linux_profiles(home=None, environ=None)`，由默认 `discover_navicat_profiles(platform='linux')` 调用。`navicat_linux.read_linux_projection(candidate, spec)` 复用与前缀检查一致的普通文件、父目录和最终 entry 的前后绑定；解析结果只有在文件与整条目录链仍匹配时才返回。显式 root 的旧 `linux-legacy-json` API 保持隔离，不能绕过原生安全门禁。
+[官方连接存储说明](https://help.navicat.com/hc/en-us/articles/219566088-How-secure-is-Navicat)、[Linux18 手册](https://www.navicat.com/manual/pdf_manual/en/navicat_18/linux_manual/navicat_en.pdf)、[官方下载入口](https://www.navicat.com/en/download/navicat-premium)
 
-`navicat_linux_json.project_json(stream, spec, ...)` 是白名单投影扫描器。JSON 是单文件，所以扫描器必须读取并校验整个字节流；**未选中的值只接受语法、UTF-8 和 escape 校验，不构造、解码或保留其字符串值**。`Password`、`EncryptPassword`、不透明设置以及整个 SSH/SSL 子树不会进入连接配置、错误、日志或 workspace。未知 key 只以解码后 Unicode 码点的 SHA256 检测重复，不构造原 key 字符串；转义等价重复 key 同样被拒绝。只有预先声明的元数据字符串会调用标准 JSON 字符串解码器。
+## 自动查找范围
 
-- 总输入最多 32 MiB，单次底层读取最多 8 KiB，最多读取 cap+1 字节辨别超限；先检查普通文件和大小再读。
-- 最多 32 层容器、100,000 个值；单个允许标量的编码 token 最多 64 KiB，整数另限 128 位十进制数字，不将 float/exponent 强转成端口。
-- 完整语法、EOF、重复 key、非法 UTF-8、NaN/Infinity、全局超限或读错误会丢弃整个投影。`ParseError` 为常量文本且没有保留原异常的 `__context__`/`__cause__`。允许字段的类型/长度错误变为脱敏 invalid 标记。
-- 只按 `Users[] → Projects[] → Servers[]` 的显式角色定位记录，不递归搜索“像连接的字典”。未知家族仍显示为不支持且待复核的记录，未知 wrapper 不会被当成有效空来源。
-- 身份包括精确来源文件、UserUUID、ProjectUUID、ConnType 及非空 ConnectionUUID 或空 UUID 的名称 fallback。相同字面路径来自默认/XDG 路由时身份不变；不同命名空间不合并。重复记录或命名空间保留独立待复核项，并保护首次记录的身份；无法区分的重复项不承诺任意重排后身份稳定。缺失/无效命名空间使用位置 fallback 且保持 incomplete-source 门禁。
-- 不完整记录仍可首次显示，`config_complete=False` 阻止它覆盖已经知道的配置；解析恢复后才允许更新未手工复核的行。既有手工配置、review 状态、进程秘密和收藏 ID 按原 Store 契约保留。
-- 分组只读同一来源的确切 `Premium/Profiles/vgroup.json`；只接受已实存的 version1.1、空 `connections`、平面 CONNECTION 结构及确切家族 token。不使用 macOS 家族别名放宽接受范围。未知嵌套/成员、同名同驱动跨命名空间歧义、损坏/缺失/链接/竞态都令 `groups_complete=False`。首次可保留已知且不歧义的 membership；有权威历史时保留 last-known-good，完整有效空分组可清旧分组。
+默认 Linux 路由只检查以下固定候选，不递归搜索用户目录：
 
-原版新增运行的 exact container ID/owner、正常退出/重启、断网、五条计数和清理回执位于 ignored `headless-drivers-20261111/`。容器、操作 HOME 和评估状态均已删除，只保留脱敏结构/生成样例与私有证据图。未触碰 Dell、WSL、用户现存配置或任何业务数据库。
-
-尚未闭合：Linux SSH/TLS 和各认证模式的主动 save-only 枚举、附加与活动配置、非空 UUID 原生行为、复杂/嵌套分组、Profiles Location 可配置来源、Flatpak 运行、从实际用户存量元数据到手工确认后的连接闭环，以及后续六平台安装包验证。所有原生记录的统一复核门禁保留；此分支没有宣称完整 Linux 迁移或原版功能/UI 已对齐。
-
-
-本 checkpoint 最终元数据回归结果：macOS ARM64 / Python3.13.10 为 **368 passed、0 skipped、0 failed**；独立原生 Linux ARM64（Debian13.7、Python3.13.18、无架构仿真参数）为 **367 passed、1 skipped、0 failed**，均使用 `-Werror`。唯一跳过是 root UID 会绕过 POSIX 文件权限的测试，未伪称已验证拒绝读取；链接、非普通文件、读取竞态、原生 JSON/分组/Store 保全均实际运行。73项流式投影测试和71项原生适配测试包含在这些总数中，不另加算。
-
-Linux 测试从冻结的只读源码快照执行；回执核对最终五个相关源码/测试 SHA256，无工作树漂移。依赖仅装进唯一自有测试容器，测试时断网，结束后完整 ID/owner 核验并移除该容器及其中依赖，remaining-owned 为0。第一轮最小环境缺 `keyring` 导致33项既有 Windows 合成测试无法 import，该失败日志保留；补入项目已经声明的同版本依赖后通过，没有修改测试期望掩盖环境失败。以上是解析与状态保全测试，不是 OpenNavicat Linux 安装包或桌面 GUI 的本轮发布验收；六平台正式安装验证仍留到后续集成里程碑。
-
-
-## 在 0.7.1 基线上的独立集成与保全修补
-
-另建独立 worktree/分支 `work/linux-native-integration`，从 `c2896f900ba9cb041dcd6b6e8ea4cc9976e6d75e` 按序 cherry-pick 两个原检查点，对应本分支 `979bfe5`、`7dfff08`。没有改写原调查分支或已发布 main，也没有发布 0.8。初始全源为1128 passed、315 skipped、0 failed，证明旧 `dd7f8ab` 的7个端口测试失败没有带入本次基线。
-
-独立补充反例先取得8个真实失败，再收敛 native mapper：
-
-- MongoDB 源缺失 `AuthSource` 时，不能把它当成明确空字符串覆盖旧配置。缺失/错误类型现在是 incomplete snapshot；明确存在的有效空字符串仍可清旧值。
-- 已知投影键不等于所有驱动都接受其主动语义。SQLite 的主动 SSL/SSH、MongoDB/Redis 的主动 HTTP、SQL Server 的额外主动 SSL 均使 `config_complete=False`；未观察的跨家族 `InitialDatabase` 也不猜测映射。关闭的传输开关及其 inactive opaque 子树不会被当作启用配置、复制密钥路径或凭据。
-- 未知 group-root/group/member 选项不能生成未经确认的新 membership。未知 root 保留历史但不授权新归组；未知 group/member 分别跳过其对应范围，其他明确有效的成员仍可在首次部分导入时保留。有效空与 LKG 规则保持不变。
-- `Imported Linux connection` 是缺失/非法名称时的界面 fallback，不是源中的真实名称，不得拿它匹配虚拟分组。名称不能确认时，整个连接枚举不再授权名称归组。
-
-另加正反对照：inactive variants 不递归 overlay 基础身份/配置，不完整时保留 LKG，移除未知 variant 后完整快照才更新未手工复核的配置；明确空 auth source 可清旧值；unknown member 与独立 valid member 并存时不丢已确认路径。所有原生记录依旧 `blocked=True`，这些修补没有增加任何自动认证、猜测 SSH/TLS 模式或凭据迁移。`config_complete=True` 只代表此次基本配置投影完整，不能当成完整目标连接功能验收或解除 review 的依据。
-
-最终验证全部使用 `-Werror`：
-
-| 范围 | 实际结果 |
+| 来源 | 连接文件 |
 | --- | --- |
-| macOS ARM64 本机全源 | **1155 passed、315 skipped、0 failed** |
-| macOS 元数据相关六模块 | **395 passed、0 skipped、0 failed** |
-| 原生 Linux ARM64 / Debian13.7 / Python3.13.18 同范围 | **394 passed、1 skipped、0 failed** |
+| 标准原生目录 | `~/.config/navicat/Common/connections.json` |
+| 有效绝对 `XDG_CONFIG_HOME` | `$XDG_CONFIG_HOME/navicat/Common/connections.json` |
+| 已确认官方 app ID 的 Flatpak 候选 | `~/.var/app/com.navicat.premium.en/config/navicat/Common/connections.json` |
 
-315项全源跳过属于未启用的自有远端 DB/TLS/SSH/GUI 专项，以及需要 Windows 原生 HKCU 的2项；本轮没有把旧发布中已完成的专项重跑成新结论。Linux唯一跳过是 root UID 绕过 POSIX 读权限，非普通文件、链接、完整投影后的文件/目录竞态均实际执行。原生映射测试已由71项扩展为98项，73项流式扫描测试保持不变。
+同一字面路径来自不同路由时只读取一次。Flatpak 路径由官方 app ID 和其配置目录规则推导，尚未完成 Navicat Flatpak 运行验收。[Flatpak 目录规则](https://docs.flatpak.org/en/latest/conventions.html)
 
-Linux 从冻结只读快照执行，核对11个相关源码/测试文件 SHA256 无漂移；唯一自有测试容器、其中私有依赖均按完整ID/name/owner清理，remaining-owned 为0。未再运行原版、未触碰 CUA、Dell、WSL、用户现存配置或业务服务。
+每个连接文件对应的分组候选为同一 `navicat` 配置根下的 `Premium/Profiles/vgroup.json`。`Common`、`Premium`、`Profiles` 的大小写保留。Linux 全局 Profiles Location 的可配置来源仍未知，不套用 Windows 的 `ProfilesPath`，也不把单连接的 Settings Location 当作连接 JSON 或全局分组目录。[官方分平台迁移说明](https://help.navicat.com/hc/en-us/articles/218281627-How-to-get-the-connection-information-when-migrating-Navicat-to-new-computer)
 
-还复用先前七类驱动的**生成、脱敏导出**检查基本字段投影：七条均可见且 blocked，重复读取身份一致，首次 Store 增7条、重复增0条，四类秘密字段均为空。两份导出是故意裁剪的样例，namespace ID 已重新合成；例如早期 PG 样例省略了 `ServiceProvider`，因此保持 `config_complete=False`，不能将该结果说成原版完整文件无法读取。此项不扩大原生 namespace UUID、非空 ConnectionUUID 或完整存量迁移的运行验收范围。
+相对路径、父目录回退、NUL、UNC 形式、父目录或最终文件链接、非普通文件和读取竞态均不成为可信来源。没有扫描旧 Wine 前缀、未知 Flatpak app ID、日志或 `ui_connections.json`。
 
-本次 ignored 回执集中在 `artifacts/linux-native-integration/`，含补充反例修补前失败日志、最终两平台 JUnit、Linux snapshot/cleanup/hash 回执和七驱动脱敏导出投影回执。它是后续里程碑的独立可合并源码，不是六平台新发布或 Linux GUI/安装器验收。
+## 可见的连接字段
+
+原生文件按 `Users[] → Projects[] → Servers[]` 的显式角色读取，字段使用 PascalCase。已确认家族与基本投影如下；表中每一类仍要求手工复核。
+
+| 原生 `ConnType` | 驱动 | 基本可见字段 |
+| --- | --- | --- |
+| `MYSQL` | MySQL | 名称、主机、端口、用户名 |
+| `MARIADB` | MariaDB | 名称、主机、端口、用户名 |
+| `PGSQL` | PostgreSQL | 名称、主机、端口、用户名、初始数据库 |
+| `SQLITE` | SQLite | 名称、未加密本地数据库文件路径；发现时不打开数据库文件 |
+| `MSSQL` | SQL Server | 名称、主机、端口、用户名、初始数据库；认证和加密设置继续复核 |
+| `MONGODB` | MongoDB | 基本端点；只识别实存的 None/Standalone/Primary 与 retry 布尔值，其他认证/拓扑不猜测 |
+| `REDIS` | Redis | 基本端点；只识别实存的 None/Standalone，默认数据库0仍须检查 |
+
+未知家族在可识别的 server 容器内保留为不支持、待复核的条目。未知外层格式不会被递归猜成连接，也不会当成权威空来源清理旧条目。云供应商专属设置、未经确认的认证/SSH/TLS/HTTP/套接字和兼容选项不自动转成可用配置。
+
+原生记录中的 `Profiles`、`ActiveServerSettings` 和不透明属性没有得到完整资格。非空、缺失或不明的 active/variant 状态保留不完整快照门禁，不从嵌套记录覆盖基础身份或连接参数。关闭传输开关留下的 inactive 子树不会被误当作启用设置。
+
+数据库密码、SSH 密码/口令以及 TLS 私钥口令需要按实际连接要求重新填写。本功能不会解密、提取或迁移 Navicat 密码，不读取其钥匙串，也不复用未知的密钥设置。已经由用户在 OpenNavicat 手工保存的配置和凭据继续走既有本地保护机制。
+
+## 去重、部分失败与分组保全
+
+- 正常重读按来源文件、UserUUID/ProjectUUID namespace、驱动及连接 UUID 或名称 fallback 建立身份。同一来源反复导入不增加重复行；不同 namespace 不因同名而合并。重复或无法区分的记录保持独立、待复核，不承诺不明重复项任意重排后的身份稳定性。
+- 来源缺失仅标记来源状态，不硬删除本地连接。解析失败、未知结构或不完整记录不会把已有连接参数覆盖成空值。缺失的 `AuthSource` 与明确存在的空字符串有区别。
+- 手工检查保存过的连接参数、review 状态、进程秘密和收藏引用按原有本地保护契约保留。来源重新出现、且基本配置快照完整时，只更新仍由来源管理的配置。
+- 分组只接受已确认的 version1.1、空 `connections`、平面 CONNECTION 结构及确切家族 token。同名同驱动跨 namespace 不能唯一定位时，不猜测目标。
+- 未知 group-root、group 或 member 选项不授权未经确认的新归组；其他明确有效的成员仍可在首次部分导入中保留。缺失、损坏、链接或竞态保留 last-known-good 分组；完整有效的空分组可以清旧来源分组。
+- 界面显示 fallback 不是源名称，不用于分组匹配。分组仍由完整有效来源更新驱动，手工保存连接参数不会把来源分组变成永久不变的快照。
+
+`config_complete=True` 只表示本次基本配置投影完整，不能据此解除 review 或宣称全部源设置已支持。空缺 namespace、非空连接 UUID 的真实运行行为、复杂/嵌套组与活动配置仍保留后续验收门禁。
+
+## 只读与资源边界
+
+连接 JSON 是单文件，扫描器读取并校验整个有界字节流，仅解码白名单元数据。未选中的密码、不透明值和 SSH/SSL 子树只接受 JSON、UTF-8 与 escape 校验，不构造或保留其字符串值。未知 key 只用 Unicode 码点摘要检测重复，不进入诊断；转义等价的重复 key 同样拒绝。
+
+文件最多32MiB、容器最多32层、值数量最多100,000；单次读取最多8KiB，单个允许标量最多64KiB，端口不会从浮点或指数数值强转。完整语法、EOF、重复 key、类型与范围错误都不冒充成功导入。普通文件和整条父目录链在读取前后核对，解析结果仅在绑定仍有效时返回。发现过程不启动 Navicat、不打开数据库、不写回来源。
+
+显式指定 root 的旧 recognized-shape API 保留为 `linux-legacy-json` 兼容入口，始终 blocked 且不完整；默认原生路由不调用它，也不会绕到 macOS 转换器。
+
+## 当前资格与剩余门禁
+
+Linux 模块独立集成在0.7.1源码基线上完成 `-Werror` 验证：
+
+| 范围 | 结果 |
+| --- | --- |
+| macOS ARM64 全源，Linux模块修补后 | 1155 passed、315 skipped、0 failed |
+| 元数据相关六模块 | 395 passed、0 skipped |
+| 原生 Linux ARM64 / Debian13.7 / Python3.13.18，同范围 | 394 passed、1 skipped、0 failed |
+
+全源跳过的是未启用的自有 DB/TLS/SSH/GUI 专项及 Windows 原生 HKCU 测试；Linux唯一跳过是 root UID 会绕过 POSIX 读权限检查。文件/目录竞态、链接、非普通文件、流式投影、身份与 LKG 保全已实际运行。自有 Linux 测试容器已清理，源码快照无漂移。
+
+七类驱动的既有生成、脱敏导出也完成基本字段投影和重复导入检查。导出中的 namespace ID 已重新合成，早期样例还故意省略了部分字段；它们不是完整原始配置文件，不能扩大为真实 namespace、认证或完整迁移验收。
+
+最终组合仍需统一全源、六平台原生构建与安装验证。主动认证/SSH/TLS、活动配置、复杂分组、可配置 Profiles Location、Flatpak 运行及实际存量到确认后连接的完整闭环继续开放。本模块和这些测试均不代表完整 Navicat UI/工具功能已经还原。

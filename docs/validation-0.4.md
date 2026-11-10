@@ -32,7 +32,7 @@ QT_QPA_PLATFORM=offscreen .venv/bin/python -Werror -m pytest -q \
 当前实现的SQLite引擎专项43项、页面组件12项、真实主窗口集成21项均实际执行通过。
 修复后最终本机完整默认为 **219 passed / 133 skipped / 0 failed，14.46秒**，`-W error` 下通过。
 默认套件中的远程服务/平台跳过项不作为协议集成通过，原有独立75项TLS/SSH的历史证据见
-[0.3验证](validation-0.3.md)，本轮发布仍会重新执行该独立安全作业。
+[0.3验证](validation-0.3.md)，本轮最终tag独立安全作业也已重新执行并通过。
 
 源程序实际smoke返回0.4.0、Darwin/arm64、SQL6×4、libpq18.6与全部驱动，
 实际加密provider探测成功。公共PyPI锁文件通过显式公共索引的离线一致性检查；本轮没有新增运行依赖。
@@ -68,9 +68,48 @@ Save→disconnect的时序上复现已排队schema刷新访问已关闭session�
 修复为断开/退出后忽略排队刷新，并用session identity拒绝同ID重连后的旧响应；
 三个确定性真实主窗口回归覆盖了断开、退出和旧响应后到，不能以其它平台局部成功替代完整门禁。
 
-发布仍要求六个原生OS/架构目标的测试、二进制架构检查、实际桌面后端smoke、安装及卸载，
-加上独立真实安全连接作业。每份安装包使用SHA256SUMS和build-manifests.json，公开后另核对实际下载。
-当前0.4.0安装流水线与公开下载状态将在完成后补录；存在本地测试或GIF不等于Release已发布。
+修复后的main流水线42773857224与最终tag流水线
+[42774383062](https://github.com/shubolab/opennavicat/actions/runs/42774383062)
+均全部通过。最终tag源码为 `6eb1eff36edeee24c4108b13223a712ad3c3dce3`；
+[v0.4.0公开预发行版本](https://github.com/shubolab/opennavicat/releases/tag/v0.4.0)
+于2026-11-10 15:25:09（北京时间）发布，六份安装包、SHA256SUMS及build-manifests.json共8个资产。
 
-继续沿用未签名/未Apple公证状态和Ubuntu24.04构建环境边界，Windows ARM64应用及库须为原生ARM64，
+| 最终原生作业 | passed | skipped | 安装、运行、卸载 |
+| --- | ---: | ---: | --- |
+| Windows amd64 | 218 | 134 | 通过 |
+| Windows arm64 | 218 | 134 | 通过 |
+| macOS amd64 | 219 | 133 | 通过 |
+| macOS arm64 | 219 | 133 | 通过 |
+| Linux amd64 | 219 | 133 | 通过 |
+| Linux arm64 | 219 | 133 | 通过 |
+| 真实TLS/SSH独立安全作业 | 75 | 0 | 通过 |
+
+六个目标均在对应原生host执行，实际安装后返回6行×4列查询、0.4.0版本、libpq18及真实加密provider成功。
+原生映像逐项检查数量分别为macOS amd64/arm64的111/110、Windows的123/121、Linux的242/238。
+公开资产再以无Authorization的匿名HTTPS下载，全部HTTP200。三份独立下载的校验文件/构建清单逐字节一致，
+六份实际安装包的SHA-256和长度同时匹配校验文件、构建清单及GitHub公开资产digest/size。
+
+| 实际下载文件 | bytes | SHA-256 |
+| --- | ---: | --- |
+| OpenNavicat-0.4.0-linux-amd64.deb | 71636754 | c219daf594ae6ac67ff3a552b7ba760665236253d8b1f1f5ea808e61254018dd |
+| OpenNavicat-0.4.0-linux-arm64.deb | 70342590 | 340ae96edcf977cab5bb48f7fdf9b54ed2dbdad57174cdddde2431f977e641b4 |
+| OpenNavicat-0.4.0-macos-amd64.dmg | 45341453 | e0021c6cbfc501d9cde890a62d10f594c05e066bff18833be216f2272e262bb9 |
+| OpenNavicat-0.4.0-macos-arm64.dmg | 44986484 | 71a25c1e4eac323c565024a5a2bf8ef7876363375b244ad60f9378dd88223109 |
+| OpenNavicat-0.4.0-windows-amd64-setup.exe | 38823970 | 3d10c30e1086a2c1ca5e42f88bfeef80266210e7804be064b0f63cf702deee87 |
+| OpenNavicat-0.4.0-windows-arm64-setup.exe | 30303070 | f1b63665ff2a9ca08c4bfb83a26780564e7deb060518de35e3c11bd54739eb67 |
+| SHA256SUMS | 616 | e269aa3542946cee700251eedff5f3f8e6c71c83d8631ce1a96480754237c32e |
+| build-manifests.json | 195740 | 2942069f5e08e357b68d5322e776c00776ed0de9efebdc7601a0cd4e6b4b39a6 |
+
+根复核收据保存在忽略目录 `artifacts/release-v0.4.0/final/verification.json`，
+公开可复核证据为Release随附的
+[SHA256SUMS](https://github.com/shubolab/opennavicat/releases/download/v0.4.0/SHA256SUMS)及
+[build-manifests.json](https://github.com/shubolab/opennavicat/releases/download/v0.4.0/build-manifests.json)。
+
+公开后的macOS ARM64 DMG另在本机macOS27.2 ARM64进行只读挂载、隔离复制、Cocoa实际运行、清理和卸载；
+两个DMG均从实际挂载内容核对全部原生映像、symlink及主程序摘要。Linux最终公开ARM64 DEB另在
+干净Ubuntu24.04.5 ARM64/glibc2.39仅安装声明依赖和xvfb/xauth后运行，xcb依赖无缺，
+实际6×4查询、中文截图及crypto probe通过，apt purge及任务容器移除已完成。
+Windows本地RDP和Linux amd64 WSL验收在用户新授权后继续进行，不冒充已完成。
+
+继续沿用未签名/未Apple公证状态和Ubuntu24.04构建环境边界，Windows ARM64应用及库为原生ARM64，
 Inno引导程序为x86。用户已恢复目标，本轮里程碑交付后继续完整目标，不再次自动暂停。

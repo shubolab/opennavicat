@@ -13,22 +13,22 @@ Python + Qt Widgets（PySide6），数据库连接、SQL 和结果均在本机�
 
 ![OpenNavicat 示例数据工作流演示](docs/assets/opennavicat-demo.gif)
 
-首个可用里程碑 **[v0.3.0](https://github.com/shubolab/opennavicat/releases/tag/v0.3.0)**
+最新可用里程碑 **[v0.4.0](https://github.com/shubolab/opennavicat/releases/tag/v0.4.0)**
 已发布为早期预发行版本，提供三个操作系统、两种架构的六份安装包。SQLite、PostgreSQL、MySQL、MariaDB
 已实现驱动与核心工作流，使用隔离服务进行真实读写和界面集成验证。完整 Navicat Premium 能力仍在持续实现中，
 详细范围见 [功能路线图](docs/roadmap.md)。
 
 | 安装包 | amd64 / Intel、x64 | arm64 / Apple Silicon、Windows ARM |
 | --- | --- | --- |
-| macOS | [DMG](https://github.com/shubolab/opennavicat/releases/download/v0.3.0/OpenNavicat-0.3.0-macos-amd64.dmg) | [DMG](https://github.com/shubolab/opennavicat/releases/download/v0.3.0/OpenNavicat-0.3.0-macos-arm64.dmg) |
-| Windows | [Setup EXE](https://github.com/shubolab/opennavicat/releases/download/v0.3.0/OpenNavicat-0.3.0-windows-amd64-setup.exe) | [Setup EXE](https://github.com/shubolab/opennavicat/releases/download/v0.3.0/OpenNavicat-0.3.0-windows-arm64-setup.exe) |
-| Linux（Debian/Ubuntu） | [DEB](https://github.com/shubolab/opennavicat/releases/download/v0.3.0/OpenNavicat-0.3.0-linux-amd64.deb) | [DEB](https://github.com/shubolab/opennavicat/releases/download/v0.3.0/OpenNavicat-0.3.0-linux-arm64.deb) |
+| macOS | [DMG](https://github.com/shubolab/opennavicat/releases/download/v0.4.0/OpenNavicat-0.4.0-macos-amd64.dmg) | [DMG](https://github.com/shubolab/opennavicat/releases/download/v0.4.0/OpenNavicat-0.4.0-macos-arm64.dmg) |
+| Windows | [Setup EXE](https://github.com/shubolab/opennavicat/releases/download/v0.4.0/OpenNavicat-0.4.0-windows-amd64-setup.exe) | [Setup EXE](https://github.com/shubolab/opennavicat/releases/download/v0.4.0/OpenNavicat-0.4.0-windows-arm64-setup.exe) |
+| Linux（Debian/Ubuntu） | [DEB](https://github.com/shubolab/opennavicat/releases/download/v0.4.0/OpenNavicat-0.4.0-linux-amd64.deb) | [DEB](https://github.com/shubolab/opennavicat/releases/download/v0.4.0/OpenNavicat-0.4.0-linux-arm64.deb) |
 
-[SHA256SUMS](https://github.com/shubolab/opennavicat/releases/download/v0.3.0/SHA256SUMS)
-和 [构建与安装验证清单](https://github.com/shubolab/opennavicat/releases/download/v0.3.0/build-manifests.json)
+[SHA256SUMS](https://github.com/shubolab/opennavicat/releases/download/v0.4.0/SHA256SUMS)
+和 [构建与安装验证清单](https://github.com/shubolab/opennavicat/releases/download/v0.4.0/build-manifests.json)
 随版本发布。当前安装包没有发布者签名或 Apple 公证；Windows ARM64 安装引导器使用 x86，
 安装后的应用、Python、Qt 及原生库为 ARM64。实际系统验证范围和功能边界见
-[0.3 验证记录](docs/validation-0.3.md)。
+[0.4 验证记录](docs/validation-0.4.md)。
 
 首个可用版本交付后曾按要求暂停。用户更新本机 Navicat 后已于 2026-11-10 明确恢复；
 当前参考为 **Navicat Premium 18.0.5 build 321**，已重新实际打开并验证新建表、修改表、
@@ -77,7 +77,7 @@ sudo apt-get install libegl1 libopengl0 libxcb-cursor0 libxkbcommon-x11-0 libgli
 0.2 默认跟随系统明暗主题。`--theme dark` / `--theme light` 可固定主题用于对照；
 左侧搜索移至底部，数据库下按表/视图/查询/备份分组，中间“对象”页显示真实对象元数据，
 右侧信息面板由“查看”开关控制。SQLite “有索引”列按独立索引计算，不把 rowid 主键
-误当作独立索引。查询页使用信息/摘要/结果切换，连接窗口提供独立的异步测试连接。
+误当作独立索引。查询页使用消息/摘要/结果切换，连接窗口提供独立的异步测试连接。
 
 实际参考步骤和当前渲染边界见 [原版界面观察](docs/ui-reference-observations.md)。
 Linux 中文渲染使用系统 CJK 字体；构建环境提供 Noto Sans CJK，应用没有捆绑整套字体。
@@ -172,7 +172,7 @@ dist/OpenNavicat.app/Contents/MacOS/OpenNavicat --smoke-test
 构建）与 psycopg 的 Python 绑定，运行源码时需把 libpq DLL 目录放入 PATH 并设置
 `OPENNAVICAT_LIBPQ_DIR`；该脚本也配置加密库的 OpenSSL 源码构建路径。安装包直接包含运行库。
 `--demo` 则打开可交互的持久示例工作区。具体环境、测试数量、已构建产物及尚未验收项
-见 [0.3 验证记录](docs/validation-0.3.md)（[0.2](docs/validation-0.2.md)、[0.1 历史记录](docs/validation.md)）。Linux 容器构建可执行 `scripts/build-linux.sh`，
+见 [0.4 验证记录](docs/validation-0.4.md)（[0.3](docs/validation-0.3.md)、[0.2](docs/validation-0.2.md)、[0.1 历史记录](docs/validation.md)）。Linux 容器构建可执行 `scripts/build-linux.sh`，
 它在独立环境中测试、打包并运行产物，输出到 `artifacts/linux/`。
 
 README 演示可用 `.venv/bin/python scripts/record-demo.py` 重新录制，需要本机已有 ffmpeg。

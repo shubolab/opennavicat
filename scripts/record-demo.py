@@ -630,14 +630,17 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
     def product_tree():
         page = state["mongo_page"]
         page.set_view(1)
-        first = page.tree.topLevelItem(0)
-        first.setExpanded(True)
-        for row in range(first.childCount()):
-            child = first.child(row)
+        stock = None
+        for row in range(page.tree.topLevelItemCount()):
+            child = page.tree.topLevelItem(row)
             if child.text(0) == "attributes":
                 child.setExpanded(True)
             elif child.text(0) == "stock":
                 page.tree.setCurrentItem(child)
+                stock = child
+        if (stock is None or stock.text(1) != str(page.selected_document().document["stock"])
+                or stock.text(2) != "Int64"):
+            raise RuntimeError("The current-document tree did not render its exact BSON integer and type.")
         phase("mongodb_typed_tree")
         hold(2.0, open_gridfs_objects)
 

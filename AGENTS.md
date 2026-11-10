@@ -48,13 +48,21 @@ workflow declaration or emulated x64 executable is not an arm64 installer.
 Publish a release only after all six installer assets and checksums are verified;
 clearly describe the implemented milestone and remaining full-parity gaps.
 
-The user subsequently requested pausing this goal **after the first usable
-six-target installer Release is published and verified downloadable**. Finish
-that release first, then pause without starting another feature milestone. The
-user plans to update the local Navicat installation. On an explicit resume,
-inspect the then-installed version and its actual UI again, and use that latest
-reference to continue the original complete-function/UI goal. Do not assume the
-current 16.1.1 observations establish parity with the future updated reference.
+The first six-target MVP Release v0.3.0 was published and verified downloadable,
+then the goal was paused as requested. The user explicitly resumed it on
+2026-11-10 after updating the reference. The current selected artifact is
+`/Users/wangshubo/Downloads/Navicat Premium.app`, verified as **18.0.5 build 321**.
+Use this version's actual UI and complete database-tool behavior going forward;
+16.1.1 observations are historical evidence. The earlier pause request is revoked.
+Do not pause again merely on completing the next milestone. Preserve all original
+full-function/UI gates, including newly found Redis/Snowflake and other 18 tools.
+
+The user requests **one actual application GIF in README**, rather than a gallery
+of screenshots. Record OpenNavicat with a newly generated, isolated example
+workspace, example connection names and SQL only. Review every recorded phase
+for real connections, hostnames, local personal paths, credentials and business
+data before committing. Never present reference Navicat screenshots as this app.
+Refresh the GIF when a milestone changes the demonstrated UI or behavior.
 
 - Use `.venv/bin/python` on macOS/Linux; the workspace environment uses Python 3.13.
 - Keep all Qt widget reads and writes on the GUI thread. Database work goes

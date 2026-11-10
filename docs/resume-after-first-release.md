@@ -1,5 +1,10 @@
 # 首个可用版本交付后的恢复说明
 
+状态更新：用户已于 **2026-11-10 明确恢复目标**，指定参考为
+`/Users/wangshubo/Downloads/Navicat Premium.app`，实际确认 **18.0.5 build 321**。
+新版的 [运行观察](ui-reference-18-observations.md) 和 [静态调查](reference-18-static.md)
+已重新建立。下文暂停交接保留为历史，不能据此再次暂停当前工作。
+
 用户要求在首个最小可用 Release 发布且六份安装包实际可下载后暂停目标，
 准备把本机 Navicat 更新为最新版。v0.3.0 是早期可用里程碑；完整 Navicat
 数据库工具功能、1:1 UI 和三平台逐项对齐目标保持未完成。

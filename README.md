@@ -24,9 +24,11 @@ Python + Qt Widgets（PySide6），数据库连接、SQL 和结果均在本机�
 安装后的应用、Python、Qt 及原生库为 ARM64。实际系统验证范围和功能边界见
 [0.3 验证记录](docs/validation-0.3.md)。
 
-按用户要求，首个可用版本交付后暂停继续开发，等待更新本机 Navicat 并明确恢复。
-恢复时重新检查届时安装的版本及实际界面，继续原定完整功能和 1:1 UI 目标；
-当前 16.1.1 的参考记录保留为历史证据。交接步骤见 [恢复说明](docs/resume-after-first-release.md)。
+首个可用版本交付后曾按要求暂停。用户更新本机 Navicat 后已于 2026-11-10 明确恢复；
+当前参考为 **Navicat Premium 18.0.5 build 321**，已重新实际打开并验证新建表、修改表、
+SQL 预览、查询和多结果工作流。继续原定完整功能和 1:1 UI 目标，
+旧 16.1.1 记录保留为历史证据。新版运行观察见
+[18 版实际界面与行为记录](docs/ui-reference-18-observations.md)。
 
 0.1 的自定义界面没有满足还原要求。0.2 开始实际打开参考应用，以同一个本地样例库
 观察并重建主工具栏、分类导航、对象列表、信息面板、查询/结果区和连接对话框。
@@ -166,7 +168,7 @@ dist/OpenNavicat.app/Contents/MacOS/OpenNavicat --smoke-test
 ## 参考、实现与许可证
 
 [Navicat 调查报告](docs/navicat-reference.md) 区分资源中的功能声明、重建设计和
-尚未验证的行为。参考对象是本机 Navicat Premium 16.1.1 build 51；当前实现的行为
+尚未验证的行为。当前参考对象是本机 Navicat Premium 18.0.5 build 321；当前实现的行为
 由 OpenNavicat 源码和测试决定。原始 REA 证据是本机诊断文件，已从源码分发忽略。
 
 OpenNavicat 自有代码使用 [MIT License](LICENSE)。依赖分别使用其自身许可证，

@@ -1,5 +1,13 @@
 # Navicat reference investigation
 
+**Current reference after the user's explicit resume:**
+`/Users/wangshubo/Downloads/Navicat Premium.app`, **18.0.5 / build 321**.
+The new static identity, full capability categories, version-pair differences,
+resource Evidence and concrete UI entry cues are recorded in
+[reference-18-static.md](reference-18-static.md). Runtime/UI observations remain
+a separate evidence chain. The following 16.1.1 report is historical evidence;
+it must not be treated as acceptance of the updated reference.
+
 Reference examined on 2026-11-10: `/Applications/Navicat Premium.app`.
 The artifact identifies itself as **Navicat Premium 16.1.1, build 51**.
 This report records a focused static resource investigation, not full behavioral

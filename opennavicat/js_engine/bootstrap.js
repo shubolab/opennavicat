@@ -34,11 +34,23 @@
     return freeze(obj);
   }
   function Long(value) {const n=i64(value);return tagged('int64',n,()=>`Long("${n.toString()}")`,()=>n);}
-  function Int32(value) {if(typeof value!=='number'||!isSafe(value)||value<-(2**31)||value>=2**31)throw new RangeError('Int32 range');return tagged('int32',value,()=>`Int32("${String(value)}")`,()=>value);}
+  function Int32(value) {if(typeof value==='string'){if(!/^[+-]?\d+$/.test(value))throw new RangeError('Int32 requires a decimal integer');value=NativeNumber(value);}if(typeof value!=='number'||!isSafe(value)||value<-(2**31)||value>=2**31)throw new RangeError('Int32 range');return tagged('int32',value,()=>`Int32("${String(value)}")`,()=>value);}
   function Double(value) {const n=Number(value);return tagged('double',n,()=>String(n),()=>n);}
   function Decimal128(value) {if(typeof value!=='string')throw new TypeError('Decimal128 requires exact string');return tagged('decimal128',value,()=>value);}
   function ObjectId(value) {if(typeof value!=='string'||!/^[a-fA-F0-9]{24}$/.test(value))throw new TypeError('ObjectId requires 24 hex characters');const h=value.toLowerCase();return tagged('objectid',h,()=>h);}
   function DateMS(value) {const n=i64(value);return tagged('date',n,()=>n.toString());}
+  function ISODate(value) {
+    if(value===undefined)return new NativeDate();
+    if(typeof value!=='string')throw new TypeError('ISODate requires an ISO string with explicit timezone');
+    const parts=/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(Z|[+-]\d{2}:\d{2})$/.exec(value);
+    if(!parts)throw new TypeError('ISODate requires a complete ISO string with explicit timezone');
+    const fraction=parts[7]||'';
+    if(/[1-9]/.test(fraction.slice(3)))throw new RangeError('BSON dates require exact millisecond precision');
+    const localText=parts[1]+'-'+parts[2]+'-'+parts[3]+'T'+parts[4]+':'+parts[5]+':'+parts[6]+'.'+(fraction+'000').slice(0,3)+'Z';
+    const local=new NativeDate(localText), date=new NativeDate(value);
+    if(!isSafe(epoch.call(local))||!isSafe(epoch.call(date))||dateISO.call(local)!==localText)throw new RangeError('Invalid ISODate calendar date');
+    return date;
+  }
   const alphabet='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
   function base64(bytes) {let s='';for(let i=0;i<bytes.length;i+=3){const n=(bytes[i]<<16)|((bytes[i+1]||0)<<8)|(bytes[i+2]||0);s+=alphabet[(n>>>18)&63]+alphabet[(n>>>12)&63]+(i+1<bytes.length?alphabet[(n>>>6)&63]:'=')+(i+2<bytes.length?alphabet[n&63]:'=');}return s;}
   function Binary(bytes,subtype=0) {
@@ -51,6 +63,7 @@
     return tagged('binary',[value,subtype],()=>value);
   }
   function BinData(subtype,text){return Binary(text,subtype);}
+  define(Binary,'createFromBase64',{value:(text,subtype=0)=>Binary(text,subtype),writable:false,configurable:false});
   function BSONRegex(pattern,options='') {if(typeof pattern!=='string'||typeof options!=='string'||/[^ilmsux]/.test(options))throw new TypeError('BSON regex');const flags=[...new Set(options)].sort().join('');return tagged('regex',[pattern,flags],()=>pattern);}
   function Timestamp(t,i) {if(!isSafe(t)||!isSafe(i)||t<0||i<0||t>0xffffffff||i>0xffffffff)throw new RangeError('Timestamp range');return tagged('timestamp',[t,i],()=>`${t}:${i}`);}
   function MinKey(){return tagged('minkey',null,()=>'MinKey');}
@@ -181,6 +194,6 @@
     });
   }
   const db=new Proxy(freeze({getCollection:collection,runCommand:command}),{get(target,name){if(typeof name!=='string')return undefined;return Object.prototype.hasOwnProperty.call(target,name)?target[name]:collection(name);}});
-  for(const [name,value]of Object.entries({db,Long,NumberLong:Long,Int32,NumberInt:Int32,Decimal128,NumberDecimal:Decimal128,ObjectId,Binary,BinData,BSONRegex,Timestamp,MinKey,MaxKey,Code,DBRef}))define(globalThis,name,{value,writable:false,configurable:false});
+  for(const [name,value]of Object.entries({db,Long,NumberLong:Long,Int32,NumberInt:Int32,Decimal128,NumberDecimal:Decimal128,ObjectId,Binary,BinData,ISODate,BSONRegex,Timestamp,MinKey,MaxKey,Code,DBRef}))define(globalThis,name,{value,writable:false,configurable:false});
   return value => {guard();const finish=cursorCompletion.get(value);if(finish)value=finish();return stringify(encode(value,0,new WeakSet(),true));};
 })()

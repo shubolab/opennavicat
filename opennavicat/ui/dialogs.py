@@ -1,0 +1,1120 @@
+"""Native connection, table definition and record editing dialogs."""
+
+from __future__ import annotations
+
+import json
+import base64
+import hashlib
+import re
+import uuid
+from pathlib import Path
+
+from PySide6.QtCore import Qt, QThreadPool, QTimer, QSize, Signal
+from PySide6.QtWidgets import (
+    QButtonGroup, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout,
+    QFrame, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QListWidget, QMessageBox, QPlainTextEdit,
+    QPushButton, QRadioButton, QScrollArea, QSpinBox, QTableWidget, QTableWidgetItem,
+    QTabWidget, QVBoxLayout, QWidget,
+)
+
+from opennavicat.database import ConnectionConfig
+
+
+def _hint(text: str) -> QLabel:
+    label = QLabel(text)
+    label.setWordWrap(True)
+    label.setStyleSheet("color: #738096; font-size: 11px;")
+    return label
+
+
+def _pin_fingerprint(pin: str) -> str:
+    try:
+        payload = base64.b64decode(pin.split()[1], validate=True)
+        digest = base64.b64encode(hashlib.sha256(payload).digest()).decode("ascii").rstrip("=")
+        return "SHA256:" + digest
+    except (ValueError, IndexError):
+        return "无法解析已保存的主机密钥"
+
+
+def confirm_ssh_host_key(parent, error) -> bool:
+    """Ask about an unknown SSH key on the GUI thread; never accept a mismatch."""
+    endpoint = f"{error.hostname}:{error.port}"
+    if error.expected:
+        QMessageBox.critical(parent, "SSH 主机密钥不匹配",
+            f"{endpoint} 的主机密钥与已保存的密钥不一致，连接已拒绝。\n\n"
+            f"已保存的指纹：{_pin_fingerprint(error.expected)}\n"
+            f"收到的密钥类型：{error.key_type}\n收到的指纹：{error.fingerprint}")
+        return False
+    message = (
+        f"尚未信任 SSH 主机 {endpoint} 的主机密钥。\n\n"
+        f"密钥类型：{error.key_type}\nSHA256 指纹：{error.fingerprint}\n\n"
+        "请核对服务器提供的指纹。是否信任此密钥并继续连接？\n"
+        "确认后，此连接配置将固定使用该主机密钥。"
+    )
+    return QMessageBox.question(parent, "确认 SSH 主机密钥", message,
+        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes
+
+
+class _ConnectionDiagram(QWidget):
+    """Original neutral artwork painted with the current platform palette."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.driver = "SQLite"
+        self.tunnel_enabled = False
+        self.ssl_enabled = False
+        self.setFixedHeight(140)
+        self.setObjectName("connectionDiagram")
+        self.setAccessibleName("OpenNavicat 与数据库连接示意图")
+
+    def paintEvent(self, event):
+        from PySide6.QtCore import QRectF
+        from PySide6.QtGui import QPainter, QPainterPath, QPen
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        palette = self.palette()
+        painter.setPen(QPen(palette.mid().color(), 1.5))
+        painter.setBrush(palette.base())
+        left = self.width() * (0.15 if self.tunnel_enabled else 0.24)
+        right = self.width() * (0.85 if self.tunnel_enabled else 0.76)
+        y = 35
+        # Original workbench artwork sits on the left, database on the right.
+        painter.drawRoundedRect(QRectF(left - 29, y + 3, 58, 39), 3, 3)
+        painter.drawLine(round(left), y + 43, round(left), y + 51)
+        painter.drawLine(round(left - 17), y + 52, round(left + 17), y + 52)
+        if self.tunnel_enabled:
+            center = self.width() * 0.5
+            painter.drawLine(round(left + 40), y + 28, round(center - 33), y + 28)
+            painter.drawLine(round(center + 33), y + 28, round(right - 40), y + 28)
+            painter.drawRoundedRect(QRectF(center - 26, y + 1, 52, 51), 2, 2)
+            for offset in (12, 26, 40):
+                painter.drawLine(round(center - 18), y + offset, round(center + 18), y + offset)
+        else:
+            painter.drawLine(round(left + 40), y + 28, round(right - 40), y + 28)
+        body = QPainterPath()
+        body.moveTo(right - 26, y + 8)
+        body.lineTo(right - 26, y + 42)
+        body.cubicTo(right - 26, y + 56, right + 26, y + 56, right + 26, y + 42)
+        body.lineTo(right + 26, y + 8)
+        painter.drawPath(body)
+        painter.drawEllipse(QRectF(right - 26, y, 52, 17))
+        painter.drawArc(QRectF(right - 26, y + 18, 52, 17), 180 * 16, 180 * 16)
+        if self.ssl_enabled:
+            lock_x = self.width() * (0.675 if self.tunnel_enabled else 0.5)
+            painter.drawArc(QRectF(lock_x - 4, y + 6, 8, 10), 0, 180 * 16)
+            painter.drawRoundedRect(QRectF(lock_x - 6, y + 11, 12, 10), 1, 1)
+        painter.setPen(palette.text().color())
+        painter.drawText(QRectF(left - 75, 104, 150, 24), Qt.AlignmentFlag.AlignCenter, "OpenNavicat")
+        painter.drawText(QRectF(right - 75, 104, 150, 24), Qt.AlignmentFlag.AlignCenter, "数据库")
+        if self.tunnel_enabled:
+            painter.drawText(QRectF(center - 65, 104, 130, 24), Qt.AlignmentFlag.AlignCenter, "SSH Server")
+
+
+class ConnectionDialog(QDialog):
+    """Native connection profile editor with an explicit asynchronous test action.
+
+    Profile collection never opens a connection. Only clicking Test Connection
+    starts a short-lived session; that session is always closed by its worker.
+    """
+
+    test_finished = Signal(bool, str)
+
+    def __init__(self, parent=None, config: ConnectionConfig | None = None):
+        super().__init__(parent)
+        self._original = config
+        self._config = None
+        self._testing = False
+        self._test_task = None
+        self._test_pool = QThreadPool(self)
+        self._test_pool.setMaxThreadCount(1)
+        self._reference_frame_size = QSize(749, 668)
+        self.setObjectName("connectionDialog")
+        self.resize(749, 668)
+        self.setMinimumSize(520, 520)
+        font = self.font()
+        font.setPixelSize(12)
+        self.setFont(font)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+        self.content = QWidget()
+        content = QHBoxLayout(self.content)
+        content.setContentsMargins(20, 20, 20, 0)
+        content.setSpacing(20)
+        outer.addWidget(self.content, 1)
+
+        self.profile_pane = QFrame()
+        self.profile_pane.setObjectName("connectionProfilePane")
+        self.profile_pane.setFixedWidth(200)
+        rail = QVBoxLayout(self.profile_pane)
+        rail.setContentsMargins(0, 0, 0, 0)
+        rail.setSpacing(0)
+        self.profiles = QListWidget()
+        self.profiles.setObjectName("connectionProfiles")
+        self.profiles.addItem("Main Profile（有效）")
+        self.profiles.setCurrentRow(0)
+        rail.addWidget(self.profiles, 1)
+        # Drivers are selected by the main window's connection-type menu. Keep
+        # the original widget API hidden for callers that select one in code.
+        self.driver_combo = QComboBox(self)
+        self.driver_combo.setObjectName("connectionDriver")
+        for label, driver in [("SQLite", "sqlite"), ("PostgreSQL", "postgresql"),
+                              ("MySQL", "mysql"), ("MariaDB", "mariadb")]:
+            self.driver_combo.addItem(label, driver)
+        self.driver_combo.hide()
+        self.new_profile_button = QPushButton("＋ 新建连接配置文件")
+        self.new_profile_button.setObjectName("newConnectionProfile")
+        self.new_profile_button.setEnabled(False)
+        self.new_profile_button.setToolTip("多个连接配置文件尚未实现；当前连接使用 Main Profile。")
+        rail.addWidget(self.new_profile_button)
+        content.addWidget(self.profile_pane)
+
+        right = QWidget()
+        self.settings_pane = right
+        right.setObjectName("connectionSettingsPane")
+        right_layout = QVBoxLayout(right)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        self.tabs = QTabWidget()
+        self.tabs.setObjectName("connectionTabs")
+        self.tabs.setDocumentMode(False)
+        right_layout.addWidget(self.tabs)
+        content.addWidget(right, 1)
+
+        self.general_tab = QWidget()
+        general = QVBoxLayout(self.general_tab)
+        general.setContentsMargins(10, 6, 10, 12)
+        general.setSpacing(12)
+        self.diagram = _ConnectionDiagram()
+        general.addWidget(self.diagram)
+        general.addSpacing(12)
+        form = QFormLayout()
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        form.setHorizontalSpacing(14)
+        form.setVerticalSpacing(13)
+        self.name_edit = QLineEdit(config.name if config else "")
+        self.name_edit.setObjectName("connectionName")
+        self.name_edit.setPlaceholderText("连接名称")
+        form.addRow("连接名", self.name_edit)
+        self.sqlite_mode_combo = QComboBox(self)
+        self.sqlite_mode_combo.addItem("现有 SQLite 3 数据库", "existing")
+        self.sqlite_mode_combo.addItem("新建 SQLite 3 数据库", "create")
+        self.sqlite_mode_combo.hide()
+        self.sqlite_type_widget = QWidget()
+        sqlite_types = QVBoxLayout(self.sqlite_type_widget)
+        sqlite_types.setContentsMargins(0, 0, 0, 0)
+        sqlite_types.setSpacing(4)
+        self.sqlite_type_group = QButtonGroup(self)
+        self.sqlite_existing_radio = QRadioButton("现有数据库文件")
+        self.sqlite_create_radio = QRadioButton("新建 SQLite 3 数据库")
+        self.sqlite_legacy_radio = QRadioButton("新建 SQLite 2 数据库")
+        for index, radio in enumerate((self.sqlite_existing_radio, self.sqlite_create_radio, self.sqlite_legacy_radio)):
+            self.sqlite_type_group.addButton(radio, index)
+            sqlite_types.addWidget(radio)
+        self.sqlite_existing_radio.setChecked(True)
+        self.sqlite_legacy_radio.setEnabled(False)
+        self.sqlite_legacy_radio.setToolTip("SQLite 2 格式的创建与连接尚未实现。")
+        self.sqlite_type_group.idClicked.connect(lambda index: self.sqlite_mode_combo.setCurrentIndex(index) if index < 2 else None)
+        self.sqlite_mode_combo.currentIndexChanged.connect(lambda index: self.sqlite_type_group.button(index).setChecked(True))
+        self.sqlite_type_label = QLabel("类型")
+        form.addRow(self.sqlite_type_label, self.sqlite_type_widget)
+        self.database_edit = QLineEdit(config.database if config else "")
+        self.database_edit.setObjectName("connectionDatabase")
+        self.database_row = QWidget()
+        database_layout = QHBoxLayout(self.database_row)
+        database_layout.setContentsMargins(0, 0, 0, 0)
+        database_layout.setSpacing(6)
+        database_layout.addWidget(self.database_edit, 1)
+        self.browse_button = QPushButton("…")
+        self.browse_button.setFixedWidth(30)
+        self.browse_button.setToolTip("选择数据库文件")
+        database_layout.addWidget(self.browse_button)
+        # Retained for callers using the original public widget attribute. The
+        # SQLite type selector now exposes the create-file workflow.
+        self.create_button = QPushButton("新建…", self)
+        self.create_button.hide()
+        self.database_label = QLabel("数据库文件")
+        form.addRow(self.database_label, self.database_row)
+        self.browse_button.clicked.connect(self._browse)
+        self.create_button.clicked.connect(self._new_file)
+        self.host_edit = QLineEdit(config.host if config else "localhost")
+        self.port_spin = QSpinBox()
+        self.port_spin.setRange(1, 65535)
+        self.user_edit = QLineEdit(config.username if config else "")
+        self.password_edit = QLineEdit(config.password if config else "")
+        self.password_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self._network_rows = []
+        for label, field in [("主机", self.host_edit), ("端口", self.port_spin)]:
+            label_widget = QLabel(label)
+            form.addRow(label_widget, field)
+            self._network_rows.append((label_widget, field))
+        form.addRow("用户名", self.user_edit)
+        form.addRow("密码", self.password_edit)
+        self.remember_check = QCheckBox("保存密码")
+        self.remember_check.setChecked(bool(config and config.password))
+        self.remember_check.setToolTip("密码仅保存在本机系统钥匙串中。")
+        form.addRow("", self.remember_check)
+        general.addLayout(form)
+        self.note = QLabel()
+        self.note.setWordWrap(True)
+        self.note.setObjectName("connectionHint")
+        self.note.hide()
+        general.addWidget(self.note)
+        general.addStretch(1)
+
+        self.advanced_tab = QWidget()
+        advanced = QFormLayout(self.advanced_tab)
+        advanced.setContentsMargins(20, 28, 20, 20)
+        advanced.setSpacing(16)
+        self.read_only_check = QCheckBox("以只读方式打开连接")
+        self.read_only_check.setChecked(bool(config and config.read_only))
+        advanced.addRow(self.read_only_check)
+        self.foreign_keys_check = QCheckBox("启用 SQLite 外键约束")
+        self.foreign_keys_check.setChecked(True)
+        self.foreign_keys_check.setEnabled(False)
+        self.foreign_keys_check.setToolTip("SQLite 连接始终启用外键约束；当前版本不可关闭。")
+        advanced.addRow(self.foreign_keys_check)
+        self.timeout_spin = QSpinBox()
+        self.timeout_spin.setRange(1, 31536000)
+        self.timeout_spin.setValue(getattr(config, "connect_timeout", 10) if config else 10)
+        advanced.addRow("连接超时（秒）", self.timeout_spin)
+
+        self.databases_tab = QWidget()
+        databases = QVBoxLayout(self.databases_tab)
+        databases.setContentsMargins(20, 28, 20, 20)
+        self.remote_database_edit = QLineEdit(self.database_edit.text())
+        self.remote_database_edit.setPlaceholderText("数据库名称")
+        self.remote_database_label = QLabel("初始数据库")
+        form.insertRow(5, self.remote_database_label, self.remote_database_edit)
+        self.remote_database_edit.textChanged.connect(self.database_edit.setText)
+        self.database_edit.textChanged.connect(self.remote_database_edit.setText)
+        self.sqlite_database_note = QLabel("数据库文件在“常规”页中设置。")
+        self.sqlite_database_note.setWordWrap(True)
+        databases.addWidget(self.sqlite_database_note)
+        self.network_database_note = QLabel("初始数据库在“常规”页中设置。可用数据库列表由连接后的服务器提供。")
+        self.network_database_note.setWordWrap(True)
+        databases.addWidget(self.network_database_note)
+        databases.addStretch()
+
+        self.ssl_tab = QWidget()
+        ssl_layout = QVBoxLayout(self.ssl_tab)
+        ssl_layout.setContentsMargins(10, 6, 10, 12)
+        ssl_layout.setSpacing(10)
+        self.ssl_diagram = _ConnectionDiagram()
+        ssl_layout.addWidget(self.ssl_diagram)
+        ssl_form = QFormLayout()
+        ssl_form.setSpacing(8)
+        ssl_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.ssl_enabled_check = QCheckBox("使用 SSL")
+        self.ssl_enabled_check.setChecked(bool(config and config.ssl_mode != "disable"))
+        ssl_form.addRow(self.ssl_enabled_check)
+        self.ssl_combo = QComboBox()
+        for mode in ("allow", "prefer", "require", "verify-ca", "verify-full"):
+            self.ssl_combo.addItem(mode, mode)
+        self.ssl_combo.setCurrentIndex(self.ssl_combo.findData("prefer"))
+        ssl_form.addRow("SSL 模式", self.ssl_combo)
+        self.ssl_verify_check = QCheckBox("使用验证")
+        self.ssl_verify_check.setChecked(bool(config and any(getattr(config, name, "") for name in
+            ("ssl_ca", "ssl_cert", "ssl_key", "ssl_crl", "ssl_key_password"))))
+        self.ssl_verify_check.setToolTip("启用自定义证书文件。服务器证书验证策略由 SSL 模式决定。")
+        ssl_form.addRow(self.ssl_verify_check)
+        self._ssl_file_widgets = []
+        for name, attribute in [("客户端密钥", "ssl_key"), ("客户端证书", "ssl_cert"),
+                                ("根证书", "ssl_ca"), ("证书撤消列表", "ssl_crl")]:
+            field, edit, browse = self._file_field(getattr(config, attribute, "") if config else "", name)
+            setattr(self, attribute + "_edit", edit)
+            setattr(self, attribute + "_browse", browse)
+            self._ssl_file_widgets.append(field)
+            ssl_form.addRow(name, field)
+        self.ssl_key_password_edit = QLineEdit(getattr(config, "ssl_key_password", "") if config else "")
+        self.ssl_key_password_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        ssl_form.addRow("密钥通行短语", self.ssl_key_password_edit)
+        self.remember_ssl_check = QCheckBox("保存密钥通行短语")
+        self.ssl_remember_check = self.remember_ssl_check
+        self.remember_ssl_check.setChecked(bool(config and getattr(config, "ssl_key_password", "")))
+        self.remember_ssl_check.setToolTip("通行短语仅保存在本机系统钥匙串中。")
+        ssl_form.addRow("", self.remember_ssl_check)
+        ssl_layout.addLayout(ssl_form)
+        ssl_layout.addStretch()
+        self.ssl_enabled_check.toggled.connect(self._ssl_state_changed)
+        self.ssl_verify_check.toggled.connect(self._ssl_state_changed)
+        self.ssl_combo.currentIndexChanged.connect(self._ssl_state_changed)
+        self.ssl_key_edit.textChanged.connect(self._ssl_state_changed)
+
+        self.ssh_tab = QWidget()
+        ssh = QVBoxLayout(self.ssh_tab)
+        ssh.setContentsMargins(10, 6, 10, 12)
+        ssh.setSpacing(10)
+        self.ssh_diagram = _ConnectionDiagram()
+        ssh.addWidget(self.ssh_diagram)
+        self.ssh_enabled_check = QCheckBox("使用 SSH 隧道")
+        self.ssh_enabled_check.setChecked(bool(config and getattr(config, "ssh_enabled", False)))
+        ssh.addWidget(self.ssh_enabled_check)
+        self.ssh_form = QFormLayout()
+        self.ssh_form.setSpacing(8)
+        self.ssh_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.ssh_host_edit = QLineEdit(getattr(config, "ssh_host", "") if config else "")
+        self.ssh_port_spin = QSpinBox()
+        self.ssh_port_spin.setRange(1, 65535)
+        self.ssh_port_spin.setValue(getattr(config, "ssh_port", 22) if config else 22)
+        self.ssh_port_spin.setFixedWidth(78)
+        self.ssh_user_edit = QLineEdit(getattr(config, "ssh_username", "") if config else "")
+        self.ssh_auth_combo = QComboBox()
+        for label, method in [("密码", "password"), ("公钥", "key"),
+                              ("密码和公钥", "password+key"), ("SSH Agent", "agent")]:
+            self.ssh_auth_combo.addItem(label, method)
+        self.ssh_auth_combo.setCurrentIndex(max(0, self.ssh_auth_combo.findData(
+            getattr(config, "ssh_auth_method", "password") if config else "password")))
+        for label, field in [("主机", self.ssh_host_edit), ("端口", self.ssh_port_spin),
+                             ("用户名", self.ssh_user_edit), ("验证方法", self.ssh_auth_combo)]:
+            self.ssh_form.addRow(label, field)
+        self.ssh_password_edit = QLineEdit(getattr(config, "ssh_password", "") if config else "")
+        self.ssh_password_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.remember_ssh_check = QCheckBox("保存密码")
+        self.ssh_remember_check = self.remember_ssh_check
+        self.remember_ssh_check.setChecked(bool(config and getattr(config, "ssh_password", "")))
+        self.remember_ssh_check.setToolTip("SSH 密码仅保存在本机系统钥匙串中。")
+        self._ssh_password_rows = []
+        for text, field in [("密码", self.ssh_password_edit), ("", self.remember_ssh_check)]:
+            label = QLabel(text)
+            self.ssh_form.addRow(label, field)
+            self._ssh_password_rows.append((label, field))
+        self.ssh_key_field, self.ssh_key_edit, self.ssh_key_browse = self._file_field(
+            getattr(config, "ssh_key_file", "") if config else "", "SSH 私钥")
+        self.ssh_key_passphrase_edit = QLineEdit(getattr(config, "ssh_key_passphrase", "") if config else "")
+        self.ssh_key_passphrase_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.remember_ssh_key_check = QCheckBox("保存通行短语")
+        self.ssh_key_remember_check = self.remember_ssh_key_check
+        self.remember_ssh_key_check.setChecked(bool(config and getattr(config, "ssh_key_passphrase", "")))
+        self.remember_ssh_key_check.setToolTip("私钥通行短语仅保存在本机系统钥匙串中。")
+        self._ssh_key_rows = []
+        for text, field in [("私钥", self.ssh_key_field), ("通行短语", self.ssh_key_passphrase_edit),
+                            ("", self.remember_ssh_key_check)]:
+            label = QLabel(text)
+            self.ssh_form.addRow(label, field)
+            self._ssh_key_rows.append((label, field))
+        self.ssh_compression_check = QCheckBox("使用压缩")
+        self.ssh_compression_check.setChecked(bool(config and getattr(config, "ssh_compression", False)))
+        self.ssh_form.addRow("", self.ssh_compression_check)
+        ssh.addLayout(self.ssh_form)
+        self.ssh_pin_label = QLabel()
+        self.ssh_pin_label.setWordWrap(True)
+        ssh.addWidget(self.ssh_pin_label)
+        ssh.addStretch()
+        self._ssh_host_key = getattr(config, "ssh_host_key", "") if config else ""
+        self._ssh_pin_endpoint = self._ssh_endpoint()
+        self._test_error = None
+        self._test_success_message = ""
+        self.ssh_enabled_check.toggled.connect(self._ssh_state_changed)
+        self.ssh_auth_combo.currentIndexChanged.connect(self._ssh_state_changed)
+        self.ssh_host_edit.textChanged.connect(self._ssh_endpoint_changed)
+        self.ssh_port_spin.valueChanged.connect(self._ssh_endpoint_changed)
+        self.http_tab = self._unavailable_tab("使用 HTTP 通道", "HTTP 隧道尚未实现；此选项当前不可用。")
+
+        footer = QFrame()
+        self.footer = footer
+        footer.setObjectName("connectionDialogFooter")
+        footer.setFixedHeight(60)
+        footer_layout = QHBoxLayout(footer)
+        footer_layout.setContentsMargins(18, 12, 20, 14)
+        footer_layout.setSpacing(12)
+        self.profile_toggle = QPushButton("▤")
+        self.profile_toggle.setFixedWidth(26)
+        self.profile_toggle.setCheckable(True)
+        self.profile_toggle.setAutoDefault(False)
+        self.profile_toggle.setToolTip("显示或隐藏连接配置文件")
+        self.profile_toggle.toggled.connect(self._toggle_profiles)
+        footer_layout.addWidget(self.profile_toggle)
+        self.test_button = QPushButton("测试连接")
+        self.test_button.setAutoDefault(False)
+        self.test_button.clicked.connect(self.test_connection)
+        footer_layout.addWidget(self.test_button)
+        self.test_status = QLabel()
+        self.test_status.setObjectName("connectionTestStatus")
+        footer_layout.addWidget(self.test_status, 1)
+        self.buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
+        self.buttons.button(QDialogButtonBox.StandardButton.Save).setText("保存")
+        self.buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("取消")
+        self.buttons.button(QDialogButtonBox.StandardButton.Save).setDefault(True)
+        self.buttons.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
+        self.buttons.accepted.connect(self.accept)
+        self.buttons.rejected.connect(self.reject)
+        footer_layout.addWidget(self.buttons)
+        outer.addWidget(footer)
+        self.driver_combo.currentIndexChanged.connect(self._driver_changed)
+        if config:
+            self.driver_combo.setCurrentIndex(max(0, self.driver_combo.findData(config.driver)))
+            self.ssl_combo.setCurrentIndex(max(0, self.ssl_combo.findData(config.ssl_mode)))
+        self._driver_changed()
+        self._ssl_state_changed()
+        self._ssh_state_changed()
+        if config and config.port:
+            self.port_spin.setValue(config.port)
+
+    @staticmethod
+    def _unavailable_tab(label, message):
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(20, 28, 20, 20)
+        checkbox = QCheckBox(label)
+        checkbox.setEnabled(False)
+        checkbox.setToolTip(message)
+        layout.addWidget(checkbox)
+        note = QLabel(message)
+        note.setWordWrap(True)
+        layout.addWidget(note)
+        layout.addStretch()
+        return widget
+
+    @property
+    def remember_password(self) -> bool:
+        return self.remember_check.isChecked() and self.driver_combo.currentData() != "sqlite"
+
+    @property
+    def remember_ssh_password(self) -> bool:
+        return (self.driver_combo.currentData() != "sqlite" and self.ssh_enabled_check.isChecked()
+                and self.ssh_auth_combo.currentData() in ("password", "password+key")
+                and self.remember_ssh_check.isChecked())
+
+    @property
+    def remember_ssh_key_passphrase(self) -> bool:
+        return (self.driver_combo.currentData() != "sqlite" and self.ssh_enabled_check.isChecked()
+                and self.ssh_auth_combo.currentData() in ("key", "password+key")
+                and self.remember_ssh_key_check.isChecked())
+
+    @property
+    def remember_ssl_password(self) -> bool:
+        return (self.driver_combo.currentData() != "sqlite" and self.ssl_enabled_check.isChecked()
+                and self.ssl_verify_check.isChecked() and self.remember_ssl_check.isChecked())
+
+    def _file_field(self, value, title):
+        field = QWidget()
+        row = QHBoxLayout(field)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(6)
+        edit, browse = QLineEdit(value), QPushButton("…")
+        browse.setFixedWidth(30)
+        browse.setAutoDefault(False)
+        browse.setToolTip(f"选择{title}")
+        browse.clicked.connect(lambda: self._browse_file(edit, title))
+        row.addWidget(edit, 1)
+        row.addWidget(browse)
+        return field, edit, browse
+
+    def _browse_file(self, edit, title):
+        path, _ = QFileDialog.getOpenFileName(self, f"选择{title}", edit.text(), "所有文件 (*)")
+        if path:
+            edit.setText(path)
+
+    def _ssl_state_changed(self, *_):
+        enabled = self.ssl_enabled_check.isChecked()
+        self.ssl_combo.setEnabled(enabled)
+        self.ssl_verify_check.setEnabled(enabled)
+        custom_files = enabled and self.ssl_verify_check.isChecked()
+        for field in self._ssl_file_widgets:
+            field.setEnabled(custom_files)
+        self.ssl_key_password_edit.setEnabled(custom_files and bool(self.ssl_key_edit.text().strip()))
+        self.remember_ssl_check.setEnabled(custom_files and bool(self.ssl_key_edit.text().strip()))
+        self.ssl_diagram.ssl_enabled = enabled
+        self.ssl_diagram.update()
+        if hasattr(self, "ssh_diagram"):
+            self.ssh_diagram.ssl_enabled = enabled
+            self.ssh_diagram.update()
+
+    def _ssh_endpoint(self):
+        return self.ssh_host_edit.text().strip().casefold(), self.ssh_port_spin.value()
+
+    def _ssh_endpoint_changed(self, *_):
+        endpoint = self._ssh_endpoint()
+        if endpoint != self._ssh_pin_endpoint:
+            self._ssh_host_key = ""
+            self._ssh_pin_endpoint = endpoint
+        self._update_ssh_pin_label()
+
+    def _update_ssh_pin_label(self):
+        self.ssh_pin_label.setText("主机密钥：" + _pin_fingerprint(self._ssh_host_key)
+                                   if self._ssh_host_key else "主机密钥将在首次连接时确认。")
+
+    def _ssh_state_changed(self, *_):
+        enabled = self.ssh_enabled_check.isChecked()
+        method = self.ssh_auth_combo.currentData()
+        for field in (self.ssh_host_edit, self.ssh_port_spin, self.ssh_user_edit,
+                      self.ssh_auth_combo, self.ssh_compression_check):
+            field.setEnabled(enabled)
+        for label, field in self._ssh_password_rows:
+            visible = method in ("password", "password+key")
+            label.setVisible(visible)
+            field.setVisible(visible)
+            field.setEnabled(enabled)
+        for label, field in self._ssh_key_rows:
+            visible = method in ("key", "password+key")
+            label.setVisible(visible)
+            field.setVisible(visible)
+            field.setEnabled(enabled)
+        self.ssh_diagram.tunnel_enabled = enabled
+        self.ssh_diagram.update()
+        self._update_ssh_pin_label()
+
+    def _driver_changed(self, *_):
+        driver = self.driver_combo.currentData()
+        local = driver == "sqlite"
+        label = self.driver_combo.currentText()
+        self.setWindowTitle(f"{label} - {'编辑连接' if self._original else '新建连接'}")
+        self.diagram.driver = label
+        self.diagram.update()
+        allow_index = self.ssl_combo.findData("allow")
+        if driver == "postgresql" and allow_index < 0:
+            self.ssl_combo.insertItem(0, "allow", "allow")
+        elif driver != "postgresql" and allow_index >= 0:
+            self.ssl_combo.removeItem(allow_index)
+        self.tabs.clear()
+        for widget, name in [(self.general_tab, "常规"), (self.advanced_tab, "高级"),
+                             (self.databases_tab, "数据库")]:
+            self.tabs.addTab(widget, name)
+        if not local:
+            self.tabs.addTab(self.ssl_tab, "SSL")
+            index = self.tabs.addTab(self.ssh_tab, "SSH")
+            self.tabs.setTabToolTip(index, "使用 SSH 隧道连接数据库。")
+        index = self.tabs.addTab(self.http_tab, "HTTP")
+        self.tabs.setTabToolTip(index, "HTTP 隧道尚未实现。")
+        self.sqlite_type_label.setVisible(local)
+        self.sqlite_type_widget.setVisible(local)
+        self.database_label.setVisible(local)
+        self.database_row.setVisible(local)
+        self.remote_database_label.setVisible(not local)
+        self.remote_database_edit.setVisible(not local)
+        self.sqlite_database_note.setVisible(local)
+        self.network_database_note.setVisible(not local)
+        self.foreign_keys_check.setVisible(local)
+        for row_label, field in self._network_rows:
+            row_label.setVisible(not local)
+            field.setVisible(not local)
+        for field in (self.user_edit, self.password_edit, self.remember_check):
+            field.setEnabled(not local)
+            field.setToolTip("SQLite 3 直连不使用用户名及密码；加密扩展尚未实现。" if local else "")
+        self.remember_check.setToolTip("SQLite 3 直连不使用用户名及密码；加密扩展尚未实现。" if local else "密码仅保存在本机系统钥匙串中。")
+        self.port_spin.setValue(5432 if driver == "postgresql" else 3306)
+        self.port_spin.setFixedWidth(78)
+        if not local:
+            if not self.database_edit.text():
+                self.database_edit.setText("postgres" if driver == "postgresql" else "")
+            if not self.user_edit.text():
+                self.user_edit.setText("postgres" if driver == "postgresql" else "root")
+        self.database_edit.setPlaceholderText("数据库文件路径，或 :memory:" if local else "数据库名称")
+        self.note.setText("SQLite 3 用户名、密码及加密扩展尚未实现。" if local else "")
+        self.profile_toggle.blockSignals(True)
+        self.profile_toggle.setChecked(local)
+        self.profile_toggle.blockSignals(False)
+        self._toggle_profiles(local)
+
+    def _toggle_profiles(self, visible):
+        self.profile_pane.setVisible(visible)
+        self._reference_frame_size = QSize(749 if visible else 574, 668)
+        if self.isVisible():
+            self._fit_reference_frame()
+        else:
+            self.resize(self._reference_frame_size)
+
+    def _fit_reference_frame(self):
+        """Match measured outer size after the platform supplies frame margins."""
+        if not self.isVisible():
+            return
+        frame = self.frameGeometry().size()
+        client = self.size()
+        margins = QSize(max(0, frame.width() - client.width()),
+                        max(0, frame.height() - client.height()))
+        target = self._reference_frame_size - margins
+        # Longer authentication forms may need more space on a platform whose
+        # native controls are taller. Keep the measured baseline, but never
+        # shrink content through the footer to force an outer-size assertion.
+        target = target.expandedTo(self.layout().minimumSize())
+        if target != client:
+            self.resize(target)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self._fit_reference_frame()
+        # Some window systems expose their titlebar metrics only after mapping.
+        QTimer.singleShot(0, self._fit_reference_frame)
+
+    def _browse(self):
+        if self.sqlite_mode_combo.currentData() == "create":
+            self._new_file()
+            return
+        path, _ = QFileDialog.getOpenFileName(self, "选择 SQLite 数据库", self.database_edit.text(),
+                                            "SQLite 数据库 (*.sqlite *.sqlite3 *.db *.db3);;所有文件 (*)")
+        if path:
+            self.database_edit.setText(path)
+            if not self.name_edit.text():
+                self.name_edit.setText(Path(path).stem)
+
+    def _new_file(self):
+        path, _ = QFileDialog.getSaveFileName(self, "新建 SQLite 数据库", self.database_edit.text() or "database.sqlite",
+                                            "SQLite 数据库 (*.sqlite);;所有文件 (*)")
+        if path:
+            self.sqlite_mode_combo.setCurrentIndex(self.sqlite_mode_combo.findData("create"))
+            self.database_edit.setText(path)
+            if not self.name_edit.text():
+                self.name_edit.setText(Path(path).stem)
+
+    def _collect_config(self, *, testing=False):
+        name = self.name_edit.text().strip()
+        database = self.database_edit.text().strip()
+        driver = self.driver_combo.currentData()
+        host = self.host_edit.text().strip()
+        if not database or (not name and not testing):
+            raise ValueError("请输入连接名及数据库。" if not testing else "请先选择数据库。")
+        if driver != "sqlite" and not host:
+            raise ValueError("请输入数据库服务器主机名。")
+        if driver == "sqlite" and database != ":memory:":
+            path = Path(database).expanduser().absolute()
+            database = str(path)
+            if not path.parent.is_dir():
+                raise ValueError("数据库所在文件夹不存在。")
+            if self.sqlite_mode_combo.currentData() == "existing" and not path.is_file():
+                raise ValueError("数据库文件不存在。若要创建文件，请将类型改为“新建 SQLite 3 数据库”。")
+            if path.exists() and not path.is_file():
+                raise ValueError("请选择数据库文件，不能选择文件夹。")
+            if self.read_only_check.isChecked() and not path.is_file():
+                raise ValueError("只读连接不能创建新的数据库文件。")
+        ssl_mode = self.ssl_combo.currentData() if self.ssl_enabled_check.isChecked() else "disable"
+        custom_ssl = driver != "sqlite" and ssl_mode != "disable" and self.ssl_verify_check.isChecked()
+        ssl_files = {name: "" for name in ("ssl_ca", "ssl_cert", "ssl_key", "ssl_crl")}
+        ssl_password = ""
+        if custom_ssl:
+            if bool(self.ssl_cert_edit.text().strip()) != bool(self.ssl_key_edit.text().strip()):
+                raise ValueError("客户端证书与客户端密钥必须同时设置。")
+            for attribute, label in [("ssl_ca", "根证书"), ("ssl_cert", "客户端证书"),
+                                     ("ssl_key", "客户端密钥"), ("ssl_crl", "证书撤消列表")]:
+                value = getattr(self, attribute + "_edit").text().strip()
+                if value:
+                    ssl_files[attribute] = self._readable_file(value, label)
+            ssl_password = self.ssl_key_password_edit.text()
+            if ssl_password and not ssl_files["ssl_key"]:
+                raise ValueError("设置密钥通行短语前，请选择客户端密钥。")
+        ssh_enabled = driver != "sqlite" and self.ssh_enabled_check.isChecked()
+        ssh_host = self.ssh_host_edit.text().strip()
+        ssh_user = self.ssh_user_edit.text().strip()
+        ssh_method = self.ssh_auth_combo.currentData()
+        ssh_key = self.ssh_key_edit.text().strip()
+        if ssh_enabled:
+            if not ssh_host or not ssh_user:
+                raise ValueError("请输入 SSH 主机及用户名。")
+            if ssh_method in ("key", "password+key"):
+                if not ssh_key:
+                    raise ValueError("请选择 SSH 私钥文件。")
+                ssh_key = self._readable_file(ssh_key, "SSH 私钥")
+        return ConnectionConfig(
+            id=self._original.id if self._original else uuid.uuid4().hex,
+            name=name or "测试连接", driver=driver, database=database, host=host or "localhost",
+            port=self.port_spin.value() if driver != "sqlite" else 0,
+            username=self.user_edit.text() if driver != "sqlite" else "",
+            password=self.password_edit.text() if driver != "sqlite" else "",
+            ssl_mode=ssl_mode,
+            read_only=self.read_only_check.isChecked(),
+            connect_timeout=self.timeout_spin.value(),
+            **ssl_files, ssl_key_password=ssl_password,
+            ssh_enabled=ssh_enabled, ssh_host=ssh_host, ssh_port=self.ssh_port_spin.value(),
+            ssh_username=ssh_user, ssh_auth_method=ssh_method,
+            ssh_password=self.ssh_password_edit.text(), ssh_key_file=ssh_key,
+            ssh_key_passphrase=self.ssh_key_passphrase_edit.text(),
+            ssh_compression=self.ssh_compression_check.isChecked(),
+            ssh_host_key=self._ssh_host_key,
+        )
+
+    @staticmethod
+    def _readable_file(value, label):
+        path = Path(value).expanduser().absolute()
+        try:
+            if not path.is_file():
+                raise OSError("不是普通文件")
+            with path.open("rb") as handle:
+                handle.read(1)
+        except OSError as exc:
+            raise ValueError(f"无法读取{label}：{path}\n{exc}") from exc
+        return str(path)
+
+    def accept(self):
+        if self._testing:
+            return
+        try:
+            self._config = self._collect_config()
+        except ValueError as exc:
+            QMessageBox.warning(self, "连接设置", str(exc))
+            return
+        super().accept()
+
+    def get_config(self) -> ConnectionConfig | None:
+        return self._config
+
+    def test_connection(self):
+        if self._testing:
+            return
+        try:
+            config = self._collect_config(testing=True)
+        except ValueError as exc:
+            QMessageBox.warning(self, "测试连接", str(exc))
+            return
+        self._testing = True
+        self.content.setEnabled(False)
+        self.buttons.setEnabled(False)
+        self.test_button.setEnabled(False)
+        self.test_status.setText("正在连接…")
+        self.test_status.setToolTip("")
+        self._test_error = None
+        self._test_success_message = ""
+        from opennavicat.database import DatabaseSession
+        from opennavicat.tasks import Task
+
+        def work():
+            session = DatabaseSession(config)
+            try:
+                session.connect()
+                session.execute("SELECT 1", limit=1)
+                if config.driver == "sqlite":
+                    # SELECT 1 alone can succeed without reading a corrupt
+                    # SQLite header. Read its real schema before reporting success.
+                    session.objects("main")
+                return "连接成功"
+            finally:
+                session.close()
+
+        task = Task(work)
+        self._test_task = task
+        task.signals.succeeded.connect(self._test_succeeded)
+        task.signals.failed.connect(self._test_failed)
+        task.signals.finished.connect(self._test_complete)
+        self._test_pool.start(task)
+
+    def _test_succeeded(self, message):
+        self._test_success_message = message
+
+    def _test_failed(self, error):
+        self._test_error = error
+
+    def _test_complete(self):
+        # Host-key approval happens only after the worker's finished signal.
+        # A modal prompt can run a nested GUI loop, so asking from failed would
+        # allow finished to run midway through that prompt and lose a retry.
+        from opennavicat.transport import SSHHostKeyError
+        error = self._test_error
+        approved = isinstance(error, SSHHostKeyError) and confirm_ssh_host_key(self, error)
+        if approved:
+            self._ssh_host_key = error.pin
+            self._ssh_pin_endpoint = self._ssh_endpoint()
+            self._update_ssh_pin_label()
+        self._testing = False
+        self._test_task = None
+        self.content.setEnabled(True)
+        self.buttons.setEnabled(True)
+        self.test_button.setEnabled(True)
+        if approved:
+            self.test_connection()
+        elif error is not None:
+            message = str(error)
+            self.test_status.setText("连接失败")
+            self.test_status.setToolTip(message)
+            self.test_finished.emit(False, message)
+        else:
+            self.test_status.setText(self._test_success_message)
+            self.test_finished.emit(True, self._test_success_message)
+
+    def reject(self):
+        if not self._testing:
+            super().reject()
+
+    def done(self, result):
+        if not self._testing:
+            super().done(result)
+
+    def closeEvent(self, event):
+        if self._testing:
+            event.ignore()
+            return
+        super().closeEvent(event)
+
+
+class TableDesignerDialog(QDialog):
+    """Visual CREATE TABLE builder with the exact SQL visible before execution."""
+
+    TYPES = {
+        "sqlite": ["INTEGER", "TEXT", "REAL", "NUMERIC", "BLOB", "BOOLEAN", "DATETIME"],
+        "postgresql": ["INTEGER", "BIGINT", "TEXT", "VARCHAR(255)", "BOOLEAN", "NUMERIC(12,2)",
+                       "TIMESTAMP", "TIMESTAMPTZ", "DATE", "UUID", "JSONB", "BYTEA", "SERIAL", "BIGSERIAL"],
+        "mysql": ["INT", "BIGINT", "VARCHAR(255)", "TEXT", "BOOLEAN", "DECIMAL(12,2)",
+                  "DATETIME", "TIMESTAMP", "DATE", "JSON", "BLOB", "DOUBLE"],
+    }
+
+    def __init__(self, parent=None, session=None, schema="main"):
+        super().__init__(parent)
+        self.session = session
+        self.schema = schema
+        self.driver = getattr(getattr(session, "config", None), "driver", "sqlite")
+        self._sql = ""
+        self.setWindowTitle("Create table")
+        self.resize(830, 590)
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+        self.name_edit = QLineEdit()
+        self.name_edit.setPlaceholderText("Table name")
+        form.addRow(f"Table in {schema}", self.name_edit)
+        layout.addLayout(form)
+        self.grid = QTableWidget(0, 5)
+        self.grid.setHorizontalHeaderLabels(["Column", "Type", "Primary key", "Not null", "Default SQL expression"])
+        self.grid.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.grid.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.grid.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
+        self.grid.setColumnWidth(2, 85)
+        self.grid.setColumnWidth(3, 70)
+        self.grid.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        layout.addWidget(self.grid, 1)
+        actions = QHBoxLayout()
+        add = QPushButton("+ Add column")
+        remove = QPushButton("Remove column")
+        actions.addWidget(add)
+        actions.addWidget(remove)
+        actions.addStretch()
+        layout.addLayout(actions)
+        add.clicked.connect(lambda: self.add_column())
+        remove.clicked.connect(self._remove_columns)
+        layout.addWidget(_hint("Defaults are SQL expressions: use 'text' for strings, or CURRENT_TIMESTAMP. Review the generated SQL before creating the table."))
+        self.preview = QPlainTextEdit()
+        self.preview.setReadOnly(True)
+        self.preview.setMaximumHeight(150)
+        self.preview.setPlaceholderText("CREATE TABLE preview")
+        layout.addWidget(self.preview)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        buttons.button(QDialogButtonBox.StandardButton.Ok).setText("Create table")
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+        self.name_edit.textChanged.connect(self._refresh_preview)
+        self.add_column("id", "INTEGER" if self.driver in ("sqlite", "postgresql") else "INT", pk=True)
+        self.add_column("", "TEXT")
+
+    def add_column(self, name="", datatype=None, pk=False):
+        row = self.grid.rowCount()
+        self.grid.insertRow(row)
+        name_edit = QLineEdit(name)
+        type_combo = QComboBox()
+        type_combo.setEditable(True)
+        type_combo.addItems(self.TYPES.get(self.driver, self.TYPES["mysql"]))
+        if datatype:
+            type_combo.setCurrentText(datatype)
+        key_check, null_check = QCheckBox(), QCheckBox()
+        key_check.setChecked(pk)
+        null_check.setChecked(pk)
+        default_edit = QLineEdit()
+        default_edit.setPlaceholderText("No default")
+        for column, widget in enumerate((name_edit, type_combo, key_check, null_check, default_edit)):
+            self.grid.setCellWidget(row, column, widget)
+        name_edit.textChanged.connect(self._refresh_preview)
+        type_combo.currentTextChanged.connect(self._refresh_preview)
+        key_check.toggled.connect(self._refresh_preview)
+        null_check.toggled.connect(self._refresh_preview)
+        default_edit.textChanged.connect(self._refresh_preview)
+        self._refresh_preview()
+
+    def _remove_columns(self):
+        rows = sorted({index.row() for index in self.grid.selectedIndexes()}, reverse=True)
+        if not rows and self.grid.currentRow() >= 0:
+            rows = [self.grid.currentRow()]
+        for row in rows:
+            self.grid.removeRow(row)
+        self._refresh_preview()
+
+    def _quote(self, value):
+        if self.session:
+            return self.session.quote_identifier(value)
+        char = "`" if self.driver in ("mysql", "mariadb") else '"'
+        return char + value.replace(char, char + char) + char
+
+    def _build_sql(self, validate=False):
+        table = self.name_edit.text().strip()
+        if not table:
+            if validate:
+                raise ValueError("Enter a table name.")
+            return ""
+        clauses, primary, names = [], [], set()
+        for row in range(self.grid.rowCount()):
+            name = self.grid.cellWidget(row, 0).text().strip()
+            datatype = self.grid.cellWidget(row, 1).currentText().strip()
+            pk = self.grid.cellWidget(row, 2).isChecked()
+            notnull = self.grid.cellWidget(row, 3).isChecked()
+            default = self.grid.cellWidget(row, 4).text().strip()
+            if not name:
+                continue
+            if name.casefold() in names:
+                raise ValueError(f"Column '{name}' is duplicated.")
+            names.add(name.casefold())
+            if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_ ]*(?:\(\s*\d+\s*(?:,\s*\d+\s*)?\))?(?:\[\])?", datatype):
+                raise ValueError(f"Enter a valid SQL type for '{name}'.")
+            clause = f"  {self._quote(name)} {datatype}"
+            if notnull or pk:
+                clause += " NOT NULL"
+            if default:
+                clause += " DEFAULT " + default
+            clauses.append(clause)
+            if pk:
+                primary.append(self._quote(name))
+        if not clauses:
+            raise ValueError("Add at least one named column.")
+        if primary:
+            clauses.append("  PRIMARY KEY (" + ", ".join(primary) + ")")
+        qualified = self._quote(self.schema) + "." + self._quote(table) if self.schema else self._quote(table)
+        return f"CREATE TABLE {qualified} (\n" + ",\n".join(clauses) + "\n);"
+
+    def _refresh_preview(self, *_):
+        if not hasattr(self, "preview"):
+            return
+        try:
+            self.preview.setPlainText(self._build_sql())
+        except ValueError as exc:
+            self.preview.setPlainText(str(exc))
+
+    def accept(self):
+        try:
+            self._sql = self._build_sql(True)
+        except ValueError as exc:
+            QMessageBox.warning(self, "Table definition", str(exc))
+            return
+        super().accept()
+
+    def sql(self) -> str:
+        return self._sql
+
+
+class RowDialog(QDialog):
+    """Record fields with explicit NULL values and type-aware conversion.
+
+    New rows include an additional Use default checkbox. Fields left on their
+    default are omitted from the insert dictionary instead of sent as NULL.
+    """
+
+    def __init__(self, columns: list[dict], values: dict | None = None, parent=None):
+        super().__init__(parent)
+        self._new = values is None
+        self._columns = columns
+        self._initial = values or {}
+        self._values = {}
+        self._fields = []
+        self.setWindowTitle("Insert record" if self._new else "Edit record")
+        self.resize(640, min(650, 180 + len(columns) * 55))
+        layout = QVBoxLayout(self)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        body = QWidget()
+        form = QFormLayout(body)
+        form.setSpacing(10)
+        for column in columns:
+            name = column["name"]
+            value = self._initial.get(name)
+            line = QLineEdit(self._display(value))
+            line.setPlaceholderText(str(column.get("type", "")))
+            protected = self._protected(column)
+            null = QCheckBox("NULL")
+            null.setChecked(value is None and not self._new)
+            default = QCheckBox("Default") if self._new else None
+            if default:
+                default.setChecked(True)
+                default.setEnabled(not protected)
+            field = QWidget()
+            row = QHBoxLayout(field)
+            row.setContentsMargins(0, 0, 0, 0)
+            row.addWidget(line, 1)
+            row.addWidget(null)
+            if default:
+                row.addWidget(default)
+            label = name + ("  [PK]" if column.get("pk") else "")
+            if protected:
+                label += "  (generated)"
+                line.setToolTip("This value is generated by the database and cannot be assigned.")
+            form.addRow(label, field)
+
+            def update_state(_=None, edit=line, null_check=null, default_check=default,
+                             database_generated=protected):
+                using_default = bool(default_check and default_check.isChecked())
+                null_check.setEnabled(not database_generated and not using_default)
+                edit.setEnabled(not database_generated and not using_default and not null_check.isChecked())
+
+            null.toggled.connect(update_state)
+            if default:
+                default.toggled.connect(update_state)
+            update_state()
+            self._fields.append((column, line, null, default))
+        scroll.setWidget(body)
+        layout.addWidget(scroll)
+        layout.addWidget(_hint(
+            "Default omits the field so the database can generate its value. Uncheck it to enter a value; NULL stores an explicit null."
+            if self._new else "NULL stores a null value. An empty text field stores an empty string. Changes are applied when you save."
+        ))
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    @staticmethod
+    def _protected(column: dict) -> bool:
+        return bool(column.get("generated") or column.get("identity_generation") == "ALWAYS")
+
+    @staticmethod
+    def _display(value) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, (dict, list)):
+            return json.dumps(value, ensure_ascii=False, default=str)
+        return str(value)
+
+    @staticmethod
+    def _parse(text: str, column: dict):
+        datatype = column.get("type", "").upper().split("(", 1)[0].strip()
+        if datatype in ("JSON", "JSONB"):
+            return json.loads(text)
+        if datatype in ("INT", "INTEGER", "BIGINT", "SMALLINT", "TINYINT", "MEDIUMINT", "SERIAL", "BIGSERIAL", "INT2", "INT4", "INT8"):
+            return int(text)
+        if datatype in ("REAL", "FLOAT", "DOUBLE", "DOUBLE PRECISION", "FLOAT4", "FLOAT8"):
+            return float(text)
+        if datatype in ("NUMERIC", "DECIMAL"):
+            # Decimal strings preserve precision and are accepted by all drivers.
+            from decimal import Decimal
+            Decimal(text)
+            return text
+        if datatype in ("BOOLEAN", "BOOL"):
+            if text.casefold() in ("true", "1", "yes"):
+                return True
+            if text.casefold() in ("false", "0", "no"):
+                return False
+            raise ValueError("Use true or false for a boolean field.")
+        return text
+
+    def accept(self):
+        result = {}
+        for column, line, null, default in self._fields:
+            name = column["name"]
+            if self._protected(column):
+                continue
+            if default and default.isChecked():
+                continue
+            if null.isChecked():
+                if not column.get("nullable", True) and not column.get("pk"):
+                    QMessageBox.warning(self, "Record value", f"'{name}' does not allow NULL.")
+                    return
+                result[name] = None
+            else:
+                try:
+                    # Preserve untouched rich values such as binary/date objects.
+                    original = self._initial.get(name)
+                    if not self._new and original is not None and line.text() == self._display(original):
+                        result[name] = original
+                    else:
+                        result[name] = self._parse(line.text(), column)
+                except (ValueError, ArithmeticError) as exc:
+                    QMessageBox.warning(self, "Record value", f"Invalid value for '{name}': {exc}")
+                    line.setFocus()
+                    return
+        self._values = result
+        super().accept()
+
+    def values(self) -> dict:
+        return self._values

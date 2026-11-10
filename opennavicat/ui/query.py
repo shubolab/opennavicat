@@ -1,0 +1,389 @@
+"""Dense native SQL workspace reconstructed from observed query UI geometry."""
+from __future__ import annotations
+
+from pathlib import Path
+
+from PySide6.QtCore import QPointF, QSize, Qt
+from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap
+from PySide6.QtWidgets import (
+    QAbstractItemView, QComboBox, QFrame, QHBoxLayout, QInputDialog, QLabel,
+    QMenu, QPlainTextEdit, QSizePolicy, QSpinBox, QSplitter, QTableWidget,
+    QTableWidgetItem, QTabWidget, QToolButton, QVBoxLayout, QWidget,
+)
+
+from .editor import SqlEditor, pretty_sql
+from .grid import DataGrid, DataModel
+from .icons import icon, tool_icon
+
+
+def _execution_icon(stop=False):
+    """Original small outline execution pictograms at two display resolutions."""
+    result = QIcon()
+    for scale in (1, 2, 3):
+        pixmap = QPixmap(16 * scale, 16 * scale)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        painter.scale(scale, scale)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.setPen(QPen(QColor("#c86260" if stop else "#438fc8"), 1.3,
+                            Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap,
+                            Qt.PenJoinStyle.RoundJoin))
+        if stop:
+            painter.drawRect(3, 3, 10, 10)
+        else:
+            shape = QPainterPath(QPointF(4, 2))
+            shape.lineTo(13, 8)
+            shape.lineTo(4, 14)
+            shape.closeSubpath()
+            painter.drawPath(shape)
+        painter.end()
+        pixmap.setDevicePixelRatio(scale)
+        result.addPixmap(pixmap)
+    return result
+
+
+class _QueryGrid(DataGrid):
+    """Continue real column rules through unused viewport space, without fake rows."""
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        if getattr(self, "paints_unused_grid", False):
+            return
+        if not self.model():
+            return
+        count = self.model().rowCount()
+        top = self.rowViewportPosition(count - 1) + self.rowHeight(count - 1) if count else 0
+        top = max(0, top)
+        if top >= self.viewport().height():
+            return
+        painter = QPainter(self.viewport())
+        color = self.palette().mid().color()
+        color.setAlpha(80)
+        painter.setPen(color)
+        for column in range(self.model().columnCount()):
+            x = self.columnViewportPosition(column) + self.columnWidth(column) - 1
+            painter.drawLine(x, top, x, self.viewport().height())
+        painter.end()
+
+
+class QueryPage(QWidget):
+    def __init__(self, window, connection_id, sql=""):
+        super().__init__()
+        self.window = window
+        self.connection_id = connection_id
+        config = window.configs[connection_id]
+        self.schema = window.active_schema
+        if self.schema == "main" and config.driver != "sqlite":
+            self.schema = "public" if config.driver == "postgresql" else config.database
+        self.filename = None
+        self.modified = False
+        self._running = False
+        self._has_results = False
+        self._last_results = []
+        self.setObjectName("queryPage")
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        self.toolbar = QFrame()
+        self.toolbar.setObjectName("queryToolbar")
+        self.toolbar.setFixedHeight(36)
+        tools = QHBoxLayout(self.toolbar)
+        tools.setContentsMargins(7, 3, 7, 3)
+        tools.setSpacing(4)
+        self.save_button = self._tool("保存查询", "save", lambda: window.save_sql(page=self))
+        tools.addWidget(self.save_button)
+        tools.addWidget(self._separator())
+        self.builder_button = self._tool("查询创建工具（尚未实现）", "model", available=False)
+        tools.addWidget(self.builder_button)
+        self.format_button = self._tool("格式化 SQL", "format", self.format_sql)
+        tools.addWidget(self.format_button)
+        self.snippets_button = self._tool("代码片段库（尚未实现）", "query", available=False)
+        tools.addWidget(self.snippets_button)
+        self.chart_button = self._tool("图表（尚未实现）", "chart", available=False)
+        tools.addWidget(self.chart_button)
+        tools.addWidget(self._separator())
+        self.export_button = self._tool("导出结果", "export", window.export_rows)
+        self.export_button.setEnabled(False)
+        tools.addWidget(self.export_button)
+        tools.addStretch()
+        layout.addWidget(self.toolbar)
+
+        self.execution_bar = QFrame()
+        self.execution_bar.setObjectName("queryExecutionBar")
+        self.execution_bar.setFixedHeight(34)
+        execution = QHBoxLayout(self.execution_bar)
+        execution.setContentsMargins(7, 3, 7, 3)
+        execution.setSpacing(8)
+        self.connection_picker = QComboBox()
+        self.connection_picker.setFixedWidth(150)
+        self.connection_picker.setToolTip("连接")
+        self.schema_picker = QComboBox()
+        self.schema_picker.setFixedWidth(150)
+        self.schema_picker.setToolTip("数据库 / 模式")
+        execution.addWidget(self.connection_picker)
+        execution.addWidget(self.schema_picker)
+        self.run_button = QToolButton()
+        self.run_button.setObjectName("queryRun")
+        self.run_button.setIcon(_execution_icon())
+        self.run_button.setIconSize(QSize(16, 16))
+        self.run_button.setFixedSize(24, 24)
+        self.run_button.setAutoRaise(True)
+        self.run_button.setToolTip("运行（⌘ / Ctrl + Enter）")
+        self.run_button.clicked.connect(lambda: window.run_query(self))
+        self.run_button.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.run_button.customContextMenuRequested.connect(self._run_menu)
+        execution.addWidget(self.run_button)
+        self.stop_button = QToolButton()
+        self.stop_button.setObjectName("queryStop")
+        self.stop_button.setIcon(_execution_icon(True))
+        self.stop_button.setIconSize(QSize(16, 16))
+        self.stop_button.setFixedSize(24, 24)
+        self.stop_button.setAutoRaise(True)
+        self.stop_button.setToolTip("停止运行")
+        self.stop_button.clicked.connect(window.stop)
+        self.stop_button.setEnabled(False)
+        execution.addWidget(self.stop_button)
+        self.explain_button = self._tool("解释 SQL / 执行计划", "builder", self._explain)
+        self.explain_button.setFixedSize(24, 24)
+        if not callable(getattr(window, "explain_query", None)):
+            self.explain_button.setEnabled(False)
+            self.explain_button.setToolTip("执行计划功能尚未实现。")
+        execution.addWidget(self.explain_button)
+        execution.addStretch()
+        layout.addWidget(self.execution_bar)
+
+        # Retain the public compatibility attributes without adding a banner or
+        # a visible result-limit spinner to the observed compact query layout.
+        self.connection_label = QLabel(self)
+        self.connection_label.hide()
+        self.limit = QSpinBox(self)
+        self.limit.setRange(1, 100000)
+        self.limit.setValue(1000)
+        self.limit.hide()
+
+        self.split = QSplitter(Qt.Orientation.Vertical)
+        self.split.setObjectName("querySplitter")
+        self.split.setHandleWidth(3)
+        self.editor = SqlEditor()
+        self.editor.setPlaceholderText("")
+        font = self.editor.font()
+        font.setPixelSize(12)
+        self.editor.setFont(font)
+        self.editor.setPlainText(sql)
+        self.editor.document().setModified(False)
+        self.editor.textChanged.connect(self.mark_modified)
+        self.editor.execute_requested.connect(lambda: window.run_query(self))
+        self.split.addWidget(self.editor)
+        self.results = QTabWidget()
+        self.results.setObjectName("queryResults")
+        self.results.setDocumentMode(False)
+        self.results.tabBar().setExpanding(False)
+        self.results.setMinimumHeight(120)
+        self.results.currentChanged.connect(self._result_changed)
+        self.split.addWidget(self.results)
+        self.results.hide()
+        self.split.setStretchFactor(0, 55)
+        self.split.setStretchFactor(1, 45)
+        layout.addWidget(self.split, 1)
+
+        self.footer = QFrame()
+        self.footer.setObjectName("queryFooter")
+        footer = QHBoxLayout(self.footer)
+        footer.setContentsMargins(6, 0, 6, 0)
+        footer.setSpacing(10)
+        self.message = QLabel()
+        self.message.setObjectName("queryStatus")
+        self.message.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        self.message.setWordWrap(False)
+        footer.addWidget(self.message, 1)
+        self.elapsed_label = QLabel()
+        self.elapsed_label.setObjectName("queryElapsed")
+        footer.addWidget(self.elapsed_label)
+        self.footer.setFixedHeight(22)
+        layout.addWidget(self.footer)
+        self.connection_picker.currentIndexChanged.connect(self._connection_changed)
+        self.schema_picker.currentTextChanged.connect(self._schema_changed)
+        self.refresh_label()
+
+    @staticmethod
+    def _separator():
+        line = QFrame()
+        line.setFrameShape(QFrame.Shape.VLine)
+        line.setFrameShadow(QFrame.Shadow.Plain)
+        line.setFixedHeight(20)
+        return line
+
+    def _tool(self, tooltip, name, callback=None, available=True):
+        button = QToolButton()
+        button.setAutoRaise(True)
+        button.setIcon(tool_icon(name, 16))
+        button.setIconSize(QSize(16, 16))
+        button.setFixedSize(26, 26)
+        button.setToolTip(tooltip)
+        button.setEnabled(available)
+        if callback:
+            button.clicked.connect(callback)
+        return button
+
+    @property
+    def running(self):
+        return self._running
+
+    @running.setter
+    def running(self, value):
+        self._running = bool(value)
+        if hasattr(self, "stop_button"):
+            self.stop_button.setEnabled(self._running)
+            self.run_button.setEnabled(not self._running)
+            self.connection_picker.setEnabled(not self._running)
+            self.schema_picker.setEnabled(not self._running)
+            self.explain_button.setEnabled(not self._running and callable(getattr(self.window, "explain_query", None)))
+
+    def refresh_label(self):
+        self.connection_picker.blockSignals(True)
+        self.connection_picker.clear()
+        for connection_id, config in self.window.configs.items():
+            self.connection_picker.addItem(icon(config.driver, 16), config.name, connection_id)
+        self.connection_picker.setCurrentIndex(self.connection_picker.findData(self.connection_id))
+        self.connection_picker.blockSignals(False)
+        self.schema_picker.blockSignals(True)
+        self.schema_picker.clear()
+        root = self.window.connection_item(self.connection_id)
+        if root:
+            for index in range(root.childCount()):
+                info = root.child(index).data(0, Qt.ItemDataRole.UserRole)
+                if info and info["type"] == "schema":
+                    self.schema_picker.addItem(info["schema"])
+        if self.schema and self.schema_picker.findText(self.schema) < 0:
+            self.schema_picker.addItem(self.schema)
+        self.schema_picker.setCurrentIndex(self.schema_picker.findText(self.schema or ""))
+        self.schema_picker.blockSignals(False)
+        config = self.window.configs.get(self.connection_id)
+        self.connection_label.setText(f"{config.name if config else ''} / {self.schema or ''}")
+
+    def _connection_changed(self, index):
+        if self.running:
+            return
+        connection_id = self.connection_picker.itemData(index)
+        if connection_id not in self.window.configs or connection_id == self.connection_id:
+            return
+        self.connection_id = connection_id
+        config = self.window.configs[connection_id]
+        self.schema = "main" if config.driver == "sqlite" else ("public" if config.driver == "postgresql" else config.database)
+        self.refresh_label()
+        self.window.set_active(connection_id, self.schema)
+        self.results.clear()
+        self.results.hide()
+        self._has_results = False
+        self.message.clear()
+        self.elapsed_label.clear()
+        self.export_button.setEnabled(False)
+
+    def _schema_changed(self, text):
+        if text and not self.running:
+            self.schema = text
+            self.window.set_active(self.connection_id, text)
+
+    def mark_modified(self):
+        self.modified = True
+        index = self.window.tabs.indexOf(self)
+        if index >= 0:
+            name = Path(self.filename).name if self.filename else self.window.tabs.tabText(index).rstrip(" •*")
+            self.window.tabs.setTabText(index, f"{name} *")
+
+    def format_sql(self):
+        self.editor.setPlainText(pretty_sql(self.editor.toPlainText()))
+
+    def _run_menu(self, position):
+        menu = QMenu(self)
+        limit = menu.addAction(f"限制返回记录…（当前 {self.limit.value():,}）")
+        limit.triggered.connect(self._choose_limit)
+        menu.exec(self.run_button.mapToGlobal(position))
+
+    def _choose_limit(self):
+        value, accepted = QInputDialog.getInt(self, "限制返回记录", "每个结果集最多返回记录数", self.limit.value(), 1, 100000, 1000)
+        if accepted:
+            self.limit.setValue(value)
+
+    def _explain(self):
+        explain = getattr(self.window, "explain_query", None)
+        if callable(explain):
+            explain(self)
+
+    def _result_changed(self, *_):
+        if hasattr(self, "export_button"):
+            self.export_button.setEnabled(self.current_result() is not None)
+        if hasattr(self.window, "refresh_actions"):
+            self.window.refresh_actions()
+
+    def show_results(self, results):
+        first_execution = not self._has_results
+        self._last_results = list(results)
+        self.results.clear()
+        self.info = QPlainTextEdit()
+        self.info.setObjectName("queryInformation")
+        self.info.setReadOnly(True)
+        info = []
+        for number, result in enumerate(results, 1):
+            info.extend([f"[{number}] {result.sql.strip()}",
+                         f"受影响的行数：{result.affected:,}    执行时间：{result.elapsed_ms:.3f} ms",
+                         "已达到返回记录限制。" if result.truncated else "", ""])
+        self.info.setPlainText("\n".join(info))
+        self.results.addTab(self.info, "信息")
+        self.summary = QTableWidget(len(results), 4)
+        self.summary.setObjectName("querySummary")
+        self.summary.setHorizontalHeaderLabels(["查询", "状态", "受影响的行数", "执行时间"])
+        self.summary.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.summary.verticalHeader().setDefaultSectionSize(20)
+        self.summary.horizontalHeader().setStretchLastSection(True)
+        for row, result in enumerate(results):
+            for column, value in enumerate([row + 1, "成功", result.affected, f"{result.elapsed_ms:.3f} ms"]):
+                self.summary.setItem(row, column, QTableWidgetItem(str(value)))
+        self.results.addTab(self.summary, "摘要")
+        first_grid = None
+        result_number = 0
+        for result in results:
+            if not result.columns:
+                continue
+            result_number += 1
+            grid = _QueryGrid()
+            grid.setObjectName("queryResultGrid")
+            grid.setModel(DataModel(result, parent=grid))
+            grid.verticalHeader().setDefaultSectionSize(20)
+            grid.verticalHeader().setMinimumSectionSize(20)
+            grid.horizontalHeader().setStretchLastSection(False)
+            grid.horizontalHeader().setFixedHeight(22)
+            grid.setAlternatingRowColors(True)
+            index = self.results.addTab(grid, f"结果 {result_number}")
+            if first_grid is None:
+                first_grid = index
+        self.results.setCurrentIndex(first_grid if first_grid is not None else 1)
+        self.results.show()
+        self._has_results = True
+        if first_execution:
+            height = max(300, self.split.height())
+            self.split.setSizes([round(height * 0.55), round(height * 0.45)])
+        elapsed = sum(result.elapsed_ms for result in results)
+        self.elapsed_label.setText(f"执行时间：{elapsed / 1000:.3f} s")
+        latest_sql = results[-1].sql.strip().replace("\n", " ") if results else ""
+        self.message.setText(latest_sql)
+        self.message.setToolTip(latest_sql)
+        self._result_changed()
+
+    def current_result(self):
+        widget = self.results.currentWidget()
+        return widget.model().result if isinstance(widget, DataGrid) else None
+
+    def show_error(self, error, partial_results=None, sql=None):
+        """Show an actual execution failure in Information, retaining partial sets."""
+        self.show_results(partial_results or [])
+        sql = self.editor.selected_sql().strip() if sql is None else sql
+        prefix = self.info.toPlainText().rstrip()
+        details = f"{sql}\n\n[错误] {error}"
+        self.info.setPlainText((prefix + "\n\n" if prefix else "") + details)
+        self.results.setCurrentIndex(0)
+        self.message.setText(f"查询失败：{error}")
+        self.message.setToolTip(str(error))
+        self._result_changed()

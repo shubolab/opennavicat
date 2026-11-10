@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=OpenNavicat
+Name[zh_CN]=OpenNavicat 数据库管理
+Comment=Native database workbench
+Comment[zh_CN]=本地数据库连接、查询与数据管理
+Exec=/usr/bin/opennavicat
+TryExec=/usr/bin/opennavicat
+Icon=opennavicat
+Terminal=false
+Categories=Development;Database;
+StartupNotify=true
+StartupWMClass=OpenNavicat

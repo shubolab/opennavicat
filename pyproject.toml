@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "opennavicat"
+version = "0.3.0"
+description = "A native, local-first, cross-platform database workbench"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [{name = "OpenNavicat contributors"}]
+dependencies = [
+  "PySide6-Essentials==6.12.0",
+  "psycopg==3.3.8",
+  "psycopg-binary==3.3.8; sys_platform != 'win32' or (platform_machine != 'ARM64' and platform_machine != 'arm64' and platform_machine != 'aarch64')",
+  "PyMySQL[rsa]==1.2.4",
+  "sqlparse>=0.5.3,<0.6",
+  "keyring>=25,<26",
+  "paramiko==5.1.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<10", "pytest-qt>=4,<5", "pyinstaller>=6,<7"]
+
+[project.scripts]
+opennavicat = "opennavicat.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["opennavicat*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

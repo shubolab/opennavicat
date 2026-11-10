@@ -1,0 +1,287 @@
+"""Object workspace and inspector observed in the native reference application."""
+from __future__ import annotations
+
+from pathlib import Path
+
+from PySide6.QtCore import Qt, QSize
+from PySide6.QtGui import QAction
+from PySide6.QtWidgets import (
+    QAbstractItemView, QButtonGroup, QFormLayout, QHBoxLayout, QLabel, QLineEdit,
+    QPlainTextEdit, QSizePolicy, QStackedWidget, QTableWidget, QTableWidgetItem,
+    QToolBar, QToolButton, QVBoxLayout, QWidget,
+)
+
+from .icons import icon, tool_icon
+
+
+class ObjectBrowser(QWidget):
+    def __init__(self, window):
+        super().__init__()
+        self.window = window
+        self.connection_id = None
+        self.schema = "main"
+        self.kind = "table"
+        self.records = []
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        self.toolbar = QToolBar(self)
+        self.toolbar.setObjectName("objectToolbar")
+        self.toolbar.setIconSize(QSize(18, 18))
+        self.toolbar.setFixedHeight(36)
+        self.toolbar.setStyleSheet("QToolButton { min-width: 26px; max-width: 30px; padding: 1px; }")
+        self.open_action = self.add_action("打开表", "open", self.open_selected)
+        self.design_action = self.add_action("设计表", "design", self.design_selected)
+        self.new_action = self.add_action("新建表", "add", window.new_table)
+        self.delete_action = self.add_action("删除表", "delete", self.drop_selected)
+        self.toolbar.addSeparator()
+        self.import_action = self.add_action("导入向导", "import", self.import_selected)
+        self.export_action = self.add_action("导出向导", "export", self.export_selected)
+        self.toolbar.addSeparator()
+        self.refresh_action = self.add_action("刷新", "refresh", self.refresh)
+        spacer = QWidget()
+        spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        self.toolbar.addWidget(spacer)
+        self.details_action = self.add_action("详细信息", "list", lambda: self.table.show())
+        self.er_action = self.add_action("ER 图表", "er", window.open_diagram)
+        self.toolbar.addSeparator()
+        self.search = QLineEdit()
+        self.search.setPlaceholderText("搜索")
+        self.search.setClearButtonEnabled(True)
+        self.search.setFixedWidth(200)
+        self.search.textChanged.connect(self.filter_rows)
+        self.toolbar.addWidget(self.search)
+        layout.addWidget(self.toolbar)
+        self.table = QTableWidget(0, 5)
+        self.table.setObjectName("objectList")
+        self.table.setHorizontalHeaderLabels(["名", "根页面", "有索引", "有触发器", ""])
+        self.table.verticalHeader().hide()
+        self.table.verticalHeader().setDefaultSectionSize(20)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.table.setShowGrid(False)
+        self.table.setAlternatingRowColors(False)
+        self.table.horizontalHeader().setStretchLastSection(True)
+        self.table.horizontalHeader().setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        for index, width in enumerate([215, 120, 100, 120]):
+            self.table.setColumnWidth(index, width)
+        self.table.itemDoubleClicked.connect(lambda _: self.open_selected())
+        self.table.itemSelectionChanged.connect(self.selection_changed)
+        layout.addWidget(self.table)
+        self.update_actions()
+
+    def add_action(self, title, symbol, callback):
+        action = QAction(tool_icon(symbol, 18), title, self)
+        action.triggered.connect(callback)
+        self.toolbar.addAction(action)
+        return action
+
+    def set_context(self, connection_id, schema, kind="table"):
+        self.connection_id, self.schema, self.kind = connection_id, schema, kind
+        label = {"table": "表", "view": "视图", "query": "查询", "backup": "备份"}.get(kind, "对象")
+        self.open_action.setText("打开" + label)
+        self.design_action.setText("设计" + label)
+        self.new_action.setText("新建" + label)
+        self.delete_action.setText("删除" + label)
+        self.refresh()
+
+    def refresh(self):
+        session = self.window.sessions.get(self.connection_id)
+        selected = self.selected()
+        self._selection_hint = selected["name"] if selected and (selected["id"], selected["schema"], selected["kind"]) == (self.connection_id, self.schema, self.kind) else None
+        self.table.setRowCount(0)
+        self.records = []
+        self.update_actions()
+        if session is None:
+            return
+        schema, kind, connection_id = self.schema, self.kind, self.connection_id
+        if kind == "query":
+            items = [{"name": entry["name"], "kind": "query", "schema": schema, "sql": entry["sql"], "id": connection_id} for entry in self.window.store.state["favorites"] if entry.get("connection_id") == connection_id]
+            self.show_objects(items)
+            return
+        if kind == "backup":
+            items = [{"name": entry["name"], "kind": "backup", "schema": schema, "path": entry["path"], "id": connection_id} for entry in self.window.store.state.get("backups", []) if entry.get("connection_id") == connection_id]
+            self.show_objects(items)
+            return
+        def work():
+            objects = [dict(obj, id=connection_id) for obj in session.objects(schema) if obj["kind"] == kind]
+            if session.config.driver == "sqlite":
+                rootpages = dict(session._query(f"SELECT name,rootpage FROM {session.quote_identifier(schema)}.sqlite_schema WHERE type IN ('table','view')"))
+                triggers = {row[0] for row in session._query(f"SELECT DISTINCT tbl_name FROM {session.quote_identifier(schema)}.sqlite_schema WHERE type='trigger'")}
+                for obj in objects:
+                    obj["rootpage"] = rootpages.get(obj["name"], "")
+                    obj["indexed"] = bool(session._query(f"PRAGMA {session.quote_identifier(schema)}.index_list({session.quote_identifier(obj['name'])})")) if kind == "table" else False
+                    obj["triggers"] = obj["name"] in triggers
+            return objects
+        def done(objects):
+            if (self.connection_id, self.schema, self.kind) == (connection_id, schema, kind):
+                self.show_objects(objects)
+        self.window.submit(work, done, label="读取对象")
+
+    def show_objects(self, objects):
+        self.records = objects
+        self.table.setRowCount(len(objects))
+        for row, entry in enumerate(objects):
+            values = [entry["name"], entry.get("rootpage", ""), "是" if entry.get("indexed") else "否", "是" if entry.get("triggers") else "否", ""]
+            if self.kind in {"query", "backup"}:
+                values = [entry["name"], "", "", "", ""]
+            for column, value in enumerate(values):
+                item = QTableWidgetItem(str(value))
+                if column == 0:
+                    item.setIcon(icon(entry["kind"] if entry["kind"] != "query" else "query", 16))
+                    item.setData(Qt.ItemDataRole.UserRole, entry)
+                self.table.setItem(row, column, item)
+        self.filter_rows(self.search.text())
+        if getattr(self, "_selection_hint", None):
+            for row, entry in enumerate(objects):
+                if entry["name"] == self._selection_hint:
+                    self.table.setCurrentCell(row, 0)
+                    break
+        self.update_actions()
+        self.window.status.setText(f"{len(objects)} " + {"table": "表", "view": "视图", "query": "查询", "backup": "备份"}.get(self.kind, "对象"))
+
+    def selected(self):
+        row = self.table.currentRow()
+        item = self.table.item(row, 0) if row >= 0 else None
+        return item.data(Qt.ItemDataRole.UserRole) if item else None
+
+    def selection_changed(self):
+        self.update_actions()
+        entry = self.selected()
+        if entry:
+            self.window.inspector.show_object(entry, self.window.configs.get(self.connection_id))
+            session = self.window.sessions.get(self.connection_id)
+            if self.window.inspector.isVisible() and session and entry["kind"] in {"table", "view"}:
+                def done(ddl):
+                    if self.selected() == entry and self.window.tabs.currentWidget() is self:
+                        self.window.inspector.show_object(entry, self.window.configs.get(entry["id"]), ddl)
+                self.window.submit(lambda: session.table_ddl(entry["schema"], entry["name"]), done, label="读取对象信息")
+
+    def update_actions(self):
+        selected = self.selected() is not None
+        connected = self.connection_id in self.window.sessions
+        writable = connected and not self.window.configs[self.connection_id].read_only
+        self.open_action.setEnabled(selected)
+        self.design_action.setEnabled(selected and self.kind in {"table", "view"})
+        self.new_action.setEnabled(writable and self.kind == "table")
+        self.delete_action.setEnabled(writable and selected and self.kind in {"table", "view"})
+        self.import_action.setEnabled(writable and selected and self.kind == "table")
+        self.export_action.setEnabled(connected and selected and self.kind in {"table", "view"})
+        self.er_action.setEnabled(connected)
+
+    def filter_rows(self, text):
+        text = text.casefold()
+        for row in range(self.table.rowCount()):
+            item = self.table.item(row, 0)
+            self.table.setRowHidden(row, bool(item and text not in item.text().casefold()))
+
+    def open_selected(self):
+        entry = self.selected()
+        if not entry:
+            return
+        if entry["kind"] == "query":
+            self.window.new_query(sql=entry["sql"], connection_id=entry["id"])
+        elif entry["kind"] == "backup":
+            self.window.statusBar().showMessage(entry["path"], 10000)
+        else:
+            self.window.open_table(dict(entry, table=entry["name"]))
+
+    def design_selected(self):
+        entry = self.selected()
+        if entry:
+            self.window.design_object(dict(entry, table=entry["name"]))
+
+    def import_selected(self):
+        self.open_selected()
+        self.window.when_idle(self.window.import_rows)
+
+    def export_selected(self):
+        self.open_selected()
+        self.window.when_idle(self.window.export_rows)
+
+    def drop_selected(self):
+        entry = self.selected()
+        if entry:
+            self.window.drop_object(entry)
+
+
+class Inspector(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setObjectName("inspector")
+        self.setMinimumWidth(200)
+        self.setMaximumWidth(360)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        tabs = QWidget()
+        row = QHBoxLayout(tabs)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(2)
+        row.addStretch()
+        self.general = QToolButton()
+        self.general.setIcon(icon("info", 18))
+        self.general.setCheckable(True)
+        self.general.setChecked(True)
+        self.general.setToolTip("常规")
+        row.addWidget(self.general)
+        self.ddl_button = QToolButton()
+        self.ddl_button.setText("DDL")
+        self.ddl_button.setCheckable(True)
+        self.ddl_button.setToolTip("DDL")
+        row.addWidget(self.ddl_button)
+        row.addStretch()
+        tabs.setFixedHeight(30)
+        layout.addWidget(tabs)
+        self.stack = QStackedWidget()
+        body = QWidget()
+        box = QVBoxLayout(body)
+        box.setContentsMargins(22, 30, 18, 10)
+        heading = QHBoxLayout()
+        self.symbol = QLabel()
+        self.symbol.setFixedSize(48, 48)
+        heading.addWidget(self.symbol)
+        labels = QVBoxLayout()
+        self.title = QLabel()
+        self.title.setWordWrap(True)
+        self.title.setStyleSheet("font-weight:600;font-size:14px;")
+        labels.addWidget(self.title)
+        self.kind = QLabel()
+        labels.addWidget(self.kind)
+        heading.addLayout(labels)
+        box.addLayout(heading)
+        box.addSpacing(22)
+        self.connection = QLabel()
+        self.connection.setWordWrap(True)
+        self.schema = QLabel()
+        box.addWidget(self.connection)
+        box.addWidget(self.schema)
+        box.addSpacing(22)
+        self.details = QLabel()
+        self.details.setWordWrap(True)
+        box.addWidget(self.details)
+        box.addStretch()
+        self.stack.addWidget(body)
+        self.ddl = QPlainTextEdit()
+        self.ddl.setReadOnly(True)
+        self.stack.addWidget(self.ddl)
+        layout.addWidget(self.stack)
+        self.buttons = QButtonGroup(self)
+        self.buttons.setExclusive(True)
+        self.buttons.addButton(self.general, 0)
+        self.buttons.addButton(self.ddl_button, 1)
+        self.buttons.idClicked.connect(self.stack.setCurrentIndex)
+
+    def show_object(self, info, config=None, ddl=""):
+        kind = info.get("kind", "query")
+        self.symbol.setPixmap(icon(kind if kind in {"table", "view", "backup"} else "query", 48).pixmap(48, 48))
+        self.title.setText(info.get("name", info.get("table", "无标题")))
+        self.kind.setText({"table": "表", "view": "视图", "query": "查询", "backup": "备份"}.get(kind, kind))
+        self.connection.setText(config.name if config else "")
+        self.schema.setText(info.get("schema", ""))
+        details = []
+        if "rootpage" in info:
+            details.extend(["根页面", str(info["rootpage"]), "", "有索引", "是" if info.get("indexed") else "否", "", "有触发器", "是" if info.get("triggers") else "否"])
+        self.details.setText("\n".join(details))
+        self.ddl.setPlainText(ddl)

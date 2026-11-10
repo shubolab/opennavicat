@@ -2,7 +2,7 @@
 import os
 import sys
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 
 # Source builds on Windows ARM64 use native libpq and OpenSSL from an explicit
 # directory. Frozen builds register only their bundled directory in a runtime

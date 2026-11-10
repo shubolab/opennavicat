@@ -2,7 +2,7 @@
 
 记录日期：2026-11-10，Asia/Shanghai。**0.6 当前是开发候选，尚未发布；本轮六目标原生构建、安装、运行、卸载及公开下载核验尚未开始。**
 本文件记录 `work/mongodb-adapter` 开发分支上已经取得的有界证据，不把组件测试、源码 smoke 或参考程序观察当作最终安装包验收。
-最终版本号、冻结源码、完整测试和发布记录仍待补齐。当前源码 smoke 仍报告 `0.5.0`，不能把它改称已运行的 0.6 安装包。
+源码版本已升为 **0.6.0**，对应源码 smoke 已实际返回该版本；冻结发布源码、原生安装包和公开发布记录仍待补齐。
 
 开发 checkpoint 包括 `288beb1`（BSON 文档适配器及工作区）、`8bf794c`（连接设置及 URI）、
 `586a0e3`（GridFS 页面）、`02765ae`（传输、元数据与 GridFS 后端）、`f519876`（上传元数据日期精度）和
@@ -135,7 +135,8 @@ GridFS 真实页面测试完成 PNG 上传后的 `image/png` 与实际 MD5 核�
 源码 `--smoke-test` 已在隔离工作区返回 6 行查询，运行时包含
 `mongodb_adapter_constructed=true`、`mongodb_bson_probe=true`、`mongodb_tls_context_ready=true`，
 同时保留此前 SQL Server、Redis 和实际 OpenSSL cipher 探针。
-报告为 `artifacts/mongodb/source-runtime-smoke.json`，版本字段仍为 **0.5.0**。
+版本提升后又实际执行源码 smoke，报告为 `artifacts/mongodb/source-0.6-runtime-smoke.json`，版本字段为 **0.6.0**。
+早期 `source-runtime-smoke.json` 的 0.5.0 记录仍作为历史保留；版本提升后的安装/发布合同专项另有 89 项通过。
 这个 smoke 实际构造 MongoDB 适配器、检查 BSON 与 TLS context，但没有连接外部 MongoDB；
 不替代真实协议专项，也不证明最终安装程序包含正确的原生依赖。
 

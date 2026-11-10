@@ -56,7 +56,7 @@ Windows 的静态 `usessh` 与已观察 macOS 的 `usetunnel` 不同。实现不
 
 `test_navicat_windows_native.py` 提供 Windows-only 实际 API 测试：它只创建唯一的 `HKCU\Software\OpenNavicatTests\NavicatDiscovery-<UUID>`，从不写 PremiumSoft 真根。它用真实 `RegEnumValueW`/`RegQueryValueExW` 验证 NULL 数据枚举、白名单查询、双视图来源处理、分组文件和待复核配置，最后删除精确的自有测试根。
 
-2026-11-10 已在 **Windows 10.0.26100 AMD64** 运行这两个原生用例：**2 passed、0 skipped，0.63 秒，`-Werror`**。运行环境使用 [python.org 官方 Windows 3.13.7 发布清单](https://www.python.org/ftp/python/3.13.7/windows-3.13.7.json)指定的嵌入版 ZIP，SHA256 为 `e201b2da753a88c1af29d87f9f48af4d64a0fc8522a204ae672bd2c382496701`；`python.exe` 与 `python313.dll` 的 Authenticode 均为 Valid，签名者是 Python Software Foundation。pytest、sqlparse 及其七个纯 Python wheel 从 PyPI 获取并逐个核对版本 JSON 的 SHA256，只解包到独立自有临时目录，未运行安装器、WindowsApps Python 别名，也未修改系统 PATH。
+2026-11-10 已在 **Windows 10.0.26100 AMD64** 运行这两个原生用例：**2 passed、0 skipped，0.63 秒，`-Werror`**。运行环境使用 [python.org 官方 Windows 3.13.7 发布清单](https://www.python.org/ftp/python/3.13.7/windows-3.13.7.json)指定的嵌入版 ZIP，SHA256 为 `e201b2da753a88c1af29d87f9f48af4d64a0fc8522a204ae672bd2c382496701`；`python.exe` 与 `python313.dll` 的 Authenticode 均为 Valid，签名者是 Python Software Foundation。pytest、sqlparse 及其依赖共七个纯 Python wheel 从 PyPI 获取并逐个核对版本 JSON 的 SHA256，只解包到独立自有临时目录，未运行安装器、WindowsApps Python 别名，也未修改系统 PATH。
 
 两个测试根及本轮新建的空 `OpenNavicatTests` 父键已删除，临时运行目录已移除，自有进程为零。没有读取 PremiumSoft、既有 profile 或凭证值，没有数据库连接，也未操作现有 GUI 应用和其他任务夹具。macOS 全源回归为 **855 passed、314 skipped**，其中两个原生 Windows 用例按平台跳过；元数据/Store/MainWindow 相关合成回归为 **171 passed、2 skipped**。这些计数不包含未启用的外部协议夹具验收。
 

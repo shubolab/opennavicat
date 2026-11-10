@@ -6,8 +6,9 @@ Navicat, reads a keychain, decrypts a password, or writes to its source. Passwor
 migration deliberately remains a separate, explicit operation. Reports and
 profile reprs are redacted; callers must also avoid logging ``profile.config``.
 
-Linux native discovery identifies bounded sources without assuming the macOS
-record/authentication shape; explicit-root legacy fixtures remain review-only. Windows
+Linux native discovery projects its observed PascalCase source without assuming
+macOS authentication enums; every record requires local review, and explicit-root
+legacy fixtures remain a separate review-only compatibility API. Windows
 native discovery reads only plain allowlisted metadata and always requires
 manual review: its live Navicat18 value/type mapping has not been accepted.
 """
@@ -458,16 +459,8 @@ def _require_windows_review(profile, issues):
 
 
 def _native_linux_report():
-    from .navicat_linux import discover_linux_sources
-    found = discover_linux_sources()
-    issues = [ImportIssue(item.code, item.message, blocking=item.blocking) for item in found.issues]
-    if issues:
-        # Presence/prefix inspection does not establish a native record schema.
-        # This existing incomplete-source marker protects stored identities and
-        # groups rather than treating an unknown source as an authoritative [] .
-        issues.append(ImportIssue("unsupported_source_structure",
-            "Linux native connection discovery remains review-only; no profile schema has been accepted.", blocking=True))
-    return NavicatImportReport(issues=tuple(issues), sources_found=found.sources_found, platform="linux")
+    from .navicat_linux_native import discover_native_linux_profiles
+    return discover_native_linux_profiles()
 
 
 def _native_windows_report(snapshot):

@@ -6,9 +6,9 @@ Navicat, reads a keychain, decrypts a password, or writes to its source. Passwor
 migration deliberately remains a separate, explicit operation. Reports and
 profile reprs are redacted; callers must also avoid logging ``profile.config``.
 
-Linux's documented connections.json location and injected Windows registry
-records are accepted only when their structure can be mapped unambiguously to
-this reader's known fields. Their native reference acceptance remains open.
+Linux's documented connections.json location retains a bounded parser. Windows
+native discovery reads only plain allowlisted metadata and always requires
+manual review: its live Navicat18 value/type mapping has not been accepted.
 """
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ import plistlib
 import re
 import sys
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Callable, Iterable, Mapping
 
@@ -30,7 +30,7 @@ DRIVER_NAMES = {
     "pgsql": "postgresql", "postgres": "postgresql", "sqlite": "sqlite",
     "sqlserver": "sqlserver", "mssql": "sqlserver", "oracle": "oracle",
     "mongodb": "mongodb", "mongo": "mongodb", "redis": "redis",
-    "snowflake": "snowflake",
+    "snowflake": "snowflake", "dameng": "dameng",
 }
 _NAMESPACE = uuid.UUID("eb185bfd-dc69-4f7f-8a82-c0c76b501796")
 _MAX_SOURCE = 32 * 1024 * 1024
@@ -63,6 +63,8 @@ class ImportedProfile:
     # Additional memberships are preserved because Navicat virtual groups can
     # reference one connection more than once. group_path is its first location.
     group_paths: tuple[tuple[str, ...], ...] = field(default=(), repr=False)
+    # A missing/failed group source is not an authoritative empty grouping.
+    groups_complete: bool = True
 
 
 @dataclass(frozen=True)
@@ -83,8 +85,8 @@ class RegistryProfile:
 
     ``values`` use the observed lower-case Navicat metadata field names. Never
     include encrypted password values: this reader does not need them. Supplying
-    this adapter is explicit; discovery does not enumerate a user's registry
-    with undocumented field conversions.
+    this adapter is explicit. Native discovery uses its own conservative reader;
+    even injected Windows records retain the Windows manual-review gate.
     """
     driver: str
     name: str = field(repr=False)
@@ -168,17 +170,20 @@ def _groups(data: object, issues: list[ImportIssue]):
             raise ValueError("source_structure_limit")
         for group in rows:
             if not isinstance(group, dict):
+                issues.append(ImportIssue("unsupported_group", "A virtual-group entry has an unsupported structure."))
                 continue
             title = _text(group.get("vgroup_name"))
             if not title or group.get("vgroup_type") != "CONNECTION":
                 issues.append(ImportIssue("unsupported_group", "A virtual-group entry cannot be mapped safely.", fields=("vgroup_type",)))
                 continue
             path = parents + (title,)
-            items = group.get("items", [])
+            items = group.get("items")
             if not isinstance(items, list):
+                issues.append(ImportIssue("unsupported_group", "Virtual-group members must be an array."))
                 continue
             for item in items:
                 if not isinstance(item, dict):
+                    issues.append(ImportIssue("unsupported_group_member", "A virtual-group member has an unsupported structure."))
                     continue
                 if "vgroup_name" in item:
                     visit([item], path, depth + 1)
@@ -193,6 +198,14 @@ def _groups(data: object, issues: list[ImportIssue]):
                     paths.append(path)
     visit(data["vgroups"])
     return memberships
+
+
+def _group_metadata(data, issues):
+    before = len(issues)
+    groups = _groups(data, issues)
+    complete = not any(item.code in {"unsupported_groups", "unsupported_group", "unsupported_group_member"}
+                       for item in issues[before:])
+    return groups, complete
 
 
 def _convert(driver: str, name: str, original: Mapping, source: str, source_format: str,
@@ -398,7 +411,7 @@ def _convert(driver: str, name: str, original: Mapping, source: str, source_form
             issue("unknown_redis_authentication", "The Redis authentication mode needs review.", ("authenticationmode",))
     if record.get("customdblist") and _enabled(record.get("usecustomdblist", False)):
         issue("database_filter_not_migrated", "The source database visibility filter is retained as an unsupported option.", ("usecustomdblist", "customdblist"), False)
-    if driver in {"oracle", "snowflake"}:
+    if driver in {"oracle", "snowflake", "dameng"}:
         issue("driver_not_available", "This connection family is retained but its adapter is not yet available.", ("driver",))
     if driver == "mongodb":
         config.mongo_auth_source = _text(record.get("authsource"))
@@ -431,15 +444,112 @@ def _convert(driver: str, name: str, original: Mapping, source: str, source_form
                            source_format, tuple(sorted(unsupported)), tuple(sorted(secrets)), blocked, group_paths)
 
 
+def _require_windows_review(profile, issues):
+    issues.append(ImportIssue("windows_native_settings_review",
+        "Windows Navicat metadata is visible but its native settings require explicit review before connecting.",
+        profile.source_id, ("windows_native_format",), True))
+    return replace(profile, blocked=True,
+                   unsupported_fields=tuple(sorted(set(profile.unsupported_fields) | {"windows_native_format"})))
+
+
+def _native_windows_report(snapshot):
+    """Display plain Windows metadata without inventing transport/auth semantics."""
+    issues = [ImportIssue(item.code, item.message, blocking=item.blocking) for item in snapshot.issues]
+    groups = {}
+    groups_complete = False
+    sources = snapshot.sources_found
+    if snapshot.entries and snapshot.profiles_location is not None:
+        location = snapshot.profiles_location
+        path = location / "vgroup.json"
+        try:
+            # An explicit configured local directory is the only file source.
+            # Refuse known links/junctions instead of following them to an
+            # unrelated file. No default-path or recursive directory search.
+            for component in (path, *path.parents):
+                info = component.lstat()
+                if component.is_symlink() or getattr(info, "st_file_attributes", 0) & 0x400:
+                    raise ValueError("linked_group_source")
+            if not path.is_file():
+                raise ValueError("group_source_not_file")
+            groups, groups_complete = _group_metadata(_load(path, "json"), issues)
+            sources += 1
+        except Exception:
+            issues.append(ImportIssue("groups_read_failed", "The configured Windows group file could not be read safely."))
+    counts = {}
+    for row in snapshot.entries:
+        key = (row.driver, row.name)
+        counts[key] = counts.get(key, 0) + 1
+    for key in set(groups):
+        if key not in counts:
+            groups_complete = False
+            issues.append(ImportIssue("unresolved_group_members", "Some virtual-group members do not match a discovered connection."))
+            groups.pop(key)
+        elif counts[key] > 1:
+            groups_complete = False
+            issues.append(ImportIssue("ambiguous_group_members", "A Windows group member matches conflicting sources and remains ungrouped."))
+            groups.pop(key)
+
+    profiles = []
+    for row in snapshot.entries:
+        # The view discriminator is structured, not appended to a source key:
+        # a legal profile name may itself contain strings such as '#view=64'.
+        variant = ["key", row.physical_id] if row.physical_id else ["view", row.view]
+        if row.physical_id and "windows_registry_view_conflict" in row.errors:
+            variant += ["view", row.view]
+        identity = json.dumps(["windows-native-registry", row.driver, row.source_key, variant], ensure_ascii=False, separators=(",", ":"))
+        source_id = "navicat:" + str(uuid.uuid5(_NAMESPACE, identity))
+        config = ConnectionConfig("navicat-" + source_id[8:], row.name or "Imported connection", driver=row.driver,
+                                  host="", ssl_mode="disable" if row.driver == "sqlite" else "verify-full")
+        fields = set(row.errors)
+        values = row.values
+        def plain(name):
+            value = values.get(name)
+            if value is None:
+                return ""
+            if not isinstance(value, str) or "\0" in value:
+                fields.add(name)
+                return ""
+            return value
+        host = plain("host")
+        if any(part in host for part in ("://", "@", "/", "?", "#")):
+            fields.add("host")
+        else:
+            config.host = host
+        config.username = plain("username")
+        port = values.get("port")
+        if isinstance(port, int) and not isinstance(port, bool) and 1 <= port <= 65535:
+            config.port = port
+        elif port is not None:
+            fields.add("port")
+        aliases = ("databasefile", "dbfilename") if row.driver == "sqlite" else ("defaultdatabase", "database")
+        databases = {plain(name) for name in aliases} - {""}
+        if len(databases) == 1:
+            config.database = next(iter(databases))
+        elif len(databases) > 1:
+            fields.update(aliases)
+        if fields:
+            issues.append(ImportIssue("windows_metadata_review", "Some Windows metadata is unavailable, changed or ambiguous.",
+                                      source_id, tuple(sorted(_safe_field(value) for value in fields)), True))
+        if row.driver in {"oracle", "snowflake", "dameng"}:
+            fields.add("driver")
+            issues.append(ImportIssue("driver_not_available", "This connection family is visible but its adapter is not available.", source_id, ("driver",), True))
+        memberships = tuple(groups.get((row.driver, row.name), ()))
+        profile = ImportedProfile(source_id, config, memberships[0] if memberships else (),
+            row.source_key, "windows-registry", tuple(sorted(fields)), () if row.driver == "sqlite" else ("password",),
+            True, memberships, groups_complete)
+        profiles.append(_require_windows_review(profile, issues))
+    return _finish(profiles, issues, sources, "win32")
+
+
 def discover_navicat_profiles(root: str | os.PathLike | None = None, *, platform: str | None = None,
                               registry_reader: Callable[[], Iterable[RegistryProfile]] | None = None) -> NavicatImportReport:
     """Discover metadata without opening connections or reading stored secrets.
 
     An explicit root is a Navicat CC directory, its Common directory, or one
     exact conn.plist/connections.json file. It is never recursively searched.
-    On Windows an injected native metadata reader is currently required; absent
-    evidence is reported rather than guessed. All exceptions become redacted
-    issues, including parser messages that might otherwise contain user values.
+    Native Windows metadata stays blocked until explicitly edited and reviewed.
+    All exceptions become redacted issues, including parser messages that might
+    otherwise contain user values.
     """
     platform = platform or sys.platform
     issues: list[ImportIssue] = []
@@ -447,7 +557,8 @@ def discover_navicat_profiles(root: str | os.PathLike | None = None, *, platform
     sources = 0
     if platform == "win32" and root is None:
         if registry_reader is None:
-            return NavicatImportReport(issues=(ImportIssue("windows_discovery_pending", "Native Windows registry metadata mapping has not been accepted yet."),), platform=platform)
+            from .navicat_windows import read_windows_navicat_registry
+            return _native_windows_report(read_windows_navicat_registry())
         try:
             records = list(registry_reader())
             if len(records) > _MAX_PROFILES:
@@ -458,7 +569,8 @@ def discover_navicat_profiles(root: str | os.PathLike | None = None, *, platform
                 if not drv:
                     issues.append(ImportIssue("unknown_driver", "An unknown source connection family was not imported."))
                     continue
-                profiles.append(_convert(drv, row.name, row.values, row.source_key, "windows-registry", (row.group_path,) if row.group_path else (), issues))
+                converted = _convert(drv, row.name, row.values, row.source_key, "windows-registry", (row.group_path,) if row.group_path else (), issues)
+                profiles.append(_require_windows_review(converted, issues))
         except Exception:
             issues.append(ImportIssue("registry_read_failed", "The registry metadata source could not be read safely."))
         return _finish(profiles, issues, sources, platform)
@@ -493,26 +605,32 @@ def discover_navicat_profiles(root: str | os.PathLike | None = None, *, platform
     if not records:
         issues.append(ImportIssue("unsupported_source_structure", "The connection source contains no recognized primary profile records."))
     groups = {}
+    groups_complete = False
     group_file = base / "Navicat Premium/Profiles/vgroup.json" if platform == "darwin" else base / "Premium/Profiles/vgroup.json"
     if group_file.exists():
         try:
-            groups = _groups(_load(group_file, "json"), issues)
+            groups, groups_complete = _group_metadata(_load(group_file, "json"), issues)
             sources += 1
         except Exception:
             issues.append(ImportIssue("groups_read_failed", "The virtual-group metadata source could not be read safely."))
+    else:
+        issues.append(ImportIssue("groups_source_missing", "The group source is absent; existing group membership must be preserved."))
     identity_counts: dict[tuple[str, str], int] = {}
     for drv, name, _, _ in records:
         identity_counts[(drv, name)] = identity_counts.get((drv, name), 0) + 1
     identities = set(identity_counts)
     for key in set(groups) & identities:
         if identity_counts[key] > 1:
+            groups_complete = False
             groups.pop(key)
             issues.append(ImportIssue("ambiguous_group_members", "A group member matches multiple source namespaces and was left ungrouped."))
     if set(groups) - identities:
+        groups_complete = False
         issues.append(ImportIssue("unresolved_group_members", "Some virtual-group members do not match a discovered connection."))
     for driver, name, record, scope in records:
         try:
-            profiles.append(_convert(driver, name, record, str(path), "macos-plist" if path.suffix.lower() == ".plist" else "linux-json", tuple(groups.get((driver, name), ())), issues, scope))
+            converted = _convert(driver, name, record, str(path), "macos-plist" if path.suffix.lower() == ".plist" else "linux-json", tuple(groups.get((driver, name), ())), issues, scope)
+            profiles.append(replace(converted, groups_complete=groups_complete))
         except Exception:
             # No raw exception text: malformed content can include credentials.
             issues.append(ImportIssue("profile_read_failed", "A connection metadata entry could not be converted safely."))

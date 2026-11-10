@@ -101,18 +101,36 @@ def ready(qtbot,host,page):
     assert page.page is not None, page.message.text()
 
 
+def register_host(qtbot,host,session,*,close_session=False):
+    """Drain while Qt objects exist, before pytest-qt closes/deletes widgets."""
+    state={'done':False}
+    def shutdown(widget):
+        if state['done']:return
+        assert widget is host and isValid(host) and isValid(host.pool), 'Host was deleted before its I/O was verified complete'
+        release=getattr(session,'release',None)
+        if release is not None:release.set()
+        qtbot.waitUntil(lambda:not host.tasks and not host.pool.activeThreadCount(),timeout=15000)
+        for page in host.pages:
+            if isValid(page):
+                page.discard_changes();page._closed=True;page.close();page.deleteLater()
+        if close_session:
+            host.submit(session.close)
+            qtbot.waitUntil(lambda:not host.tasks and not host.pool.activeThreadCount(),timeout=15000)
+        assert not host.errors
+        host.close()
+        state['done']=True
+    qtbot.addWidget(host,before_close_func=shutdown)
+    return lambda:shutdown(host)
+
+
 @pytest.fixture
 def ui(qtbot,monkeypatch):
-    session=ControlledSession();host=SerialHost(session);qtbot.addWidget(host)
+    session=ControlledSession();host=SerialHost(session)
+    shutdown=register_host(qtbot,host,session)
     host.show()
     monkeypatch.setattr(QMessageBox,"question",lambda *_a,**_k:QMessageBox.StandardButton.Cancel)
-    yield host,session
-    if session.release is not None:session.release.set()
-    qtbot.waitUntil(lambda:not host.tasks and not host.pool.activeThreadCount(),timeout=10000)
-    for page in host.pages:
-        if isValid(page):
-            page.discard_changes();page._closed=True;page.deleteLater()
-    assert not host.errors
+    try:yield host,session
+    finally:shutdown()
 
 
 def page(qtbot,ui,**options):
@@ -331,6 +349,7 @@ def live_ui(qtbot,tmp_path,monkeypatch):
     database=config.database;collection="onv_ui_"+uuid.uuid4().hex
     admin=MongoSession(deepcopy(config))
     session=host=widget=None
+    shutdown=None
     created=False
     try:
         admin.connect()
@@ -346,7 +365,9 @@ def live_ui(qtbot,tmp_path,monkeypatch):
                 assert threading.get_ident()!=main_thread
                 return _method(*args,**kwargs)
             monkeypatch.setattr(session,name,traced)
-        host=SerialHost(session);qtbot.addWidget(host);host.show()
+        host=SerialHost(session)
+        shutdown=register_host(qtbot,host,session,close_session=True)
+        host.show()
         host.submit(session.connect)
         qtbot.waitUntil(lambda:not host.tasks and not host.pool.activeThreadCount(),timeout=10000)
         assert not host.errors
@@ -357,11 +378,11 @@ def live_ui(qtbot,tmp_path,monkeypatch):
         yield host,widget,admin,database,collection,io_threads
     finally:
         try:
-            if host is not None:qtbot.waitUntil(lambda:not host.tasks and not host.pool.activeThreadCount(),timeout=15000)
+            if shutdown is not None:shutdown()
         finally:
             if widget is not None and isValid(widget):widget.discard_changes();widget._closed=True;widget.deleteLater()
             try:
-                if session is not None:session.close()
+                if session is not None and shutdown is None:session.close()
             finally:
                 try:
                     if created:admin.connection[database].drop_collection(collection)
@@ -452,3 +473,39 @@ def test_view_switching_keeps_the_visibly_selected_document_bound_to_mutation(qt
     assert widget._selected_row==1 and widget.selected_document().document["_id"]==ObjectId("000000000000000000000002")
     widget.set_view(0)
     assert widget.grid.currentIndex().row()==1
+
+
+def test_pytestqt_cleanup_drains_actual_pending_io_and_owner_close_before_qt_deletes_pool(qtbot,request):
+    from pytestqt.qtbot import _close_widgets
+    from PySide6.QtCore import QCoreApplication,QEvent
+    session=ControlledSession();host=SerialHost(session);pool=host.pool
+    entered,release,completed,closed=[threading.Event() for _ in range(4)]
+    calls=[]
+    def close_session():
+        assert threading.get_ident()!=threading.main_thread().ident
+        calls.append('owner-close');closed.set()
+    session.close=close_session
+    shutdown=register_host(qtbot,host,session,close_session=True)
+    host.show()
+    def work():
+        entered.set();assert release.wait(5)
+        calls.append('io-complete');completed.set()
+        return 'owned result'
+    host.submit(work,lambda value:calls.append(('reply',value)))
+    qtbot.waitUntil(entered.is_set,timeout=2000)
+    observations=[]
+    def allow_completion():
+        observations.append((isValid(host),isValid(pool),not completed.is_set()))
+        release.set()
+    QTimer.singleShot(30,allow_completion)
+    try:
+        # Exercise pytest-qt's real close/delete order in the test body, before
+        # the fixture finalizer would have run in the original CI failure.
+        _close_widgets(request.node)
+        QCoreApplication.sendPostedEvents(None,QEvent.Type.DeferredDelete)
+        assert observations==[(True,True,True)]
+        assert completed.is_set() and closed.is_set()
+        assert calls==['io-complete',('reply','owned result'),'owner-close']
+        assert not isValid(host) and not isValid(pool)
+        shutdown()  # A later fixture finalizer uses verified completion only.
+    finally:release.set()

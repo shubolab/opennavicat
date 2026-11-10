@@ -139,22 +139,38 @@ def ready(qtbot, host, page):
     assert page.page is not None, page.message.text()
 
 
+def register_host(qtbot,host,session,*,close_session=False):
+    """All transfer/control workers finish before Qt may delete their pools."""
+    state={'done':False}
+    def shutdown(widget):
+        if state['done']:return
+        assert widget is host and isValid(host) and isValid(host.pool) and isValid(host.cancel_pool), 'Host was deleted before transfer I/O was verified complete'
+        release=getattr(session,'release',None)
+        if release is not None:release.set()
+        def idle():
+            return not host.tasks and not host.pool.activeThreadCount() and not host.cancel_pool.activeThreadCount()
+        qtbot.waitUntil(idle,timeout=20000)
+        for page in host.pages:
+            if isValid(page):page._closed=True;page.close();page.deleteLater()
+        if close_session:
+            host.submit(session.close)
+            qtbot.waitUntil(idle,timeout=15000)
+        assert not host.errors
+        host.close()
+        state['done']=True
+    qtbot.addWidget(host,before_close_func=shutdown)
+    return lambda:shutdown(host)
+
+
 @pytest.fixture
 def ui(qtbot, monkeypatch):
     session = ControlledGridFS()
     host = SerialHost(session)
-    qtbot.addWidget(host)
+    shutdown=register_host(qtbot,host,session)
     host.show()
     monkeypatch.setattr(QMessageBox, "question", lambda *_a,**_k:QMessageBox.StandardButton.Cancel)
-    yield host, session
-    if session.release is not None:
-        session.release.set()
-    qtbot.waitUntil(lambda:not host.tasks and not host.pool.activeThreadCount() and not host.cancel_pool.activeThreadCount(), timeout=15000)
-    for page in host.pages:
-        if isValid(page):
-            page._closed = True
-            page.deleteLater()
-    assert not host.errors
+    try:yield host,session
+    finally:shutdown()
 
 
 def page(qtbot, ui):
@@ -442,6 +458,7 @@ def live_ui(qtbot, monkeypatch):
     admin, session = MongoSession(deepcopy(config)), MongoSession(deepcopy(config))
     bucket = "onv_gridfs_" + uuid.uuid4().hex
     host = widget = None
+    shutdown=None
     try:
         admin.connect()
         import gridfs
@@ -449,7 +466,7 @@ def live_ui(qtbot, monkeypatch):
         storage.upload_from_stream("seed.bin",b"\x00\xff\r\n",metadata={"owned":True})
         storage.upload_from_stream("a[1].txt",b"synthetic")
         host = SerialHost(session)
-        qtbot.addWidget(host)
+        shutdown=register_host(qtbot,host,session,close_session=True)
         host.show()
         host.submit(session.connect)
         qtbot.waitUntil(lambda:not host.tasks and not host.pool.activeThreadCount(),timeout=15000)
@@ -471,14 +488,13 @@ def live_ui(qtbot, monkeypatch):
         yield host,widget,admin,storage,threads
     finally:
         try:
-            if host is not None and isValid(host) and isValid(host.pool):
-                qtbot.waitUntil(lambda:not host.tasks and not host.pool.activeThreadCount() and not host.cancel_pool.activeThreadCount(),timeout=20000)
+            if shutdown is not None:shutdown()
         finally:
             if widget is not None and isValid(widget):
                 widget._closed = True
                 widget.deleteLater()
             try:
-                session.close()
+                if shutdown is None:session.close()
             finally:
                 try:
                     if admin.connection is not None:
@@ -602,3 +618,39 @@ def test_live_gridfs_cancel_partial_native_upload_removes_only_its_chunks(qtbot,
     assert namespace[widget.bucket+".files"].count_documents({}) == 2
     assert namespace[widget.bucket+".files"].find_one({"filename":source.name}) is None
     assert namespace[widget.bucket+".chunks"].count_documents({}) == before
+
+
+@pytest.mark.parametrize('kind',['transfer','control'])
+def test_pytestqt_cleanup_waits_for_both_pools_and_native_owner_close_before_deletion(qtbot,request,kind):
+    from pytestqt.qtbot import _close_widgets
+    from PySide6.QtCore import QCoreApplication,QEvent
+    session=ControlledGridFS();host=SerialHost(session)
+    pool=host.pool if kind=='transfer'else host.cancel_pool
+    entered,release,completed,closed=[threading.Event() for _ in range(4)]
+    calls=[]
+    def close_session():
+        assert threading.get_ident()!=threading.main_thread().ident
+        calls.append('owner-close');closed.set()
+    session.close=close_session
+    shutdown=register_host(qtbot,host,session,close_session=True)
+    host.show()
+    def work():
+        entered.set();assert release.wait(5)
+        calls.append('io-complete');completed.set()
+        return 'owned result'
+    host.submit(work,lambda value:calls.append(('reply',value)),pool=pool)
+    qtbot.waitUntil(entered.is_set,timeout=2000)
+    observations=[]
+    def allow_completion():
+        observations.append((isValid(host),isValid(pool),not completed.is_set()))
+        release.set()
+    QTimer.singleShot(30,allow_completion)
+    try:
+        _close_widgets(request.node)
+        QCoreApplication.sendPostedEvents(None,QEvent.Type.DeferredDelete)
+        assert observations==[(True,True,True)]
+        assert completed.is_set() and closed.is_set()
+        assert calls==['io-complete',('reply','owned result'),'owner-close']
+        assert not isValid(host) and not isValid(pool)
+        shutdown()
+    finally:release.set()

@@ -41,7 +41,7 @@ Windows 的静态 `usessh` 与已观察 macOS 的 `usetunnel` 不同。实现不
 
 - 两个视图中的相同来源键，只有取得非空、相同的原生 key identity，并且白名单值、全部字段的名称/类型/尺寸、键修改时间和读取错误状态一致时，才合并为一条。相同 metadata 和时间不能单独证明 alias；opaque 值本身不会为了比较而读取。
 - 原生 identity 使用 `NtQueryKey(KeyNameInformation)` 获取同一已打开句柄的 canonical key-name 元数据，仅保留其 SHA256，不记录 SID 或原始键名。Microsoft 明确说明用户态使用 `NtQueryKey`，结构为字节长度加非 NUL 结尾 UTF-16 名称。实现固定 64 KiB 上限并检查实际长度；API 缺失/失败时保留两个 view 来源。它不是已观察的 Navicat UUID，也不证明配置格式已验收。[官方契约](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/wdm/nf-wdm-zwquerykey)、[名称结构](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntddk/ns-ntddk-_key_name_information)
-- 已调查 [CompareObjectHandles](https://learn.microsoft.com/en-us/windows/win32/api/handleapi/nf-handleapi-compareobjecthandles)：TRUE 是同一 kernel object 的直接证据，最低 Windows 10/Server 2016；FALSE 不能用来猜 alias。当前实现没有用它代替稳定的 key-name 元数据，也没有宣称此原生路径已在 Windows 跑过。
+- 已调查 [CompareObjectHandles](https://learn.microsoft.com/en-us/windows/win32/api/handleapi/nf-handleapi-compareobjecthandles)：TRUE 是同一 kernel object 的直接证据，最低 Windows 10/Server 2016；FALSE 不能用来猜 alias。当前实现没有用它代替稳定的 key-name 元数据；原生机制的 Windows AMD64 测试见下文，Windows ARM64 仍待原生 CI。
 - 视图不一致时保留两条，并发出 `windows_registry_view_conflict`。视图标识进入结构化身份输入，避免和合法连接名中的 `#view=64` 等文本碰撞。
 - 不按连接显示名合并不同驱动/命名空间，也不对用户键名应用 Python 的 Unicode `casefold`。缺少已验收的原生 UUID 时，键名变化会改变来源身份；旧本地项由既有 Store 保留为来源缺失，不自动删除。
 - 只在 `NavicatPremium` 根明确存在普通 `ProfilesPath` 值、并指向本地绝对目录时，尝试该目录下唯一的 `vgroup.json`。该字段与已支持 JSON 结构仍属于候选兼容读取，不是 Windows 原版验收结论；配置始终处于复核状态。
@@ -54,6 +54,12 @@ Windows 的静态 `usessh` 与已观察 macOS 的 `usetunnel` 不同。实现不
 
 跨平台合成测试覆盖白名单查询、禁止读取 secret/opaque 值、全部静态族可见、来源只读、跨视图去重与冲突（包含同长度 opaque 值不能证明 alias）、私密 repr、受控分组位置、链接拒绝和 Store 本地编辑保护。跨 macOS/Linux/Windows 覆盖分组的成功→缺失/坏 JSON/未知结构/部分无效成员、首次导入、有效空分组及本地确认后重载。既有元数据、Store 和 MainWindow 门禁回归继续运行。
 
-`test_navicat_windows_native.py` 提供 Windows-only 实际 API 测试：它只创建唯一的 `HKCU\Software\OpenNavicatTests\NavicatDiscovery-<UUID>`，从不写 PremiumSoft 真根。它用真实 `RegEnumValueW`/`RegQueryValueExW` 验证 NULL 数据枚举、白名单查询、分组文件和待复核配置，最后删除精确的自有测试根。**该原生测试首次运行可由后续 Windows CI 完成；在 macOS 上跳过，不能据此宣称 Windows API 或 Navicat18 已实测通过。**
+`test_navicat_windows_native.py` 提供 Windows-only 实际 API 测试：它只创建唯一的 `HKCU\Software\OpenNavicatTests\NavicatDiscovery-<UUID>`，从不写 PremiumSoft 真根。它用真实 `RegEnumValueW`/`RegQueryValueExW` 验证 NULL 数据枚举、白名单查询、双视图来源处理、分组文件和待复核配置，最后删除精确的自有测试根。
+
+2026-11-10 已在 **Windows 10.0.26100 AMD64** 运行这两个原生用例：**2 passed、0 skipped，0.63 秒，`-Werror`**。运行环境使用 [python.org 官方 Windows 3.13.7 发布清单](https://www.python.org/ftp/python/3.13.7/windows-3.13.7.json)指定的嵌入版 ZIP，SHA256 为 `e201b2da753a88c1af29d87f9f48af4d64a0fc8522a204ae672bd2c382496701`；`python.exe` 与 `python313.dll` 的 Authenticode 均为 Valid，签名者是 Python Software Foundation。pytest、sqlparse 及其七个纯 Python wheel 从 PyPI 获取并逐个核对版本 JSON 的 SHA256，只解包到独立自有临时目录，未运行安装器、WindowsApps Python 别名，也未修改系统 PATH。
+
+两个测试根及本轮新建的空 `OpenNavicatTests` 父键已删除，临时运行目录已移除，自有进程为零。没有读取 PremiumSoft、既有 profile 或凭证值，没有数据库连接，也未操作现有 GUI 应用和其他任务夹具。macOS 全源回归为 **855 passed、314 skipped**，其中两个原生 Windows 用例按平台跳过；元数据/Store/MainWindow 相关合成回归为 **171 passed、2 skipped**。这些计数不包含未启用的外部协议夹具验收。
+
+**上述 Windows AMD64 结果证明原生 API 和自有合成来源读取机制，不能替代 Windows Navicat18 save-only 格式或 Windows GUI 验收。Windows ARM64 API 路径仍待后续原生 CI；用户现场 Windows 后续验收已延期，不因本机制测试推进现场操作。**
 
 完成 Windows 18 来源验收仍需要受控原版 save-only 样例：逐驱动验证实际活跃路径、REG 类型、身份稳定性、32/64 视图行为、认证与 SSL/SSH 枚举、可配置 Profiles Location、分组格式及重启后的存量加载。只有这些证据允许以后逐项缩小复核门禁。六目标安装包、实际用户 Windows GUI 和完整工具/UI 对齐仍是独立门禁。

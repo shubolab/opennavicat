@@ -675,7 +675,9 @@ def test_real_cancel_targets_own_typed_comment_and_finishes_query(session):
             if rows:break
             time.sleep(.02)
         assert rows,'Owned long query was not visible to its cancellation channel'
-        when=time.monotonic();session.cancel();worker.join(3)
+        marker=session.cancellation_marker()
+        assert marker is not None
+        when=time.monotonic();session.cancel(expected_comment=marker);worker.join(3)
         assert not worker.is_alive() and failures and time.monotonic()-when<3
         assert session._active_comment is None
     finally:

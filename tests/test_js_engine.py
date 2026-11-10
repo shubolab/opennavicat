@@ -110,18 +110,15 @@ def test_actual_native_parent_watchdog_kills_child_during_blocked_host_call(engi
         time.sleep(.3)
         # The child was blocked waiting for this response for >100ms. The
         # runtime receipt provides the independent kill/reap evidence.
-        # Windows TerminateProcess and POSIX SIGKILL have different exit
-        # codes. Both must have terminated this exact child before host I/O
-        # returns; the independent receipt below still requires hard kill
-        # and reap rather than accepting a normal completed execution.
-        returncode=children[0].poll()
-        killed_before_return.append(self.cancelled() and returncode is not None and returncode != 0)
+        # Windows Popen.kill() uses TerminateProcess(handle, 1); POSIX uses
+        # SIGKILL. Observe the exact child before the blocked host returns.
+        killed_before_return.append({'cancelled':self.cancelled(),'returncode':children[0].poll()})
         raise RuntimeError("simulated bounded host return")
     monkeypatch.setattr(MongoDBBridge,"command",blocked)
     with pytest.raises(JavaScriptError) as raised:
         engine.execute(offline,"db.runCommand({ping:1})",limits=ExecutionLimits(timeout_ms=100))
-    assert killed_before_return == [True]
-    assert raised.value.result.hard_killed and raised.value.result.elapsed_ms < 1500
+    assert killed_before_return == [{'cancelled':True,'returncode':1 if os.name=='nt' else -9}]
+    assert raised.value.result.cancelled and raised.value.result.hard_killed and raised.value.result.elapsed_ms < 1500
     assert_clean(raised.value.result)
 
 

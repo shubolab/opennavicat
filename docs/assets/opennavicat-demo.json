@@ -1,6 +1,6 @@
 {
   "application": "OpenNavicat",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "theme": "dark",
   "capture": "Actual live Qt QWidget.grab frames; no reference screenshots, composited UI or image generation service",
   "qt_platform": "offscreen",
@@ -10,8 +10,8 @@
     900
   ],
   "fps": 6,
-  "frames": 179,
-  "duration_seconds": 29.84,
+  "frames": 180,
+  "duration_seconds": 30.0,
   "loop": "infinite",
   "data": "All profiles, customer/product data, email addresses, BSON, dates, SQL and images are generated for this demo",
   "connection_name": "演示数据库 · 示例数据",
@@ -30,57 +30,57 @@
     {
       "name": "objects",
       "first_frame": 0,
-      "frames": 13
+      "frames": 12
     },
     {
       "name": "table_data",
-      "first_frame": 13,
+      "first_frame": 12,
       "frames": 14
     },
     {
       "name": "query_editor",
-      "first_frame": 27,
+      "first_frame": 26,
       "frames": 13
     },
     {
       "name": "query_results",
-      "first_frame": 40,
+      "first_frame": 39,
       "frames": 16
     },
     {
       "name": "table_designer",
-      "first_frame": 56,
+      "first_frame": 55,
       "frames": 11
     },
     {
       "name": "designer_sql_preview",
-      "first_frame": 67,
-      "frames": 17
+      "first_frame": 66,
+      "frames": 16
     },
     {
       "name": "mongodb_collection_grid",
-      "first_frame": 84,
-      "frames": 14
+      "first_frame": 82,
+      "frames": 13
     },
     {
       "name": "mongodb_typed_tree",
-      "first_frame": 98,
+      "first_frame": 95,
       "frames": 13
     },
     {
       "name": "mongodb_gridfs_preview",
-      "first_frame": 111,
-      "frames": 13
+      "first_frame": 108,
+      "frames": 14
     },
     {
       "name": "mongodb_javascript_editor",
-      "first_frame": 124,
+      "first_frame": 122,
       "frames": 13
     },
     {
       "name": "mongodb_javascript_results",
-      "first_frame": 137,
-      "frames": 14
+      "first_frame": 135,
+      "frames": 16
     },
     {
       "name": "mongodb_index_designer",
@@ -90,7 +90,7 @@
     {
       "name": "mongodb_index_script_preview",
       "first_frame": 164,
-      "frames": 15
+      "frames": 16
     }
   ],
   "mongodb_included": true,
@@ -106,13 +106,13 @@
   "sqlite_closed_in_worker": true,
   "native_window_closed_before_quit": true,
   "background_io_completed_before_quit": true,
-  "captured_nominal_duration_seconds": 29.833,
+  "captured_nominal_duration_seconds": 30.0,
   "gif_probe": {
-    "frames": 179,
-    "duration_seconds": 29.84,
+    "frames": 180,
+    "duration_seconds": 30.0,
     "r_frame_rate": "6/1",
     "avg_frame_rate": "25/4",
-    "effective_frames_per_second": 5.99866,
+    "effective_frames_per_second": 6.0,
     "note": "GIF delays are quantized to centiseconds; fps is the requested capture rate."
   },
   "mongodb_service": {
@@ -125,8 +125,8 @@
     "credentials_generated_in_memory": true
   },
   "encoder": "ffmpeg version 8.0.1 Copyright (c) 2000-2025 the FFmpeg developers",
-  "gif_bytes": 744090,
-  "gif_sha256": "23a19beddbd9d9ab1264148fa13b86550b069f5a1495a7468e92dd9eab5fdd1b",
+  "gif_bytes": 750742,
+  "gif_sha256": "0b8bd608fafab22f0a3aa947858c92a405d9248aaab5429495124d46132f051b",
   "temporary_workspace_removed": true,
   "temporary_frame_files_removed": true
 }

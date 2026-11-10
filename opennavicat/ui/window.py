@@ -60,6 +60,18 @@ GROUP BY c.id, c.name, c.city
 ORDER BY revenue DESC;"""
 
 
+class ConnectionTree(QTreeWidget):
+    def keyPressEvent(self, event):
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter) and event.modifiers() in (
+                Qt.KeyboardModifier.NoModifier, Qt.KeyboardModifier.KeypadModifier):
+            item = self.currentItem()
+            if item is not None:
+                self.itemActivated.emit(item, self.currentColumn())
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+
 class TablePage(QWidget):
     def __init__(self, window, connection_id, schema, table, kind="table"):
         super().__init__()
@@ -579,7 +591,9 @@ class MainWindow(QMainWindow):
         side = QVBoxLayout(self.sidebar)
         side.setContentsMargins(8, 0, 8, 6)
         side.setSpacing(0)
-        self.tree = QTreeWidget()
+        self.tree = ConnectionTree()
+        self.tree.setObjectName("connectionTree")
+        self.tree.setAccessibleName("数据库连接和对象")
         self.tree.setHeaderHidden(True)
         self.tree.setIndentation(16)
         self.tree.setIconSize(QSize(16, 16))
@@ -587,7 +601,7 @@ class MainWindow(QMainWindow):
         self.tree.setUniformRowHeights(True)
         self.tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.tree.customContextMenuRequested.connect(self.tree_menu)
-        self.tree.itemDoubleClicked.connect(self.tree_open)
+        self.tree.itemActivated.connect(self.tree_open)
         self.tree.itemExpanded.connect(self.tree_expand)
         self.tree.itemClicked.connect(self.tree_selected)
         side.addWidget(self.tree, 1)

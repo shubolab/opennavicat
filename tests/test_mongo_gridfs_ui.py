@@ -205,6 +205,32 @@ def test_gridfs_metadata_default_grid_fixed_columns_and_pagination(qtbot, ui):
     assert session.threads and all(thread != threading.get_ident() for thread in session.threads)
 
 
+def test_preview_and_progress_are_below_table_and_pagination_with_reference_toolbar_order(qtbot,ui):
+    host,session=ui
+    widget=page(qtbot,ui)
+    ordered=[action for action in widget.toolbar.actions() if action in {
+        widget.open_action,widget.delete_action,widget.upload_action,widget.download_action,
+        widget.filter_action,widget.preview_action,widget.progress_action,widget.focus_action}]
+    assert ordered==[widget.open_action,widget.delete_action,widget.upload_action,widget.download_action,
+        widget.filter_action,widget.preview_action,widget.progress_action,widget.focus_action]
+    assert widget.splitter.orientation()==Qt.Orientation.Vertical
+    assert widget.splitter.widget(0) is widget.file_panel
+    assert widget.grid.parentWidget() is widget.file_panel and widget.footer.parentWidget() is widget.file_panel
+    assert widget.delete_button is widget.toolbar.widgetForAction(widget.delete_action)
+    assert not widget.footer.isAncestorOf(widget.delete_button)
+    widget.preview_action.setChecked(True);ready(qtbot,host,widget)
+    qtbot.waitUntil(lambda:widget.preview_panel.isVisible())
+    assert widget.preview_panel.geometry().top()>widget.file_panel.geometry().bottom()
+    assert widget.footer.geometry().top()>widget.grid.geometry().bottom()
+    widget.progress_action.setChecked(True)
+    qtbot.waitUntil(lambda:widget.progress_panel.isVisible())
+    assert widget.splitter.widget(1) is widget.preview_panel and widget.splitter.widget(2) is widget.progress_panel
+    assert widget.progress_panel.geometry().top()>widget.preview_panel.geometry().bottom()
+    widget.preview_action.setChecked(False)
+    assert not widget.preview_panel.isVisible() and widget.progress_panel.isVisible()
+    assert widget.progress_action.isChecked() and widget.selected_file() is session.files[0]
+
+
 def test_filters_escape_literal_name_and_clear_recovers_rows(qtbot, ui):
     host, _ = ui
     widget = page(qtbot, ui)

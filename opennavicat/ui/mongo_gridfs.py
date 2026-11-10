@@ -97,10 +97,10 @@ class MongoGridFSPage(QWidget):
         self.toolbar.setFixedHeight(36)
         self.toolbar.setIconSize(QSize(18, 18))
         layout.addWidget(self.toolbar)
-        self.upload_action = self._action("上传文件", "import", self.upload_file)
         self.open_action = self._action("打开文件（外部应用打开尚未实现）", "open")
         self.open_action.setEnabled(False)
         self.delete_action = self._action("删除文件", "delete", self.delete_file)
+        self.upload_action = self._action("上传文件", "import", self.upload_file)
         self.download_action = self._action("下载文件", "export", self.download_file)
         self.toolbar.addSeparator()
         self.filter_action = self._action("筛选", "filter")
@@ -145,7 +145,13 @@ class MongoGridFSPage(QWidget):
         self.message.setWordWrap(True)
         self.message.hide()
         layout.addWidget(self.message)
-        self.splitter = QSplitter(Qt.Orientation.Horizontal)
+        # Reference M18-09 places preview/progress below the table and its page
+        # controls. The global right-side Inspector belongs to MainWindow.
+        self.splitter = QSplitter(Qt.Orientation.Vertical)
+        self.file_panel = QWidget()
+        self.file_layout = QVBoxLayout(self.file_panel)
+        self.file_layout.setContentsMargins(0,0,0,0)
+        self.file_layout.setSpacing(0)
         self.grid = DataGrid(row_selectors=False)
         self.model = GridFSFileModel(self.grid)
         self.model.set_documents([])
@@ -159,24 +165,30 @@ class MongoGridFSPage(QWidget):
         self.grid.setColumnWidth(1, 190)
         self.grid.setColumnWidth(4, 195)
         self.grid.selectionModel().currentRowChanged.connect(self._selection_changed)
-        self.splitter.addWidget(self.grid)
+        self.file_layout.addWidget(self.grid,1)
+        self.splitter.addWidget(self.file_panel)
         self.preview_panel = QWidget()
-        preview = QVBoxLayout(self.preview_panel)
+        preview = QHBoxLayout(self.preview_panel)
+        preview.setContentsMargins(12,8,12,8)
+        self.preview_download_button = QToolButton()
+        self.preview_download_button.setIcon(tool_icon("save",24))
+        self.preview_download_button.setIconSize(QSize(24,24))
+        self.preview_download_button.setToolTip("保存到磁盘")
+        self.preview_download_button.clicked.connect(self.download_file)
+        preview.addWidget(self.preview_download_button,0,Qt.AlignmentFlag.AlignTop)
         self.preview_label = QLabel("选择文件以预览。")
         self.preview_label.setTextFormat(Qt.TextFormat.PlainText)
         self.preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.preview_label.setWordWrap(True)
-        self.preview_label.setMinimumSize(240, 180)
+        self.preview_label.setMinimumSize(200,80)
         self.preview_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
         preview.addWidget(self.preview_label, 1)
-        self.preview_download_button = QPushButton("保存到磁盘")
-        self.preview_download_button.clicked.connect(self.download_file)
-        preview.addWidget(self.preview_download_button)
         self.splitter.addWidget(self.preview_panel)
         self.splitter.setStretchFactor(0, 4)
         self.splitter.setStretchFactor(1, 1)
         self.preview_panel.hide()
         self.preview_action.toggled.connect(self._toggle_preview)
+        self.splitter.splitterMoved.connect(lambda *_args:self._render_preview())
         layout.addWidget(self.splitter, 1)
 
         self.progress_panel = QWidget()
@@ -199,8 +211,9 @@ class MongoGridFSPage(QWidget):
         progress_controls.addWidget(self.cancel_button)
         progress_layout.addLayout(progress_controls)
         self.progress_panel.hide()
-        self.progress_action.toggled.connect(self.progress_panel.setVisible)
-        layout.addWidget(self.progress_panel)
+        self.progress_action.toggled.connect(self._toggle_progress)
+        self.splitter.addWidget(self.progress_panel)
+        self.splitter.setStretchFactor(2,1)
 
         self.footer = QWidget()
         self.footer.setObjectName("tableFooter")
@@ -208,8 +221,16 @@ class MongoGridFSPage(QWidget):
         footer = QHBoxLayout(self.footer)
         footer.setContentsMargins(6, 2, 6, 2)
         footer.setSpacing(3)
-        self.delete_button = self._button(footer, "删除文件", "record_delete", self.delete_file)
-        self.refresh_button = self._button(footer, "刷新", "refresh", self.refresh)
+        self.delete_button = self.toolbar.widgetForAction(self.delete_action)
+        # Retain the compatibility widget without adding a reference-inaccurate
+        # duplicate delete/refresh strip. Refresh is also in the grid menu.
+        self.refresh_button = QToolButton(self)
+        self.refresh_button.hide()
+        self.refresh_button.clicked.connect(self.refresh)
+        self.refresh_action = QAction(tool_icon("refresh",16),"刷新",self)
+        self.refresh_action.triggered.connect(self.refresh)
+        self.grid.setContextMenuPolicy(Qt.ContextMenuPolicy.ActionsContextMenu)
+        self.grid.addAction(self.refresh_action)
         self.status = QLabel("正在读取…")
         self.status.setTextFormat(Qt.TextFormat.PlainText)
         footer.addWidget(self.status, 1)
@@ -230,7 +251,7 @@ class MongoGridFSPage(QWidget):
         self.page_size.editingFinished.connect(lambda: self.go_page(0))
         self.page_size.hide()
         self.settings_button = self._button(footer, "设置", "other", self.page_settings)
-        layout.addWidget(self.footer)
+        self.file_layout.addWidget(self.footer)
         self._update_controls()
         QTimer.singleShot(0, self, self.refresh)
 
@@ -545,8 +566,19 @@ class MongoGridFSPage(QWidget):
 
     def _toggle_preview(self, enabled):
         self.preview_panel.setVisible(enabled)
+        self._size_bottom_panels()
         if enabled:
             self.preview_file()
+
+    def _toggle_progress(self, enabled):
+        self.progress_panel.setVisible(enabled)
+        self._size_bottom_panels()
+
+    def _size_bottom_panels(self):
+        height=max(400,self.splitter.height())
+        preview=180 if self.preview_action.isChecked() else 0
+        progress=140 if self.progress_action.isChecked() else 0
+        self.splitter.setSizes([max(220,height-preview-progress),preview,progress])
 
     def preview_file(self):
         selected = self.selected_file()
@@ -620,6 +652,7 @@ class MongoGridFSPage(QWidget):
         self.download_action.setEnabled(idle and selected is not None)
         self.preview_download_button.setEnabled(idle and selected is not None)
         self.refresh_button.setEnabled(idle)
+        self.refresh_action.setEnabled(idle)
         self.filter_bar.setEnabled(idle)
         self.grid.setEnabled(idle)
         self.first_button.setEnabled(idle and self.offset > 0)

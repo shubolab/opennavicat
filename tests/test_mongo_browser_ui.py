@@ -162,18 +162,22 @@ def test_grid_default_bson_summaries_missing_null_and_exact_native_document_sour
 def test_tree_lazy_navigation_and_json_page_preserve_bson_and_unicode(qtbot,ui):
     host,session=ui;widget=page(qtbot,ui)
     qtbot.mouseClick(widget.view_buttons.button(1),Qt.MouseButton.LeftButton)
-    root=widget.tree.topLevelItem(0)
-    assert root.childCount()==0
-    root.setExpanded(True)
-    nested=next(root.child(i) for i in range(root.childCount()) if root.child(i).text(0)=="nested")
+    assert widget.tree.isHeaderHidden()
+    assert widget.tree.topLevelItemCount()==len(session.records[0].document)
+    nested=next(widget.tree.topLevelItem(i) for i in range(widget.tree.topLevelItemCount()) if widget.tree.topLevelItem(i).text(0)=="nested")
     assert nested.childCount()==0
     nested.setExpanded(True)
     text=next(nested.child(i) for i in range(nested.childCount()) if nested.child(i).text(0)=="text")
     assert text.text(1)=="a\u2028b\u2029中文"
-    second=widget.tree.topLevelItem(1);widget.tree.setCurrentItem(second)
-    assert widget.selected_document().document["_id"]==session.records[1].document["_id"]
+    count=len(session.calls)
+    qtbot.mouseClick(widget.next_button,Qt.MouseButton.LeftButton)
+    assert widget.selected_document() is session.records[1] and len(session.calls)==count
+    assert [widget.tree.topLevelItem(i).text(0) for i in range(widget.tree.topLevelItemCount())]==list(session.records[1].document)
+    assert widget.record_position.text()=="第 2 条记录"
     qtbot.mouseClick(widget.view_buttons.button(2),Qt.MouseButton.LeftButton)
     assert widget.json_view.isReadOnly() and widget.json_view.language=="text"
+    assert widget.json_view.textCursor().position()==widget._json_offsets[1]
+    assert not widget.edit_action.isVisible() and not widget.collapse_action.isVisible()
     view=widget.json_view.toPlainText()
     assert view.startswith("// 1\n") and "// 2\n" in view and '"$numberLong"' in view and '"$numberDecimal"' in view
     assert "\\u2028" in view and "\\u2029" in view
@@ -181,6 +185,81 @@ def test_tree_lazy_navigation_and_json_page_preserve_bson_and_unicode(qtbot,ui):
     assert isinstance(dialog,MongoDocumentDialog) and "Extended JSON" in dialog.windowTitle()
     assert isinstance(canonical_loads(dialog.editor.toPlainText())["long"],Int64)
     dialog.reject()
+
+
+def test_tree_records_cross_pages_and_unknown_total_never_claims_last(qtbot,ui):
+    host,session=ui
+    session.records.extend(document({"_id":value,"label":str(value)}) for value in range(3,6))
+    widget=page(qtbot,ui);widget.page_size.setValue(2)
+    widget.filter_edit.setText('{"long":{"$gte":{"$numberLong":"1"}}}')
+    widget.sort_edit.setText('{"_id":1}')
+    widget.apply_filter();ready(qtbot,host,widget)
+    widget.set_view(1)
+    qtbot.mouseClick(widget.next_button,Qt.MouseButton.LeftButton)
+    assert widget.offset==0 and widget._selected_row==1
+    qtbot.mouseClick(widget.next_button,Qt.MouseButton.LeftButton);ready(qtbot,host,widget)
+    assert widget.offset==2 and widget._selected_row==0
+    arguments=session.calls[-1][1]
+    assert isinstance(arguments[2]["long"]["$gte"],Int64) and arguments[3]==[("_id",1)]
+    assert arguments[5:]==(2,2)
+    qtbot.mouseClick(widget.previous_button,Qt.MouseButton.LeftButton);ready(qtbot,host,widget)
+    assert widget.offset==0 and widget._selected_row==1
+    qtbot.mouseClick(widget.last_button,Qt.MouseButton.LeftButton);ready(qtbot,host,widget)
+    assert widget.offset==4 and widget.selected_document() is session.records[4]
+    qtbot.mouseClick(widget.first_button,Qt.MouseButton.LeftButton);ready(qtbot,host,widget)
+    assert widget.offset==0 and widget._selected_row==0
+    widget.load_page(replace(widget.page,total=None))
+    assert widget.next_button.isEnabled() and not widget.last_button.isEnabled()
+    assert "总数未知" in widget.last_button.toolTip()
+
+
+def test_cancel_discard_and_save_navigation_keep_original_bson_preimage(qtbot,ui,monkeypatch):
+    host,session=ui;widget=page(qtbot,ui)
+    original=widget.selected_document()
+    dialog=widget.edit_document();changed=deepcopy(original.document);changed["long"]=Int64(999)
+    dialog.editor.setPlainText(canonical_dumps(changed))
+    widget.grid.setCurrentIndex(widget.model.index(1,0))
+    assert widget.selected_document() is original and widget.grid.currentIndex().row()==0
+    widget.set_view(2)
+    cursor=widget.json_view.textCursor();cursor.setPosition(widget._json_offsets[1]);widget.json_view.setTextCursor(cursor)
+    assert widget.selected_document() is original and widget.json_view.textCursor().position()==widget._json_offsets[0]
+    widget.set_view(1)
+    qtbot.mouseClick(widget.next_button,Qt.MouseButton.LeftButton)
+    assert widget.selected_document() is original and widget.dirty
+    monkeypatch.setattr(QMessageBox,"question",lambda *_a,**_k:QMessageBox.StandardButton.Discard)
+    qtbot.mouseClick(widget.next_button,Qt.MouseButton.LeftButton)
+    assert widget.selected_document() is session.records[1] and not widget.dirty
+    assert original.raw_bson==session.records[0].raw_bson
+    widget.select_record(0)
+    dialog=widget.edit_document();dialog.editor.setPlainText(canonical_dumps(changed))
+    session.entered,session.release=threading.Event(),threading.Event()
+    monkeypatch.setattr(QMessageBox,"question",lambda *_a,**_k:QMessageBox.StandardButton.Save)
+    qtbot.mouseClick(widget.next_button,Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(session.entered.is_set)
+    assert widget.loading and widget.selected_document() is original and not widget.next_button.isEnabled()
+    session.release.set()
+    qtbot.waitUntil(lambda:not host.tasks and not widget.loading and widget._selected_row==1)
+    expected=next(arguments[3] for operation,arguments in session.calls if operation=="replace")
+    assert expected is original and expected.raw_bson==original.raw_bson
+    assert session.records[0].document["long"]==Int64(999) and not widget.dirty
+
+
+def test_refresh_preserves_typed_identity_and_failed_page_keeps_previous_record(qtbot,ui):
+    host,session=ui
+    session.records=[document({"_id":1,"value":"int"}),document({"_id":Int64(1),"value":"long"}),document({"_id":True,"value":"bool"})]
+    widget=page(qtbot,ui);widget.select_record(1);widget.set_view(1)
+    original=widget.selected_document()
+    session.records=[session.records[2],session.records[0],session.records[1]]
+    widget.refresh();ready(qtbot,host,widget)
+    assert widget.selected_document() is original and widget._selected_row==2
+    assert isinstance(widget.selected_document().document["_id"],Int64)
+    widget.page_size.setValue(1);widget.go_page(0);ready(qtbot,host,widget)
+    original=widget.selected_document()
+    session.fail_next=DatabaseError("Owned page read failed")
+    qtbot.mouseClick(widget.next_button,Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda:not host.tasks and not widget.loading)
+    assert widget.offset==widget.page.offset==0 and widget.selected_document() is original
+    assert "read failed" in widget.message.text() and widget._pending_row is None
 
 
 def test_filter_sort_projection_inputs_capture_typed_values_and_invalid_json_never_runs(qtbot,ui):
@@ -460,13 +539,43 @@ def test_live_mongo_delete_conflict_cannot_delete_a_concurrently_changed_documen
     assert admin.fetch_documents(database,collection,{"_id":identity}).documents==[]
 
 
+def test_live_tree_cross_page_save_navigates_after_exact_bson_write(qtbot,live_ui,monkeypatch):
+    host,widget,admin,database,collection,threads=live_ui
+    widget.page_size.setValue(1);widget.sort_edit.setText('{"_id":1}')
+    widget.apply_filter();ready(qtbot,host,widget);widget.set_view(1)
+    original=widget.selected_document();identity=original.document["_id"]
+    assert widget.tree.topLevelItemCount()==len(original.document)
+    assert not widget.last_button.isEnabled() and widget.page.total is None
+    dialog=widget.edit_document();changed=deepcopy(original.document);changed["long"]=Int64(9007199254740999)
+    dialog.editor.setPlainText(canonical_dumps(changed))
+    qtbot.mouseClick(widget.next_button,Qt.MouseButton.LeftButton)
+    assert widget.offset==0 and widget.selected_document() is original and widget.dirty
+    monkeypatch.setattr(QMessageBox,"question",lambda *_a,**_k:QMessageBox.StandardButton.Save)
+    qtbot.mouseClick(widget.next_button,Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda:not host.tasks and not widget.loading and widget.offset==1,timeout=15000)
+    assert widget.selected_document().document["_id"]!=identity
+    assert [widget.tree.topLevelItem(i).text(0) for i in range(widget.tree.topLevelItemCount())]==["_id","long","only_second"]
+    saved=admin.fetch_documents(database,collection,{"_id":identity}).documents[0]
+    assert saved.document["long"]==Int64(9007199254740999) and isinstance(saved.document["long"],Int64)
+    assert saved.document["binary"]==Binary(b"\x00\xff",128)
+    widget.set_view(2);assert widget._selected_row==0
+    widget.set_view(1);qtbot.mouseClick(widget.previous_button,Qt.MouseButton.LeftButton)
+    ready(qtbot,host,widget)
+    assert widget.offset==0 and widget.selected_document().document["_id"]==identity
+    assert threads and all(thread!=threading.get_ident() for thread in threads)
+
+
 def test_view_switching_keeps_the_visibly_selected_document_bound_to_mutation(qtbot,ui):
     widget=page(qtbot,ui)
     widget.grid.setCurrentIndex(widget.model.index(1,0))
     widget.set_view(1)
-    assert widget.tree.currentItem() is widget.tree.topLevelItem(1)
-    widget.tree.setCurrentItem(widget.tree.topLevelItem(0))
+    assert widget.tree.currentItem() is widget.tree.topLevelItem(0)
+    assert [widget.tree.topLevelItem(i).text(0) for i in range(widget.tree.topLevelItemCount())]==["_id","long","only_second"]
+    widget.tree.setCurrentItem(widget.tree.topLevelItem(1))
     widget.set_view(0)
+    assert widget.grid.currentIndex().row()==1 and widget._selected_row==1
+    widget.set_view(1)
+    qtbot.mouseClick(widget.first_button,Qt.MouseButton.LeftButton)
     assert widget.grid.currentIndex().row()==0 and widget._selected_row==0
     widget.set_view(2)
     cursor=widget.json_view.textCursor();cursor.setPosition(widget._json_offsets[1]);widget.json_view.setTextCursor(cursor)

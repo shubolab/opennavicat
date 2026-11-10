@@ -9,26 +9,33 @@ Python + Qt Widgets（PySide6），数据库连接、SQL 和结果均在本机�
 
 下面是一段 OpenNavicat 实际运行演示：浏览示例表、编写并执行查询、查看结果、编辑表结构和
 检查 SQL 预览。连接名、客户、邮箱、日期、订单及 SQL 均来自隔离生成的演示工作区，
-不读取本机真实连接或业务数据库。演示对应当前 0.5.0 源码；公开安装版本以 Release 为准。
+不读取本机真实连接或业务数据库。演示对应 0.5.0 的实际 Qt 界面。
 
 ![OpenNavicat 示例数据工作流演示](docs/assets/opennavicat-demo.gif)
 
-最新可用里程碑 **[v0.4.0](https://github.com/shubolab/opennavicat/releases/tag/v0.4.0)**
-已发布为早期预发行版本，提供三个操作系统、两种架构的六份安装包。SQLite、PostgreSQL、MySQL、MariaDB
-已实现驱动与核心工作流，使用隔离服务进行真实读写和界面集成验证。完整 Navicat Premium 能力仍在持续实现中，
-详细范围见 [功能路线图](docs/roadmap.md)。
+最新可用里程碑 **[v0.5.0](https://github.com/shubolab/opennavicat/releases/tag/v0.5.0)**
+已于 2026-11-10 发布为早期预发行版本，提供三个操作系统、两种架构的六份安装包。
+现有 **SQLite、PostgreSQL、MySQL、MariaDB、SQL Server、Redis** 六种核心驱动，
+使用隔离数据库进行了真实协议、读写及界面集成验证。本版还加入新版连接管理器、SQLite 独立索引/触发器设计，
+以及 macOS Navicat 历史连接的自动加载、分组和去重。完整 Navicat Premium 能力仍在持续实现中，
+详细范围见 [功能路线图](docs/roadmap.md) 和 [0.5 验证记录](docs/validation-0.5.md)。
 
 | 安装包 | amd64 / Intel、x64 | arm64 / Apple Silicon、Windows ARM |
 | --- | --- | --- |
-| macOS | [DMG](https://github.com/shubolab/opennavicat/releases/download/v0.4.0/OpenNavicat-0.4.0-macos-amd64.dmg) | [DMG](https://github.com/shubolab/opennavicat/releases/download/v0.4.0/OpenNavicat-0.4.0-macos-arm64.dmg) |
-| Windows | [Setup EXE](https://github.com/shubolab/opennavicat/releases/download/v0.4.0/OpenNavicat-0.4.0-windows-amd64-setup.exe) | [Setup EXE](https://github.com/shubolab/opennavicat/releases/download/v0.4.0/OpenNavicat-0.4.0-windows-arm64-setup.exe) |
-| Linux（Debian/Ubuntu） | [DEB](https://github.com/shubolab/opennavicat/releases/download/v0.4.0/OpenNavicat-0.4.0-linux-amd64.deb) | [DEB](https://github.com/shubolab/opennavicat/releases/download/v0.4.0/OpenNavicat-0.4.0-linux-arm64.deb) |
+| macOS | [DMG](https://github.com/shubolab/opennavicat/releases/download/v0.5.0/OpenNavicat-0.5.0-macos-amd64.dmg) | [DMG](https://github.com/shubolab/opennavicat/releases/download/v0.5.0/OpenNavicat-0.5.0-macos-arm64.dmg) |
+| Windows | [Setup EXE](https://github.com/shubolab/opennavicat/releases/download/v0.5.0/OpenNavicat-0.5.0-windows-amd64-setup.exe) | [Setup EXE](https://github.com/shubolab/opennavicat/releases/download/v0.5.0/OpenNavicat-0.5.0-windows-arm64-setup.exe) |
+| Linux（Debian/Ubuntu） | [DEB](https://github.com/shubolab/opennavicat/releases/download/v0.5.0/OpenNavicat-0.5.0-linux-amd64.deb) | [DEB](https://github.com/shubolab/opennavicat/releases/download/v0.5.0/OpenNavicat-0.5.0-linux-arm64.deb) |
 
-[SHA256SUMS](https://github.com/shubolab/opennavicat/releases/download/v0.4.0/SHA256SUMS)
-和 [构建与安装验证清单](https://github.com/shubolab/opennavicat/releases/download/v0.4.0/build-manifests.json)
+[SHA256SUMS](https://github.com/shubolab/opennavicat/releases/download/v0.5.0/SHA256SUMS)
+和 [构建与安装验证清单](https://github.com/shubolab/opennavicat/releases/download/v0.5.0/build-manifests.json)
 随版本发布。当前安装包没有发布者签名或 Apple 公证；Windows ARM64 安装引导器使用 x86，
 安装后的应用、Python、Qt 及原生库为 ARM64。实际系统验证范围和功能边界见
-[0.4 验证记录](docs/validation-0.4.md)。
+[0.5 验证记录](docs/validation-0.5.md)。本版六个原生 CI 目标均实际完成测试、安装、运行和卸载，
+公开的六份安装包也已匿名下载并核对摘要。Linux DEB 基于 Ubuntu 24.04，要求 glibc 2.39 或更新版本，
+通过包管理器安装声明的 Qt 图形库及 Noto CJK 字体。
+公开版本另完成 macOS ARM64 原生运行、干净 Ubuntu ARM64 XCB 运行及 Windows AMD64 RDP 实际界面检查，
+示例查询均为 6×4。Windows 已实际打开 SQL Server/Redis 的连接设置，尚未在该远程桌面中连接真实服务；
+协议验证范围见对应记录。
 
 首个可用版本交付后曾按要求暂停。用户更新本机 Navicat 后已于 2026-11-10 明确恢复；
 当前参考为 **Navicat Premium 18.0.5 build 321**，已重新实际打开并验证新建表、修改表、
@@ -87,12 +94,18 @@ Linux 中文渲染使用系统 CJK 字体；构建环境提供 Noto Sans CJK，�
 SSH 转发后仍校验数据库原始主机名。首次未知 SSH 主机需要核对指纹；密钥变化拒绝连接。
 这些连接能力与完整 Navicat 工具/UI 对齐是分别跟踪的验收范围。
 
-- 创建并保存 SQLite、PostgreSQL、MySQL 或 MariaDB 连接，然后在连接树打开连接。
+- 从新连接管理器选择 SQLite、PostgreSQL、MySQL、MariaDB、SQL Server 或 Redis，
+  填写并保存配置后在连接树打开连接。九种数据库族入口均可见，Oracle、MongoDB、Snowflake 仍显示待实现；
+  供应商别名交给普通驱动设置，不表示专属认证已经实现。
 - 在连接树浏览数据库、schema、表和视图；打开表查看分页数据与结构信息。
 - 新建 SQL 标签页，打开/保存 SQL 文件，执行语句或选区，查看独立结果集。
 - 对有主键的表编辑记录、插入和删除，使用提交/回滚控制事务。
 - SQLite 使用独立表设计标签创建或修改表，编辑字段、索引、外键、唯一键、触发器和选项，
   查看更改/DDL，再通过保存确认执行。PostgreSQL、MySQL、MariaDB、SQL Server 目前提供只读结构和 SQL 建表入口。
+- 从 SQLite 的独立索引或触发器列表进入设计器，检查 SQL 预览后保存；保存时检查快照、依赖与待提交编辑，
+  不安全或无法完整解析的对象明确保持只读。
+- Redis 使用原生命令查询页和键数据工作区，读取或编辑 string/hash/list/set/zset/stream，
+  查看或修改 TTL、重命名和删除键。当前支持 standalone；集群、哨兵和 PubSub 尚未实现。
 - 导入 CSV / JSON 数据，导出当前结果；收藏查询并通过历史记录重新打开 SQL。
 - 使用 SQLite 备份保留可独立打开的数据库快照。
 - 点击 **模型** 从当前 schema 的真实表和外键生成关系图；可拖动、缩放，
@@ -115,17 +128,20 @@ MySQL/MariaDB 目标必须是 InnoDB。它同步预览中列出的行，不锁�
 
 ## Navicat 历史连接
 
-当前 0.5 开发版默认在普通启动时自动发现本机 Navicat 的历史连接，显示在“Navicat 连接”分组中。
+0.5.0 默认在普通启动时自动发现本机 Navicat 的历史连接，显示在“Navicat 连接”分组中。
 macOS Navicat 18 的实际连接及分组格式已验证，保留分组关系，重复加载按来源身份去重；
 你在 OpenNavicat 里手工创建或修改的配置会保留。已打开的会话继续使用原配置，来源更新在断开后生效。
 工具菜单提供“从 Navicat 重新加载连接”和自动加载开关。演示、smoke 和截图模式不读取历史连接。
+最终公开 macOS ARM64 安装包也已完成两次普通启动，核验完整历史源加载、分组、无重复项，
+四类秘密字段均为空，且没有自动建立数据库网络连接。
 
 加载只读取来源文件，不修改 Navicat，也不会自动连接数据库或读取已保存密码。
-首次打开连接时按需要补充数据库、SSH 或客户端密钥凭据；可以使用 OpenNavicat 自己的系统钥匙串保存选项。
+原版保存的密码不会迁移：首次打开连接时需重新填写数据库密码、SSH 密码、私钥口令或客户端密钥口令等所需凭据；
+可以使用 OpenNavicat 自己的系统钥匙串保存选项。
 无法准确映射的认证或安全设置会保留为待复核，尚未实现的驱动也保留可见，不能静默换成其它连接类型。
 原生 UUID 为空的来源按名称空间、数据库类型、位置和名称生成稳定身份；此时原版重命名会成为新来源项。
 来源删除不会删除本地连接。Windows 原生发现仍待接入，Linux JSON 仅支持已识别格式；
-这两端的原版资料迁移尚未完成原生验收。详细实现和范围见 [0.5 开发验证](docs/validation-0.5.md)。
+这两端的原版资料迁移尚未完成实际来源和原生界面验收。详细实现和范围见 [0.5 验证记录](docs/validation-0.5.md)。
 
 ## 数据和密码
 
@@ -181,12 +197,13 @@ dist/OpenNavicat.app/Contents/MacOS/OpenNavicat --smoke-test
 ```
 
 该命令创建临时示例数据库，通过真实后台连接运行查询，验证结果后退出。
-它也实际加载 PostgreSQL、MySQL 和 SSH/加密依赖；`--smoke-report <path>` 保存运行时版本、
+它也实际加载 PostgreSQL、MySQL、SQL Server、Redis 和 SSH/加密依赖，构造两个新增驱动适配器与 SQL Server TLS context，
+并执行加密 cipher probe；这些探针不会连接外部数据库。`--smoke-report <path>` 保存运行时版本、
 架构与驱动报告。Windows arm64 使用原生 libpq（通过 `scripts/build-libpq-windows.ps1`
 构建）与 psycopg 的 Python 绑定，运行源码时需把 libpq DLL 目录放入 PATH 并设置
 `OPENNAVICAT_LIBPQ_DIR`；该脚本也配置加密库的 OpenSSL 源码构建路径。安装包直接包含运行库。
 `--demo` 则打开可交互的持久示例工作区。具体环境、测试数量、已构建产物及尚未验收项
-见 [0.4 验证记录](docs/validation-0.4.md)（[0.3](docs/validation-0.3.md)、[0.2](docs/validation-0.2.md)、[0.1 历史记录](docs/validation.md)）。Linux 容器构建可执行 `scripts/build-linux.sh`，
+见 [0.5 验证记录](docs/validation-0.5.md)（[0.4](docs/validation-0.4.md)、[0.3](docs/validation-0.3.md)、[0.2](docs/validation-0.2.md)、[0.1 历史记录](docs/validation.md)）。Linux 容器构建可执行 `scripts/build-linux.sh`，
 它在独立环境中测试、打包并运行产物，输出到 `artifacts/linux/`。
 
 README 演示可用 `.venv/bin/python scripts/record-demo.py` 重新录制，需要本机已有 ffmpeg。

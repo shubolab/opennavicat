@@ -205,6 +205,10 @@ def inspect_bundle(directory: Path) -> dict:
     """Reject bundled OpenSSL images still referring to a Homebrew build path."""
     directory = directory.resolve()
     images, seen = [], set()
+    report = {"status": "passed", "platform": sys.platform, "machine": platform.machine(),
+              "bundle": str(directory), "images": images}
+    legacy = next((path for path in directory.rglob("legacy.*")
+                   if path.is_file() and "ossl-modules" in str(path)), None)
     for path in directory.rglob("*"):
         if not path.is_file() or path.resolve() in seen:
             continue
@@ -214,14 +218,28 @@ def inspect_bundle(directory: Path) -> dict:
             continue
         seen.add(path.resolve())
         dependencies = imports(path)
+        image = {"path": str(path.relative_to(directory)), "imports": dependencies}
+        images.append(image)
         if sys.platform == "darwin":
             for dependency in dependencies:
                 value = dependency["name"]
                 if value.startswith(("/usr/local/", "/opt/homebrew/", "/Library/Frameworks/Python.framework/")):
-                    raise RuntimeError(f"Bundled OpenSSL image retains a development dependency: {path}: {value}")
-        images.append({"path": str(path.relative_to(directory)), "imports": dependencies})
-    return {"status": "passed", "platform": sys.platform, "machine": platform.machine(),
-            "bundle": str(directory), "images": images}
+                    raise BundleInspectionError(f"Bundled OpenSSL image retains a development dependency: {path}: {value}", report)
+            if name.startswith("libcrypto"):
+                image["openssl"] = _openssl_details(path.resolve())
+                if legacy:
+                    try:
+                        image["native_probe"] = probe_library(path.resolve(), legacy.resolve().parent)
+                    except Exception as exc:
+                        image["native_probe_error"] = str(exc)
+                        raise BundleInspectionError(str(exc), report) from exc
+    return report
+
+
+class BundleInspectionError(RuntimeError):
+    def __init__(self, message, report):
+        super().__init__(message)
+        self.report = report
 
 
 def prefer_sdk_openssl(binary_toc, directory: Path):
@@ -232,6 +250,12 @@ def prefer_sdk_openssl(binary_toc, directory: Path):
         if len(files) != 1:
             raise RuntimeError(f"Expected one SDK {pattern} in {directory}")
         sdk[files[0].name.casefold()] = str(files[0].resolve())
+    return prefer_openssl_sources(binary_toc, sdk)
+
+
+def prefer_openssl_sources(binary_toc, preferred):
+    """Do not collapse a provider's OpenSSL version into another same-name copy."""
+    sdk = {name.casefold(): str(Path(source).resolve()) for name, source in preferred.items()}
     output, present = [], set()
     for destination, source, kind in binary_toc:
         basename = destination.replace("\\", "/").rsplit("/", 1)[-1].casefold()
@@ -256,8 +280,8 @@ def main(argv=None):
     try:
         report = inspect_bundle(args.bundle) if args.bundle else inspect(args.crypto_library, args.probe)
     except Exception as exc:
-        report = {"status": "failed", "platform": sys.platform,
-                  "machine": platform.machine(), "error": str(exc)}
+        report = getattr(exc, "report", {"platform": sys.platform, "machine": platform.machine()})
+        report.update(status="failed", error=str(exc))
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(report, indent=2), "utf-8")

@@ -87,6 +87,21 @@ if not binary_metadata:
     import runpy
     provider_tools = runpy.run_path(str(project / "scripts/check-openssl-providers.py"))
     a.binaries = provider_tools["prefer_sdk_openssl"](a.binaries, libpq_directory)
+elif sys.platform == "darwin" and provider_report["libraries"]:
+    # macOS also has same-basename collisions: Psycopg's bundled libcrypto.3
+    # can replace the newer Homebrew build linked by cryptography and its
+    # provider. Preserve that verified pair rather than mixing OpenSSL minors.
+    import runpy
+    provider_tools = runpy.run_path(str(project / "scripts/check-openssl-providers.py"))
+    preferred = {}
+    for library in provider_report["libraries"]:
+        crypto = Path(library["resolved_library"])
+        preferred[crypto.name] = str(crypto)
+        ssl = crypto.parent / "libssl.3.dylib"
+        if not ssl.is_file():
+            raise RuntimeError(f"Missing matching libssl for provider-linked {crypto}")
+        preferred[ssl.name] = str(ssl)
+    a.binaries = provider_tools["prefer_openssl_sources"](a.binaries, preferred)
 pyz = PYZ(a.pure)
 exe = EXE(
     pyz, a.scripts, [], exclude_binaries=True, name="OpenNavicat",

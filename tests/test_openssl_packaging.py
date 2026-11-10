@@ -84,6 +84,41 @@ def test_windows_loaded_sdk_identity_overrides_static_python_search_heuristics(t
     assert paths == [sdk]
 
 
+def test_macos_provider_linked_openssl_pair_wins_psycopg_same_basename(tmp_path):
+    crypto = tmp_path / "Homebrew3.6/libcrypto.3.dylib"
+    ssl = tmp_path / "Homebrew3.6/libssl.3.dylib"
+    toc = [("libcrypto.3.dylib", "Psycopg3.5/libcrypto.3.dylib", "BINARY"),
+           ("libssl.3.dylib", "Psycopg3.5/libssl.3.dylib", "BINARY"),
+           ("cryptography/_rust.abi3.so", "cryptography/_rust.abi3.so", "EXTENSION")]
+    actual = helper.prefer_openssl_sources(toc, {crypto.name: crypto, ssl.name: ssl})
+    assert actual[:2] == [(crypto.name, str(crypto), "BINARY"), (ssl.name, str(ssl), "BINARY")]
+    assert actual[2] == toc[2]
+
+
+def test_bundle_probe_failure_records_actual_openssl_version_in_diagnostic(tmp_path, monkeypatch):
+    import json
+    bundle = tmp_path / "bundle"
+    modules = bundle / "ossl-modules"
+    modules.mkdir(parents=True)
+    (modules / "legacy.dylib").touch()
+    (bundle / "libcrypto.3.dylib").touch()
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(helper, "imports", lambda _: [])
+    monkeypatch.setattr(helper, "_openssl_details", lambda _: {"version": "OpenSSL 3.5.8"})
+
+    def missing_entrypoint(*_args):
+        raise RuntimeError("The native legacy provider failed to load")
+
+    monkeypatch.setattr(helper, "probe_library", missing_entrypoint)
+    output = tmp_path / "diagnostic.json"
+    assert helper.main(["--bundle", str(bundle), "--output", str(output)]) == 1
+    report = json.loads(output.read_text())
+    assert report["status"] == "failed"
+    crypto = next(image for image in report["images"] if image["path"] == "libcrypto.3.dylib")
+    assert crypto["openssl"]["version"] == "OpenSSL 3.5.8"
+    assert "failed to load" in crypto["native_probe_error"]
+
+
 def test_frozen_provider_path_is_bundled_on_macos(tmp_path, monkeypatch):
     modules = tmp_path / "ossl-modules"
     modules.mkdir()

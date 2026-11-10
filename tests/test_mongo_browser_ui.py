@@ -13,7 +13,8 @@ import pytest
 from bson import BSON, Binary, Decimal128, Int64, ObjectId
 from bson.datetime_ms import DatetimeMS
 from PySide6.QtCore import QThreadPool, QTimer, Qt
-from PySide6.QtWidgets import QFileDialog, QMessageBox, QWidget
+from PySide6.QtTest import QTest
+from PySide6.QtWidgets import QDialogButtonBox, QFileDialog, QMessageBox, QWidget
 from shiboken6 import isValid
 
 from opennavicat.database import DatabaseError
@@ -242,6 +243,81 @@ def test_cancel_discard_and_save_navigation_keep_original_bson_preimage(qtbot,ui
     expected=next(arguments[3] for operation,arguments in session.calls if operation=="replace")
     assert expected is original and expected.raw_bson==original.raw_bson
     assert session.records[0].document["long"]==Int64(999) and not widget.dirty
+
+
+def move_grid_to_other_record(widget,motion):
+    modifiers=(Qt.KeyboardModifier.ShiftModifier if motion.startswith("shift_") else
+               Qt.KeyboardModifier.ControlModifier if motion.startswith("ctrl_") else Qt.KeyboardModifier.NoModifier)
+    kind=motion.rsplit("_",1)[-1]
+    if kind=="mouse":
+        target=widget.model.index(1,0)
+        QTest.mouseClick(widget.grid.viewport(),Qt.MouseButton.LeftButton,modifiers,widget.grid.visualRect(target).center())
+    else:
+        QTest.keyClick(widget.grid,Qt.Key.Key_Up if kind=="up" else Qt.Key.Key_Down,modifiers)
+
+
+@pytest.mark.parametrize("motion",["mouse","shift_mouse","ctrl_mouse","down","shift_down","ctrl_down","up","shift_up","ctrl_up"])
+def test_actual_grid_cancel_keeps_highlight_and_toolbar_edit_delete_on_same_document(qtbot,ui,monkeypatch,motion):
+    host,session=ui;widget=page(qtbot,ui)
+    start=1 if motion.endswith("up") else 0
+    widget.select_record(start);original=widget.selected_document()
+    dialog=widget.edit_document();changed=deepcopy(original.document);changed["draft"]=True
+    dialog.editor.setPlainText(canonical_dumps(changed))
+    move_grid_to_other_record(widget,motion)
+    assert widget.dirty and widget.selected_document() is original
+    assert widget.grid.currentIndex().row()==start
+    assert [index.row() for index in widget.grid.selectionModel().selectedRows()]==[start]
+    assert [name for name,_args in session.calls]==["fetch"]
+    QTest.mouseClick(dialog.buttons.button(QDialogButtonBox.StandardButton.Cancel),Qt.MouseButton.LeftButton)
+    assert widget._dialog is None
+    QTest.mouseClick(widget.toolbar.widgetForAction(widget.edit_action),Qt.MouseButton.LeftButton)
+    assert canonical_loads(widget._dialog.editor.toPlainText())["_id"]==original.document["_id"]
+    assert [index.row() for index in widget.grid.selectionModel().selectedRows()]==[start]
+    QTest.mouseClick(widget._dialog.buttons.button(QDialogButtonBox.StandardButton.Cancel),Qt.MouseButton.LeftButton)
+    monkeypatch.setattr(QMessageBox,"question",lambda *_a,**_k:QMessageBox.StandardButton.Yes)
+    QTest.mouseClick(widget.delete_button,Qt.MouseButton.LeftButton)
+    ready(qtbot,host,widget)
+    deleted=next(arguments[2] for operation,arguments in session.calls if operation=="delete")
+    assert deleted is original
+    assert all(record.document["_id"]!=original.document["_id"] for record in session.records)
+
+
+def test_actual_mouse_save_handoff_preserves_highlight_until_write_then_selects_target(qtbot,ui,monkeypatch):
+    host,session=ui;widget=page(qtbot,ui);original=widget.selected_document()
+    dialog=widget.edit_document();changed=deepcopy(original.document);changed["draft"]=True
+    dialog.editor.setPlainText(canonical_dumps(changed))
+    session.entered,session.release=threading.Event(),threading.Event()
+    monkeypatch.setattr(QMessageBox,"question",lambda *_a,**_k:QMessageBox.StandardButton.Save)
+    move_grid_to_other_record(widget,"mouse")
+    qtbot.waitUntil(session.entered.is_set)
+    assert widget.loading and widget.grid.currentIndex().row()==0
+    assert [index.row() for index in widget.grid.selectionModel().selectedRows()]==[0]
+    assert not widget.edit_action.isEnabled() and not widget.delete_button.isEnabled()
+    move_grid_to_other_record(widget,"shift_down")
+    assert widget.grid.currentIndex().row()==0
+    assert [index.row() for index in widget.grid.selectionModel().selectedRows()]==[0]
+    session.release.set()
+    qtbot.waitUntil(lambda:not host.tasks and not widget.loading and widget._selected_row==1)
+    assert widget.grid.currentIndex().row()==1
+    assert [index.row() for index in widget.grid.selectionModel().selectedRows()]==[1]
+    assert len([name for name,_args in session.calls if name=="replace"])==1
+
+
+def test_actual_shift_discard_and_clean_keyboard_navigation_keep_single_matching_highlight(qtbot,ui,monkeypatch):
+    host,session=ui;widget=page(qtbot,ui)
+    dialog=widget.edit_document();changed=deepcopy(widget.selected_document().document);changed["draft"]=True
+    dialog.editor.setPlainText(canonical_dumps(changed))
+    monkeypatch.setattr(QMessageBox,"question",lambda *_a,**_k:QMessageBox.StandardButton.Discard)
+    move_grid_to_other_record(widget,"shift_mouse")
+    assert widget._dialog is None and widget._selected_row==widget.grid.currentIndex().row()==1
+    assert [index.row() for index in widget.grid.selectionModel().selectedRows()]==[1]
+    move_grid_to_other_record(widget,"shift_up")
+    assert widget._selected_row==widget.grid.currentIndex().row()==0
+    assert [index.row() for index in widget.grid.selectionModel().selectedRows()]==[0]
+    move_grid_to_other_record(widget,"down")
+    assert widget._selected_row==widget.grid.currentIndex().row()==1
+    assert [index.row() for index in widget.grid.selectionModel().selectedRows()]==[1]
+    assert [name for name,_args in session.calls]==["fetch"]
 
 
 def test_refresh_preserves_typed_identity_and_failed_page_keeps_previous_record(qtbot,ui):

@@ -17,7 +17,7 @@ import tempfile
 
 from bson import BSON, Binary, Code, Decimal128, Int64, ObjectId, Regex, Timestamp
 from bson.datetime_ms import DatetimeMS
-from PySide6.QtCore import QAbstractTableModel, QModelIndex, QSize, Qt, QTimer, Signal
+from PySide6.QtCore import QAbstractTableModel, QItemSelectionModel, QModelIndex, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QFontDatabase, QPalette
 from PySide6.QtWidgets import (
     QAbstractItemView, QButtonGroup, QDialog, QDialogButtonBox, QFileDialog,
@@ -255,6 +255,7 @@ class MongoCollectionPage(QWidget):
         self.grid.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.grid.doubleClicked.connect(lambda _index:self.edit_document())
         self.grid.selectionModel().currentRowChanged.connect(self._grid_selected)
+        self.grid.selectionModel().selectionChanged.connect(self._grid_selection_changed)
         self.grid.horizontalHeader().sectionClicked.connect(self.sort_column)
         self.views.addWidget(self.grid)
         self.tree = QTreeWidget(); self.tree.setHeaderLabels(["名称","值","类型"])
@@ -341,8 +342,22 @@ class MongoCollectionPage(QWidget):
         self._setting_selection=True
         try:
             if self.model.columns and self.page and self.page.documents:
-                self.grid.setCurrentIndex(self.model.index(self._selected_row,0))
+                index=self.model.index(self._selected_row,0)
+                self.grid.setCurrentIndex(index)
+                self.grid.selectionModel().select(index,
+                    QItemSelectionModel.SelectionFlag.ClearAndSelect|QItemSelectionModel.SelectionFlag.Rows)
         finally:self._setting_selection=False
+
+    def _grid_selection_changed(self,_selected,_deselected):
+        if self._setting_selection:return
+        current=self.grid.currentIndex()
+        # Qt can apply the mouse/key selection after currentRowChanged has
+        # already rejected navigation. Repair that later part synchronously.
+        # A different current row may still be awaiting _grid_selected; let
+        # that guard decide first rather than overriding valid navigation.
+        if current.isValid() and current.row()==self._selected_row:
+            rows=[index.row() for index in self.grid.selectionModel().selectedRows()]
+            if rows!=[self._selected_row]:self._restore_grid_selection()
 
     def _tree_selected(self,current,_previous):
         # The tree only contains the current document, never a list of records.

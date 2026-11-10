@@ -162,7 +162,7 @@ class ConnectionDialog(QDialog):
         self.driver_combo.setObjectName("connectionDriver")
         for label, driver in [("SQLite", "sqlite"), ("PostgreSQL", "postgresql"),
                               ("MySQL", "mysql"), ("MariaDB", "mariadb"),
-                              ("SQL Server", "sqlserver"), ("Redis", "redis")]:
+                              ("SQL Server", "sqlserver"), ("Redis", "redis"), ("MongoDB", "mongodb")]:
             self.driver_combo.addItem(label, driver)
         self.driver_combo.hide()
         self.new_profile_button = QPushButton("＋ 新建连接配置文件")
@@ -253,6 +253,7 @@ class ConnectionDialog(QDialog):
             self._network_rows.append((label_widget, field))
         form.addRow("用户名", self.user_edit)
         form.addRow("密码", self.password_edit)
+        self.general_form = form
         self.remember_check = QCheckBox("保存密码")
         self.remember_check.setChecked(bool(config and config.password))
         self.remember_check.setToolTip("密码仅保存在本机系统钥匙串中。")
@@ -309,6 +310,70 @@ class ConnectionDialog(QDialog):
         integrated.setEnabled(False)
         integrated.setToolTip("Windows 集成身份验证尚未实现，请使用 SQL Server 用户名和密码。")
         form.insertRow(form.rowCount() - 3, self.sqlserver_auth_label, self.sqlserver_auth_combo)
+        self.mongo_type_label = QLabel("连接类型")
+        self.mongo_topology_combo = QComboBox()
+        for label, value in (("Standalone", "standalone"), ("Shard Cluster（尚未实现）", "sharded"), ("Replica Set（尚未实现）", "replica_set")):
+            self.mongo_topology_combo.addItem(label, value)
+            if value != "standalone":self.mongo_topology_combo.model().item(self.mongo_topology_combo.count()-1).setEnabled(False)
+        original_mongo = config if config and config.driver == "mongodb" else None
+        topology = getattr(original_mongo, "mongo_connection_type", "standalone")
+        if str(topology).lower() == "standalone":topology = "standalone"
+        self._restore_mongo_choice(self.mongo_topology_combo, topology)
+        form.insertRow(1, self.mongo_type_label, self.mongo_topology_combo)
+        self.mongo_srv_check = QCheckBox("使用 SRV 记录（尚未实现）")
+        self.mongo_srv_check.setChecked(bool(getattr(original_mongo, "mongo_srv", False)))
+        self.mongo_srv_check.setToolTip("SRV 发现尚未完成支持；请使用 Standalone 的单一主机与端口。")
+        form.insertRow(2, "", self.mongo_srv_check)
+        self.mongo_auth_label = QLabel("验证")
+        self.mongo_auth_combo = QComboBox()
+        for label, value in (("无", "NONE"), ("密码", "PASSWORD"), ("LDAP（尚未实现）", "PLAIN"),
+                             ("Kerberos（尚未实现）", "GSSAPI"), ("X.509（尚未完成接入）", "MONGODB-X509")):
+            self.mongo_auth_combo.addItem(label, value)
+            if value not in {"NONE", "PASSWORD"}:self.mongo_auth_combo.model().item(self.mongo_auth_combo.count()-1).setEnabled(False)
+        mechanism = str(getattr(original_mongo, "mongo_auth_mechanism", "NONE")).upper()
+        password_auth = mechanism in {"SCRAM-SHA-1", "SCRAM-SHA-256"} or (mechanism == "DEFAULT" and bool(config and (config.username or config.password)))
+        auth = "PASSWORD" if password_auth else "NONE" if mechanism in {"DEFAULT", "NONE"} else mechanism
+        self._restore_mongo_choice(self.mongo_auth_combo, auth)
+        row, _role = form.getWidgetPosition(self.user_edit)
+        form.insertRow(row, self.mongo_auth_label, self.mongo_auth_combo)
+        source = getattr(original_mongo, "mongo_auth_source", "admin")
+        source_visible = bool(original_mongo and (original_mongo.username or source != "admin" or mechanism in {"SCRAM-SHA-1", "SCRAM-SHA-256"}))
+        self.mongo_auth_source_edit = QLineEdit(source if source_visible else "")
+        self.mongo_auth_source_edit.setPlaceholderText("admin")
+        self.mongo_auth_source_edit.setToolTip("密码验证使用的数据库；留空时使用 admin。")
+        self.mongo_auth_source_label = QLabel("验证数据库")
+        form.insertRow(row+1, self.mongo_auth_source_label, self.mongo_auth_source_edit)
+        self.mongo_mechanism_combo = QComboBox()
+        for label,value in (("默认（SCRAM 协商）", "DEFAULT"), ("SCRAM-SHA-1", "SCRAM-SHA-1"), ("SCRAM-SHA-256", "SCRAM-SHA-256")):
+            self.mongo_mechanism_combo.addItem(label, value)
+        self._restore_mongo_choice(self.mongo_mechanism_combo, mechanism if password_auth else "DEFAULT")
+        self.mongo_mechanism_label = QLabel("密码验证机制")
+        advanced.addRow(self.mongo_mechanism_label, self.mongo_mechanism_combo)
+        self.mongo_read_preference_combo = QComboBox()
+        for value in ("primary", "primaryPreferred", "secondary", "secondaryPreferred", "nearest"):
+            self.mongo_read_preference_combo.addItem(value, value)
+            if value != "primary":self.mongo_read_preference_combo.model().item(self.mongo_read_preference_combo.count()-1).setEnabled(False)
+        self._restore_mongo_choice(self.mongo_read_preference_combo, getattr(original_mongo, "mongo_read_preference", "primary"))
+        self.mongo_read_preference_label = QLabel("读取偏好")
+        advanced.addRow(self.mongo_read_preference_label, self.mongo_read_preference_combo)
+        self.mongo_replica_set_edit = QLineEdit(getattr(original_mongo, "mongo_replica_set", ""))
+        self.mongo_members_edit = QLineEdit(getattr(original_mongo, "mongo_members", ""))
+        self._mongo_unsupported_rows = []
+        for title, field in (("副本集（尚未实现）", self.mongo_replica_set_edit), ("成员列表（尚未实现）", self.mongo_members_edit)):
+            label_widget = QLabel(title)
+            field.setClearButtonEnabled(True)
+            field.setToolTip("当前尚不支持此设置；已有值需明确清除后才能保存 Standalone 连接。")
+            advanced.addRow(label_widget, field)
+            self._mongo_unsupported_rows.append((label_widget, field))
+            field.textChanged.connect(self._mongo_state_changed)
+        self.mongo_auth_combo.currentIndexChanged.connect(self._mongo_state_changed)
+        self.mongo_srv_check.toggled.connect(self._mongo_state_changed)
+        self.mongo_remarks_tab = QWidget()
+        remarks = QVBoxLayout(self.mongo_remarks_tab)
+        self.mongo_remarks_edit = QPlainTextEdit()
+        self.mongo_remarks_edit.setPlaceholderText("连接备注持久化尚未实现。")
+        self.mongo_remarks_edit.setEnabled(False)
+        remarks.addWidget(self.mongo_remarks_edit)
         self._redis_database_validator = QRegularExpressionValidator(QRegularExpression("[0-9]*"), self)
         self.sqlite_database_note = QLabel("数据库文件在“常规”页中设置。")
         self.sqlite_database_note.setWordWrap(True)
@@ -476,6 +541,35 @@ class ConnectionDialog(QDialog):
             self.port_spin.setValue(config.port)
 
     @staticmethod
+    def _restore_mongo_choice(combo, value):
+        index = combo.findData(value)
+        if index < 0:
+            combo.addItem(str(value) + "（不支持）", value)
+            index = combo.count()-1
+            combo.model().item(index).setEnabled(False)
+        combo.setCurrentIndex(index)
+
+    def _mongo_state_changed(self, *_):
+        if not hasattr(self, "mongo_auth_combo"):
+            return
+        active = self.driver_combo.currentData() == "mongodb"
+        password = active and self.mongo_auth_combo.currentData() == "PASSWORD"
+        self.general_form.setRowVisible(self.mongo_type_label, active)
+        self.general_form.setRowVisible(self.mongo_srv_check, active)
+        self.general_form.setRowVisible(self.mongo_auth_label, active)
+        self.general_form.setRowVisible(self.mongo_auth_source_label, password)
+        self.mongo_srv_check.setEnabled(self.mongo_srv_check.isChecked())
+        for field in (self.user_edit, self.password_edit, self.remember_check):
+            self.general_form.setRowVisible(field, not active or password)
+        for label, field in ((self.mongo_mechanism_label,self.mongo_mechanism_combo),
+                             (self.mongo_read_preference_label,self.mongo_read_preference_combo), *self._mongo_unsupported_rows):
+            label.setVisible(active); field.setVisible(active)
+        self.mongo_mechanism_combo.setEnabled(password)
+        for _label, field in self._mongo_unsupported_rows:
+            field.setEnabled(bool(field.text()))
+        if self.isVisible():self._fit_reference_frame()
+
+    @staticmethod
     def _unavailable_tab(label, message):
         widget = QWidget()
         layout = QVBoxLayout(widget)
@@ -492,7 +586,8 @@ class ConnectionDialog(QDialog):
 
     @property
     def remember_password(self) -> bool:
-        return self.remember_check.isChecked() and self.driver_combo.currentData() != "sqlite"
+        return (self.remember_check.isChecked() and self.driver_combo.currentData() != "sqlite"
+                and (self.driver_combo.currentData() != "mongodb" or self.mongo_auth_combo.currentData() == "PASSWORD"))
 
     @property
     def remember_ssh_password(self) -> bool:
@@ -602,7 +697,7 @@ class ConnectionDialog(QDialog):
         if driver != previous_driver and (self._original is None or self._original.driver != driver):
             if driver == "sqlserver":
                 self.ssl_enabled_check.setChecked(True)
-            elif driver == "redis":
+            elif driver in {"redis", "mongodb"}:
                 self.ssl_enabled_check.setChecked(False)
         self._set_ssl_modes(driver)
         self.tabs.clear()
@@ -613,8 +708,11 @@ class ConnectionDialog(QDialog):
             self.tabs.addTab(self.ssl_tab, "SSL")
             index = self.tabs.addTab(self.ssh_tab, "SSH")
             self.tabs.setTabToolTip(index, "使用 SSH 隧道连接数据库。")
-        index = self.tabs.addTab(self.http_tab, "HTTP")
-        self.tabs.setTabToolTip(index, "HTTP 隧道尚未实现。")
+        if driver == "mongodb":
+            self.tabs.addTab(self.mongo_remarks_tab, "备注")
+        else:
+            index = self.tabs.addTab(self.http_tab, "HTTP")
+            self.tabs.setTabToolTip(index, "HTTP 隧道尚未实现。")
         self.sqlite_type_label.setVisible(local)
         self.sqlite_type_widget.setVisible(local)
         self.redis_type_label.setVisible(driver == "redis")
@@ -623,13 +721,14 @@ class ConnectionDialog(QDialog):
         self.sqlserver_auth_combo.setVisible(driver == "sqlserver")
         self.database_label.setVisible(local)
         self.database_row.setVisible(local)
-        self.remote_database_label.setVisible(not local)
-        self.remote_database_edit.setVisible(not local)
+        self.remote_database_label.setVisible(not local and driver != "mongodb")
+        self.remote_database_edit.setVisible(not local and driver != "mongodb")
         self.remote_database_label.setText("数据库编号" if driver == "redis" else "初始数据库")
         self.remote_database_edit.setPlaceholderText("0" if driver == "redis" else "数据库名称")
         self.remote_database_edit.setValidator(self._redis_database_validator if driver == "redis" else None)
         self.sqlite_database_note.setVisible(local)
         self.network_database_note.setVisible(not local)
+        self.network_database_note.setText("数据库列表将在连接后由服务器提供。" if driver == "mongodb" else "初始数据库在“常规”页中设置。可用数据库列表由连接后的服务器提供。")
         self.foreign_keys_check.setVisible(local)
         for row_label, field in self._network_rows:
             row_label.setVisible(not local)
@@ -639,11 +738,11 @@ class ConnectionDialog(QDialog):
             field.setToolTip("SQLite 3 直连不使用用户名及密码；加密扩展尚未实现。" if local else "")
         self.remember_check.setToolTip("SQLite 3 直连不使用用户名及密码；加密扩展尚未实现。" if local else "密码仅保存在本机系统钥匙串中。")
         self.port_spin.setValue({"postgresql": 5432, "mysql": 3306, "mariadb": 3306,
-                                 "sqlserver": 1433, "redis": 6379}.get(driver, 3306))
+                                 "sqlserver": 1433, "redis": 6379, "mongodb": 27017}.get(driver, 3306))
         self.port_spin.setFixedWidth(78)
         if not local:
-            defaults = {"postgresql": "postgres", "mysql": "", "mariadb": "", "sqlserver": "master", "redis": "0"}
-            user_defaults = {"postgresql": "postgres", "mysql": "root", "mariadb": "root", "sqlserver": "", "redis": ""}
+            defaults = {"postgresql": "postgres", "mysql": "", "mariadb": "", "sqlserver": "master", "redis": "0", "mongodb": ""}
+            user_defaults = {"postgresql": "postgres", "mysql": "root", "mariadb": "root", "sqlserver": "", "redis": "", "mongodb": ""}
             if not self.database_edit.text() or (previous_driver and self.database_edit.text() == defaults.get(previous_driver, "")):
                 self.database_edit.setText(defaults.get(driver, ""))
             if not self.user_edit.text() or (previous_driver and self.user_edit.text() == user_defaults.get(previous_driver, "")):
@@ -651,8 +750,9 @@ class ConnectionDialog(QDialog):
         self.user_edit.setPlaceholderText("ACL 用户名（可留空）" if driver == "redis" else "SQL Server 登录名" if driver == "sqlserver" else "")
         self._read_only_driver_state()
         self.database_edit.setPlaceholderText("数据库文件路径，或 :memory:" if local else "数据库名称")
-        self.note.setText("当前支持 Redis 单机连接；集群与哨兵尚未实现。" if driver == "redis" else "")
-        self.note.setVisible(driver == "redis")
+        self.note.setText("当前支持 Redis 单机连接；集群与哨兵尚未实现。" if driver == "redis" else "当前支持 MongoDB Standalone；副本集、分片集群与 SRV 尚未实现。" if driver == "mongodb" else "")
+        self.note.setVisible(driver in {"redis", "mongodb"})
+        self._mongo_state_changed()
         self._active_driver = driver
         self._ssl_state_changed()
         self.profile_toggle.blockSignals(True)
@@ -670,14 +770,14 @@ class ConnectionDialog(QDialog):
 
     def _set_ssl_modes(self, driver):
         modes = (["allow", "prefer", "require", "verify-ca", "verify-full"] if driver == "postgresql"
-                 else ["require", "verify-ca", "verify-full"] if driver in {"redis", "sqlserver"}
+                 else ["require", "verify-ca", "verify-full"] if driver in {"redis", "sqlserver", "mongodb"}
                  else ["prefer", "require", "verify-ca", "verify-full"])
         current = self.ssl_combo.currentData()
         original = self._original
         if original and original.driver == driver and not getattr(self, "_original_ssl_restored", False):
             current = original.ssl_mode if original.ssl_mode != "disable" else None
             self._original_ssl_restored = True
-        default = "verify-full" if driver == "sqlserver" else "require" if driver == "redis" else "prefer"
+        default = "verify-full" if driver == "sqlserver" else "require" if driver in {"redis", "mongodb"} else "prefer"
         self.ssl_combo.blockSignals(True)
         self.ssl_combo.clear()
         for mode in modes:
@@ -750,6 +850,27 @@ class ConnectionDialog(QDialog):
         database = self.database_edit.text().strip()
         driver = self.driver_combo.currentData()
         host = self.host_edit.text().strip()
+        mongo_fields = {}
+        if driver == "mongodb":
+            if self.mongo_topology_combo.currentData() != "standalone" or self.mongo_srv_check.isChecked():
+                raise ValueError("MongoDB 当前仅支持 Standalone；SRV、副本集及分片集群尚未实现。")
+            if self.mongo_replica_set_edit.text().strip() or self.mongo_members_edit.text().strip():
+                raise ValueError("MongoDB 副本集名称及成员列表尚未实现，请明确移除这些设置。")
+            auth = self.mongo_auth_combo.currentData()
+            if auth not in {"NONE", "PASSWORD"}:
+                raise ValueError("此 MongoDB 验证方式尚未完成支持；请选择无验证或密码 SCRAM 验证。")
+            mechanism = self.mongo_mechanism_combo.currentData() if auth == "PASSWORD" else "NONE"
+            if auth == "PASSWORD" and mechanism not in {"DEFAULT", "SCRAM-SHA-1", "SCRAM-SHA-256"}:
+                raise ValueError("此 MongoDB 密码验证机制尚未支持。")
+            if auth == "PASSWORD" and not self.user_edit.text().strip():
+                raise ValueError("请输入 MongoDB 密码验证用户名。")
+            if self.mongo_read_preference_combo.currentData() != "primary":
+                raise ValueError("MongoDB 当前仅支持 primary 读取偏好。")
+            original = self._original if self._original and self._original.driver == "mongodb" else None
+            mongo_fields = dict(mongo_auth_source=self.mongo_auth_source_edit.text().strip() or "admin",
+                mongo_auth_mechanism=mechanism, mongo_connection_type="standalone", mongo_srv=False,
+                mongo_replica_set="", mongo_members="", mongo_read_preference="primary",
+                mongo_retry_reads=getattr(original,"mongo_retry_reads",True), mongo_retry_writes=getattr(original,"mongo_retry_writes",True))
         if driver == "redis":
             if self.redis_mode_combo.currentData() != "standalone":
                 raise ValueError("Redis 集群和哨兵尚未实现，请选择单机连接。")
@@ -766,7 +887,7 @@ class ConnectionDialog(QDialog):
             if any(getattr(self, field).text().strip() for field in
                    ("ssl_cert_edit", "ssl_key_edit", "ssl_crl_edit", "ssl_key_password_edit")):
                 raise ValueError("SQL Server 当前不支持客户端证书、客户端密钥、证书撤消列表及密钥通行短语；请移除这些设置。")
-        if not database or (not name and not testing):
+        if (not database and driver != "mongodb") or (not name and not testing):
             raise ValueError("请输入连接名及数据库。" if not testing else "请先选择数据库。")
         if driver != "sqlite" and not host:
             raise ValueError("请输入数据库服务器主机名。")
@@ -784,12 +905,17 @@ class ConnectionDialog(QDialog):
         ssl_mode = self.ssl_combo.currentData() if self.ssl_enabled_check.isChecked() else "disable"
         if driver == "redis" and ssl_mode not in {"disable", "require", "verify-ca", "verify-full"}:
             raise ValueError("Redis 不支持此 SSL 模式；请选择 require、verify-ca 或 verify-full。")
+        if driver == "mongodb" and ssl_mode not in {"disable", "require", "verify-ca", "verify-full"}:
+            raise ValueError("MongoDB 不支持此 SSL 模式；请选择 require、verify-ca 或 verify-full。")
         if driver == "sqlserver" and ssl_mode not in {"disable", "require", "verify-ca", "verify-full"}:
             raise ValueError("SQL Server 不支持此 SSL 模式；请选择 require、verify-ca 或 verify-full。")
         custom_ssl = driver != "sqlite" and ssl_mode != "disable" and self.ssl_verify_check.isChecked()
         ssl_files = {name: "" for name in ("ssl_ca", "ssl_cert", "ssl_key", "ssl_crl")}
         ssl_password = ""
         if custom_ssl:
+            if driver == "mongodb" and ssl_mode == "require" and any(
+                    field.text().strip() for field in (self.ssl_ca_edit, self.ssl_crl_edit)):
+                raise ValueError("MongoDB 根证书及证书撤消列表需要 verify-ca 或 verify-full，不能被静默忽略。")
             if bool(self.ssl_cert_edit.text().strip()) != bool(self.ssl_key_edit.text().strip()):
                 raise ValueError("客户端证书与客户端密钥必须同时设置。")
             for attribute, label in [("ssl_ca", "根证书"), ("ssl_cert", "客户端证书"),
@@ -816,8 +942,8 @@ class ConnectionDialog(QDialog):
             id=self._original.id if self._original else uuid.uuid4().hex,
             name=name or "测试连接", driver=driver, database=database, host=host or "localhost",
             port=self.port_spin.value() if driver != "sqlite" else 0,
-            username=self.user_edit.text() if driver != "sqlite" else "",
-            password=self.password_edit.text() if driver != "sqlite" else "",
+            username=self.user_edit.text() if driver != "sqlite" and (driver != "mongodb" or mongo_fields["mongo_auth_mechanism"] != "NONE") else "",
+            password=self.password_edit.text() if driver != "sqlite" and (driver != "mongodb" or mongo_fields["mongo_auth_mechanism"] != "NONE") else "",
             ssl_mode=ssl_mode,
             read_only=self.read_only_check.isChecked(),
             connect_timeout=self.timeout_spin.value(),
@@ -828,6 +954,7 @@ class ConnectionDialog(QDialog):
             ssh_key_passphrase=self.ssh_key_passphrase_edit.text(),
             ssh_compression=self.ssh_compression_check.isChecked(),
             ssh_host_key=self._ssh_host_key,
+            **mongo_fields,
         )
 
     @staticmethod
@@ -878,7 +1005,10 @@ class ConnectionDialog(QDialog):
             session = DatabaseSession(config)
             try:
                 session.connect()
-                session.execute("PING" if config.driver == "redis" else "SELECT 1", limit=1)
+                if config.driver != "mongodb":
+                    session.execute("PING" if config.driver == "redis" else "SELECT 1", limit=1)
+                # MongoSession.connect performs an actual authenticated ping;
+                # do not send SQL or invent a shell command for its probe.
                 if config.driver == "sqlite":
                     # SELECT 1 alone can succeed without reading a corrupt
                     # SQLite header. Read its real schema before reporting success.

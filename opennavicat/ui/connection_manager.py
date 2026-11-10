@@ -109,6 +109,9 @@ def _driver_preset(kind: str, label: str) -> dict:
         result.update(database="0", ssl_mode="disable")
     elif kind == "sqlserver":
         result["ssl_mode"] = "verify-full"
+    elif kind == "mongodb":
+        result.update(database="", ssl_mode="disable", mongo_connection_type="standalone",
+                      mongo_auth_source="admin", mongo_auth_mechanism="NONE")
     return result
 
 
@@ -123,6 +126,105 @@ def _decoded(value: str) -> str:
         raise ConnectionURIError("URI 的百分号编码必须是有效的 UTF-8。") from None
     if any(ord(char) < 32 or ord(char) == 127 for char in result):
         raise ConnectionURIError("URI 字段不能包含控制字符。")
+    return result
+
+
+def _mongodb_uri_options(parts, options: dict, result: dict) -> dict:
+    """Represent a single-host Mongo URI exactly, or reject it before any I/O.
+
+    This is a deliberately bounded native URI subset. It never resolves SRV,
+    reads a PEM, or asks PyMongo to construct a client. Unsupported security or
+    topology semantics must be reviewed by the user instead of being dropped.
+    """
+    supported = {
+        "authsource", "authmechanism", "directconnection", "readpreference",
+        "retryreads", "retrywrites", "connecttimeoutms", "serverselectiontimeoutms",
+        "tls", "ssl", "tlscafile", "tlscrlfile", "tlsinsecure",
+        "tlsallowinvalidcertificates", "tlsallowinvalidhostnames",
+    }
+    if set(options) - supported:
+        raise ConnectionURIError("MongoDB URI 包含尚未支持的参数；客户端组合 PEM、SRV、副本集和外部验证尚未完成接入。")
+
+    def boolean(name, default=False):
+        value = options.get(name)
+        if value is None:
+            return default
+        if value not in {"true", "false"}:
+            raise ConnectionURIError("MongoDB URI 的布尔参数必须是 true 或 false。")
+        return value == "true"
+
+    if "directconnection" in options and not boolean("directconnection"):
+        raise ConnectionURIError("MongoDB 当前仅支持 directConnection=true 的单机连接。")
+    if options.get("readpreference", "primary") != "primary":
+        raise ConnectionURIError("MongoDB 当前仅支持 primary 读取偏好。")
+    result.update(mongo_read_preference="primary", mongo_retry_reads=boolean("retryreads", True),
+                  mongo_retry_writes=boolean("retrywrites", True))
+
+    if "@" in parts.netloc:
+        # MongoDB requires reserved userinfo characters to be percent encoded.
+        # A single raw ':' separates username and password; additional ones
+        # cannot be silently treated as literal password text.
+        userinfo = parts.netloc.rsplit("@", 1)[0]
+        if any(char in userinfo for char in "$/?#[]@") or userinfo.count(":") > 1:
+            raise ConnectionURIError("MongoDB 用户名和密码中的保留字符必须使用百分号编码。")
+        if not result["username"]:
+            raise ConnectionURIError("MongoDB 密码验证需要非空用户名。")
+    elif "authsource" in options or "authmechanism" in options:
+        raise ConnectionURIError("MongoDB 验证参数需要同时指定用户名。")
+    database = result["database"]
+    if any(char in database for char in ' /\\.\"$'):
+        raise ConnectionURIError("MongoDB 数据库名称包含不支持的字符。")
+    source = options.get("authsource", database or "admin")
+    if not source or any(char in source for char in ' /\\.\"') or ("$" in source and source != "$external"):
+        raise ConnectionURIError("MongoDB 验证数据库名称无效。")
+    mechanism = options.get("authmechanism", "DEFAULT" if result["username"] else "NONE")
+    if "authmechanism" in options and mechanism not in {"SCRAM-SHA-1", "SCRAM-SHA-256"}:
+        raise ConnectionURIError("MongoDB URI 的显式验证机制当前仅支持 SCRAM-SHA-1 或 SCRAM-SHA-256。")
+    if mechanism not in {"NONE", "DEFAULT", "SCRAM-SHA-1", "SCRAM-SHA-256"}:
+        raise ConnectionURIError("此 MongoDB 验证机制尚未完成支持；当前仅支持无验证或 SCRAM 密码验证。")
+    if mechanism == "NONE" and result["username"]:
+        raise ConnectionURIError("MongoDB URI 不能同时指定凭据与无验证模式。")
+    result.update(mongo_auth_source=source, mongo_auth_mechanism=mechanism)
+
+    timeout_values = []
+    for name in ("connecttimeoutms", "serverselectiontimeoutms"):
+        if name in options:
+            value = options[name]
+            if not re.fullmatch(r"[0-9]+", value) or len(value) > 11 or not 1000 <= int(value) <= 31536000000 or int(value) % 1000:
+                raise ConnectionURIError("MongoDB 超时必须是可精确表示为整秒的正整数毫秒值。")
+            timeout_values.append(int(value) // 1000)
+    if bool("serverselectiontimeoutms" in options) != bool("connecttimeoutms" in options):
+        raise ConnectionURIError("当前设置使用同一个连接和服务器选择超时；请同时指定相等的两个超时。")
+    if len(set(timeout_values)) > 1:
+        raise ConnectionURIError("当前设置要求 connectTimeoutMS 与 serverSelectionTimeoutMS 相等。")
+    if timeout_values:
+        result["connect_timeout"] = timeout_values[0]
+
+    if "tls" in options and "ssl" in options:
+        raise ConnectionURIError("MongoDB URI 不能同时指定 tls 与其别名 ssl。")
+    security_flags = {"tlsinsecure", "tlsallowinvalidcertificates", "tlsallowinvalidhostnames"}
+    if "tlsinsecure" in options and security_flags.intersection(options) - {"tlsinsecure"}:
+        raise ConnectionURIError("tlsInsecure 不能与单独的证书或主机名验证选项同时指定。")
+    tls_explicit = "tls" in options or "ssl" in options
+    files = {name: options[name] for name in ("tlscafile", "tlscrlfile") if name in options}
+    if any(not value for value in files.values()):
+        raise ConnectionURIError("MongoDB TLS 文件路径不能为空。")
+    if security_flags.intersection(options) and not tls_explicit:
+        raise ConnectionURIError("使用 MongoDB TLS 验证策略参数时，请明确设置 tls=true。")
+    enabled = boolean("tls", boolean("ssl", bool(files)))
+    if not enabled and (files or security_flags.intersection(options)):
+        raise ConnectionURIError("tls=false 不能同时指定 TLS 文件或验证策略。")
+    insecure = boolean("tlsinsecure")
+    invalid_certs = boolean("tlsallowinvalidcertificates", insecure)
+    invalid_host = boolean("tlsallowinvalidhostnames", insecure)
+    mode = "disable" if not enabled else "require" if invalid_certs else "verify-ca" if invalid_host else "verify-full"
+    if files and mode == "require":
+        raise ConnectionURIError("CA 与证书撤消列表需要证书链验证，不能与跳过证书验证同时使用。")
+    result["ssl_mode"] = mode
+    if "tlscafile" in files:
+        result["ssl_ca"] = files["tlscafile"]
+    if "tlscrlfile" in files:
+        result["ssl_crl"] = files["tlscrlfile"]
     return result
 
 
@@ -148,10 +250,12 @@ def parse_connection_uri(uri: str) -> dict:
         raise ConnectionURIError("URI 的主机或 IPv6 地址格式无效。") from None
     schemes = {"sqlite": "sqlite", "postgres": "postgresql", "postgresql": "postgresql",
                "mysql": "mysql", "mariadb": "mariadb", "sqlserver": "sqlserver",
-               "redis": "redis", "rediss": "redis"}
+               "redis": "redis", "rediss": "redis", "mongodb": "mongodb"}
+    if parts.scheme.lower() == "mongodb+srv":
+        raise ConnectionURIError("MongoDB SRV 发现尚未实现；请使用 mongodb:// 的单一主机与端口。")
     kind = schemes.get(parts.scheme.lower())
     if not kind:
-        raise ConnectionURIError("暂不支持此 URI 协议。可用：sqlite、postgresql、mysql、mariadb、sqlserver、redis、rediss。")
+        raise ConnectionURIError("暂不支持此 URI 协议。可用：sqlite、postgresql、mysql、mariadb、sqlserver、redis、rediss、mongodb。")
     if not uri.lower().startswith(parts.scheme.lower() + "://"):
         raise ConnectionURIError("连接 URI 必须使用 协议:// 格式。")
     try:
@@ -208,6 +312,8 @@ def parse_connection_uri(uri: str) -> dict:
             db_name = str(int(db_name or "0"))
         result.update(host=host, port=port or result["port"], database=db_name,
                       username=_decoded(parts.username or ""), password=_decoded(parts.password or ""))
+        if kind == "mongodb":
+            return _mongodb_uri_options(parts, options, result)
         names = {"sslmode": "ssl_mode", "sslrootcert": "ssl_ca", "sslcert": "ssl_cert",
                  "sslkey": "ssl_key", "sslcrl": "ssl_crl", "sslpassword": "ssl_key_password"}
         if set(options) - (set(names) | {"connect_timeout"}):
@@ -316,7 +422,7 @@ class ConnectionUriDialog(QDialog):
         self.uri_edit.setAccessibleName("连接 URI，输入已遮蔽")
         label.setBuddy(self.uri_edit)
         layout.addWidget(self.uri_edit)
-        note = QLabel("支持 SQLite、PostgreSQL、MySQL、MariaDB、SQL Server 和 Redis URI。\nURI 仅在内存中解析；进入设置页后再确认连接。")
+        note = QLabel("支持 SQLite、PostgreSQL、MySQL、MariaDB、SQL Server、Redis 和 MongoDB URI。\nURI 仅在内存中解析；进入设置页后再确认连接。")
         note.setWordWrap(True)
         layout.addWidget(note)
         self.error_label = QLabel()

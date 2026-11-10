@@ -1,6 +1,6 @@
 # 0.6 候选：MongoDB 文档、原生命令、GridFS 与安全验证
 
-记录日期：2026-11-10，Asia/Shanghai。**0.6 当前是开发候选，尚未发布。首轮六目标原生构建、安装、运行、卸载均通过；随后发现的问题已经修补，最终源码正在重新执行发布门禁。公开下载核验须在发布后进行。**
+记录日期：2026-11-10，Asia/Shanghai。**0.6 当前是开发候选，尚未发布。修补后的 main checkpoint 六目标原生构建、安装、运行、卸载及数据库专项均通过；正式 tag 仍须执行发布门禁，公开下载核验须在发布后进行。**
 本文件记录 `work/mongodb-adapter` 开发分支上已经取得的有界证据，不把组件测试、源码 smoke 或参考程序观察当作最终安装包验收。
 源码版本已升为 **0.6.0**，对应源码 smoke 已实际返回该版本；冻结发布源码、原生安装包和公开发布记录仍待补齐。
 
@@ -60,7 +60,8 @@ SSH 使用每客户端原生 pool/TLS context 适配；初期 SOCKS 参数路线
 | --- | ---: | --- |
 | 独立审查修补后源码全量 | 870 passed，231 skipped，0 failed，41.66 秒，`-Werror` | 显式启用自建 MongoDB 协议夹具，包含新增录制器与键盘回归；其它未启用端点、平台和安全专项保留跳过；`artifacts/mongodb/source-reviewed-final.xml` |
 | 首轮整合源码 checkpoint | 819 passed，231 skipped，0 failed，39.77 秒，`-Werror` | 后续审查前的历史范围；`artifacts/mongodb/source-final.xml` |
-| 正式 MongoDB 协议 runner | 131 passed，0 skipped，`-Werror` | 101 后端、18 原生命令、12 MainWindow；3 个本次新建原生容器、认证就绪及最终删除均核验；`artifacts/security-integration/mongodb-protocol-final/summary.json` |
+| 修补后 CI MongoDB 协议 runner | 152 passed，0 skipped，`-Werror` | 102 后端、38 原生命令、12 MainWindow；原生 amd64、Ubuntu 22.04、实际内核 6.8.0-1070-azure；3 个本次新建容器均认证就绪并核验删除；`artifacts/mongodb/main-c6859b4-ci/security/mongodb-protocol/` |
+| 首轮 MongoDB 协议 runner checkpoint | 131 passed，0 skipped，`-Werror` | 101 后端、18 原生命令、12 MainWindow；本机原生 arm64；`artifacts/security-integration/mongodb-protocol-final/summary.json` |
 | MongoDB 后端、文档页面、GridFS 联跑 | 138 passed，0 skipped，`-Werror` | 100 项后端、15 项文档页面、23 项 GridFS；`artifacts/mongodb/backend-browser-gridfs-results.xml` |
 | TLS、双向 TLS、SCRAM 与 SSH 专项 | 22 passed，0 skipped，`-Werror` | 真正服务与协议，不替换加密/网络为 mock；`artifacts/mongodb-security/final/pytest-results.xml`、`summary.json`、`final-verification.json` |
 | MongoDB 设置/URI 与既有连接窗口回归 | 152 passed，`-Werror` | 52 项新增 MongoDB 与 100 项既有设置/管理器；`artifacts/mongodb/connection-settings.log`；没有自动连接或读取用户凭据 |
@@ -172,16 +173,21 @@ Windows 753 passed、297 skipped；冻结程序的 MongoDB 适配器、BSON 原�
 [SERVER-131779](https://jira.mongodb.org/browse/SERVER-131779) 记录 Ubuntu 回移修复内核的版本识别问题。
 数据库专项单独改用 Ubuntu 22.04 runner 及其对应运行库，保留 MongoDB 8.0、全部专项和零跳过要求；
 六份桌面安装包的目标平台不变，没有禁用服务器检查或改写用户内核。
-修补后的最终原生报告仍须核对实际内核回执和测试结果。
+修补后的 [CI 42828008953](https://github.com/shubolab/opennavicat/actions/runs/42828008953) 数据库专项已实际通过：
+既有 TLS/SSH 75 项、SQL Server/Redis 协议与界面 131 项、MongoDB 协议与主窗口 152 项、MongoDB TLS/SSH 22 项，
+四份报告共 380 项执行且零跳过。五个独有 MongoDB 服务均报告实际内核 **6.8.0-1070-azure**、原生 amd64、
+身份核验和最终删除通过，TLS/mTLS 的临时证书目录也已移除。
+该 main checkpoint 的六个原生安装包 job 随后全部通过，整条 CI 为 success。
+正式 tag 仍须再次通过发布依赖门禁。
 
 | 本轮最终目标 | 原生构建及安装/运行/卸载 | 公开资产下载核验 |
 | --- | --- | --- |
-| Windows amd64 | 首轮通过；修补后待核验 | 待发布后 |
-| Windows arm64 | 首轮通过；修补后待核验 | 待发布后 |
-| macOS amd64 | 首轮通过；修补后待核验 | 待发布后 |
-| macOS arm64 | 首轮通过；修补后待核验 | 待发布后 |
-| Linux amd64 | 首轮通过；修补后待核验 | 待发布后 |
-| Linux arm64 | 首轮通过；修补后待核验 | 待发布后 |
+| Windows amd64 | 修补后 main 通过；正式 tag 待执行 | 待发布后 |
+| Windows arm64 | 修补后 main 通过；正式 tag 待执行 | 待发布后 |
+| macOS amd64 | 修补后 main 通过；正式 tag 待执行 | 待发布后 |
+| macOS arm64 | 修补后 main 通过；正式 tag 待执行 | 待发布后 |
+| Linux amd64 | 修补后 main 通过；正式 tag 待执行 | 待发布后 |
+| Linux arm64 | 修补后 main 通过；正式 tag 待执行 | 待发布后 |
 
 最终六份安装报告须由对应原生架构的实际打包程序产生，核对原生映像、动态依赖、BSON 与 TLS 探针，
 并实际安装、启动、运行和卸载。发布器继续要求六安装包、manifest、摘要及公开下载字节核验。

@@ -10,44 +10,43 @@ Python + Qt Widgets（PySide6），数据库连接、SQL 和结果均在本机�
 下面是一段 OpenNavicat 实际运行演示：浏览示例表、编写并执行查询、查看结果、编辑表结构、
 检查 SQL 预览，再查看 MongoDB 文档网格、精确 BSON 类型树、GridFS 图像预览、JavaScript 查询与索引设计。
 连接名、客户、邮箱、日期、订单、商品、BSON、SQL 和图像均由隔离演示工作区生成，
-不读取本机真实连接或业务数据库。单段 GIF 对应 **0.8.1 候选源码**的实际 Qt 界面，约 30 秒；
-验证范围见 [0.8 候选记录](docs/validation-0.8.md)，下方仍提供已发布版本的安装包。
+不读取本机真实连接或业务数据库。单段 GIF 对应 **0.8.1** 的实际 Qt 界面，约 30 秒；
+验证范围见 [0.8.1 验证记录](docs/validation-0.8.md)。
 
 ![OpenNavicat 示例数据工作流演示](docs/assets/opennavicat-demo.gif)
 
-**0.8.1 候选已集成** Linux 历史连接发现、MongoDB 六页索引设计器和原生 JavaScript 查询。
-0.8.0 的正式 Windows 字体门禁未通过，未发布 Release；本候选已修正并通过六平台字体专项，继续执行完整安装预检。
-既有查询保留原执行语言，Linux 导入候选需要复核。
-开发中的范围及限制见 [候选验证记录](docs/validation-0.8.md)。
-
-最新可用里程碑 **[v0.7.1](https://github.com/shubolab/opennavicat/releases/tag/v0.7.1)**
+最新可用里程碑 **[v0.8.1](https://github.com/shubolab/opennavicat/releases/tag/v0.8.1)**
 已于 2026-11-11（北京时间）发布为早期预发行版本，提供三个操作系统、两种架构的六份安装包。
 现有 **SQLite、PostgreSQL、MySQL、MariaDB、SQL Server、Redis、MongoDB** 七种核心驱动，
-使用隔离数据库进行了真实协议、读写及界面集成验证。本版加入 MongoDB 单当前文档 BSON 树与记录导航、
-GridFS 下方预览/进度、Windows 历史连接候选发现、配置/分组重载保护，并修复原生大字体端口裁字。
-保留 MongoDB 原生命令、新版连接管理器、SQLite 独立索引/触发器设计及 macOS 历史连接自动加载、分组和去重。
+使用隔离数据库进行了真实协议、读写及界面集成验证。本版加入 Linux 历史连接及分组发现、
+MongoDB 六页索引设计器和随包提供的原生 JavaScript 查询，修正 Windows 原生大字体选择框裁字。
+既有查询保留原执行语言，Linux 导入候选需要先复核再连接。
+保留 MongoDB BSON 网格/树、GridFS、Windows 连接候选发现、SQLite 独立索引/触发器设计，
+以及 macOS 历史连接自动加载、分组和去重。
 完整 Navicat Premium 能力和 1:1 界面仍在持续实现中，
-详细范围见 [功能路线图](docs/roadmap.md) 和 [0.7 验证记录](docs/validation-0.7.md)。
+详细范围见 [功能路线图](docs/roadmap.md) 和 [0.8.1 验证记录](docs/validation-0.8.md)。
 
 | 安装包 | amd64 / Intel、x64 | arm64 / Apple Silicon、Windows ARM |
 | --- | --- | --- |
-| macOS | [DMG](https://github.com/shubolab/opennavicat/releases/download/v0.7.1/OpenNavicat-0.7.1-macos-amd64.dmg) | [DMG](https://github.com/shubolab/opennavicat/releases/download/v0.7.1/OpenNavicat-0.7.1-macos-arm64.dmg) |
-| Windows | [Setup EXE](https://github.com/shubolab/opennavicat/releases/download/v0.7.1/OpenNavicat-0.7.1-windows-amd64-setup.exe) | [Setup EXE](https://github.com/shubolab/opennavicat/releases/download/v0.7.1/OpenNavicat-0.7.1-windows-arm64-setup.exe) |
-| Linux（Debian/Ubuntu） | [DEB](https://github.com/shubolab/opennavicat/releases/download/v0.7.1/OpenNavicat-0.7.1-linux-amd64.deb) | [DEB](https://github.com/shubolab/opennavicat/releases/download/v0.7.1/OpenNavicat-0.7.1-linux-arm64.deb) |
+| macOS | [DMG](https://github.com/shubolab/opennavicat/releases/download/v0.8.1/OpenNavicat-0.8.1-macos-amd64.dmg) | [DMG](https://github.com/shubolab/opennavicat/releases/download/v0.8.1/OpenNavicat-0.8.1-macos-arm64.dmg) |
+| Windows | [Setup EXE](https://github.com/shubolab/opennavicat/releases/download/v0.8.1/OpenNavicat-0.8.1-windows-amd64-setup.exe) | [Setup EXE](https://github.com/shubolab/opennavicat/releases/download/v0.8.1/OpenNavicat-0.8.1-windows-arm64-setup.exe) |
+| Linux（Debian/Ubuntu） | [DEB](https://github.com/shubolab/opennavicat/releases/download/v0.8.1/OpenNavicat-0.8.1-linux-amd64.deb) | [DEB](https://github.com/shubolab/opennavicat/releases/download/v0.8.1/OpenNavicat-0.8.1-linux-arm64.deb) |
 
-[SHA256SUMS](https://github.com/shubolab/opennavicat/releases/download/v0.7.1/SHA256SUMS)
-和 [构建与安装验证清单](https://github.com/shubolab/opennavicat/releases/download/v0.7.1/build-manifests.json)
+[SHA256SUMS](https://github.com/shubolab/opennavicat/releases/download/v0.8.1/SHA256SUMS)
+和 [构建与安装验证清单](https://github.com/shubolab/opennavicat/releases/download/v0.8.1/build-manifests.json)
 随版本发布。当前安装包没有发布者签名或 Apple 公证；Windows ARM64 安装引导器使用 x86，
 安装后的应用、Python、Qt 及原生库为 ARM64。实际系统验证范围和功能边界见
-[0.7 验证记录](docs/validation-0.7.md)。本版六个原生 CI 目标均实际完成测试、安装、运行和卸载，
+[0.8.1 验证记录](docs/validation-0.8.md)。本版六个原生 CI 目标均实际完成测试、安装、运行和卸载，
 公开的六份安装包也已匿名下载并核对摘要。Linux DEB 基于 Ubuntu 24.04，要求 glibc 2.39 或更新版本，
 通过包管理器安装声明的 Qt 图形库及 Noto CJK 字体。
 0.5 公开版本另完成 macOS ARM64、干净 Ubuntu ARM64 XCB 及 Windows AMD64 RDP 的 6×4 示例查询，
 并在 Windows 实际打开 SQL Server/Redis 的连接设置；该次远程桌面没有连接真实 SQL Server/Redis 服务。
-0.7.1 公开 macOS ARM64 安装包补充完成两次普通启动的历史加载、分组、去重和不自动连接检查。
-Windows 候选需要复核认证与安全设置；原版 Windows 18 来源格式和 Linux 18 原生资料完整迁移仍待验收。
+0.8.1 公开 macOS ARM64 安装包另完成原生 Cocoa smoke 和两次普通启动，验证历史加载、分组、去重和不自动连接；
+两架构公开 DMG 的实际 JS helper 字节均与构建和安装运行时回执一致。
+Windows 和 Linux 导入候选需要复核认证与安全设置；原版 Windows 18 来源格式和 Linux 18 完整安全映射仍待验收。
 用户现场 Windows/WSL GUI 按要求延期，Dell 现场保留，托管 CI 的结果与该现场验收分开记录。
 0.7.0 门禁发现原生大字体问题，未发布 Release；原标签和失败证据保留，0.7.1 以新标签通过全部门禁。
+0.8.0 的 Windows 索引选择框字体门禁失败，同样未发布；0.8.1 以新标签首轮通过六安装目标、安全专项和发布任务。
 
 首个可用版本交付后曾按要求暂停。用户更新本机 Navicat 后已于 2026-11-10 明确恢复；
 当前参考为 **Navicat Premium 18.0.5 build 321**，已重新实际打开并验证新建表、修改表、
@@ -69,6 +68,7 @@ macOS / Linux：
 ```bash
 python3 -m venv .venv
 .venv/bin/python -m pip install -e '.[dev]'
+.venv/bin/python scripts/build-quickjs.py
 .venv/bin/python -m opennavicat
 ```
 
@@ -77,18 +77,25 @@ Windows PowerShell：
 ```powershell
 py -3.13 -m venv .venv
 .venv\Scripts\python.exe -m pip install -e ".[dev]"
+.venv\Scripts\python.exe scripts/build-quickjs.py
 .venv\Scripts\python.exe -m opennavicat
 ```
 
+源码运行 MongoDB JavaScript 需要先构建原生 helper。构建需要 CMake 3.20 或更新版本和 C 编译器；
+macOS/Linux 还需 Ninja，Windows amd64 使用 Visual Studio 2022，arm64 使用 Visual Studio 2026 及相应原生 C++ 工具链。
+脚本下载固定版本的官方 QuickJS-NG 源码并核对 SHA256，输出到 `artifacts/js-engine`。
+已发布安装包内含 helper，使用时无需编译。
+
 安装后也可使用 `opennavicat` 命令。`scripts/run.sh` 与 `scripts/run.ps1`
-提供快捷启动；首次运行且虚拟环境不存在时会创建环境并安装项目依赖。
+提供快捷启动；首次运行且虚拟环境不存在时会创建环境并安装项目依赖，原生 helper 仍需预先构建。
 项目提供公共 PyPI 依赖锁文件：安装 uv 后可用 `uv sync --frozen --extra dev`，
-再用 `uv run opennavicat` 启动。当前 Python / Qt 版本的系统要求仍适用。
+再运行 `uv run python scripts/build-quickjs.py` 构建 helper，使用 `uv run opennavicat` 启动。
+当前 Python / Qt 版本的系统要求仍适用。
 
 Linux 的桌面运行需要系统图形环境和 Qt 运行库。Ubuntu 24.04 示例：
 
 ```bash
-sudo apt-get install libegl1 libopengl0 libxcb-cursor0 libxkbcommon-x11-0 libglib2.0-0t64 fonts-noto-cjk
+sudo apt-get install libegl1 libopengl0 libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-shape0 libxkbcommon-x11-0 libglib2.0-0t64 fonts-noto-cjk
 ```
 
 ## 工作流
@@ -119,7 +126,7 @@ SSH 转发后仍校验数据库原始主机名。首次未知 SSH 主机需要�
 - Redis 使用原生命令查询页和键数据工作区，读取或编辑 string/hash/list/set/zset/stream，
   查看或修改 TTL、重命名和删除键。当前支持 standalone；集群、哨兵和 PubSub 尚未实现。
 - MongoDB standalone 提供精确 BSON 网格、树和 Canonical Extended JSON 文档编辑、冲突保护。
-  0.8 源码的新建查询使用原生 JavaScript，支持变量、函数、循环和已实现的 BSON/数据库接口；
+  0.8.1 的新建查询使用原生 JavaScript，支持变量、函数、循环和已实现的 BSON/数据库接口；
   既有查询保留原来的命令语义。GridFS 支持后台传输、筛选、分页及有界图像预览。
   本版提供单当前文档树及记录导航；树字段双击使用 Extended JSON 编辑器。
   索引支持六页设计和保存/删除；将“执行脚本（集合 UUID）”复制到默认 JS 查询可运行，辅助脚本用于 mongosh。
@@ -150,7 +157,7 @@ MySQL/MariaDB 目标必须是 InnoDB。它同步预览中列出的行，不锁�
 macOS Navicat 18 的实际连接及分组格式已验证，保留分组关系，重复加载按来源身份去重；
 你在 OpenNavicat 里手工创建或修改的配置会保留。已打开的会话继续使用原配置，来源更新在断开后生效。
 工具菜单提供“从 Navicat 重新加载连接”和自动加载开关。演示、smoke 和截图模式不读取历史连接。
-0.7.1 公开 macOS ARM64 安装包已完成两次普通启动，核验完整历史源加载、分组、无重复项，
+0.8.1 公开 macOS ARM64 安装包已完成两次普通启动，核验当前历史源加载、分组、无重复项，
 四类秘密字段均为空，且没有自动建立数据库网络连接。
 
 加载只读取来源文件，不修改 Navicat，也不会自动连接数据库或读取已保存密码。
@@ -161,8 +168,10 @@ macOS Navicat 18 的实际连接及分组格式已验证，保留分组关系，
 来源删除不会删除本地连接。0.7.1 接入 Windows 当前用户注册表的元数据候选发现，
 只读明确白名单的非秘密字段，保留可见驱动和已知分组；未知认证、TLS/SSH 与格式均保持待复核，
 确认设置前阻止连接。重复加载保护本地修改，读取不完整时保留已有配置和分组。
-Linux JSON 仅支持已识别格式；Windows 18 实际原生格式和 Linux 完整迁移尚未完成来源与原生界面验收。
-范围见 [Windows 元数据发现](docs/windows-navicat-discovery.md)、[0.7 验证记录](docs/validation-0.7.md)及 [0.5 验证记录](docs/validation-0.5.md)。
+0.8.1 增加 Linux Navicat 18 原生 JSON 基础配置和分组发现，依据实际 Linux 18.0.3 的隔离保存/重启观察，
+所有原生候选都需要复核。Windows 18 实际原生格式和 Linux 完整安全设置迁移仍有未完成范围。
+范围见 [Linux 元数据发现](docs/linux-navicat-discovery.md)、[Windows 元数据发现](docs/windows-navicat-discovery.md)、
+[0.8.1 验证记录](docs/validation-0.8.md)及 [0.5 验证记录](docs/validation-0.5.md)。
 
 ## 数据和密码
 
@@ -173,7 +182,7 @@ Linux JSON 仅支持已识别格式；Windows 18 实际原生格式和 Linux 完
 密码默认只在本次进程中保留。启用保存密码后使用操作系统 keyring/keychain；
 如果系统密钥服务不可用，不会自动退回明文文件。配置文件不保存数据库密码、SSH 密码、
 SSH 私钥口令和 TLS 客户端密钥口令；各项有独立的保存选择。
-SQL 历史和编辑器草稿会保留用户输入的 SQL；其中可能包含 SQL 字面量和业务数据。
+历史和编辑器草稿会保留用户输入的 SQL、原生命令和 JavaScript；其中可能包含字面量和业务数据。
 
 CSV 使用 UTF-8 BOM，首行为字段名；`\N` 表示数据库 NULL，普通反斜杠使用
 `\\` 转义。JSON 导出采用 `{"columns": [...], "rows": [...]}`，保留 SQL
@@ -182,6 +191,9 @@ CSV 使用 UTF-8 BOM，首行为字段名；`\N` 表示数据库 NULL，普通�
 传入驱动，由目标列类型转换；需要精确保留二进制值时使用 JSON。
 
 ## 测试与构建
+
+先完成上面的 Python 依赖和原生 helper 构建；`scripts/build.py` 打包时也会执行 helper 构建，需要同一原生工具链。
+源码默认测试中的服务条件跳过不等于已执行真实数据库专项。
 
 ```bash
 QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q
@@ -224,11 +236,11 @@ SQL Server/MongoDB TLS context 并检查原生 BSON 和加密 cipher；这些探
 构建）与 psycopg 的 Python 绑定，运行源码时需把 libpq DLL 目录放入 PATH 并设置
 `OPENNAVICAT_LIBPQ_DIR`；该脚本也配置加密库的 OpenSSL 源码构建路径。安装包直接包含运行库。
 `--demo` 则打开可交互的持久示例工作区。具体环境、测试数量、已构建产物及尚未验收项
-见 [0.7 验证记录](docs/validation-0.7.md)（[0.6](docs/validation-0.6.md)、[0.5](docs/validation-0.5.md)、[0.4](docs/validation-0.4.md)、[0.3](docs/validation-0.3.md)、[0.2](docs/validation-0.2.md)、[0.1 历史记录](docs/validation.md)）。Linux 容器构建可执行 `scripts/build-linux.sh`，
+见 [0.8.1 验证记录](docs/validation-0.8.md)（[0.7](docs/validation-0.7.md)、[0.6](docs/validation-0.6.md)、[0.5](docs/validation-0.5.md)、[0.4](docs/validation-0.4.md)、[0.3](docs/validation-0.3.md)、[0.2](docs/validation-0.2.md)、[0.1 历史记录](docs/validation.md)）。Linux 容器构建可执行 `scripts/build-linux.sh`，
 它在独立环境中测试、打包并运行产物，输出到 `artifacts/linux/`。
 
 README 演示可用 `.venv/bin/python scripts/record-demo.py --include-mongodb --output docs/assets/opennavicat-demo.gif`
-重新录制，需要本机已有 ffmpeg 和可用 Docker；脚本只创建本次独有的 loopback MongoDB 服务，结束后核验并清理。
+重新录制，需要预先构建原生 helper、本机已有 ffmpeg 和可用 Docker；脚本只创建本次独有的 loopback MongoDB 服务，结束后核验并清理。
 省略 `--include-mongodb` 可只录制 SQLite 六段。录制前后均不访问用户 Navicat 配置或系统钥匙串。
 脚本直接记录运行中 Qt 窗口的连续帧，临时样例库与 PNG 自动清理，仅输出一段 GIF 和不含个人路径的记录。
 

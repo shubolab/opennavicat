@@ -1,6 +1,6 @@
 # Linux Navicat 原生元数据发现与复核门禁
 
-本独立分支先以 `ea2cd34` 完成保守的默认来源发现和安全前缀检查，随后基于 Linux18.0.3 的自有离线 save-only 记录，实现 **PascalCase 原生 JSON 的非秘密元数据投影**。默认 Linux 路由不调用 macOS `_convert`，不迁移密码、启动原版或访问数据库。已识别记录会显示为待复核连接，**全部 `blocked=True`，必须由用户编辑、确认并保存设置后才解除导入门禁**；未知认证、SSH/TLS、附加或活动配置不会被猜测为可用连接。源码基于 `dd7f8ab`，与 0.7/0.7.1 发布候选分离，未改产品版本、UI、README 或发布资产。
+本独立分支先以 `ea2cd34` 完成保守的默认来源发现和安全前缀检查，随后基于 Linux18.0.3 的自有离线 save-only 记录，实现 **PascalCase 原生 JSON 的非秘密元数据投影**。默认 Linux 路由不调用 macOS `_convert`，不迁移密码、启动原版或访问数据库。已识别记录会显示为待复核连接，**全部 `blocked=True`，必须由用户编辑、确认并保存设置后才解除导入门禁**；未知认证、SSH/TLS、附加或活动配置不会被猜测为可用连接。最初源码基于 `dd7f8ab`；当前另建 `work/linux-native-integration` 从已发布 0.7.1 文档基线 `c2896f9` 集成，保留原调查分支，未改产品版本、UI、README 或发布资产。
 
 ## 路径与 API
 
@@ -79,3 +79,33 @@ Flatpak 的额外候选是 `~/.var/app/com.navicat.premium.en/config/navicat/Com
 本 checkpoint 最终元数据回归结果：macOS ARM64 / Python3.13.10 为 **368 passed、0 skipped、0 failed**；独立原生 Linux ARM64（Debian13.7、Python3.13.18、无架构仿真参数）为 **367 passed、1 skipped、0 failed**，均使用 `-Werror`。唯一跳过是 root UID 会绕过 POSIX 文件权限的测试，未伪称已验证拒绝读取；链接、非普通文件、读取竞态、原生 JSON/分组/Store 保全均实际运行。73项流式投影测试和71项原生适配测试包含在这些总数中，不另加算。
 
 Linux 测试从冻结的只读源码快照执行；回执核对最终五个相关源码/测试 SHA256，无工作树漂移。依赖仅装进唯一自有测试容器，测试时断网，结束后完整 ID/owner 核验并移除该容器及其中依赖，remaining-owned 为0。第一轮最小环境缺 `keyring` 导致33项既有 Windows 合成测试无法 import，该失败日志保留；补入项目已经声明的同版本依赖后通过，没有修改测试期望掩盖环境失败。以上是解析与状态保全测试，不是 OpenNavicat Linux 安装包或桌面 GUI 的本轮发布验收；六平台正式安装验证仍留到后续集成里程碑。
+
+
+## 在 0.7.1 基线上的独立集成与保全修补
+
+另建独立 worktree/分支 `work/linux-native-integration`，从 `c2896f900ba9cb041dcd6b6e8ea4cc9976e6d75e` 按序 cherry-pick 两个原检查点，对应本分支 `979bfe5`、`7dfff08`。没有改写原调查分支或已发布 main，也没有发布 0.8。初始全源为1128 passed、315 skipped、0 failed，证明旧 `dd7f8ab` 的7个端口测试失败没有带入本次基线。
+
+独立补充反例先取得8个真实失败，再收敛 native mapper：
+
+- MongoDB 源缺失 `AuthSource` 时，不能把它当成明确空字符串覆盖旧配置。缺失/错误类型现在是 incomplete snapshot；明确存在的有效空字符串仍可清旧值。
+- 已知投影键不等于所有驱动都接受其主动语义。SQLite 的主动 SSL/SSH、MongoDB/Redis 的主动 HTTP、SQL Server 的额外主动 SSL 均使 `config_complete=False`；未观察的跨家族 `InitialDatabase` 也不猜测映射。关闭的传输开关及其 inactive opaque 子树不会被当作启用配置、复制密钥路径或凭据。
+- 未知 group-root/group/member 选项不能生成未经确认的新 membership。未知 root 保留历史但不授权新归组；未知 group/member 分别跳过其对应范围，其他明确有效的成员仍可在首次部分导入时保留。有效空与 LKG 规则保持不变。
+- `Imported Linux connection` 是缺失/非法名称时的界面 fallback，不是源中的真实名称，不得拿它匹配虚拟分组。名称不能确认时，整个连接枚举不再授权名称归组。
+
+另加正反对照：inactive variants 不递归 overlay 基础身份/配置，不完整时保留 LKG，移除未知 variant 后完整快照才更新未手工复核的配置；明确空 auth source 可清旧值；unknown member 与独立 valid member 并存时不丢已确认路径。所有原生记录依旧 `blocked=True`，这些修补没有增加任何自动认证、猜测 SSH/TLS 模式或凭据迁移。`config_complete=True` 只代表此次基本配置投影完整，不能当成完整目标连接功能验收或解除 review 的依据。
+
+最终验证全部使用 `-Werror`：
+
+| 范围 | 实际结果 |
+| --- | --- |
+| macOS ARM64 本机全源 | **1155 passed、315 skipped、0 failed** |
+| macOS 元数据相关六模块 | **395 passed、0 skipped、0 failed** |
+| 原生 Linux ARM64 / Debian13.7 / Python3.13.18 同范围 | **394 passed、1 skipped、0 failed** |
+
+315项全源跳过属于未启用的自有远端 DB/TLS/SSH/GUI 专项，以及需要 Windows 原生 HKCU 的2项；本轮没有把旧发布中已完成的专项重跑成新结论。Linux唯一跳过是 root UID 绕过 POSIX 读权限，非普通文件、链接、完整投影后的文件/目录竞态均实际执行。原生映射测试已由71项扩展为98项，73项流式扫描测试保持不变。
+
+Linux 从冻结只读快照执行，核对11个相关源码/测试文件 SHA256 无漂移；唯一自有测试容器、其中私有依赖均按完整ID/name/owner清理，remaining-owned 为0。未再运行原版、未触碰 CUA、Dell、WSL、用户现存配置或业务服务。
+
+还复用先前七类驱动的**生成、脱敏导出**检查基本字段投影：七条均可见且 blocked，重复读取身份一致，首次 Store 增7条、重复增0条，四类秘密字段均为空。两份导出是故意裁剪的样例，namespace ID 已重新合成；例如早期 PG 样例省略了 `ServiceProvider`，因此保持 `config_complete=False`，不能将该结果说成原版完整文件无法读取。此项不扩大原生 namespace UUID、非空 ConnectionUUID 或完整存量迁移的运行验收范围。
+
+本次 ignored 回执集中在 `artifacts/linux-native-integration/`，含补充反例修补前失败日志、最终两平台 JUnit、Linux snapshot/cleanup/hash 回执和七驱动脱敏导出投影回执。它是后续里程碑的独立可合并源码，不是六平台新发布或 Linux GUI/安装器验收。

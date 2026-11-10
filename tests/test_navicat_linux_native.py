@@ -332,3 +332,112 @@ def test_incomplete_connection_namespace_cannot_authorize_group_reassignment(fil
     assert len(found.profiles)==1 and not found.profiles[0].groups_complete and not found.profiles[0].group_paths
     store.sync_navicat_profiles(found)
     assert next(iter(store.state['navicat_imports'].values()))['group_paths']==[['Generated group']]
+
+
+def test_missing_mongo_auth_source_does_not_erase_known_unreviewed_metadata(files,tmp_path):
+    *_,write=files;store=Store(tmp_path/'workspace')
+    store.sync_navicat_profiles(write([row('MONGODB',AuthSource='generated_auth_db')]))
+    previous=deepcopy(store.state['connections'])
+    partial=row('MONGODB');partial.pop('AuthSource')
+    current=write([partial]);store.sync_navicat_profiles(current)
+    assert not current.profiles[0].config_complete
+    assert store.state['connections']==previous
+
+
+def test_unknown_group_member_options_cannot_invent_a_fresh_membership(files):
+    *_,write=files;groups=grouped(('PGSQL','Generated connection'))
+    groups['vgroups'][0]['items'][0]['UnqualifiedMembershipOption']=True
+    current=write(groups=groups)
+    assert not current.profiles[0].group_paths and not current.profiles[0].groups_complete
+
+
+def test_synthetic_fallback_label_is_not_a_source_group_identity(files):
+    *_,write=files
+    current=write([row(Name=False)],groups=grouped(('PGSQL','Imported Linux connection')))
+    assert len(current.profiles)==1 and current.profiles[0].config.name=='Imported Linux connection'
+    assert not current.profiles[0].group_paths and not current.profiles[0].groups_complete
+
+
+@pytest.mark.parametrize('kind,flag',[('SQLITE','UseSSL'),('SQLITE','UseSSH'),('MONGODB','UseHTTP'),('REDIS','UseHTTP'),('MSSQL','UseSSL')])
+def test_unqualified_active_transport_flag_cannot_authorize_a_complete_snapshot(files,tmp_path,kind,flag):
+    *_,write=files;store=Store(tmp_path/'workspace');store.sync_navicat_profiles(write([row(kind)]))
+    before=deepcopy(store.state['connections'])
+    current=write([row(kind,**{flag:True})]);store.sync_navicat_profiles(current)
+    assert not current.profiles[0].config_complete and flag in current.profiles[0].unsupported_fields
+    assert store.state['connections']==before
+
+
+@pytest.mark.parametrize('kind,flag',[('SQLITE','UseSSL'),('SQLITE','UseSSH'),('MONGODB','UseHTTP'),('REDIS','UseHTTP'),('MSSQL','UseSSL')])
+def test_inactive_transport_flag_does_not_adopt_opaque_settings(files,kind,flag):
+    *_,write=files
+    current=write([row(kind,**{flag:False,'SSL':{'CACert':'SYNTHETIC-INACTIVE-CA'},
+                              'SSH':{'Host':'inactive.invalid','Password':'SYNTHETIC-INACTIVE-SECRET'},
+                              'HTTPTunnel':{'URL':'https://inactive.invalid','Password':'SYNTHETIC-INACTIVE-SECRET'}})])
+    profile=current.profiles[0]
+    assert profile.blocked and profile.config_complete
+    assert not profile.config.ssh_enabled and profile.config.ssh_host==profile.config.ssl_ca==profile.config.password==''
+    assert 'SYNTHETIC-INACTIVE' not in repr(current)
+
+
+@pytest.mark.parametrize('active',['','Generated variant','unknown-variant'])
+def test_opaque_variants_never_replace_base_identity_or_known_configuration(files,tmp_path,active):
+    *_,write=files;store=Store(tmp_path/'workspace');initial=write()
+    store.sync_navicat_profiles(initial);before=deepcopy(store.state['connections'])
+    current=write([row(Hostname='new-base.invalid',ActiveServerSettings=active,Profiles=[{
+        'Name':'Generated variant','Hostname':'variant.invalid','Username':'variant-user',
+        'ConnectionUUID':'variant-id','Password':'SYNTHETIC-VARIANT-SECRET'}])])
+    assert len(current.profiles)==1 and current.profiles[0].source_id==initial.profiles[0].source_id
+    assert not current.profiles[0].config_complete and current.profiles[0].blocked
+    assert current.profiles[0].config.host=='new-base.invalid'  # No recursive overlay inference.
+    store.sync_navicat_profiles(current);assert store.state['connections']==before
+    assert 'SYNTHETIC-VARIANT-SECRET' not in store.path.read_text()
+    restored=write([row(Hostname='complete-base.invalid')]);store.sync_navicat_profiles(restored)
+    assert len(store.connections())==1 and store.connections()[0].host=='complete-base.invalid'
+
+
+def test_authoritative_empty_mongo_auth_source_can_clear_previous_value(files,tmp_path):
+    *_,write=files;store=Store(tmp_path/'workspace')
+    store.sync_navicat_profiles(write([row('MONGODB',AuthSource='generated_auth_db')]))
+    current=write([row('MONGODB',AuthSource='')]);assert current.profiles[0].config_complete
+    store.sync_navicat_profiles(current)
+    assert len(store.connections())==1 and store.connections()[0].mongo_auth_source==''
+
+
+@pytest.mark.parametrize('kind',['MYSQL','MARIADB','MONGODB','REDIS','SQLITE'])
+def test_unobserved_initial_database_field_is_not_guessed_for_another_family(files,kind):
+    *_,write=files
+    current=write([row(kind,InitialDatabase='UNQUALIFIED_DATABASE')])
+    assert not current.profiles[0].config_complete and current.profiles[0].blocked
+    assert 'driver_specific_settings' in current.profiles[0].unsupported_fields
+    assert current.profiles[0].config.database!='UNQUALIFIED_DATABASE'
+
+
+@pytest.mark.parametrize('scope',['root','group','member'])
+def test_unknown_group_semantics_preserve_last_known_good_without_assigning_a_new_path(files,tmp_path,scope):
+    *_,write=files;store=Store(tmp_path/'workspace');old=grouped(('PGSQL','Generated connection'))
+    store.sync_navicat_profiles(write(groups=old))
+    changed=grouped(('PGSQL','Generated connection'));changed['vgroups'][0]['vgroup_name']='Unqualified path'
+    node=changed if scope=='root' else changed['vgroups'][0] if scope=='group' else changed['vgroups'][0]['items'][0]
+    node['UnqualifiedGroupingOption']={'Password':'SYNTHETIC-OPAQUE-SECRET'}
+    current=write(groups=changed)
+    assert not current.profiles[0].groups_complete and not current.profiles[0].group_paths
+    store.sync_navicat_profiles(current)
+    assert next(iter(store.state['navicat_imports'].values()))['group_paths']==[['Generated group']]
+    assert 'SYNTHETIC-OPAQUE-SECRET' not in store.path.read_text()
+
+
+def test_unknown_member_does_not_drop_a_separate_explicit_valid_membership(files):
+    *_,write=files;groups=grouped(('PGSQL','Generated connection'))
+    groups['vgroups'][0]['items'].append({'name':'Generated connection','type':'CONNECTION','server_type':'PGSQL','UnqualifiedOption':True})
+    current=write(groups=groups)
+    assert not current.profiles[0].groups_complete
+    assert current.profiles[0].group_paths==(('Generated group',),)
+
+
+def test_unknown_group_does_not_drop_another_explicit_valid_group(files):
+    *_,write=files;groups=grouped(('PGSQL','Generated connection'))
+    future=deepcopy(groups['vgroups'][0]);future.update(vgroup_name='Unqualified group',UnqualifiedOption=True)
+    groups['vgroups'].append(future)
+    current=write(groups=groups)
+    assert not current.profiles[0].groups_complete
+    assert current.profiles[0].group_paths==(('Generated group',),)

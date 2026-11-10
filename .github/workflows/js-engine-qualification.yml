@@ -10,9 +10,12 @@ on:
     paths:
       - 'native/quickjs/**'
       - 'opennavicat/js_engine/**'
+      - 'opennavicat/ui/mongo_native_query.py'
       - 'scripts/build-quickjs.py'
       - 'scripts/test-js-engine.py'
+      - 'scripts/prepare-js-payload.py'
       - 'tests/test_js_*.py'
+      - 'tests/test_mongo_native_query_ui.py'
       - '.github/workflows/js-engine-qualification.yml'
 
 permissions:
@@ -47,6 +50,13 @@ jobs:
         run: python scripts/build-quickjs.py --allow-unqualified-platform
       - name: Execute every VM and typed IPC case with zero skips
         run: python scripts/test-js-engine.py --mode vm --evidence artifacts/js-engine/qualification
+      - name: Install Linux offscreen Qt runtime libraries
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libegl1 libopengl0 libglib2.0-0t64
+      - name: Install native Qt component qualification dependencies
+        run: python -m pip install --only-binary=PySide6-Essentials PySide6-Essentials==6.12.0 "pytest-qt>=4,<5"
+      - name: Execute actual native helper in Qt with zero skips
+        run: python scripts/test-js-engine.py --mode qt --evidence artifacts/js-engine/qt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -56,6 +66,7 @@ jobs:
             artifacts/js-engine/build-receipt.json
             artifacts/js-engine/LICENSE.quickjs-ng
             artifacts/js-engine/qualification/
+            artifacts/js-engine/qt/
           if-no-files-found: error
 
   mongodb:
@@ -79,6 +90,15 @@ jobs:
       - name: Verify exact owned-run cleanup even after interruption
         if: always()
         run: python scripts/test-js-engine.py --mode protocol --evidence artifacts/js-engine/protocol --cleanup-interrupted
+      - name: Install offscreen Qt runtime and native wheels
+        run: |
+          sudo apt-get update && sudo apt-get install -y libegl1 libopengl0 libglib2.0-0
+          python -m pip install --only-binary=PySide6-Essentials PySide6-Essentials==6.12.0 "pytest-qt>=4,<5"
+      - name: Execute fresh-owned MongoDB writes and partial failure through Qt
+        run: python scripts/test-js-engine.py --mode qt-protocol --evidence artifacts/js-engine/qt-protocol
+      - name: Verify exact Qt owned-run cleanup even after interruption
+        if: always()
+        run: python scripts/test-js-engine.py --mode qt-protocol --evidence artifacts/js-engine/qt-protocol --cleanup-interrupted
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -87,4 +107,5 @@ jobs:
             artifacts/js-engine/build.log
             artifacts/js-engine/build-receipt.json
             artifacts/js-engine/protocol/
+            artifacts/js-engine/qt-protocol/
           if-no-files-found: error

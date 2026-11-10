@@ -17,8 +17,10 @@ import uuid
 import xml.etree.ElementTree as ET
 
 ROOT=Path(__file__).resolve().parents[1]
-VM=("tests/test_js_codec.py","tests/test_js_native.py","tests/test_js_gate.py")
+VM=("tests/test_js_codec.py","tests/test_js_native.py","tests/test_js_gate.py",
+    "tests/test_js_presentation.py","tests/test_js_payload.py")
 PROTOCOL=(*VM,"tests/test_js_engine.py","tests/test_js_host_reference.py")
+QT=("tests/test_mongo_native_query_ui.py",)
 COLLECT="""import json,sys,pytest
 from pathlib import Path
 class Capture:
@@ -46,7 +48,7 @@ def protocol_module():
 
 def main(argv=None):
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--mode',choices=('vm','protocol'),required=True)
+    parser.add_argument('--mode',choices=('vm','protocol','qt','qt-protocol'),required=True)
     parser.add_argument('--evidence',type=Path,required=True)
     parser.add_argument('--cleanup-interrupted',action='store_true',help='Verify and remove only this evidence run\'s exact receipt-backed MongoDB fixtures')
     args=parser.parse_args(argv)
@@ -57,7 +59,7 @@ def main(argv=None):
             path=directory/'summary.json'
             if path.exists():
                 previous=json.loads(path.read_text())
-                if previous.get('mode')!='protocol':raise RuntimeError('Cleanup requires an exact protocol run')
+                if previous.get('mode')not in {'protocol','qt-protocol'}:raise RuntimeError('Cleanup requires an exact protocol run')
                 receipt.update(run_id=previous['run_id'],removed=protocol_module().cleanup_interrupted_fixtures(directory/'fixtures',previous['run_id']))
             else:receipt['no_protocol_run_started']=True
             receipt['verified']=True
@@ -66,13 +68,25 @@ def main(argv=None):
             receipt['error_type']=type(error).__name__
             return 1
         finally:(directory/'cleanup-verification.json').write_text(json.dumps(receipt,indent=2)+'\n')
-    scope=VM if args.mode=='vm'else PROTOCOL
+    is_qt=args.mode in {'qt','qt-protocol'}
+    is_protocol=args.mode in {'protocol','qt-protocol'}
+    scope=QT if is_qt else VM if args.mode=='vm'else PROTOCOL
+    test_arguments=[*scope]
+    if is_qt:test_arguments=['-p','pytestqt.plugin',*test_arguments]
+    if args.mode=='qt':test_arguments += ['-k','not fresh_mongo']
     run_id=uuid.uuid4().hex
     summary=dict(verified=False,mode=args.mode,scope=scope,run_id=run_id,reference_endpoint_used=False)
+    summary['execution_scope']={
+        'vm':'native-helper-typed-ipc-without-database-capability',
+        'protocol':'native-helper-authoritative-fresh-mongodb',
+        'qt':'real-qt-component-contracts-and-native-helper-vm-only-no-database-capability',
+        'qt-protocol':'real-qt-component-native-helper-and-fresh-mongodb-production-chain',
+    }[args.mode]
     environment=dict(os.environ,PYTHONPATH=str(ROOT),PYTEST_DISABLE_PLUGIN_AUTOLOAD='1')
     environment.pop('OPENNAVICAT_TEST_MONGODB_ENDPOINT',None)
-    cleanup_verified=args.mode=='vm'
-    if args.mode=='protocol':
+    if is_qt:environment['QT_QPA_PLATFORM']='offscreen'
+    cleanup_verified=not is_protocol
+    if is_protocol:
         environment.update(OPENNAVICAT_TEST_MONGODB='1',OPENNAVICAT_MONGODB_PROTOCOL_RUN_ID=run_id,
             OPENNAVICAT_MONGODB_PROTOCOL_REPORT_DIR=str(directory/'fixtures'))
     report=directory/'pytest-results.xml';required=directory/'required-cases.json'
@@ -84,18 +98,19 @@ def main(argv=None):
     process=None
     try:
         with (directory/'collection.log').open('w',encoding='utf-8')as log:
-            subprocess.run([sys.executable,'-c',COLLECT,str(required),*scope],cwd=ROOT,env=environment,
+            subprocess.run([sys.executable,'-c',COLLECT,str(required),*test_arguments],cwd=ROOT,env=environment,
                 stdout=log,stderr=subprocess.STDOUT,check=True,timeout=60)
         with (directory/'pytest.log').open('w',encoding='utf-8')as log:
-            process=subprocess.Popen([sys.executable,'-m','pytest','-q','-W','error',*scope,'--junitxml='+str(report)],
+            process=subprocess.Popen([sys.executable,'-m','pytest','-q','-W','error',*test_arguments,'--junitxml='+str(report)],
                 cwd=ROOT,env=environment,stdout=log,stderr=subprocess.STDOUT,start_new_session=os.name=='posix')
             status=process.wait(timeout=180)
         if status:raise RuntimeError('Native engine pytest process failed')
         summary.update(check_junit(report,json.loads(required.read_text())))
-        if args.mode=='protocol':
+        if is_protocol:
             fixtures=[json.loads(path.read_text())for path in (directory/'fixtures').glob('fixture-*.json')]
             fixtures=[value for value in fixtures if value.get('run_id')==run_id]
-            if (not fixtures or {value.get('module')for value in fixtures}!={'test_js_engine','test_js_host_reference'}or
+            expected_modules={'test_mongo_native_query_ui'}if is_qt else{'test_js_engine','test_js_host_reference'}
+            if (not fixtures or {value.get('module')for value in fixtures}!=expected_modules or
                 any(value.get(field)is not True for value in fixtures for field in ('cleanup_removed','owner_token_verified',
                     'port_loopback_only','native_docker_architecture_matches','external_auth_readiness'))):
                 raise RuntimeError('Native engine owned MongoDB readiness/cleanup not proven')

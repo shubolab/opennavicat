@@ -122,6 +122,15 @@ def test_native_undefined_null_and_prototype_boundary(native):
         native.evaluate('Array.prototype.toJSON=function(){return 42};({x:1})')
 
 
+def test_native_completion_retains_js_bigint_and_bson_numeric_types_for_display(native):
+    result = native.evaluate('({big:1n,long:Long("1"),int:Int32(1),number:1})')
+    tags = {name: tree[0] for name, tree in result.value_tree[1]}
+    assert tags == {'big': 'js-bigint', 'long': 'int64', 'int': 'int32', 'number': 'double'}
+    with pytest.raises(JavaScriptError) as raised:
+        native.evaluate('throw new Error("synthetic failure")')
+    assert raised.value.result.value_tree is None
+
+
 @pytest.mark.parametrize('source',[
     'BigInt.prototype.toString=function(){return "123"};Long("1")',
     'Object.is=function(){return false};-0',

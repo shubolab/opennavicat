@@ -7,6 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from contextlib import nullcontext
 import json
+import copy
 import hashlib
 import os
 import platform
@@ -67,6 +68,9 @@ class JavaScriptResult:
     open_sessions: int = 0
     native_state: dict = field(default_factory=dict)
     resource_exhausted: bool = False
+    # Retain JS-only type distinctions (e.g. BigInt(1) vs BSON Int32(1))
+    # for presentation/export. The decoded Python value alone cannot do so.
+    value_tree: list | None = field(default=None, repr=False)
 
     @property
     def uncertain_writes(self):
@@ -152,11 +156,11 @@ class NativeJavaScript:
                 except ProcessLookupError:
                     pass
 
-        def cancel_database():
-            # The owning execute() waits for this thread before releasing the
-            # outer session operation. Late cancellation cannot hit another run.
+        def cancel_database(marker):
+            # A delayed control task must not cancel a later operation, even
+            # after the interrupted bridge has unwound its active comment.
             try:
-                if session is not None:session.cancel()
+                if session is not None:session.cancel(expected_comment=marker)
             except DatabaseError:
                 pass  # The result still reports interruption/uncertainty.
 
@@ -165,6 +169,7 @@ class NativeJavaScript:
             while not finished.wait(.005):
                 if external.is_set() or time.monotonic() >= deadline:
                     cancelled.set()
+                    marker = session.cancellation_marker() if session is not None else None
                     stop_child()  # independent of a blocked parent DB call
                     # Reap here too, even while execute() is still blocked in
                     # a host adapter call. Popen serializes concurrent waits.
@@ -172,7 +177,7 @@ class NativeJavaScript:
                         process.wait(timeout=.5)
                     except subprocess.TimeoutExpired:
                         pass
-                    cancellation_thread = threading.Thread(target=cancel_database, name="MongoJS-cancel")
+                    cancellation_thread = threading.Thread(target=cancel_database, args=(marker,), name="MongoJS-cancel")
                     cancellation_thread.start()
                     return
 
@@ -282,7 +287,8 @@ class NativeJavaScript:
                 stderr = ""
             if temporary is not None:temporary.cleanup()
         result = JavaScriptResult(value,tuple(bridge.receipts),(time.monotonic()-started)*1000,
-            cancelled.is_set(),process is not None and process.poll() is not None,hard_killed,stderr,failure,bridge.open_cursors,bridge.open_sessions,event.get("native",{})if event else {},resource_denied.is_set())
+            cancelled.is_set(),process is not None and process.poll() is not None,hard_killed,stderr,failure,bridge.open_cursors,bridge.open_sessions,event.get("native",{})if event else {},resource_denied.is_set(),
+            copy.deepcopy(event['tree']) if event and not failure else None)
         if failure:
             raise JavaScriptError(failure,result)
         return result

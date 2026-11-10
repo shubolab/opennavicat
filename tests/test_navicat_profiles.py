@@ -219,13 +219,20 @@ def test_linux_documented_json_location_recognized_schema_and_unknown_shape(sour
     assert not r.profiles and r.issues[0].code == "unsupported_source_structure"
 
 
-def test_windows_explicit_adapter_and_unaccepted_native_mapping():
+def test_windows_explicit_adapter_and_unaccepted_native_mapping(monkeypatch):
+    import opennavicat.navicat_windows as native
+    def unavailable():
+        raise OSError("Synthetic registry unavailable")
+    # This cross-platform unit must never inspect a real user's PremiumSoft
+    # root on Windows. Actual native coverage uses a separate owned HKCU root.
+    monkeypatch.setattr(native, "NativeRegistry", unavailable)
     r = discover_navicat_profiles(platform="win32")
     assert not r.profiles and r.issues[0].code == "windows_discovery_pending"
     rows = [RegistryProfile("PostgreSQL", "Synthetic Windows", profile(), "HKCU/synthetic", ("Examples",))]
     r = discover_navicat_profiles(platform="win32", registry_reader=lambda: rows)
     assert len(r.profiles) == 1 and r.profiles[0].source_format == "windows-registry"
     assert r.profiles[0].group_path == ("Examples",)
+    assert r.profiles[0].blocked and "windows_native_format" in r.profiles[0].unsupported_fields
     assert "Synthetic Windows" not in repr(r) and "HKCU" not in repr(r)
 
 

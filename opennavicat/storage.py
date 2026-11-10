@@ -213,7 +213,10 @@ class Store:
             existing = by_id.get(identifier, {})
             if value["ssh_host"] and (existing.get("ssh_host"), existing.get("ssh_port", 22)) == (value["ssh_host"], value["ssh_port"]):
                 value["ssh_host_key"] = existing.get("ssh_host_key", "")
+            previous = imports.get(identifier, {})
             paths = getattr(profile, "group_paths", ()) or ((profile.group_path,) if profile.group_path else ())
+            if getattr(profile, "groups_complete", True) is not True:
+                paths = deepcopy(previous.get("group_paths", []))
             group_paths = []
             for path in paths:
                 if not isinstance(path, (list, tuple)) or any(not isinstance(part, str) for part in path):
@@ -229,12 +232,12 @@ class Store:
                 unsupported = sorted(set(unsupported) | {"requires_secrets"})
             blocked = bool(profile.blocked or value["driver"] not in SUPPORTED_DRIVERS
                            or set(profile.requires_secrets) - set(self.SECRET_FIELDS))
-            previous = imports.get(identifier, {})
             edited = bool(previous.get("locally_edited"))
             metadata = {
                 "source_id": source_id, "provenance": str(profile.source_path),
                 "source_format": str(profile.source_format), "platform": platform,
                 "group_paths": group_paths, "blocked": blocked,
+                "groups_complete": getattr(profile, "groups_complete", True) is True,
                 "unsupported_fields": unsupported, "requires_secrets": requires,
                 "locally_edited": edited, "last_seen": now, "source_missing": False,
                 "source_blocked": blocked, "source_unsupported_fields": unsupported,

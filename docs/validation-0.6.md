@@ -1,6 +1,6 @@
 # 0.6 候选：MongoDB 文档、原生命令、GridFS 与安全验证
 
-记录日期：2026-11-10，Asia/Shanghai。**0.6 当前是开发候选，尚未发布；本轮六目标原生构建、安装、运行、卸载及公开下载核验尚未开始。**
+记录日期：2026-11-10，Asia/Shanghai。**0.6 当前是开发候选，尚未发布。首轮六目标原生构建、安装、运行、卸载均通过；随后发现的问题已经修补，最终源码正在重新执行发布门禁。公开下载核验须在发布后进行。**
 本文件记录 `work/mongodb-adapter` 开发分支上已经取得的有界证据，不把组件测试、源码 smoke 或参考程序观察当作最终安装包验收。
 源码版本已升为 **0.6.0**，对应源码 smoke 已实际返回该版本；冻结发布源码、原生安装包和公开发布记录仍待补齐。
 
@@ -58,7 +58,8 @@ SSH 使用每客户端原生 pool/TLS context 适配；初期 SOCKS 参数路线
 
 | 实际运行范围 | 结果 | 证据及边界 |
 | --- | ---: | --- |
-| 最终整合源码全量 | 819 passed，231 skipped，0 failed，39.77 秒，`-Werror` | 显式启用自建 MongoDB 协议夹具；其它未启用端点、平台和安全专项保留跳过；`artifacts/mongodb/source-final.xml` |
+| 独立审查修补后源码全量 | 870 passed，231 skipped，0 failed，41.66 秒，`-Werror` | 显式启用自建 MongoDB 协议夹具，包含新增录制器与键盘回归；其它未启用端点、平台和安全专项保留跳过；`artifacts/mongodb/source-reviewed-final.xml` |
+| 首轮整合源码 checkpoint | 819 passed，231 skipped，0 failed，39.77 秒，`-Werror` | 后续审查前的历史范围；`artifacts/mongodb/source-final.xml` |
 | 正式 MongoDB 协议 runner | 131 passed，0 skipped，`-Werror` | 101 后端、18 原生命令、12 MainWindow；3 个本次新建原生容器、认证就绪及最终删除均核验；`artifacts/security-integration/mongodb-protocol-final/summary.json` |
 | MongoDB 后端、文档页面、GridFS 联跑 | 138 passed，0 skipped，`-Werror` | 100 项后端、15 项文档页面、23 项 GridFS；`artifacts/mongodb/backend-browser-gridfs-results.xml` |
 | TLS、双向 TLS、SCRAM 与 SSH 专项 | 22 passed，0 skipped，`-Werror` | 真正服务与协议，不替换加密/网络为 mock；`artifacts/mongodb-security/final/pytest-results.xml`、`summary.json`、`final-verification.json` |
@@ -122,6 +123,18 @@ GridFS 真实页面测试完成 PNG 上传后的 `image/png` 与实际 MD5 核�
 上述三项已不再列为未修问题，但最终冻结源码的完整回归与更广协议范围继续开放。
 有界 shell 语法和 BSON 命令支持仍不能表述成完整 mongosh 引擎。
 
+第二轮独立审查又发现并修补了脚本取消与未确认写入问题。一次脚本从解析到逐条执行共用一个取消生命周期，
+保留每条命令的独立 typed comment。解析期间取消不再开始首条写入，两条命令之间取消不再执行后续写入；
+已确认的先前结果继续保留，最后一条已经完整返回的成功不会被事后的取消伪装为回滚。
+命令级 `writeConcern:{w:0}` 和无效确认方式在整段脚本的首次数据库 I/O 前拒绝，
+插入文档里的同名业务字段不受影响。完整查询文件 38 项及既有真实服务取消通道复核均通过，
+见 `artifacts/review-b493e9e/lifecycle.xml`、`operation.xml`。
+
+JSON 编辑与 `EJSON.parse` 拒绝把溢出的有限数字静默转换为 Infinity；显式 Extended JSON 非有限值仍可用。
+有界 shell 对尚未实现的数字字符串转义明确拒绝，不再删除反斜线而写入不同内容。独立精度回归 20 项通过。
+连接树同时补齐 Return/数字键盘 Enter 激活，由真实 SQLite 连接和表数据的两项 Qt 回归核验；
+这些自动化验证不替代原生窗口的人工界面验收。
+
 独立 MainWindow 复核曾实际发现两项界面生命周期问题：全局刷新把索引上下文切回集合，
 以及后台关闭连接期间还能排入旧会话元数据读取，导致成功断开后出现“未连接”错误。
 根实现已保留当前对象类别，并为关闭中的连接添加导航、读取及回调门禁。
@@ -142,14 +155,33 @@ GridFS 真实页面测试完成 PNG 上传后的 `image/png` 与实际 MD5 核�
 
 ## 本轮原生发布与完整目标门禁
 
+首轮 `b493e9e` 的 [CI 42824442618](https://github.com/shubolab/opennavicat/actions/runs/42824442618)
+六个原生目标均通过：每目标 1,050 项收集，macOS/Linux 754 passed、296 skipped，
+Windows 753 passed、297 skipped；冻结程序的 MongoDB 适配器、BSON 原生扩展及 TLS context 探针均为布尔 true。
+这证明该 checkpoint 的六包，不将其冒充为后续修补源码的最终产物。
+
+独立 macOS ARM64 0.6.0 冻结开发包另实际完成 Cocoa 启动、SQLite 6×4 smoke、67 个原生映像与 provider 检查，
+源码输入核验没有 drift。人工实际打开主窗口及九类型连接管理器后退出，未覆盖旧版本实例。
+连接树操作受到 Qt 原生 AX 错误阻挡，因而**本轮没有声称手工完成冻结程序的 MongoDB/GridFS 数据页验收**。
+相关小型回执在 `artifacts/mongodb/local-native/`；本次独有 GUI 容器已核验删除。
+
+初次数据库专项中 MongoDB 8.0.34 的容器在认证就绪前退出。保留退出状态和服务日志后，
+第二轮 [CI 42826666852](https://github.com/shubolab/opennavicat/actions/runs/42826666852)
+证实是服务器拒绝当前 runner 内核，退出码 1、OOMKilled=false，非适配器断言失败。
+[MongoDB 官方说明](https://www.mongodb.com/docs/v8.0/release-notes/8.0/) 记录 TCMalloc 对特定内核的限制，
+[SERVER-131779](https://jira.mongodb.org/browse/SERVER-131779) 记录 Ubuntu 回移修复内核的版本识别问题。
+数据库专项单独改用 Ubuntu 22.04 runner 及其对应运行库，保留 MongoDB 8.0、全部专项和零跳过要求；
+六份桌面安装包的目标平台不变，没有禁用服务器检查或改写用户内核。
+修补后的最终原生报告仍须核对实际内核回执和测试结果。
+
 | 本轮最终目标 | 原生构建及安装/运行/卸载 | 公开资产下载核验 |
 | --- | --- | --- |
-| Windows amd64 | 尚未开始 | 待发布后 |
-| Windows arm64 | 尚未开始 | 待发布后 |
-| macOS amd64 | 尚未开始 | 待发布后 |
-| macOS arm64 | 尚未开始 | 待发布后 |
-| Linux amd64 | 尚未开始 | 待发布后 |
-| Linux arm64 | 尚未开始 | 待发布后 |
+| Windows amd64 | 首轮通过；修补后待核验 | 待发布后 |
+| Windows arm64 | 首轮通过；修补后待核验 | 待发布后 |
+| macOS amd64 | 首轮通过；修补后待核验 | 待发布后 |
+| macOS arm64 | 首轮通过；修补后待核验 | 待发布后 |
+| Linux amd64 | 首轮通过；修补后待核验 | 待发布后 |
+| Linux arm64 | 首轮通过；修补后待核验 | 待发布后 |
 
 最终六份安装报告须由对应原生架构的实际打包程序产生，核对原生映像、动态依赖、BSON 与 TLS 探针，
 并实际安装、启动、运行和卸载。发布器继续要求六安装包、manifest、摘要及公开下载字节核验。

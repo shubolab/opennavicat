@@ -7,9 +7,11 @@ Python + Qt Widgets（PySide6），数据库连接、SQL 和结果均在本机�
 项目从本机 Navicat Premium 的功能资源调查开始，以独立实现逐步覆盖完整的
 数据库管理工作流。
 
-下面是一段 OpenNavicat 实际运行演示：浏览示例表、编写并执行查询、查看结果、编辑表结构和
-检查 SQL 预览。连接名、客户、邮箱、日期、订单及 SQL 均来自隔离生成的演示工作区，
-不读取本机真实连接或业务数据库。演示对应 0.5.0 的实际 Qt 界面。
+下面是一段 OpenNavicat 实际运行演示：浏览示例表、编写并执行查询、查看结果、编辑表结构、
+检查 SQL 预览，再查看 MongoDB 文档网格、精确 BSON 类型树及 GridFS 图像预览。
+连接名、客户、邮箱、日期、订单、商品、BSON、SQL 和图像均由隔离演示工作区生成，
+不读取本机真实连接或业务数据库。单段 GIF 对应 **0.6.0 开发候选**的实际 Qt 界面，约 21 秒；
+候选验证状态见 [0.6 验证记录](docs/validation-0.6.md)，下方提供当前已发布的安装包。
 
 ![OpenNavicat 示例数据工作流演示](docs/assets/opennavicat-demo.gif)
 
@@ -206,7 +208,9 @@ dist/OpenNavicat.app/Contents/MacOS/OpenNavicat --smoke-test
 见 [0.5 验证记录](docs/validation-0.5.md)（[0.4](docs/validation-0.4.md)、[0.3](docs/validation-0.3.md)、[0.2](docs/validation-0.2.md)、[0.1 历史记录](docs/validation.md)）。Linux 容器构建可执行 `scripts/build-linux.sh`，
 它在独立环境中测试、打包并运行产物，输出到 `artifacts/linux/`。
 
-README 演示可用 `.venv/bin/python scripts/record-demo.py` 重新录制，需要本机已有 ffmpeg。
+README 演示可用 `.venv/bin/python scripts/record-demo.py --include-mongodb --output docs/assets/opennavicat-demo.gif`
+重新录制，需要本机已有 ffmpeg 和可用 Docker；脚本只创建本次独有的 loopback MongoDB 服务，结束后核验并清理。
+省略 `--include-mongodb` 可只录制 SQLite 六段。录制前后均不访问用户 Navicat 配置或系统钥匙串。
 脚本直接记录运行中 Qt 窗口的连续帧，临时样例库与 PNG 自动清理，仅输出一段 GIF 和不含个人路径的记录。
 
 ## 参考、实现与许可证

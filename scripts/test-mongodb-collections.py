@@ -1,0 +1,109 @@
+#!/usr/bin/env python3
+"""Qualify only the ordinary-collection backend with fresh, exact-owned MongoDB.
+
+This standalone checkpoint does not widen the released database-security job's
+scope. Missing prerequisites/skips are failures, not protocol acceptance.
+"""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import importlib.util
+import json
+import os
+from pathlib import Path
+import platform
+import subprocess
+import sys
+import uuid
+import xml.etree.ElementTree as ET
+
+import bson
+import pymongo
+
+
+ROOT = Path(__file__).resolve().parents[1]
+TARGET = 'tests/test_mongodb_collections.py'
+COLLECT = '''import json,sys,pytest
+from pathlib import Path
+class Collect:
+ def pytest_collection_finish(self,session):
+  Path(sys.argv[1]).write_text(json.dumps([item.nodeid for item in session.items],indent=2)+'\\n')
+raise SystemExit(pytest.main([sys.argv[2],'--collect-only','-q'],plugins=[Collect()]))
+'''
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--evidence', type=Path, required=True)
+    parser.add_argument('--timeout', type=int, default=240)
+    args = parser.parse_args()
+    directory = args.evidence.resolve()
+    if directory.exists(): raise RuntimeError('Use a new evidence directory for each qualification')
+    directory.mkdir(parents=True)
+    run_id = uuid.uuid4().hex
+    environment = dict(os.environ, PYTHONPATH=str(ROOT), OPENNAVICAT_TEST_MONGODB='1',
+        OPENNAVICAT_MONGODB_PROTOCOL_RUN_ID=run_id,
+        OPENNAVICAT_MONGODB_PROTOCOL_REPORT_DIR=str(directory / 'fixtures'))
+    environment.pop('OPENNAVICAT_TEST_MONGODB_ENDPOINT', None)
+    environment.pop('PYTEST_ADDOPTS', None)
+    spec = importlib.util.spec_from_file_location('owned_mongodb_fixture_cleanup', ROOT / 'scripts/test-mongodb-protocol.py')
+    cleanup = importlib.util.module_from_spec(spec); spec.loader.exec_module(cleanup)
+    summary = {'verified': False, 'scope': [TARGET], 'run_id': run_id,
+        'reference_endpoint_used': False, 'execution_scope': 'ordinary-collection-backend-only', 'emergency_removed': [],
+        'runtime': {'system': platform.system(), 'machine': platform.machine(), 'python': platform.python_version(),
+            'pymongo': pymongo.version, 'bson_c': bson.has_c()},
+        'base_revision': subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=ROOT, check=True, capture_output=True, text=True).stdout.strip(),
+        'source_sha256': {path: hashlib.sha256((ROOT / path).read_bytes()).hexdigest() for path in
+            ('opennavicat/mongodb_collections.py', 'opennavicat/mongodb_session.py', 'opennavicat/js_engine/server_errors.py',
+             TARGET, 'tests/test_mongodb_session.py', 'scripts/test-mongodb-collections.py')}}
+    process = None
+    try:
+        if summary['runtime']['bson_c'] is not True:
+            raise RuntimeError('Native protocol qualification requires the actual BSON C extension')
+        with (directory / 'collection.log').open('w') as output:
+            subprocess.run([sys.executable, '-c', COLLECT, str(directory / 'required-cases.json'), TARGET],
+                cwd=ROOT, env=environment, stdout=output, stderr=subprocess.STDOUT, check=True, timeout=60)
+        expected = json.loads((directory / 'required-cases.json').read_text())
+        if not expected or any(not node.startswith(TARGET + '::') for node in expected) or len(set(expected)) != len(expected):
+            raise RuntimeError('Collection manifest did not identify the exact declared scope')
+        with (directory / 'pytest.log').open('w') as output:
+            process = subprocess.Popen([sys.executable, '-m', 'pytest', '-q', '-W', 'error', TARGET,
+                '--junitxml=' + str(directory / 'results.xml')], cwd=ROOT, env=environment,
+                stdout=output, stderr=subprocess.STDOUT)
+            try:
+                status = process.wait(timeout=args.timeout)
+            finally:
+                if process.poll() is None:
+                    process.terminate()
+                    try: process.wait(timeout=10)
+                    except subprocess.TimeoutExpired: process.kill(); process.wait()
+        cases = ET.parse(directory / 'results.xml').getroot().findall('.//testcase')
+        names = [case.attrib.get('name') for case in cases]
+        summary.update(passed=sum(not any(case.find(tag) is not None for tag in ('failure', 'error', 'skipped')) for case in cases),
+            failed=sum(case.find('failure') is not None for case in cases),
+            errors=sum(case.find('error') is not None for case in cases), skipped=sum(case.find('skipped') is not None for case in cases))
+        if status or len(cases) != len(expected) or set(names) != {node.split('::', 1)[1] for node in expected} or any(summary[key] for key in ('failed', 'errors', 'skipped')):
+            raise RuntimeError('Ordinary-collection qualification did not pass the entire exact scope without skips')
+        fixtures = [json.loads(path.read_text()) for path in (directory / 'fixtures').glob('fixture-*.json')]
+        fixtures = [value for value in fixtures if value.get('run_id') == run_id]
+        if len(fixtures) != 1 or fixtures[0].get('module') != 'test_mongodb_collections' or any(fixtures[0].get(key) is not True for key in (
+                'cleanup_removed', 'owner_token_verified', 'port_loopback_only', 'native_docker_architecture_matches', 'external_auth_readiness')):
+            raise RuntimeError('Required exact-owned native fixture/cleanup proof is missing')
+        summary['fixtures'] = fixtures
+        summary['verified'] = True
+    except BaseException as error:
+        summary['error_type'] = type(error).__name__
+        raise
+    finally:
+        try:
+            summary['emergency_removed'] = cleanup.cleanup_interrupted_fixtures(directory / 'fixtures', run_id)
+        except Exception as error:
+            summary['verified'] = False; summary['cleanup_error_type'] = type(error).__name__
+            raise
+        finally:
+            (directory / 'summary.json').write_text(json.dumps(summary, indent=2) + '\n')
+    print(json.dumps(summary, indent=2))
+
+
+if __name__ == '__main__': main()

@@ -213,7 +213,9 @@ def test_linux_documented_json_location_recognized_schema_and_unknown_shape(sour
     path = source / "Common/connections.json"
     path.write_text(json.dumps({"PostgreSQL": {"Linux": profile()}}))
     r = discover_navicat_profiles(source, platform="linux")
-    assert r.profiles[0].source_format == "linux-json"
+    assert r.profiles[0].source_format == "linux-legacy-json"
+    assert r.profiles[0].blocked and not r.profiles[0].config_complete
+    assert "linux_native_format" in r.profiles[0].unsupported_fields
     path.write_text(json.dumps({"unknown": ["not a verified schema"]}))
     r = discover_navicat_profiles(source, platform="linux")
     assert not r.profiles and r.issues[0].code == "unsupported_source_structure"

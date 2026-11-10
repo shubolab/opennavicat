@@ -99,6 +99,8 @@ def present_execution(execution: JavaScriptResult, source: str) -> QueryPresenta
         messages.append('Acknowledged writes remain committed, including when a later statement fails.')
     if execution.uncertain_writes:
         messages.append('Write acknowledgement is uncertain. Inspect the server before retrying this write.')
+    if any(row.writes and row.outcome=='acknowledged_error' and row.affected is None for row in execution.commands):
+        messages.append('The server returned a write error without reporting its effects. Inspect the server before retrying; no rollback is implied.')
     if execution.error:
         messages.append('[Error] ' + execution.error)
     result = QueryResult(columns=['Encoding', 'Value'] if rows else [], rows=rows,

@@ -96,7 +96,7 @@ def report(architecture="arm64", version="0.3.0"):
     return {"smoke": "passed", "rows": 6, "columns": ["customer"],
         "runtime": {"version": version, "os": "Windows", "machine": architecture,
             "libpq": 180000, "qt": "6.12.0", "psycopg": "3.3.8", "pymysql": "1.2.4",
-            "paramiko": "5.1.0", "cryptography": "46.0.0"}}
+            "paramiko": "5.1.0", "cryptography": "46.0.0", "crypto_legacy_probe": True}}
 
 
 def test_empty_windowed_process_stdout_is_not_an_installed_smoke(tmp_path):
@@ -110,6 +110,7 @@ def test_empty_windowed_process_stdout_is_not_an_installed_smoke(tmp_path):
 @pytest.mark.parametrize("field,value,error", [
     ("machine", "AMD64", "wrong CPU"), ("version", "0.2.0", "differs"),
     ("libpq", 0, "native database runtime"), ("paramiko", "", "driver did not load"),
+    ("crypto_legacy_probe", False, "legacy provider"),
 ])
 def test_installed_report_must_prove_architecture_version_and_driver_loading(tmp_path, field, value, error):
     value_report = report()
@@ -125,6 +126,8 @@ def test_inno_native_architecture_and_verification_install_are_explicit(tmp_path
     assert "ArchitecturesAllowed=arm64" in source
     assert "ArchitecturesInstallIn64BitMode=arm64" in source
     assert "org.opennavicat.verification." in source
+    assert "AppId={code:ApplicationId}" in source
+    assert "UsePreviousLanguage=no" in source
     assert "{param:VERIFY|0}" in source
     assert 'PrivilegesRequired=lowest' in source
     assert 'SetupArchitecture=arm64' not in source

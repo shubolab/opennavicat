@@ -94,6 +94,21 @@ Windows ARM64 首次成功构建的 vcpkg revision 为
 
 最终本地默认测试另发现 Python SQLite 上下文管理器只结束事务而不关闭连接。配置、
 历史、样例创建及测试夹具已补上显式关闭，重新执行完整 warnings-as-errors 检查通过。
+当前默认套件为 **129 passed / 133 skipped**（需要显式启用的外部服务用例不在默认执行范围），
+18.70 秒，零警告和错误；真实安全连接的 75 项另行实际执行，并非以这些跳过项代表通过。
+
+第二次运行 [42743679346](https://github.com/shubolab/opennavicat/actions/runs/42743679346)
+开始使用 Cocoa、Windows 和 X11/xcb 实际桌面后端验证安装程序。两个 macOS 原生安装作业
+均成功；安全连接 JUnit 再次为 75 / 0 failures / 0 errors / 0 skipped。
+Windows amd64 的实际桌面程序已启动成功，随后 Inno Setup 指出动态 AppId 必须设置
+`UsePreviousLanguage=no`，已据此修复。两个 Linux 作业在安装前 smoke 暴露构建主机缺少
+`libxcb-icccm4`、`libxcb-keysyms1`、`libxcb-shape0`；DEB 已声明这些库，CI 构建依赖已补齐。
+上述修复须由后续作业证明，不能以失败作业中的局部成功替代完整安装包验收。
+第二次 Windows ARM64 已成功构建 `cryptography-50.0.2-cp313-abi3-win_arm64.whl`，
+随后测试收集指出 OpenSSL legacy provider 没有被发现。后续构建显式发现发布版
+`legacy.dll`，配置源码进程的 `OPENSSL_MODULES`，将模块打入包内并设置内部运行路径。
+独立程序验证清除构建机 provider 环境，还执行公开固定向量的实际 cipher probe，
+避免仅导入成功而遗漏 provider。该修复仍需后续原生作业证明。
 
 本机另外生成并验证了 0.3.0 macOS ARM64 DMG，56,051,780 bytes，SHA-256
 `9bb4dbeae8b5c42cf74a25c2432f2e30d6679e609db0d211b8b1fb61835209a3`。

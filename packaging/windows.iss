@@ -8,6 +8,7 @@
 
 [Setup]
 AppId={code:ApplicationId}
+UsePreviousLanguage=no
 AppName=OpenNavicat
 AppVersion={#AppVersion}
 AppPublisher=OpenNavicat contributors

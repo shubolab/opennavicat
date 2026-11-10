@@ -302,6 +302,8 @@ def validate_smoke_report(path: Path, version: str, architecture: str, operating
         raise PackagingError(f"Installed application did not load the native database runtime: {runtime}")
     if not all(runtime.get(name) for name in ("qt", "psycopg", "pymysql", "paramiko", "cryptography")):
         raise PackagingError(f"An installed database/SSH driver did not load: {runtime}")
+    if runtime.get("crypto_legacy_probe") is not True:
+        raise PackagingError("The installed OpenSSL legacy provider did not execute its cipher probe")
     return report
 
 
@@ -311,6 +313,7 @@ def smoke_installed(executable: Path, directory: Path, version: str, architectur
     environment = os.environ.copy()
     environment.setdefault("QT_QPA_PLATFORM", "offscreen")
     environment.pop("PYTHONPATH", None)
+    environment.pop("OPENSSL_MODULES", None)
     native_build_directory = environment.pop("OPENNAVICAT_LIBPQ_DIR", "")
     if native_build_directory:
         environment["PATH"] = os.pathsep.join(path for path in environment.get("PATH", "").split(os.pathsep)

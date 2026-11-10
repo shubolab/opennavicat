@@ -13,6 +13,10 @@ if (-not (Test-Path (Join-Path $libraryDirectory 'libpq.dll'))) { throw 'libpq.d
 $env:OPENNAVICAT_LIBPQ_DIR = $libraryDirectory
 $env:PATH = "$libraryDirectory;$env:PATH"
 $nativePrefix = Join-Path $vcpkgRoot 'installed/arm64-windows'
+$legacyProvider = Get-ChildItem -Path $nativePrefix -Filter legacy.dll -File -Recurse |
+    Where-Object { $_.FullName -notmatch '[\\/]debug[\\/]' } |
+    Sort-Object FullName | Select-Object -First 1
+if (-not $legacyProvider) { throw 'The native OpenSSL legacy provider module was not installed.' }
 # cryptography has no Windows ARM64 wheel: its Rust build must link the same
 # native OpenSSL libraries that were just built for libpq.
 $settings = @{
@@ -24,6 +28,7 @@ $settings = @{
     OPENSSL_LIB_DIR = (Join-Path $nativePrefix 'lib')
     OPENSSL_INCLUDE_DIR = (Join-Path $nativePrefix 'include')
     OPENSSL_STATIC = '0'
+    OPENSSL_MODULES = $legacyProvider.DirectoryName
     PYTHONPATH = (Join-Path $PSScriptRoot 'windows-runtime-site')
 }
 foreach ($name in $settings.Keys) {

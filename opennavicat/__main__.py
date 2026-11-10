@@ -33,12 +33,20 @@ def main():
         import pymysql
         import paramiko
         import cryptography
+        from cryptography.hazmat.primitives.ciphers import Cipher, modes
+        from cryptography.hazmat.decrepit.ciphers.algorithms import Blowfish
+        # A fixed public test vector exercises the dynamically loaded legacy
+        # provider. Imports alone can succeed while this module is missing.
+        probe = Cipher(Blowfish(bytes(16)), modes.ECB()).encryptor()
+        probe_bytes = probe.update(bytes(8)) + probe.finalize()
+        if probe_bytes.hex() != "4ef997456198dd78":
+            raise RuntimeError("OpenSSL legacy provider cipher probe failed")
         runtime = {"version": __version__, "os": platform.system(),
             "machine": platform.machine(), "python": platform.python_version(),
             "qt": QLibraryInfo.version().toString(), "psycopg": psycopg.__version__,
             "libpq": psycopg.pq.version(), "psycopg_impl": psycopg.pq.__impl__,
             "pymysql": pymysql.VERSION_STRING, "paramiko": paramiko.__version__,
-            "cryptography": cryptography.__version__}
+            "cryptography": cryptography.__version__, "crypto_legacy_probe": True}
     app = QApplication(sys.argv[:1])
     app.setApplicationName("OpenNavicat")
     app.setOrganizationName("OpenNavicat")

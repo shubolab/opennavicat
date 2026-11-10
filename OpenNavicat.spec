@@ -33,6 +33,10 @@ else:
     if sys.platform != "win32" or not (libpq_directory / "libpq.dll").is_file():
         raise RuntimeError("A native libpq.dll build is required through OPENNAVICAT_LIBPQ_DIR")
     psycopg_binaries += [(str(path), ".") for path in libpq_directory.glob("*.dll")]
+    provider_directory = Path(os.environ.get("OPENSSL_MODULES", ""))
+    if not (provider_directory / "legacy.dll").is_file():
+        raise RuntimeError("The native OpenSSL provider directory is required through OPENSSL_MODULES")
+    psycopg_binaries += [(str(path), "openssl-modules") for path in provider_directory.glob("*.dll")]
     hiddenimports += ["psycopg.pq.pq_ctypes"]
 license_files = [(str(path), "licenses") for path in (project / "licenses").glob("*.txt")]
 if not binary_metadata:

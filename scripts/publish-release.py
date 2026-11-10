@@ -66,6 +66,7 @@ def validate_assets(directory, version):
         require(smoke.get("smoke") == "passed" and smoke.get("rows") == 6 and len(smoke.get("columns", [])) == 4, f"Installed SQL smoke did not pass: {installer.name}")
         require(runtime.get("version") == version and normalized == arch and runtime.get("os") == {"macos": "Darwin", "windows": "Windows", "linux": "Linux"}[system], f"Installed runtime is the wrong target: {installer.name}")
         require(isinstance(runtime.get("libpq"), int) and runtime["libpq"] >= 170000 and all(runtime.get(field) for field in ("qt", "psycopg", "pymysql", "paramiko", "cryptography")), f"Installed database/SSH dependencies are incomplete: {installer.name}")
+        require(runtime.get("crypto_legacy_probe") is True, f"Installed OpenSSL provider was not verified: {installer.name}")
         manifests.append(manifest)
     return manifests
 

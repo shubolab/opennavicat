@@ -15,6 +15,7 @@ else:
 environment = os.environ.copy()
 environment.setdefault("QT_QPA_PLATFORM", "offscreen")
 environment.pop("PYTHONPATH", None)
+environment.pop("OPENSSL_MODULES", None)
 native_build_directory = environment.pop("OPENNAVICAT_LIBPQ_DIR", "")
 if native_build_directory:
     environment["PATH"] = os.pathsep.join(path for path in environment.get("PATH", "").split(os.pathsep)
@@ -26,3 +27,4 @@ import json
 report = json.loads((root / "artifacts/packaged-smoke.json").read_text("utf-8"))
 assert report["smoke"] == "passed" and report["rows"] == 6
 assert report["runtime"]["libpq"] >= 170000, "Secure PostgreSQL cancellation requires libpq 17+"
+assert report["runtime"]["crypto_legacy_probe"] is True

@@ -10,3 +10,6 @@ if sys.platform == "win32" and getattr(sys, "frozen", False):
         # dependent OpenSSL DLLs on modern Python. Keep the handle alive.
         os.environ["PATH"] = str(directory) + os.pathsep + os.environ.get("PATH", "")
         sys._opennavicat_libpq_directory = os.add_dll_directory(str(directory))
+        providers = directory / "openssl-modules"
+        if (providers / "legacy.dll").is_file():
+            os.environ["OPENSSL_MODULES"] = str(providers)

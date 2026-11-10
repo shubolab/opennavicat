@@ -22,7 +22,7 @@ def assets(tmp_path):
                     "os": {"macos": "Darwin", "windows": "Windows", "linux": "Linux"}[system],
                     "version": "0.3.0", "machine": arch, "libpq": 180006,
                     "qt": "fixture", "psycopg": "fixture", "pymysql": "fixture",
-                    "paramiko": "fixture", "cryptography": "fixture"}}}
+                    "paramiko": "fixture", "cryptography": "fixture", "crypto_legacy_probe": True}}}
         manifest = {"name": "OpenNavicat", "version": "0.3.0", "os": system,
             "architecture": arch, "native_host_architecture": arch,
             "installer": installer.name, "bytes": installer.stat().st_size,

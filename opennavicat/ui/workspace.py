@@ -2,12 +2,13 @@
 from __future__ import annotations
 
 from pathlib import Path
+import math
 
 from PySide6.QtCore import Qt, QSize
-from PySide6.QtGui import QAction
+from PySide6.QtGui import QAction, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView, QButtonGroup, QCheckBox, QFormLayout, QHBoxLayout, QLabel, QLineEdit,
-    QPlainTextEdit, QSizePolicy, QStackedWidget, QTableWidget, QTableWidgetItem,
+    QMenu, QPlainTextEdit, QSizePolicy, QStackedWidget, QTableWidget, QTableWidgetItem,
     QToolBar, QToolButton, QVBoxLayout, QWidget,
 )
 
@@ -22,6 +23,24 @@ OBJECT_LABELS = {"table": "表", "view": "视图", "index": "索引", "trigger":
 def object_symbol(kind):
     return {"mongo_collection": "table", "mongo_timeseries": "table", "mongo_view": "view",
             "mongo_index": "index", "mongo_bucket": "database"}.get(kind, kind)
+
+
+def _mongo_index_type(entry):
+    kinds = {str(value) for _field, value in entry.get("keys", ()) if isinstance(value, str)}
+    return ", ".join(sorted(kinds)) or "常规"
+
+
+def _byte_size(value, *, exact=False):
+    if not isinstance(value, (int, float)) or isinstance(value, bool) or value < 0:
+        return "—"
+    number = float(value)
+    if not math.isfinite(number):
+        return "—"
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if number < 1024 or unit == "TB":
+            text = f"{number:g} {unit}"
+            return text + (f" ({int(value):,})" if exact and unit != "B" else "")
+        number /= 1024
 
 
 class ObjectBrowser(QWidget):
@@ -83,6 +102,14 @@ class ObjectBrowser(QWidget):
             self.table.setColumnWidth(index, width)
         self.table.itemDoubleClicked.connect(lambda _: self.open_selected())
         self.table.itemSelectionChanged.connect(self.selection_changed)
+        self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.table.customContextMenuRequested.connect(self.context_menu)
+        self._delete_shortcuts = []
+        for key in (Qt.Key.Key_Backspace, Qt.Key.Key_Delete):
+            shortcut = QShortcut(QKeySequence(key), self.table)
+            shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+            shortcut.activated.connect(lambda: self.drop_selected() if self.delete_action.isEnabled() else None)
+            self._delete_shortcuts.append(shortcut)
         layout.addWidget(self.table)
         self.update_actions()
 
@@ -105,13 +132,16 @@ class ObjectBrowser(QWidget):
         if kind == "mongo_collection":
             headers = ["名称", "文档数", "已固定", "内存中的总大小", "对象的平均大小", "存储大小", "索引数", "索引的总大小"]
         elif kind.startswith("mongo_"):
-            headers = ["名称", "集合", "类型", "", ""] if kind == "mongo_index" else ["名称", "", "", "", ""]
+            headers = ["名称", "索引类型", "集合名称", "唯一键", "背景", "稀疏", "在此之后过期（秒）", "版本", "大小"] if kind == "mongo_index" else ["名称", "", "", "", ""]
         self.table.setColumnCount(len(headers))
         self.table.setHorizontalHeaderLabels(headers)
         self.system_indexes_action.setVisible(kind == "index")
         if kind == "redis_data":
             self.table.setHorizontalHeaderLabels(["名称", "创建日期", "修改日期", "", ""])
-        self.open_action.setVisible(kind not in {"index", "trigger"})
+        self.open_action.setVisible(kind not in {"index", "trigger", "mongo_index"})
+        if kind == "mongo_index":
+            for column, width in enumerate((200, 105, 160, 70, 70, 70, 160, 65, 125)):
+                self.table.setColumnWidth(column, width)
         self.refresh()
 
     def refresh(self):
@@ -119,7 +149,7 @@ class ObjectBrowser(QWidget):
             return
         session = self.window.sessions.get(self.connection_id)
         selected = self.selected()
-        self._selection_hint = selected["name"] if selected and (selected["id"], selected["schema"], selected["kind"]) == (self.connection_id, self.schema, self.kind) else None
+        self._selection_hint = (selected["name"], selected.get("collection")) if selected and (selected["id"], selected["schema"], selected["kind"]) == (self.connection_id, self.schema, self.kind) else None
         self.table.setRowCount(0)
         self.records = []
         self.update_actions()
@@ -141,8 +171,11 @@ class ObjectBrowser(QWidget):
         def work():
             if session.config.driver == "mongodb":
                 if kind == "mongo_index":
-                    return [dict(obj, kind=kind, schema=schema, id=connection_id)
-                            for obj in session.indexes(schema)], 0
+                    rows = session.indexes(schema)
+                    sizes = {name: session.collection_stats(schema, name).get("indexSizes", {})
+                             for name in dict.fromkeys(row["collection"] for row in rows)}
+                    return [dict(obj, kind=kind, schema=schema, id=connection_id,
+                                 size=sizes.get(obj["collection"], {}).get(obj["name"])) for obj in rows], 0
                 if kind in {"mongo_function", "mongo_mapreduce", "mongo_pipeline"}:
                     return [], 0
                 all_objects = session.objects(schema)
@@ -205,7 +238,11 @@ class ObjectBrowser(QWidget):
                     stats.get("size", ""), stats.get("avgObjSize", ""), stats.get("storageSize", ""),
                     stats.get("nindexes", ""), stats.get("totalIndexSize", "")]
             elif self.kind == "mongo_index":
-                values = [entry["name"], entry.get("collection", ""), str(entry.get("keys", "")), "", ""]
+                options = entry.get("options", {})
+                values = [entry["name"], _mongo_index_type(entry), entry.get("collection", ""),
+                    "是" if entry.get("unique") else "否", "是" if options.get("background") else "否",
+                    "是" if options.get("sparse") else "否", options.get("expireAfterSeconds", "—"),
+                    options.get("v", "—"), _byte_size(entry.get("size"))]
             elif self.kind.startswith("mongo_"):
                 values = [entry["name"], "", "", "", ""]
             if self.kind in {"query", "backup", "redis_data"}:
@@ -219,7 +256,7 @@ class ObjectBrowser(QWidget):
         self.filter_rows(self.search.text())
         if getattr(self, "_selection_hint", None):
             for row, entry in enumerate(objects):
-                if entry["name"] == self._selection_hint:
+                if (entry["name"], entry.get("collection")) == self._selection_hint:
                     self.table.setCurrentCell(row, 0)
                     break
         self.update_actions()
@@ -246,15 +283,26 @@ class ObjectBrowser(QWidget):
                     if self.selected() == entry and self.window.tabs.currentWidget() is self:
                         self.window.inspector.show_object(entry, self.window.configs.get(entry["id"]), ddl)
                 self.window.submit(lambda: session.table_ddl(entry["schema"], entry["name"]), done, label="读取对象信息")
+            elif self.window.inspector.isVisible() and session and entry["kind"] == "mongo_index":
+                from ..mongodb_indexes import load_index
+                def done(snapshot):
+                    if (self.selected() == entry and self.window.tabs.currentWidget() is self
+                            and self.window.sessions.get(entry["id"]) is session):
+                        self.window.inspector.show_object(entry, self.window.configs.get(entry["id"]), snapshot.ddl)
+                self.window.submit(lambda: load_index(session, entry["schema"], entry["collection"], entry["name"]),
+                    done, label="读取索引信息")
 
     def update_actions(self):
         selected = self.selected() is not None
         connected = self.connection_id in self.window.sessions and self.connection_id not in getattr(self.window, "_closing_connections", ()) and not getattr(self.window, "_closing_mongo", False)
         writable = connected and not self.window.configs[self.connection_id].read_only
         self.open_action.setEnabled(selected and self.kind != "mongo_index")
-        self.design_action.setEnabled(selected and self.kind in {"table", "view", "index", "trigger"})
-        self.new_action.setEnabled(writable and self.kind in {"table", "index", "trigger"})
-        self.delete_action.setEnabled(writable and selected and self.kind in {"table", "view", "index", "trigger"} and not self.selected().get("automatic"))
+        self.design_action.setEnabled(connected and selected and self.kind in {"table", "view", "index", "trigger", "mongo_index"})
+        self.new_action.setEnabled(writable and self.kind in {"table", "index", "trigger", "mongo_index"})
+        self.delete_action.setEnabled(writable and selected and self.kind in {"table", "view", "index", "trigger", "mongo_index"}
+            and not self.selected().get("automatic") and not (self.kind == "mongo_index" and self.selected().get("system")))
+        for shortcut in getattr(self, "_delete_shortcuts", ()):
+            shortcut.setEnabled(self.kind == "mongo_index" and self.delete_action.isEnabled())
         self.import_action.setEnabled(writable and selected and self.kind == "table")
         self.export_action.setEnabled(connected and selected and self.kind in {"table", "view"})
         self.er_action.setEnabled(connected and self.window.configs[self.connection_id].driver not in {"redis", "mongodb"})
@@ -275,7 +323,7 @@ class ObjectBrowser(QWidget):
             self.window.statusBar().showMessage(entry["path"], 10000)
         elif entry["kind"] == "redis_data":
             self.window.open_redis_browser(entry["id"], entry["schema"])
-        elif entry["kind"] in {"index", "trigger"}:
+        elif entry["kind"] in {"index", "trigger", "mongo_index"}:
             self.window.design_object(entry)
         else:
             self.window.open_table(dict(entry, table=entry["name"]))
@@ -283,7 +331,7 @@ class ObjectBrowser(QWidget):
     def design_selected(self):
         entry = self.selected()
         if entry:
-            self.window.design_object(dict(entry, table=entry["name"]) if entry["kind"] not in {"index", "trigger"} else entry)
+            self.window.design_object(dict(entry, table=entry["name"]) if entry["kind"] not in {"index", "trigger", "mongo_index"} else entry)
 
     def import_selected(self):
         self.open_selected()
@@ -297,6 +345,22 @@ class ObjectBrowser(QWidget):
         entry = self.selected()
         if entry:
             self.window.drop_object(entry)
+
+    def context_menu(self, pos):
+        if self.kind != "mongo_index":
+            return
+        item = self.table.itemAt(pos)
+        if item is not None:
+            self.table.setCurrentCell(item.row(), 0)
+        menu = QMenu(self)
+        for action in (self.design_action, self.new_action, self.delete_action):
+            menu.addAction(action)
+        groups = menu.addMenu("管理组")
+        for label in ("新建组", "添加到组", "从组中排除"):
+            groups.addAction(label).setEnabled(False)
+        menu.addSeparator()
+        menu.addAction(self.refresh_action)
+        menu.exec(self.table.viewport().mapToGlobal(pos))
 
 
 class Inspector(QWidget):
@@ -376,5 +440,12 @@ class Inspector(QWidget):
         details = []
         if "rootpage" in info:
             details.extend(["根页面", str(info["rootpage"]), "", "有索引", "是" if info.get("indexed") else "否", "", "有触发器", "是" if info.get("triggers") else "否"])
+        if kind == "mongo_index":
+            options = info.get("options", {})
+            details.extend(["集合名称", info.get("collection", ""), "", "字段",
+                ", ".join(field for field, _value in info.get("keys", ())), "", "索引类型", _mongo_index_type(info),
+                "", "唯一键", "是" if info.get("unique") else "否", "", "背景", "是" if options.get("background") else "否",
+                "", "稀疏", "是" if options.get("sparse") else "否", "", "过期时间（秒）", str(options.get("expireAfterSeconds", "—")),
+                "", "版本", str(options.get("v", "—")), "", "大小", _byte_size(info.get("size"), exact=True)])
         self.details.setText("\n".join(details))
         self.ddl.setPlainText(ddl)

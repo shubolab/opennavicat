@@ -1,9 +1,9 @@
-"""Conservative Linux Navicat source discovery, without profile-value parsing.
+"""Conservative Linux Navicat paths and non-following file I/O.
 
-Official paths and the shipped Linux18 ELF establish file candidates, not its
-live authentication or record schema. This foundation checks only bounded file
-metadata and a JSON container prefix. It does not read any connection value,
-parse credentials, accept a native shape, launch Navicat, or contact a server.
+Prefix inspection remains a separate metadata-only API. The native adapter uses
+the same file/parent binding to project only allowlisted JSON metadata, without
+decoding or retaining credential/opaque values. Neither API launches Navicat,
+reads a keychain, modifies its source, or contacts a database.
 """
 from __future__ import annotations
 
@@ -124,17 +124,16 @@ def _container_prefix(fd):
     return {b"{": "object", b"[": "array", b"": "empty"}.get(first, "other"), consumed
 
 
-def inspect_linux_source(candidate):
-    """Probe a regular file through non-following directory descriptors.
+def _read_checked(candidate, read):
+    """Bind a bounded reader to a stable regular file and directory chain.
 
-    Prefix classification is not JSON validation or schema acceptance. Final
-    and parent entries are rechecked; races/failures never become empty source
-    authority. No database, credential, secret-value or JSON parser API runs.
+    Final and parent entries are rechecked after the callback; any failure
+    discards its result and cannot become authoritative empty-source metadata.
     """
     path = candidate.path
     if (os.name != "posix" or os.open not in os.supports_dir_fd
             or not hasattr(os, "O_NOFOLLOW") or not hasattr(os, "O_DIRECTORY")):
-        return LinuxSourceInspection(candidate, "unavailable", None)
+        return "unavailable", None, None, None
     descriptors, chain = [], []
     exists = None
     try:
@@ -158,7 +157,7 @@ def inspect_linux_source(candidate):
         if (not stat.S_ISREG(opened.st_mode) or _snapshot(opened) != _snapshot(before)
                 or not 0 <= opened.st_size <= _MAX_SOURCE):
             raise ValueError("unsafe_or_changed_source")
-        prefix, consumed = _container_prefix(fd)
+        value = read(fd)
         after = os.fstat(fd)
         current = os.stat(name, dir_fd=directory, follow_symlinks=False)
         if _snapshot(opened) != _snapshot(after) or _snapshot(after) != _snapshot(current):
@@ -167,14 +166,38 @@ def inspect_linux_source(candidate):
             current = os.stat(part, dir_fd=parent, follow_symlinks=False)
             if not stat.S_ISDIR(current.st_mode) or _identity(current) != identity:
                 raise ValueError("changed_source_directory")
-        return LinuxSourceInspection(candidate, "requires-review", True, prefix, consumed, opened.st_size)
+        return "read", True, value, opened.st_size
     except FileNotFoundError:
-        return LinuxSourceInspection(candidate, "missing" if exists is None else "unreadable", False if exists is None else True)
+        return "missing" if exists is None else "unreadable", False if exists is None else True, None, None
     except (OSError, ValueError, TypeError):
-        return LinuxSourceInspection(candidate, "unreadable", exists)
+        return "unreadable", exists, None, None
     finally:
         for fd in reversed(descriptors):
             os.close(fd)
+
+
+def inspect_linux_source(candidate):
+    """Classify only the container prefix through a race-checked descriptor."""
+    state, exists, value, size = _read_checked(candidate, _container_prefix)
+    prefix, consumed = value if state == "read" else ("unknown", 0)
+    return LinuxSourceInspection(candidate, "requires-review" if state == "read" else state,
+                                 exists, prefix, consumed, size)
+
+
+def read_linux_projection(candidate, spec):
+    """Read an allowlisted projection, with the same before/after file binding.
+
+    The projected parser never materializes unselected values. This API does
+    not accept a record schema or authorize a database connection by itself.
+    Errors return a redacted state; no exception can retain private source text.
+    """
+    from .navicat_linux_json import project_json
+    class Stream:
+        def __init__(self, fd):
+            self.fd = fd
+        def read(self, size):
+            return os.read(self.fd, size)
+    return _read_checked(candidate, lambda fd: project_json(Stream(fd), spec, max_bytes=_MAX_SOURCE))
 
 
 def discover_linux_sources(*, home=None, environ=None):

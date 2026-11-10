@@ -239,6 +239,9 @@ db.getCollection("documents")
   网格、树与 Extended JSON 切换保留同一选中文档；刷新发生重排时按 BSON 编码后的 `_id` 保持选择，
   不用 Python 的数值相等判断混淆 Int32、Int64 和布尔类型。
 - 树底部第一/上一/下一使用记录语义，页内移动不重新读取服务端，跨页采用实际 `next_offset`。
+  BSON 字节预算可能使实际返回文档数少于请求上限；上一页使用成功访问的真实边界，不能用 offset 减 page size。
+  访问链仅在读取成功后更新；筛选、排序、投影、每页数量、重连或显式刷新后不会复用不适用的边界。
+  未知此前边界时禁用回退并允许从第一页重新导航；页码明确表示当前访问链，而非假定每页固定条数的全局页号。
   总数未知时明确禁用全局“最后一条”，不假定当前页末尾就是最后一条，也不后台扫描整个集合。
   显示位置基于当前返回顺序；并发变更下不是一致快照或稳定的全局记录编号。
 - 切换记录或分页先完成保存/不保存/取消选择；保存重用原始 `MongoDocument` 的 sealed CAS token 和 BSON preimage，
@@ -250,7 +253,7 @@ db.getCollection("documents")
   工具条按已观察的打开/删除/上传/下载/筛选/预览/进度/专注顺序排列；打开外部应用仍明确禁用。
   预览保留受限图像解码，传输仍使用既有 worker、取消及原子下载协议。
 
-该分支在 Qt offscreen、`-Werror` 下的两组件测试为 **46 passed、0 skipped**，其中 8 项使用核验容器 ID、
+该分支在 Qt offscreen、`-Werror` 下的两组件测试为 **55 passed、0 skipped**，其中 8 项使用核验容器 ID、
 归属标签及 loopback 映射后的自有 MongoDB 做真实 worker 读写；只新增并清理各测试独有的集合或 bucket。
 另一次 fresh disposable MongoDB 的 MainWindow 路由/离开生命周期测试为 **12 passed、0 skipped**。
 它们是不同范围的测试结果，不是完整源码套件或六平台安装验收总数。原始回执和两张纯合成数据的布局复核图

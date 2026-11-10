@@ -214,6 +214,8 @@ class MongoCollectionPage(QWidget):
         self._setting_selection = False
         self._tree_document_key = None
         self._pending_row = None
+        self._page_history = []
+        self._history_identity = None
         self._tree_values = {}
         self.destroyed.connect(lambda: setattr(self, "_closed", True))
         layout = QVBoxLayout(self); layout.setContentsMargins(0,0,0,0); layout.setSpacing(0)
@@ -288,7 +290,8 @@ class MongoCollectionPage(QWidget):
         self.record_position.setToolTip("位置基于当前返回顺序；并发变更可能改变分页。")
         footer.addWidget(self.record_position)
         self.page_number=QSpinBox(); self.page_number.setMinimum(1); self.page_number.setMaximum(1)
-        self.page_number.setFixedWidth(55); self.page_number.editingFinished.connect(lambda:self.go_page((self.page_number.value()-1)*self.page_size.value()))
+        self.page_number.setFixedWidth(55); self.page_number.editingFinished.connect(self.choose_page)
+        self.page_number.setToolTip("当前访问链的页码，按实际返回边界导航；刷新后重新计数。")
         footer.addWidget(self.page_number)
         self.page_size=QSpinBox(self); self.page_size.setRange(1,1000); self.page_size.setValue(1000)
         self.page_size.setFixedWidth(70); self.page_size.setToolTip("每页文档数")
@@ -501,15 +504,35 @@ class MongoCollectionPage(QWidget):
         suffix = " · 只读" if self.read_only else f" · {readonly} 个文档只读" if readonly else ""
         self.status.setText(f"本页 {len(page.documents):,} 个 · {count}"+(" · 还有下一页" if page.has_more else "")+suffix)
         self.status.setToolTip("\n".join(sorted({document.edit_reason for document in page.documents if document.edit_reason})))
-        maximum=max(1,(page.total+self.page_size.value()-1)//self.page_size.value()) if page.total is not None else max(1,self.offset//self.page_size.value()+1+int(page.has_more))
-        self.page_number.setMaximum(maximum);self.page_number.setValue(self.offset//self.page_size.value()+1)
+        history=self._known_history()
+        self.page_number.setMaximum(max(1,len(history)+int(page.has_more)))
+        self.page_number.setValue(max(1,len(history)))
         self._update_controls()
 
-    def refresh(self,checked=False,*,check=True):
+    def _query_identity(self):
+        # BSON bytes retain typed filter values and ordered sort terms. Session
+        # identity prevents a reconnect under the same profile reusing offsets.
+        query=BSON.encode({"filter":self._filter,"sort":self._sort,"projection":self._projection},codec_options=BSON_CODEC)
+        return (self.window.sessions.get(self.connection_id),self.database,self.collection,self.page_size.value(),query)
+
+    def _known_history(self):
+        if self.page and self._history_identity==self._query_identity() and self._page_history and self._page_history[-1]==self.page.offset:
+            return self._page_history
+        return []
+
+    def refresh(self,checked=False,*,check=True,_history=None):
         if self.loading or (check and not self.can_discard(lambda:self.refresh(check=False))):return
         database,collection,offset,limit=self.database,self.collection,self.offset,self.page_size.value()
         filter_doc,sort,projection=deepcopy(self._filter),deepcopy(self._sort),deepcopy(self._projection)
-        self._submit(lambda session:session.fetch_documents(database,collection,filter_doc=filter_doc,sort=sort,projection=projection,offset=offset,limit=limit),self.load_page,"读取 MongoDB 文档")
+        identity=self._query_identity()
+        history=list(_history) if _history is not None else [offset]
+        def done(page):
+            # Only successful reads enter history. Failed next/back requests
+            # leave the last usable chain intact.
+            self._page_history=history if page.offset==offset else [page.offset]
+            self._history_identity=identity
+            self.load_page(page)
+        self._submit(lambda session:session.fetch_documents(database,collection,filter_doc=filter_doc,sort=sort,projection=projection,offset=offset,limit=limit),done,"读取 MongoDB 文档")
 
     def apply_filter(self):
         if self.loading or not self.can_discard(self.apply_filter):return
@@ -530,15 +553,26 @@ class MongoCollectionPage(QWidget):
 
     def go_page(self,offset,*,selected_row=0):
         if self.loading or not self.can_discard(lambda:self.go_page(offset,selected_row=selected_row)):return
-        self._pending_row=selected_row;self.offset=max(0,offset);self.refresh(check=False)
+        offset=max(0,offset)
+        history=self._known_history()
+        if offset in history:history=history[:history.index(offset)+1]
+        elif history and self.page.has_more and offset==self.page.next_offset:history=[*history,offset]
+        else:history=[offset]
+        self._pending_row=selected_row;self.offset=offset;self.refresh(check=False,_history=history)
+
+    def choose_page(self):
+        history=self._known_history();target=self.page_number.value()-1
+        if 0<=target<len(history):self.go_page(history[target])
+        elif history and target==len(history) and self.page.has_more:self.go_page(self.page.next_offset)
 
     def navigate(self,direction):
         if self.loading or not self.page:return
         tree=self.views.currentWidget() is self.tree
+        history=self._known_history()
         if not tree:
             if direction=="first":self.go_page(0)
-            elif direction=="previous":self.go_page(max(0,self.offset-self.page_size.value()))
-            elif direction=="next" and self.page.has_more:self.go_page(self.page.next_offset)
+            elif direction=="previous" and len(history)>1:self.go_page(history[-2])
+            elif direction=="next" and history and self.page.has_more:self.go_page(self.page.next_offset)
             elif direction=="last":self.last_page()
             return
         if direction=="first":
@@ -546,10 +580,10 @@ class MongoCollectionPage(QWidget):
             else:self.select_record(0)
         elif direction=="previous":
             if self._selected_row:self.select_record(self._selected_row-1)
-            elif self.offset:self.go_page(max(0,self.offset-self.page_size.value()),selected_row=-1)
+            elif len(history)>1:self.go_page(history[-2],selected_row=-1)
         elif direction=="next":
             if self._selected_row+1<len(self.page.documents):self.select_record(self._selected_row+1)
-            elif self.page.has_more:self.go_page(self.page.next_offset)
+            elif history and self.page.has_more:self.go_page(self.page.next_offset)
         elif direction=="last" and self.page.total:
             last=self.page.total-1;offset=last//self.page_size.value()*self.page_size.value()
             if offset==self.offset:self.select_record(last-offset)
@@ -662,15 +696,21 @@ class MongoCollectionPage(QWidget):
         self.edit_action.setVisible(not json);self.columns_action.setVisible(not tree and not json)
         self.collapse_action.setVisible(not json);self.color_action.setVisible(not tree and not json)
         self.collapse_action.setEnabled(tree)
-        has_previous=self.offset>0 or (tree and self._selected_row>0)
-        has_next=bool(self.page and (self.page.has_more or (tree and self._selected_row+1<len(self.page.documents))))
-        self.first_button.setEnabled(not self.loading and has_previous)
+        history=self._known_history()
+        has_previous=len(history)>1 or (tree and self._selected_row>0)
+        has_next=bool(self.page and ((bool(history) and self.page.has_more) or (tree and self._selected_row+1<len(self.page.documents))))
+        self.first_button.setEnabled(not self.loading and (self.offset>0 or (tree and self._selected_row>0)))
         self.previous_button.setEnabled(not self.loading and has_previous)
         self.next_button.setEnabled(not self.loading and has_next)
         has_last=bool(self.page and self.page.total is not None and (has_next if tree else self.page.has_more))
         self.last_button.setEnabled(not self.loading and has_last)
         for control,name in ((self.first_button,"第一"),(self.previous_button,"上一"),(self.next_button,"下一"),(self.last_button,"最后一")):
             control.setToolTip(name+("条记录" if tree else "页"))
+        if self.offset and len(history)<2 and not (tree and self._selected_row):
+            self.previous_button.setToolTip("此前页边界未知；请从第一页重新导航。")
+        if self.page:
+            self.page_number.setMaximum(max(1,len(history)+int(bool(history) and self.page.has_more)))
+            self.page_number.setValue(max(1,len(history)))
         if tree and self.page and self.page.total is None:self.last_button.setToolTip("文档总数未知，无法定位最后一条记录。")
         self.page_number.setVisible(not tree);self.record_position.setVisible(tree)
         self.record_position.setText(f"第 {self.offset+self._selected_row+1:,} 条记录" if document else "没有文档")

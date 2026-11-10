@@ -262,6 +262,91 @@ def test_refresh_preserves_typed_identity_and_failed_page_keeps_previous_record(
     assert "read failed" in widget.message.text() and widget._pending_row is None
 
 
+def short_pages(qtbot,ui,monkeypatch):
+    """A byte budget may stop a page before its requested document limit."""
+    host,session=ui
+    session.records=[document({"_id":value,"long":Int64(9007199254740992+value)}) for value in range(1,7)]
+    fetch=session.fetch_documents
+    def budgeted_fetch(database,collection,filter_doc=None,sort=None,projection=None,offset=0,limit=1000):
+        result=fetch(database,collection,filter_doc,sort,projection,offset,limit)
+        records=result.documents[:2]
+        return replace(result,documents=records,has_more=offset+len(records)<len(session.records),
+                       total=None,next_offset=offset+len(records))
+    monkeypatch.setattr(session,"fetch_documents",budgeted_fetch)
+    widget=page(qtbot,ui);widget.set_view(1)
+    for _ in range(4):
+        qtbot.mouseClick(widget.next_button,Qt.MouseButton.LeftButton);ready(qtbot,host,widget)
+    assert widget.page_size.value()==1000 and widget.offset==4 and widget._selected_row==0
+    return widget
+
+
+def test_three_short_pages_previous_uses_actual_boundaries_in_both_views(qtbot,ui,monkeypatch):
+    host,session=ui;widget=short_pages(qtbot,ui,monkeypatch)
+    assert [arguments[5] for operation,arguments in session.calls if operation=="fetch"]==[0,2,4]
+    assert widget.page_number.value()==3
+    qtbot.mouseClick(widget.previous_button,Qt.MouseButton.LeftButton);ready(qtbot,host,widget)
+    assert widget.offset==2 and widget.selected_document().document["_id"]==4
+    assert widget._page_history==[0,2]
+    widget.set_view(0)
+    qtbot.mouseClick(widget.previous_button,Qt.MouseButton.LeftButton);ready(qtbot,host,widget)
+    assert widget.offset==0 and widget.page_number.value()==1
+    qtbot.mouseClick(widget.next_button,Qt.MouseButton.LeftButton);ready(qtbot,host,widget)
+    assert widget.offset==2
+    widget.set_view(1)
+    qtbot.mouseClick(widget.previous_button,Qt.MouseButton.LeftButton);ready(qtbot,host,widget)
+    assert widget.offset==0 and widget.selected_document().document["_id"]==2
+
+
+def test_short_page_previous_cancel_and_failed_read_do_not_pop_history(qtbot,ui,monkeypatch):
+    host,session=ui;widget=short_pages(qtbot,ui,monkeypatch)
+    original=widget.selected_document();dialog=widget.edit_document()
+    changed=deepcopy(original.document);changed["draft"]=True;dialog.editor.setPlainText(canonical_dumps(changed))
+    before=len(session.calls)
+    qtbot.mouseClick(widget.previous_button,Qt.MouseButton.LeftButton)
+    assert widget._page_history==[0,2,4] and widget.selected_document() is original and widget.dirty
+    assert len(session.calls)==before and widget.offset==4
+    monkeypatch.setattr(QMessageBox,"question",lambda *_a,**_k:QMessageBox.StandardButton.Discard)
+    session.fail_next=DatabaseError("Short previous page failed")
+    qtbot.mouseClick(widget.previous_button,Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda:not host.tasks and not widget.loading)
+    assert widget._page_history==[0,2,4] and widget.offset==4 and widget._selected_row==0
+    assert widget.page_number.value()==3
+    assert widget.selected_document() is original and "page failed" in widget.message.text()
+    qtbot.mouseClick(widget.previous_button,Qt.MouseButton.LeftButton);ready(qtbot,host,widget)
+    assert widget._page_history==[0,2] and widget.offset==2 and widget.selected_document().document["_id"]==4
+
+
+@pytest.mark.parametrize("change",["refresh","filter","sort","projection","limit","reconnect"])
+def test_short_page_history_is_not_reused_after_query_identity_changes(qtbot,ui,monkeypatch,change):
+    host,session=ui;widget=short_pages(qtbot,ui,monkeypatch)
+    if change=="refresh":widget.refresh()
+    elif change=="filter":widget.filter_edit.setText('{"long":{"$gte":{"$numberLong":"0"}}}');widget.apply_filter()
+    elif change=="sort":widget.sort_column(widget.model.columns.index("long"))
+    elif change=="projection":widget.projection_edit.setText('{"long":1}');widget.apply_filter()
+    elif change=="limit":widget.page_size.setValue(10);widget.go_page(0)
+    else:host.sessions["owned"]=ControlledSession(list(session.records));widget.refresh()
+    ready(qtbot,host,widget)
+    assert widget._page_history==[widget.offset] and not widget.previous_button.isEnabled()
+    assert widget.page_number.value()==1
+    if widget.offset:
+        assert widget.first_button.isEnabled() and "边界未知" in widget.previous_button.toolTip()
+        qtbot.mouseClick(widget.first_button,Qt.MouseButton.LeftButton);ready(qtbot,host,widget)
+        assert widget.offset==0 and widget._page_history==[0]
+
+
+def test_failed_new_query_does_not_reuse_old_short_page_offsets(qtbot,ui,monkeypatch):
+    host,session=ui;widget=short_pages(qtbot,ui,monkeypatch)
+    old=widget.selected_document();session.fail_next=DatabaseError("New filter failed")
+    widget.filter_edit.setText('{"new":true}');widget.apply_filter()
+    qtbot.waitUntil(lambda:not host.tasks and not widget.loading)
+    assert widget.offset==4 and widget.selected_document() is old
+    assert widget._page_history==[0,2,4] and not widget._known_history()
+    assert not widget.previous_button.isEnabled() and widget.first_button.isEnabled()
+    qtbot.mouseClick(widget.first_button,Qt.MouseButton.LeftButton);ready(qtbot,host,widget)
+    assert widget.offset==0 and widget._page_history==[0]
+    assert session.calls[-1][1][2]=={"new":True}
+
+
 def test_filter_sort_projection_inputs_capture_typed_values_and_invalid_json_never_runs(qtbot,ui):
     host,session=ui;widget=page(qtbot,ui)
     count=len(session.calls)

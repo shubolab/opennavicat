@@ -1,6 +1,6 @@
 {
   "application": "OpenNavicat",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "theme": "dark",
   "capture": "Actual live Qt QWidget.grab frames; no reference screenshots, composited UI or image generation service",
   "qt_platform": "offscreen",
@@ -10,8 +10,8 @@
     900
   ],
   "fps": 6,
-  "frames": 127,
-  "duration_seconds": 21.17,
+  "frames": 126,
+  "duration_seconds": 21.0,
   "loop": "infinite",
   "data": "All profiles, customer/product data, email addresses, BSON, dates, SQL and images are generated for this demo",
   "connection_name": "演示数据库 · 示例数据",
@@ -45,31 +45,31 @@
     {
       "name": "query_results",
       "first_frame": 39,
-      "frames": 16
+      "frames": 15
     },
     {
       "name": "table_designer",
-      "first_frame": 55,
+      "first_frame": 54,
       "frames": 11
     },
     {
       "name": "designer_sql_preview",
-      "first_frame": 66,
+      "first_frame": 65,
       "frames": 17
     },
     {
       "name": "mongodb_collection_grid",
-      "first_frame": 83,
+      "first_frame": 82,
       "frames": 13
     },
     {
       "name": "mongodb_typed_tree",
-      "first_frame": 96,
+      "first_frame": 95,
       "frames": 13
     },
     {
       "name": "mongodb_gridfs_preview",
-      "first_frame": 109,
+      "first_frame": 108,
       "frames": 18
     }
   ],
@@ -84,13 +84,13 @@
   "sqlite_closed_in_worker": true,
   "native_window_closed_before_quit": true,
   "background_io_completed_before_quit": true,
-  "captured_nominal_duration_seconds": 21.167,
+  "captured_nominal_duration_seconds": 21.0,
   "gif_probe": {
-    "frames": 127,
-    "duration_seconds": 21.17,
+    "frames": 126,
+    "duration_seconds": 21.0,
     "r_frame_rate": "6/1",
     "avg_frame_rate": "25/4",
-    "effective_frames_per_second": 5.999055,
+    "effective_frames_per_second": 6.0,
     "note": "GIF delays are quantized to centiseconds; fps is the requested capture rate."
   },
   "mongodb_service": {
@@ -103,8 +103,8 @@
     "credentials_generated_in_memory": true
   },
   "encoder": "ffmpeg version 8.0.1 Copyright (c) 2000-2025 the FFmpeg developers",
-  "gif_bytes": 566015,
-  "gif_sha256": "e5be874db5468f783be67704482fbefeadc825e0534e446140a86a66c95dd30f",
+  "gif_bytes": 576922,
+  "gif_sha256": "caf781fcd4b24a2c9fce76e0a2a846818390f8de8ff25fb6dae3d4b1d1104e2c",
   "temporary_workspace_removed": true,
   "temporary_frame_files_removed": true
 }

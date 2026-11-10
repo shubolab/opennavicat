@@ -10,10 +10,13 @@ Python + Qt Widgets（PySide6），数据库连接、SQL 和结果均在本机�
 下面是一段 OpenNavicat 实际运行演示：浏览示例表、编写并执行查询、查看结果、编辑表结构、
 检查 SQL 预览，再查看 MongoDB 文档网格、精确 BSON 类型树、GridFS 图像预览、JavaScript 查询与索引设计。
 连接名、客户、邮箱、日期、订单、商品、BSON、SQL 和图像均由隔离演示工作区生成，
-不读取本机真实连接或业务数据库。单段 GIF 对应 **0.8.1** 的实际 Qt 界面，约 30 秒；
-验证范围见 [0.8.1 验证记录](docs/validation-0.8.md)。
+不读取本机真实连接或业务数据库。单段 GIF 对应 **0.9.0 候选**的实际 Qt 界面，约 30 秒；
+验证范围见 [0.9 候选记录](docs/validation-0.9.md)。
 
 ![OpenNavicat 示例数据工作流演示](docs/assets/opennavicat-demo.gif)
+
+0.9.0 候选增加内置 MongoDB JavaScript 的八个索引 helpers，并修复经过未保存设计文档的异步保存后丢失已确认连接设置的问题。
+六平台新安装包资格尚待执行；下面保留当前已发布版本的下载入口。
 
 最新可用里程碑 **[v0.8.1](https://github.com/shubolab/opennavicat/releases/tag/v0.8.1)**
 已于 2026-11-11（北京时间）发布为早期预发行版本，提供三个操作系统、两种架构的六份安装包。

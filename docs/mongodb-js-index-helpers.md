@@ -1,11 +1,12 @@
 # MongoDB JavaScript index helpers
 
-This is a separate `work/mongodb-js-index-helpers` checkpoint for the next
-development milestone. It starts at curated `36071be`; the small constructor
-compatibility fix is independently available as `e7e894e`. It does not change
-main, the frozen 0.8 integration tree, versions, tags, published installers or
-the retained Dell fixture. Six-target installer evidence from earlier engine
-work does not qualify these newer helpers.
+These helpers were developed in the independent `work/mongodb-js-index-helpers`
+checkpoint based on curated `36071be` and then integrated for the 0.9 milestone.
+The small constructor compatibility fix `e7e894e` already entered 0.8.1; the
+eight collection helpers described here did not. Their final integrated source,
+installer qualification and remaining gates are tracked separately in
+[the 0.9 validation record](validation-0.9.md). Earlier engine installer evidence
+does not qualify these newer helpers; the retained Dell fixture remains untouched.
 
 The native collection object now provides these helpers:
 

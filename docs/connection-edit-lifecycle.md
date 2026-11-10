@@ -1,7 +1,9 @@
 # Accepted connection settings and asynchronous document saves
 
-This isolated change is based on `d948f24` for a subsequent milestone. It is not
-part of the frozen 0.8.1 combo-layout patch or a claim of completed Navicat parity.
+This change was developed independently from `d948f24` and integrated for the
+0.9 milestone. It was not part of the frozen 0.8.1 combo-layout patch and is not
+a claim of completed Navicat parity. Final integrated qualification is tracked in
+[the 0.9 validation record](validation-0.9.md).
 
 An owned SQLite reproduction confirmed a settings-loss bug. The connection
 settings dialog had already returned **Accepted** and was no longer visible,

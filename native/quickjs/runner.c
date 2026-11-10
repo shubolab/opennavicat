@@ -21,7 +21,13 @@ static int send_frame(const char *text,size_t n);
 /* Public JS_NewRuntime2 allocator: retain an out-of-band failure bit even when
    NG cannot allocate an Error and JavaScript catches its null fallback. */
 typedef struct {size_t used;size_t limit;int failed;int notified;const char *token;} Quota;
+#ifdef _MSC_VER
+/* MSVC's C stddef.h lacks max_align_t; keep the 64-bit CRT's 16-byte alignment. */
+typedef __declspec(align(16)) union {unsigned char minimum_alignment[16];struct {size_t size;} value;} Allocation;
+#else
 typedef union {max_align_t alignment;unsigned char minimum_alignment[16];struct {size_t size;} value;} Allocation;
+#endif
+_Static_assert(sizeof(Allocation)%16==0,"Quota allocation headers must preserve 16-byte alignment");
 static void quota_failure(Quota *q) {
     q->failed=1;
     if(!q->notified) {

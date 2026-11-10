@@ -9,10 +9,14 @@
   const NativeDate=Date, NativeRegExp=RegExp, NativeArray=Array, NativeU8=Uint8Array;
   const ObjectProto=Object.prototype, ArrayProto=Array.prototype, NativeObject=Object, NativeNumber=Number;
   const NativeWeakMap=WeakMap, NativeWeakSet=WeakSet, NativeJSON=JSON, arrayMap=ArrayProto.map;
+  const NativeString=String,objectIs=Object.is,bigIntToString=BigInt.prototype.toString,functionCall=Function.prototype.call;
+  const arrayPush=ArrayProto.push,arraySlice=ArrayProto.slice,arraySome=ArrayProto.some,arrayIncludes=ArrayProto.includes;
   const weakGet=WeakMap.prototype.get, weakSet=WeakMap.prototype.set, weakHas=WeakSet.prototype.has, weakAdd=WeakSet.prototype.add, weakDelete=WeakSet.prototype.delete;
   function guard() {
-    if(Object!==NativeObject||Number!==NativeNumber||WeakMap!==NativeWeakMap||WeakSet!==NativeWeakSet||JSON!==NativeJSON||JSON.stringify!==stringify||JSON.parse!==parse||
+    if(Object!==NativeObject||String!==NativeString||Object.is!==objectIs||BigInt.prototype.toString!==bigIntToString||Function.prototype.call!==functionCall||
+      Number!==NativeNumber||WeakMap!==NativeWeakMap||WeakSet!==NativeWeakSet||JSON!==NativeJSON||JSON.stringify!==stringify||JSON.parse!==parse||
       ArrayProto.map!==arrayMap||ObjectProto.toJSON!==undefined||ArrayProto.toJSON!==undefined||WeakMap.prototype.get!==weakGet||WeakMap.prototype.set!==weakSet||
+      ArrayProto.push!==arrayPush||ArrayProto.slice!==arraySlice||ArrayProto.some!==arraySome||ArrayProto.includes!==arrayIncludes||
       WeakSet.prototype.has!==weakHas||WeakSet.prototype.add!==weakAdd||WeakSet.prototype.delete!==weakDelete)
       throw new TypeError('Mutated bridge intrinsics are not supported by this prototype');
   }
@@ -25,7 +29,7 @@
     return freeze(obj);
   }
   function Long(value) {const n=i64(value);return tagged('int64',n,()=>`Long("${n.toString()}")`,()=>n);}
-  function Int32(value) {if(typeof value!=='number'||!isSafe(value)||value<-(2**31)||value>=2**31)throw new RangeError('Int32 range');return tagged('int32',value,()=>String(value),()=>value);}
+  function Int32(value) {if(typeof value!=='number'||!isSafe(value)||value<-(2**31)||value>=2**31)throw new RangeError('Int32 range');return tagged('int32',value,()=>`Int32("${String(value)}")`,()=>value);}
   function Double(value) {const n=Number(value);return tagged('double',n,()=>String(n),()=>n);}
   function Decimal128(value) {if(typeof value!=='string')throw new TypeError('Decimal128 requires exact string');return tagged('decimal128',value,()=>value);}
   function ObjectId(value) {if(typeof value!=='string'||!/^[a-fA-F0-9]{24}$/.test(value))throw new TypeError('ObjectId requires 24 hex characters');const h=value.toLowerCase();return tagged('objectid',h,()=>h);}
@@ -82,7 +86,9 @@
       if(value instanceof NativeRegExp)return encode(BSONRegex(value.source,value.flags),depth+1,seen);
       if(NativeArray.isArray(value)) {
         const names=keys(value);if(names.length!==value.length||names.some((k,i)=>k!==String(i)))throw new TypeError('Sparse or decorated arrays are not accepted');
-        return ['array',value.map(x=>encode(x,depth+1,seen,allowLargeBigInt))];
+        const props=descriptors(value),items=[];
+        for(let i=0;i<value.length;i++){const d=props[String(i)];if(!d||!d.enumerable||!('value'in d))throw new TypeError('Array accessors are not BSON data');items.push(encode(d.value,depth+1,seen,allowLargeBigInt));}
+        return ['array',items];
       }
       if(getProto(value)!==Object.prototype&&getProto(value)!==null)throw new TypeError('Unknown object prototype');
       const fields=descriptors(value), result=[];

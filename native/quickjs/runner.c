@@ -75,7 +75,8 @@ static void error_frame(JSContext *ctx, State *s, const char *category) {
     buf_puts(",\"message\":",stream);quote(stream,message?message:"exception unavailable",message?strlen(message):21);
     buf_printf(stream,",\"interrupted\":%s,\"jobs\":%u,\"calls\":%u}",s->interrupted?"true":"false",s->jobs,s->calls);
     buf_close(stream); send_frame(out,len);free(out);
-    if(message)JS_FreeCString(ctx,message); JS_FreeValue(ctx,error);
+    if(message) {JS_FreeCString(ctx,message);}
+    JS_FreeValue(ctx,error);
 }
 static JSValue bridge(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
     (void)this_val; State *s=JS_GetContextOpaque(ctx);
@@ -100,16 +101,33 @@ static void rejected(JSContext *ctx,JSValueConst promise,JSValueConst reason,boo
     if(handled) {if(s->unhandled>0)s->unhandled--;return;}
     s->unhandled++;JS_FreeValue(ctx,s->reason);s->reason=JS_DupValue(ctx,reason);
 }
-int main(int argc,char **argv) {
-    if(argc!=6 || strlen(argv[5])!=64) return 64;
-    double timeout_ms=strtod(argv[1],NULL);size_t heap=(size_t)strtoull(argv[2],NULL,10);size_t stack=(size_t)strtoull(argv[3],NULL,10);unsigned max_jobs=(unsigned)strtoul(argv[4],NULL,10);
-    if(timeout_ms<=0||heap<1024||stack<16384||!max_jobs)return 64;
+static int configure_io(void) {
 #ifdef _WIN32
     SetErrorMode(SEM_FAILCRITICALERRORS|SEM_NOGPFAULTERRORBOX);
-    if(_setmode(_fileno(stdin),_O_BINARY)<0||_setmode(_fileno(stdout),_O_BINARY)<0)return 74;
+    if(_setmode(_fileno(stdin),_O_BINARY)<0||_setmode(_fileno(stdout),_O_BINARY)<0)return -1;
 #else
     struct rlimit core_limit={0,0};setrlimit(RLIMIT_CORE,&core_limit);
 #endif
+    return 0;
+}
+int main(int argc,char **argv) {
+    if(configure_io())return 74;
+    /* Explicit native smoke mode tests all byte values and CRT pipe framing;
+       it evaluates no JavaScript and has no database or filesystem capability. */
+    if(argc==3 && strcmp(argv[1],"--probe-framing")==0) {
+        unsigned count=(unsigned)strtoul(argv[2],NULL,10);
+        if(!count||count>16)return 64;
+        for(unsigned index=0;index<count;index++) {
+            size_t length=0;char *data=read_frame(&length);
+            if(!data)return 65;
+            int failed=send_frame(data,length);free(data);
+            if(failed)return 74;
+        }
+        return 0;
+    }
+    if(argc!=6 || strlen(argv[5])!=64) return 64;
+    double timeout_ms=strtod(argv[1],NULL);size_t heap=(size_t)strtoull(argv[2],NULL,10);size_t stack=(size_t)strtoull(argv[3],NULL,10);unsigned max_jobs=(unsigned)strtoul(argv[4],NULL,10);
+    if(timeout_ms<=0||heap<1024||stack<16384||!max_jobs)return 64;
     size_t bootstrap_len,source_len;char *bootstrap=read_frame(&bootstrap_len);char *source=read_frame(&source_len);
     if(!bootstrap||!source) {free(bootstrap);free(source);return 65;}
     JSRuntime *rt=JS_NewRuntime();if(!rt)return 70;

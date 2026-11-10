@@ -4,6 +4,8 @@ import os
 from pathlib import Path
 import threading
 import time
+import struct
+import subprocess
 
 from bson import BSON, Binary, Decimal128, Int64
 import pytest
@@ -15,6 +17,22 @@ from opennavicat.js_engine.runtime import ExecutionLimits,JavaScriptError,Native
 def test_native_bson_extension_is_loaded():
     import bson
     assert bson.has_c(),"Native qualification cannot silently use the pure Python BSON fallback"
+
+
+@pytest.mark.parametrize('length',[0,10,26,266,282,65546,65562,1024*1024])
+def test_native_binary_pipe_all_bytes_and_frame_boundaries(native,length):
+    data=bytes(index%256 for index in range(length))
+    frame=struct.pack('>I',length)+data
+    options={'creationflags':subprocess.CREATE_NO_WINDOW}if os.name=='nt'else{}
+    reply=subprocess.run([str(native.helper),'--probe-framing','1'],input=frame,capture_output=True,timeout=5,**options)
+    assert reply.returncode==0 and reply.stdout==frame and reply.stderr==b''
+
+
+@pytest.mark.parametrize('frame',[struct.pack('>I',1024*1024+1),struct.pack('>I',26)+b'incomplete'])
+def test_native_binary_pipe_rejects_oversized_and_incomplete_frames(native,frame):
+    options={'creationflags':subprocess.CREATE_NO_WINDOW}if os.name=='nt'else{}
+    reply=subprocess.run([str(native.helper),'--probe-framing','1'],input=frame,capture_output=True,timeout=5,**options)
+    assert reply.returncode==65 and reply.stdout==b''and reply.stderr==b''
 
 
 @pytest.fixture(scope="module")
@@ -100,3 +118,18 @@ def test_native_undefined_null_and_prototype_boundary(native):
     assert native.evaluate('null').value is None
     with pytest.raises(JavaScriptError,match='intrinsics'):
         native.evaluate('Array.prototype.toJSON=function(){return 42};({x:1})')
+
+
+@pytest.mark.parametrize('source',[
+    'BigInt.prototype.toString=function(){return "123"};Long("1")',
+    'Object.is=function(){return false};-0',
+    'Array.prototype.push=function(){return 0};({x:1})',
+])
+def test_native_intrinsics_cannot_silently_change_bson_values(native,source):
+    with pytest.raises(JavaScriptError,match='intrinsics'):
+        native.evaluate(source)
+
+
+def test_native_array_accessors_are_not_executed_during_data_encoding(native):
+    with pytest.raises(JavaScriptError,match='accessors'):
+        native.evaluate('const a=[1];Object.defineProperty(a,0,{enumerable:true,get(){throw new Error("must not call getter")}});a')

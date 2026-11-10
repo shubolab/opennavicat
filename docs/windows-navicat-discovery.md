@@ -48,7 +48,7 @@ Windows 的静态 `usessh` 与已观察 macOS 的 `usetunnel` 不同。实现不
 - 不猜默认目录，不扩展环境变量，不读取 UNC 路径，不递归扫描 Documents/Profiles，不跟随已知符号链接或 junction。缺少位置、视图位置冲突、文件缺失、不可读或未知 JSON 结构都产生明确问题。
 - recognized `vgroups` 结构只按唯一的驱动/名称匹配。视图冲突或重复来源导致成员歧义时保持未归组，不把连接分到错误分组。
 - 记录或族枚举失败不使已读连接消失，并发出既有的 `registry_read_failed`，让 Store 保留先前来源状态。重新加载不会覆盖已经由用户编辑确认的本地配置与秘密，也不会重新阻止该本地覆盖项。
-- `ImportedProfile.groups_complete` 默认 True，保留原有调用契约。Windows、macOS、Linux 的分组文件缺失、读取/解析/结构失败或成员歧义时设为 False：Store 保留已有的 last-known-good `group_paths`，首次导入的连接仍显示。只有完整有效的分组来源才可改变已有分组；明确有效的 `{"vgroups":[]}` 可以清空旧分组，且不回退用户确认的本地连接配置或秘密。
+- `ImportedProfile.groups_complete` 默认 True，保留原有调用契约。Windows、macOS、Linux 的分组文件缺失、读取/解析/结构失败或成员歧义时设为 False：Store 保留已有的 last-known-good `group_paths`，首次导入仍保留已解析且不歧义的有效归属。尚无完整分组历史时，保留并累积这类已知归属；一旦有过完整分组来源（包括有效空分组），不完整重载只保留该 last-known-good 分组。只有完整有效的分组来源才可改变已有完整分组；明确有效的 `{"vgroups":[]}` 可以清空旧分组，且不回退用户确认的本地连接配置或秘密。
 
 ## 测试与尚未完成的验收
 
@@ -58,7 +58,7 @@ Windows 的静态 `usessh` 与已观察 macOS 的 `usetunnel` 不同。实现不
 
 2026-11-10 已在 **Windows 10.0.26100 AMD64** 运行这两个原生用例：**2 passed、0 skipped，0.63 秒，`-Werror`**。运行环境使用 [python.org 官方 Windows 3.13.7 发布清单](https://www.python.org/ftp/python/3.13.7/windows-3.13.7.json)指定的嵌入版 ZIP，SHA256 为 `e201b2da753a88c1af29d87f9f48af4d64a0fc8522a204ae672bd2c382496701`；`python.exe` 与 `python313.dll` 的 Authenticode 均为 Valid，签名者是 Python Software Foundation。pytest、sqlparse 及其依赖共七个纯 Python wheel 从 PyPI 获取并逐个核对版本 JSON 的 SHA256，只解包到独立自有临时目录，未运行安装器、WindowsApps Python 别名，也未修改系统 PATH。
 
-两个测试根及本轮新建的空 `OpenNavicatTests` 父键已删除，临时运行目录已移除，自有进程为零。没有读取 PremiumSoft、既有 profile 或凭证值，没有数据库连接，也未操作现有 GUI 应用和其他任务夹具。macOS 全源回归为 **855 passed、314 skipped**，其中两个原生 Windows 用例按平台跳过；元数据/Store/MainWindow 相关合成回归为 **171 passed、2 skipped**。这些计数不包含未启用的外部协议夹具验收。
+两个测试根及本轮新建的空 `OpenNavicatTests` 父键已删除，临时运行目录已移除，自有进程为零。没有读取 PremiumSoft、既有 profile 或凭证值，没有数据库连接，也未操作现有 GUI 应用和其他任务夹具。macOS 全源回归为 **864 passed、314 skipped**，其中两个原生 Windows 用例按平台跳过；元数据/Store/MainWindow 相关合成回归为 **180 passed、2 skipped**。这些计数不包含未启用的外部协议夹具验收。
 
 **上述 Windows AMD64 结果证明原生 API 和自有合成来源读取机制，不能替代 Windows Navicat18 save-only 格式或 Windows GUI 验收。Windows ARM64 API 路径仍待后续原生 CI；用户现场 Windows 后续验收已延期，不因本机制测试推进现场操作。**
 

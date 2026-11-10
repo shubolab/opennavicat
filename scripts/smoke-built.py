@@ -16,6 +16,8 @@ environment = os.environ.copy()
 environment.setdefault("QT_QPA_PLATFORM", "offscreen")
 environment.pop("PYTHONPATH", None)
 environment.pop("OPENSSL_MODULES", None)
+for variable in ("DYLD_LIBRARY_PATH", "DYLD_FALLBACK_LIBRARY_PATH", "DYLD_FRAMEWORK_PATH", "DYLD_FALLBACK_FRAMEWORK_PATH"):
+    environment.pop(variable, None)
 native_build_directory = environment.pop("OPENNAVICAT_LIBPQ_DIR", "")
 if native_build_directory:
     environment["PATH"] = os.pathsep.join(path for path in environment.get("PATH", "").split(os.pathsep)

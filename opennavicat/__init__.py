@@ -1,6 +1,5 @@
 """OpenNavicat native database workbench."""
 import os
-from pathlib import Path
 import sys
 
 __version__ = "0.3.0"
@@ -11,4 +10,5 @@ __version__ = "0.3.0"
 if sys.platform == "win32" and not getattr(sys, "frozen", False):
     _native_directory = os.environ.get("OPENNAVICAT_LIBPQ_DIR")
     if _native_directory:
-        _native_dll_directory = os.add_dll_directory(str(Path(_native_directory).resolve()))
+        from ._native_runtime import prepare_native_openssl
+        prepare_native_openssl(_native_directory)

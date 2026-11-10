@@ -110,6 +110,19 @@ Windows amd64 的实际桌面程序已启动成功，随后 Inno Setup 指出动
 独立程序验证清除构建机 provider 环境，还执行公开固定向量的实际 cipher probe，
 避免仅导入成功而遗漏 provider。该修复仍需后续原生作业证明。
 
+第三次运行 [42745695032](https://github.com/shubolab/opennavicat/actions/runs/42745695032)
+中，Linux 两架构、Windows amd64 和 macOS arm64 均已完成实际桌面后端的安装流程。
+Windows ARM64 的模块路径已经发现正确，但系统报告入口点缺失；调查确认 CPython
+自带 OpenSSL 3.5.9 与 vcpkg 3.6.5 具有相同 DLL 名称。后续启动在任何 SSL/hash 导入前
+按完整路径预加载 SDK DLL，并核对 Windows 实际选中的模块路径；打包时强制同名 DLL
+使用 SDK 来源。Intel macOS 的独立实际 cipher probe 也发现了动态 Homebrew OpenSSL
+模块遗漏；构建已改为从实际链接库查询 MODULESDIR、收集正确模块并设置包内路径。
+这些后续修复仍须对应原生 CI 作业确认；保留原先失败记录。
+本轮修复后，本机默认套件为 **138 passed / 133 skipped，12.71 秒**，`-W error`
+下零警告/错误；真实数据库安全测试仍单独执行。动态 provider 的本地冻结小程序也已在
+移除开发库环境后完成实际固定向量运算。最终 Windows ARM64 与 Intel macOS 状态以新
+原生作业及安装包中的实际加载路径/版本报告为准。
+
 本机另外生成并验证了 0.3.0 macOS ARM64 DMG，56,051,780 bytes，SHA-256
 `9bb4dbeae8b5c42cf74a25c2432f2e30d6679e609db0d211b8b1fb61835209a3`。
 `release-assets/OpenNavicat-0.3.0-macos-arm64.manifest.json` 记录 65 个原生 ARM64

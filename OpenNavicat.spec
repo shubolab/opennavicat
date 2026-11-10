@@ -4,6 +4,8 @@ from pathlib import Path
 import sys
 import tomllib
 import os
+import json
+import subprocess
 from importlib.metadata import distributions, PackageNotFoundError
 
 from PyInstaller.utils.hooks import collect_dynamic_libs, collect_submodules, copy_metadata
@@ -36,8 +38,18 @@ else:
     provider_directory = Path(os.environ.get("OPENSSL_MODULES", ""))
     if not (provider_directory / "legacy.dll").is_file():
         raise RuntimeError("The native OpenSSL provider directory is required through OPENSSL_MODULES")
-    psycopg_binaries += [(str(path), "openssl-modules") for path in provider_directory.glob("*.dll")]
+    psycopg_binaries += [(str(path), "ossl-modules") for path in provider_directory.glob("*.dll")]
     hiddenimports += ["psycopg.pq.pq_ctypes"]
+# Query the OpenSSL linked by cryptography, not whichever openssl happens to be
+# first on PATH. Run in a child process so native libraries loaded for inspection
+# cannot affect the bundler's own process. Use the same directory as the official
+# PyInstaller OpenSSL runtime hook on every platform.
+provider_report_path = project / "artifacts/openssl-providers-build.json"
+subprocess.run([sys.executable, str(project / "scripts/check-openssl-providers.py"),
+                "--probe", "--output", str(provider_report_path)], check=True)
+provider_report = json.loads(provider_report_path.read_text("utf-8"))
+psycopg_binaries += [(entry["source"], entry["destination"]) for entry in provider_report["providers"]]
+psycopg_binaries = list(dict.fromkeys(psycopg_binaries))
 license_files = [(str(path), "licenses") for path in (project / "licenses").glob("*.txt")]
 if not binary_metadata:
     for notice in (libpq_directory.parent / "share").glob("*/copyright"):
@@ -67,6 +79,14 @@ a = Analysis(
               "PySide6.QtQuick", "PySide6.QtQml", "tkinter", "pytest"],
     noarchive=False,
 )
+if not binary_metadata:
+    # CPython and the native SDK can ship the same DLL basename at different
+    # OpenSSL patch/minor versions. Explicit SDK inputs must win normalization;
+    # otherwise its provider can bind against an older Python copy and fail
+    # with Windows ENTRY_POINT_NOT_FOUND. Keep each TOC dependency type intact.
+    import runpy
+    provider_tools = runpy.run_path(str(project / "scripts/check-openssl-providers.py"))
+    a.binaries = provider_tools["prefer_sdk_openssl"](a.binaries, libpq_directory)
 pyz = PYZ(a.pure)
 exe = EXE(
     pyz, a.scripts, [], exclude_binaries=True, name="OpenNavicat",

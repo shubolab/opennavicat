@@ -70,6 +70,8 @@ jobs:
         run: python -c "import opennavicat, pytest, sys; sys.exit(pytest.main(['-q', '-W', 'error', '--junitxml=artifacts/pytest-results.xml']))"
       - name: Build native desktop distribution
         run: python scripts/build.py --clean
+      - name: Record bundled OpenSSL provider dependencies
+        run: python scripts/check-openssl-providers.py --bundle "${{ runner.os == 'macOS' && 'dist/OpenNavicat.app' || 'dist/OpenNavicat' }}" --output artifacts/openssl-providers-bundle.json
       - name: Run packaged application and all driver imports
         if: runner.os != 'Linux'
         env:
@@ -105,6 +107,7 @@ jobs:
             artifacts/pytest-results.xml
             artifacts/packaged-smoke.json
             artifacts/packaged-workbench.png
+            artifacts/openssl-providers*.json
             release-assets/*manifest*.json
           if-no-files-found: ignore
 

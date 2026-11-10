@@ -33,6 +33,8 @@ def main():
         import pymysql
         import paramiko
         import cryptography
+        import ssl
+        from cryptography.hazmat.backends import default_backend
         from cryptography.hazmat.primitives.ciphers import Cipher, modes
         from cryptography.hazmat.decrepit.ciphers.algorithms import Blowfish
         # A fixed public test vector exercises the dynamically loaded legacy
@@ -46,7 +48,10 @@ def main():
             "qt": QLibraryInfo.version().toString(), "psycopg": psycopg.__version__,
             "libpq": psycopg.pq.version(), "psycopg_impl": psycopg.pq.__impl__,
             "pymysql": pymysql.VERSION_STRING, "paramiko": paramiko.__version__,
-            "cryptography": cryptography.__version__, "crypto_legacy_probe": True}
+            "cryptography": cryptography.__version__, "crypto_legacy_probe": True,
+            "crypto_openssl": default_backend().openssl_version_text(),
+            "stdlib_openssl": ssl.OPENSSL_VERSION,
+            "native_openssl_bootstrap": getattr(sys, "_opennavicat_native_openssl", None)}
     app = QApplication(sys.argv[:1])
     app.setApplicationName("OpenNavicat")
     app.setOrganizationName("OpenNavicat")

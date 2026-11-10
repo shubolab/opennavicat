@@ -4,6 +4,7 @@ from __future__ import annotations
 import base64
 import json
 import struct
+from contextlib import contextmanager
 
 from bson import BSON, Binary, Decimal128, Int64, ObjectId
 from bson.raw_bson import RawBSONDocument
@@ -135,3 +136,55 @@ def test_unordered_bulk_error_preserves_actual_write_count_and_partial_status(se
     assert partial.affected == 2 and partial.partial is True and partial.truncated is False
     assert session.connection[session.config.database].docs.count_documents({}) == 3
     assert "writeErrors" in partial.rows[0][0]
+
+
+def test_cancel_between_real_statements_preserves_first_result_and_stops_next_write(session, monkeypatch):
+    original_operation = session._operation
+    cancelled = False
+
+    @contextmanager
+    def operation_with_between_statement_cancel(*args, **kwargs):
+        nonlocal cancelled
+        with original_operation(*args, **kwargs) as comment:
+            yield comment
+        # The first real server command has completed, but its successor has
+        # not started. Keep this deterministic instead of racing a timer.
+        if not cancelled:
+            cancelled = True
+            session.cancel()
+
+    monkeypatch.setattr(session, "_operation", operation_with_between_statement_cancel)
+    script = "db.runCommand({insert:'docs',documents:[{_id:911}]}); db.runCommand({insert:'docs',documents:[{_id:912}]})"
+    with pytest.raises(DatabaseError, match="cancelled") as raised:
+        execute_queries(session, script)
+    assert [doc["_id"] for doc in session.connection[session.config.database].docs.find().sort("_id", 1)] == [911]
+    assert len(raised.value.partial_results) == 1
+    first = raised.value.partial_results[0]
+    assert first.affected == 1 and first.partial is False and first.truncated is False
+    # Cancellation applies to this script, and a subsequent fresh execution
+    # must still work without reconnecting or altering the prior outcome.
+    monkeypatch.setattr(session, "_operation", original_operation)
+    result = execute_queries(session, "db.docs.find({_id:911})")[0]
+    assert values(result) == [{"_id":911}] and not session._cancel_requested.is_set()
+
+
+@pytest.mark.parametrize("concern", ["{w:0}", "{w:Long('0')}", "{w:0,j:true}", "{w:false}", "{w:0.0}", "{w:-1}", "{w:''}", "0"])
+@pytest.mark.parametrize("nested", [False, True])
+def test_unacknowledged_concern_is_rejected_before_any_statement_or_driver_io(session, monkeypatch, concern, nested):
+    command = "{insert:'docs',documents:[{_id:922}],writeConcern:" + concern + "}"
+    if nested:
+        command = "{explain:" + command + "}"
+    script = "db.runCommand({insert:'docs',documents:[{_id:921}]}); db.runCommand(" + command + ")"
+    from pymongo.synchronous.database import Database
+    with monkeypatch.context() as patch:
+        patch.setattr(Database, "command", lambda *_args, **_kwargs: pytest.fail("Rejected script reached the driver"))
+        with pytest.raises(DatabaseError, match="writeConcern"):
+            execute_queries(session, script)
+    assert session.connection[session.config.database].docs.count_documents({}) == 0
+
+
+def test_acknowledged_write_accepts_same_named_fields_inside_user_documents(session):
+    result = execute_queries(session, "db.runCommand({insert:'docs',documents:[{_id:931,writeConcern:{w:0},nested:{writeConcern:{w:0}}}],writeConcern:{w:1}})")[0]
+    assert result.affected == 1 and not result.partial and not result.truncated
+    assert session.connection[session.config.database].docs.find_one({"_id":931}) == {
+        "_id":931, "writeConcern":{"w":0}, "nested":{"writeConcern":{"w":0}}}

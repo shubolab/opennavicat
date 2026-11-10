@@ -52,6 +52,16 @@ def _validate_command(session, command):
         raise DatabaseError("MongoDB routing, sessions and transactions are managed by the connection")
     if any(command.get(key) for key in ("tailable", "awaitData", "exhaust", "noCursorTimeout")):
         raise DatabaseError("Streaming cursors require their dedicated workspace")
+    if "writeConcern" in command:
+        concern = command["writeConcern"]
+        if not isinstance(concern, dict):
+            raise DatabaseError("MongoDB writeConcern must be a document")
+        acknowledgement = concern.get("w", 1)
+        if (isinstance(acknowledgement, bool)
+                or not isinstance(acknowledgement, (int, str))
+                or isinstance(acknowledgement, int) and acknowledgement < 1
+                or isinstance(acknowledgement, str) and not acknowledgement):
+            raise DatabaseError("MongoDB query commands require acknowledged writeConcern (w >= 1 or a named mode)")
     if verb == "aggregate":
         pipeline = command.get("pipeline")
         if not isinstance(pipeline, list):
@@ -62,11 +72,11 @@ def _validate_command(session, command):
             raise DatabaseError("This MongoDB command has not been accepted for read-only connections")
         if verb == "aggregate":
             session._read_pipeline(command["pipeline"])
-        elif verb == "explain":
-            nested = command[next(iter(command))]
-            if not isinstance(nested, dict):
-                raise DatabaseError("MongoDB explain must contain a read-only BSON command")
-            _validate_command(session, nested)
+    if verb == "explain":
+        nested = command[next(iter(command))]
+        if not isinstance(nested, dict):
+            raise DatabaseError("MongoDB explain must contain a BSON command")
+        _validate_command(session, nested)
     return verb
 
 
@@ -125,6 +135,14 @@ def execute_queries(session, text, limit=1000):
     for command in commands:
         verb = _validate_command(session, command)
         prepared.append((command, verb, _bounded_command(command, verb, limit)))
+    # A script is one cancellable unit. Individual operations keep their own
+    # typed comments, while the enclosing operation prevents the next command
+    # from clearing a cancellation requested after the previous server reply.
+    with session._operation():
+        return _execute_prepared(session, prepared, limit)
+
+
+def _execute_prepared(session, prepared, limit):
     completed = []
     for original, verb, command in prepared:
         started = time.perf_counter()
@@ -135,6 +153,8 @@ def execute_queries(session, text, limit=1000):
             database = session._selected_schema or session.config.database or "admin"
             session._validate_namespace(database)
             session._check()
+            if session._cancel_requested.is_set():
+                raise DatabaseError("MongoDB query cancelled")
             # Keep getMore bound to the command's logical session and serving
             # address. The official CommandCursor path handles CSOT correctly;
             # Database.command(getMore) incorrectly injects server maxTimeMS.
@@ -142,6 +162,8 @@ def execute_queries(session, text, limit=1000):
             logical = session.connection.start_session() if supports_sessions else nullcontext(None)
             operation = session._operation(user_comment=original["comment"]) if "comment" in original else session._operation()
             with logical as wire_session, timeout(120), operation as comment:
+                if session._cancel_requested.is_set():
+                    raise DatabaseError("MongoDB query cancelled")
                 command["comment"] = comment
                 target = session.connection.get_database(database, codec_options=RAW_CODEC)
                 reply = target.command(command, session=wire_session, codec_options=RAW_CODEC)

@@ -42,12 +42,14 @@ Windows 的静态 `usessh` 与已观察 macOS 的 `usetunnel` 不同。实现不
 - 两个视图中的相同来源键，只有取得非空、相同的原生 key identity，并且白名单值、全部字段的名称/类型/尺寸、键修改时间和读取错误状态一致时，才合并为一条。相同 metadata 和时间不能单独证明 alias；opaque 值本身不会为了比较而读取。
 - 原生 identity 使用 `NtQueryKey(KeyNameInformation)` 获取同一已打开句柄的 canonical key-name 元数据，仅保留其 SHA256，不记录 SID 或原始键名。Microsoft 明确说明用户态使用 `NtQueryKey`，结构为字节长度加非 NUL 结尾 UTF-16 名称。实现固定 64 KiB 上限并检查实际长度；API 缺失/失败时保留两个 view 来源。它不是已观察的 Navicat UUID，也不证明配置格式已验收。[官方契约](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/wdm/nf-wdm-zwquerykey)、[名称结构](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntddk/ns-ntddk-_key_name_information)
 - 已调查 [CompareObjectHandles](https://learn.microsoft.com/en-us/windows/win32/api/handleapi/nf-handleapi-compareobjecthandles)：TRUE 是同一 kernel object 的直接证据，最低 Windows 10/Server 2016；FALSE 不能用来猜 alias。当前实现没有用它代替稳定的 key-name 元数据；原生机制的 Windows AMD64 测试见下文，Windows ARM64 仍待原生 CI。
-- 视图不一致时保留两条，并发出 `windows_registry_view_conflict`。视图标识进入结构化身份输入，避免和合法连接名中的 `#view=64` 等文本碰撞。
+- 逻辑来源 ID 始终由驱动、键路径和视图的结构化输入生成，不包含可选原生 identity API 的返回值；同一视图在 API 可用/不可用之间切换不会改变 ID。视图标识不会和合法连接名中的 `#view=64` 等文本碰撞。
+- 当前确证两个视图是同一物理键且快照相同时，报告附带显式 `source_aliases`。Store 可沿用此前仅在 32 位视图发现的本地 ID、原始来源 ID 和收藏引用，不因后来优先显示 64 位视图而新建项。当前双视图缺少 proof 或存在冲突时撤回合并绑定，保留先前确认项及另一待复核来源；API 暂时不可用可能因此显示两个来源，不凭旧 metadata/时间推断 opaque 值相同。
+- 如果两个来源已经各自存在，之后取得 alias proof 也不删除或合并任何本地记录、确认配置或秘密，不新增第三条，并将两条均标记为仍可见来源及 alias 待复核。视图不一致时保留两条，并发出 `windows_registry_view_conflict`。
 - 不按连接显示名合并不同驱动/命名空间，也不对用户键名应用 Python 的 Unicode `casefold`。缺少已验收的原生 UUID 时，键名变化会改变来源身份；旧本地项由既有 Store 保留为来源缺失，不自动删除。
 - 只在 `NavicatPremium` 根明确存在普通 `ProfilesPath` 值、并指向本地绝对目录时，尝试该目录下唯一的 `vgroup.json`。该字段与已支持 JSON 结构仍属于候选兼容读取，不是 Windows 原版验收结论；配置始终处于复核状态。
 - 不猜默认目录，不扩展环境变量，不读取 UNC 路径，不递归扫描 Documents/Profiles，不跟随已知符号链接或 junction。缺少位置、视图位置冲突、文件缺失、不可读或未知 JSON 结构都产生明确问题。
 - recognized `vgroups` 结构只按唯一的驱动/名称匹配。视图冲突或重复来源导致成员歧义时保持未归组，不把连接分到错误分组。
-- 记录或族枚举失败不使已读连接消失，并发出既有的 `registry_read_failed`，让 Store 保留先前来源状态。重新加载不会覆盖已经由用户编辑确认的本地配置与秘密，也不会重新阻止该本地覆盖项。
+- 记录或族枚举失败不使已读连接消失，并发出既有的 `registry_read_failed`，让 Store 保留先前来源状态。`ImportedProfile.config_complete=False` 的记录可首次显示为待复核项，但不会覆盖已有配置：读取 Host、Port、UserName 或数据库字段失败不能将已有值清空。完整读取恢复后才更新未经本地编辑的来源配置。重新加载不会覆盖已经由用户编辑确认的本地配置与秘密，也不会重新阻止该本地覆盖项。
 - `ImportedProfile.groups_complete` 默认 True，保留原有调用契约。Windows、macOS、Linux 的分组文件缺失、读取/解析/结构失败或成员歧义时设为 False：Store 保留已有的 last-known-good `group_paths`，首次导入仍保留已解析且不歧义的有效归属。尚无完整分组历史时，保留并累积这类已知归属；一旦有过完整分组来源（包括有效空分组），不完整重载只保留该 last-known-good 分组。只有完整有效的分组来源才可改变已有完整分组；明确有效的 `{"vgroups":[]}` 可以清空旧分组，且不回退用户确认的本地连接配置或秘密。
 
 ## 测试与尚未完成的验收
@@ -58,7 +60,7 @@ Windows 的静态 `usessh` 与已观察 macOS 的 `usetunnel` 不同。实现不
 
 2026-11-10 已在 **Windows 10.0.26100 AMD64** 运行这两个原生用例：**2 passed、0 skipped，0.63 秒，`-Werror`**。运行环境使用 [python.org 官方 Windows 3.13.7 发布清单](https://www.python.org/ftp/python/3.13.7/windows-3.13.7.json)指定的嵌入版 ZIP，SHA256 为 `e201b2da753a88c1af29d87f9f48af4d64a0fc8522a204ae672bd2c382496701`；`python.exe` 与 `python313.dll` 的 Authenticode 均为 Valid，签名者是 Python Software Foundation。pytest、sqlparse 及其依赖共七个纯 Python wheel 从 PyPI 获取并逐个核对版本 JSON 的 SHA256，只解包到独立自有临时目录，未运行安装器、WindowsApps Python 别名，也未修改系统 PATH。
 
-两个测试根及本轮新建的空 `OpenNavicatTests` 父键已删除，临时运行目录已移除，自有进程为零。没有读取 PremiumSoft、既有 profile 或凭证值，没有数据库连接，也未操作现有 GUI 应用和其他任务夹具。macOS 全源回归为 **864 passed、314 skipped**，其中两个原生 Windows 用例按平台跳过；元数据/Store/MainWindow 相关合成回归为 **180 passed、2 skipped**。这些计数不包含未启用的外部协议夹具验收。
+两个测试根及本轮新建的空 `OpenNavicatTests` 父键已删除，临时运行目录已移除，自有进程为零。没有读取 PremiumSoft、既有 profile 或凭证值，没有数据库连接，也未操作现有 GUI 应用和其他任务夹具。macOS 全源回归为 **878 passed、314 skipped**，其中两个原生 Windows 用例按平台跳过；元数据/Store/MainWindow 相关合成回归为 **194 passed、2 skipped**。这些计数不包含未启用的外部协议夹具验收。原生 API 的两项实跑对应 `939fa9e`；后续配置保全和 Store alias 调和由跨平台合成测试验证，仍需最终 Windows 原生 CI 验证集成。
 
 **上述 Windows AMD64 结果证明原生 API 和自有合成来源读取机制，不能替代 Windows Navicat18 save-only 格式或 Windows GUI 验收。Windows ARM64 API 路径仍待后续原生 CI；用户现场 Windows 后续验收已延期，不因本机制测试推进现场操作。**
 

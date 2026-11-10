@@ -61,6 +61,8 @@ class WindowsRegistryEntry:
     view: int = 64
     errors: tuple[str, ...] = ()
     physical_id: str = field(default="", repr=False)
+    # Only views observed to share this physical key and the same snapshot.
+    alias_views: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -307,7 +309,7 @@ def read_windows_navicat_registry(registry=None) -> WindowsRegistrySnapshot:
                     (row.values, row.value_types, row.last_write, row.errors) ==
                     (first.values, first.value_types, first.last_write, first.errors) for row in group)
         if len(group) == 1 or equal:
-            retained.append(first)
+            retained.append(replace(first, alias_views=tuple(sorted({row.view for row in group}))))
         else:
             issues.append(RegistryProblem("windows_registry_view_conflict", "Registry views disagree; all versions are retained for review.", True))
             retained.extend(replace(row, errors=tuple(sorted(set(row.errors) | {"windows_registry_view_conflict"}))) for row in group)

@@ -65,6 +65,10 @@ class ImportedProfile:
     group_paths: tuple[tuple[str, ...], ...] = field(default=(), repr=False)
     # A missing/failed group source is not an authoritative empty grouping.
     groups_complete: bool = True
+    # An incomplete record may be shown initially, but cannot replace known
+    # stored configuration. Positive native alias IDs never contain values.
+    config_complete: bool = True
+    source_aliases: tuple[str, ...] = field(default=(), repr=False)
 
 
 @dataclass(frozen=True)
@@ -489,15 +493,18 @@ def _native_windows_report(snapshot):
             issues.append(ImportIssue("ambiguous_group_members", "A Windows group member matches conflicting sources and remains ungrouped."))
             groups.pop(key)
 
+    def source_identity(row, view):
+        # Physical identity proves aliasing, not logical source identity: an
+        # optional API becoming unavailable must not create a new source.
+        identity = json.dumps(["windows-native-registry", row.driver, row.source_key, ["view", view]], ensure_ascii=False, separators=(",", ":"))
+        return "navicat:" + str(uuid.uuid5(_NAMESPACE, identity))
+
     profiles = []
     for row in snapshot.entries:
         # The view discriminator is structured, not appended to a source key:
         # a legal profile name may itself contain strings such as '#view=64'.
-        variant = ["key", row.physical_id] if row.physical_id else ["view", row.view]
-        if row.physical_id and "windows_registry_view_conflict" in row.errors:
-            variant += ["view", row.view]
-        identity = json.dumps(["windows-native-registry", row.driver, row.source_key, variant], ensure_ascii=False, separators=(",", ":"))
-        source_id = "navicat:" + str(uuid.uuid5(_NAMESPACE, identity))
+        source_id = source_identity(row, row.view)
+        source_aliases = tuple(source_identity(row, view) for view in row.alias_views if view != row.view)
         config = ConnectionConfig("navicat-" + source_id[8:], row.name or "Imported connection", driver=row.driver,
                                   host="", ssl_mode="disable" if row.driver == "sqlite" else "verify-full")
         fields = set(row.errors)
@@ -530,13 +537,14 @@ def _native_windows_report(snapshot):
         if fields:
             issues.append(ImportIssue("windows_metadata_review", "Some Windows metadata is unavailable, changed or ambiguous.",
                                       source_id, tuple(sorted(_safe_field(value) for value in fields)), True))
+        config_complete = not (fields - {"windows_registry_view_conflict"})
         if row.driver in {"oracle", "snowflake", "dameng"}:
             fields.add("driver")
             issues.append(ImportIssue("driver_not_available", "This connection family is visible but its adapter is not available.", source_id, ("driver",), True))
         memberships = tuple(groups.get((row.driver, row.name), ()))
         profile = ImportedProfile(source_id, config, memberships[0] if memberships else (),
             row.source_key, "windows-registry", tuple(sorted(fields)), () if row.driver == "sqlite" else ("password",),
-            True, memberships, groups_complete)
+            True, memberships, groups_complete, config_complete, source_aliases)
         profiles.append(_require_windows_review(profile, issues))
     return _finish(profiles, issues, sources, "win32")
 

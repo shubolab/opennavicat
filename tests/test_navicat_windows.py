@@ -139,14 +139,143 @@ def test_binary_or_expandable_metadata_is_not_read_or_coerced():
     assert imported.blocked and {"host", "port", "username"} <= set(imported.unsupported_fields)
 
 
-def test_same_source_in_two_views_is_deduplicated_with_stable_identity():
+def test_same_source_in_two_views_is_deduplicated_with_stable_store_identity(tmp_path):
     fake = Registry()
     fake.profile(view=32)
-    initial = report(fake).profiles[0].source_id
+    first = report(fake)
+    initial = first.profiles[0].source_id
+    store = Store(tmp_path / "workspace")
+    store.sync_navicat_profiles(first)
+    identifier = store.connections()[0].id
     fake.profile(view=64)
     found = report(fake)
     assert len(found.profiles) == 1 and found.sources_found == 1
-    assert found.profiles[0].source_id == initial
+    # The report's preferred visible view can change; its explicit positive
+    # alias proof lets the Store retain the original identity and references.
+    assert initial in found.profiles[0].source_aliases
+    store.sync_navicat_profiles(found)
+    assert [c.id for c in store.connections()] == [identifier]
+    assert store.state["navicat_imports"][identifier]["source_id"] == initial
+    assert not store.state["navicat_imports"][identifier]["source_missing"]
+
+
+@pytest.mark.parametrize("view", [32, 64])
+@pytest.mark.parametrize("initial_identity", ["", "positive-key-identity"])
+def test_native_identity_api_availability_does_not_change_logical_view_identity(tmp_path, view, initial_identity):
+    fake = Registry()
+    key = fake.profile(view=view, identity=initial_identity)
+    first = report(fake)
+    store = Store(tmp_path / "workspace")
+    store.sync_navicat_profiles(first)
+    identifier = store.connections()[0].id
+    key.physical_identity = "" if initial_identity else "positive-key-identity"
+    second = report(fake)
+    assert second.profiles[0].source_id == first.profiles[0].source_id
+    store.sync_navicat_profiles(second)
+    assert [c.id for c in store.connections()] == [identifier]
+    assert not store.state["navicat_imports"][identifier]["source_missing"]
+
+
+@pytest.mark.parametrize("field", ["Host", "UserName", "Port", "DefaultDatabase"])
+def test_incomplete_native_snapshot_preserves_existing_known_config(tmp_path, field):
+    fake = Registry()
+    key = fake.profile(values={"Host": ("generated.invalid", REG_SZ), "UserName": ("generated", REG_SZ),
+                               "Port": (5432, REG_DWORD), "DefaultDatabase": ("generated_db", REG_SZ)})
+    store = Store(tmp_path / "workspace")
+    store.sync_navicat_profiles(report(fake))
+    before = deepcopy(store.connections()[0])
+    key.unreadable = {field}
+    key.values["Host"] = ("different-snapshot.invalid", REG_SZ)
+    store.sync_navicat_profiles(report(fake))
+    assert store.connections() == [before]
+    assert not store.state["navicat_imports"][before.id]["source_missing"]
+    # A complete later snapshot may authoritatively update the source again.
+    key.unreadable.clear()
+    store.sync_navicat_profiles(report(fake))
+    assert store.connections()[0].host == "different-snapshot.invalid"
+
+
+def test_first_partial_native_snapshot_is_visible_blocked_and_later_recovers(tmp_path):
+    fake = Registry()
+    key = fake.profile(unreadable={"Host"})
+    partial = report(fake)
+    assert not partial.profiles[0].config_complete
+    store = Store(tmp_path / "workspace")
+    store.sync_navicat_profiles(partial)
+    local = store.connections()[0]
+    assert local.host == "" and local.username == "generated-user"
+    assert store.state["navicat_imports"][local.id]["blocked"]
+    key.unreadable.clear()
+    store.sync_navicat_profiles(report(fake))
+    assert store.connections()[0].id == local.id and store.connections()[0].host == "generated.invalid"
+
+
+@pytest.mark.parametrize("initial_view", [32, 64])
+@pytest.mark.parametrize("loss", ["no_proof", "conflict"])
+def test_lost_alias_proof_keeps_reviewed_source_and_other_view(tmp_path, monkeypatch, initial_view, loss):
+    import keyring
+    monkeypatch.setattr(keyring, "delete_password", lambda *_: None)
+    fake = Registry()
+    first_key = fake.profile(view=initial_view)
+    store = Store(tmp_path / "workspace")
+    store.sync_navicat_profiles(report(fake))
+    local = store.connections()[0]
+    local.host, local.password = "reviewed.invalid", "LOCAL-REVIEW-SECRET"
+    store.save_connection(local)
+    store.state["favorites"] = [{"connection_id": local.id, "sql": "SELECT 1"}]
+    other_key = fake.profile(view=64 if initial_view == 32 else 32)
+    assert len(report(fake).profiles) == 1
+    counts = store.sync_navicat_profiles(report(fake))
+    assert counts["added"] == 0 and [c.id for c in store.connections()] == [local.id]
+    store = Store(tmp_path / "workspace")
+    if loss == "no_proof":
+        first_key.physical_identity = other_key.physical_identity = ""
+    else:
+        other_key.values["Host"] = ("conflicting-view.invalid", REG_SZ)
+    split = report(fake)
+    assert len(split.profiles) == 2
+    counts = store.sync_navicat_profiles(split)
+    assert counts["added"] == 1 and counts["source_missing"] == 0
+    assert len(store.connections()) == 2
+    reviewed = next(c for c in store.connections() if c.id == local.id)
+    assert reviewed.host == "reviewed.invalid"
+    assert not store.state["navicat_imports"][local.id]["blocked"]
+    assert store.state["favorites"][0]["connection_id"] == local.id
+    # Hydration is not invoked by discovery; the separate process-secret cache
+    # was intentionally discarded on restart, while its review still persists.
+    assert "LOCAL-REVIEW-SECRET" not in store.path.read_text()
+    assert store.sync_navicat_profiles(split)["added"] == 0
+
+
+def test_two_reviewed_sources_later_proven_alias_are_not_merged_or_duplicated(tmp_path, monkeypatch):
+    import keyring
+    monkeypatch.setattr(keyring, "delete_password", lambda *_: None)
+    fake = Registry()
+    keys = [fake.profile(view=view, identity="") for view in (64, 32)]
+    store = Store(tmp_path / "workspace")
+    store.sync_navicat_profiles(report(fake))
+    ids = []
+    for index, local in enumerate(store.connections()):
+        local.host = f"reviewed-{index}.invalid"
+        local.password = f"LOCAL-ONLY-{index}"
+        store.save_connection(local)
+        ids.append(local.id)
+    before = deepcopy(store.state["connections"])
+    secrets = deepcopy(store.passwords)
+    store.state["favorites"] = [{"connection_id": identifier, "sql": "SELECT 1"} for identifier in ids]
+    for key in keys:
+        key.physical_identity = "positive-common-identity"
+    positive = report(fake)
+    assert len(positive.profiles) == 1
+    for _ in range(2):
+        counts = store.sync_navicat_profiles(positive)
+        assert counts["added"] == counts["source_missing"] == 0
+        assert counts["preserved"] == 2 and counts["total"] == 2
+        assert store.state["connections"] == before and store.passwords == secrets
+        assert all(not store.state["navicat_imports"][identifier]["blocked"] for identifier in ids)
+        assert all("windows_alias_review" in store.state["navicat_imports"][identifier]["source_unsupported_fields"] for identifier in ids)
+        assert {row["connection_id"] for row in store.state["favorites"]} == set(ids)
+    assert all(secret not in store.path.read_text() for secret in secrets.values())
 
 
 def test_matching_metadata_never_proves_aliasing_of_unread_opaque_values():

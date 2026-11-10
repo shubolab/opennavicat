@@ -72,6 +72,7 @@ def validate_assets(directory, version):
             require(runtime.get("navicat_windows_api_ready") is True,
                 f"Installed Windows registry metadata APIs did not initialize: {installer.name}")
         require(runtime.get("crypto_legacy_probe") is True, f"Installed OpenSSL provider was not verified: {installer.name}")
+        require(all(runtime.get(field) is True for field in ('native_js_helper_ready','native_js_bigint_bson_probe','native_js_cancel_probe','native_js_child_reaped','native_js_no_console','native_js_bundled')), f'Installed native JavaScript probes did not pass: {installer.name}')
         manifests.append(manifest)
     return manifests
 

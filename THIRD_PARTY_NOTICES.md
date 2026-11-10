@@ -17,6 +17,7 @@ authority for the exact version and accompanying license files on each build hos
 | python-tds | SQL Server TDS protocol driver | MIT. [Source and license](https://github.com/denisenkom/pytds). |
 | redis-py | Redis RESP protocol client | MIT. [Source and license](https://github.com/redis/redis-py). |
 | PyMongo / BSON | MongoDB protocol and native typed BSON codecs | Apache-2.0, as declared by the installed 4.19.0 wheel metadata. [Source and license](https://github.com/mongodb/mongo-python-driver). |
+| QuickJS-NG | Controlled native MongoDB JavaScript child runtime | MIT. Official v0.18.0 source revision `d7215b0ad3fc2c562e8317fd9bca058fd4863804`, archive SHA-256 `a49defe70cbcae9226d9fac025af116e87ebae2440dcff1ca3c80b79e1cdef0b`. [Official source and license](https://github.com/quickjs-ng/quickjs/tree/v0.18.0). The original license is retained in the application and native helper payload. |
 | dnspython | MongoDB driver DNS support | ISC, as declared by the installed 2.9.2 wheel metadata. [Source and license](https://github.com/rthalley/dnspython). |
 | pyOpenSSL | SQL Server TLS transport | Apache-2.0. [Source and license](https://github.com/pyca/pyopenssl). |
 | certifi | Default SQL Server trusted CA bundle | MPL-2.0. [Source and license](https://github.com/certifi/python-certifi). |

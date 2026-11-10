@@ -115,6 +115,8 @@ def main():
             "crypto_openssl": default_backend().openssl_version_text(),
             "stdlib_openssl": ssl.OPENSSL_VERSION,
             "native_openssl_bootstrap": getattr(sys, "_opennavicat_native_openssl", None)}
+        from .js_engine.probe import probe_native_javascript
+        runtime.update(probe_native_javascript())
     app = QApplication(sys.argv[:1])
     app.setApplicationName("OpenNavicat")
     app.setOrganizationName("OpenNavicat")

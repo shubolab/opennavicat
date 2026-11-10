@@ -300,6 +300,8 @@ def validate_smoke_report(path: Path, version: str, architecture: str, operating
     if (operating_system == "windows" and tuple(map(int, version.split("."))) >= (0, 7, 0)
             and runtime.get("navicat_windows_api_ready") is not True):
         raise PackagingError("Installed Windows registry metadata APIs did not initialize")
+    if any(runtime.get(field) is not True for field in ('native_js_helper_ready','native_js_bigint_bson_probe','native_js_cancel_probe','native_js_child_reaped','native_js_no_console','native_js_bundled')):
+        raise PackagingError('Installed native JavaScript helper execution, typed BSON, cancellation or payload proof is missing')
     if report.get("smoke") != "passed" or report.get("rows") != 6:
         raise PackagingError(f"Installed SQL smoke did not return six real rows: {report}")
     if runtime.get("version") != version:

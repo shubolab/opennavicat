@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
 )
 
 from .icons import icon, tool_icon
+from ..query_language import LEGACY
 
 OBJECT_LABELS = {"table": "表", "view": "视图", "index": "索引", "trigger": "触发器",
     "redis_data": "数据", "query": "查询", "backup": "备份", "mongo_collection": "集合",
@@ -160,7 +161,9 @@ class ObjectBrowser(QWidget):
             self.show_objects([dict(name="(所有数据)", kind=kind, schema=schema, id=connection_id)])
             return
         if kind == "query":
-            items = [{"name": entry["name"], "kind": "query", "schema": schema, "sql": entry["sql"], "id": connection_id} for entry in self.window.store.state["favorites"] if entry.get("connection_id") == connection_id]
+            items = [{"name": entry["name"], "kind": "query", "schema": schema, "sql": entry["sql"], "id": connection_id,
+                      'query_language': entry.get('query_language') if entry.get('query_language') is not None else LEGACY}
+                     for entry in self.window.store.state["favorites"] if entry.get("connection_id") == connection_id]
             self.show_objects(items)
             return
         if kind == "backup":
@@ -323,7 +326,7 @@ class ObjectBrowser(QWidget):
         if not entry:
             return
         if entry["kind"] == "query":
-            self.window.new_query(sql=entry["sql"], connection_id=entry["id"])
+            self.window.new_query(sql=entry["sql"], connection_id=entry["id"], query_language=entry.get('query_language') if entry.get('query_language') is not None else LEGACY)
         elif entry["kind"] == "backup":
             self.window.statusBar().showMessage(entry["path"], 10000)
         elif entry["kind"] == "redis_data":

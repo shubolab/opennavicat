@@ -127,18 +127,18 @@ def _bounded_command(command, verb, limit):
 
 def execute_queries(session, text, limit=1000):
     """Bound delivered rows/raw BSON, not arbitrary server work or driver RAM."""
-    if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 100000:
-        raise DatabaseError("The MongoDB result limit must be between 1 and 100000")
-    commands = parse_mongo_queries(text)
-    # Reject a later unsupported/readonly command before an earlier write runs.
-    prepared = []
-    for command in commands:
-        verb = _validate_command(session, command)
-        prepared.append((command, verb, _bounded_command(command, verb, limit)))
-    # A script is one cancellable unit. Individual operations keep their own
-    # typed comments, while the enclosing operation prevents the next command
-    # from clearing a cancellation requested after the previous server reply.
+    # Include parsing and validation in the script's cancellation lifetime.
+    # Individual operations keep their own typed comments, while this outer
+    # operation prevents a request being cleared before the first/next command.
     with session._operation():
+        if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 100000:
+            raise DatabaseError("The MongoDB result limit must be between 1 and 100000")
+        commands = parse_mongo_queries(text)
+        # Reject a later unsupported/readonly command before an earlier write runs.
+        prepared = []
+        for command in commands:
+            verb = _validate_command(session, command)
+            prepared.append((command, verb, _bounded_command(command, verb, limit)))
         return _execute_prepared(session, prepared, limit)
 
 

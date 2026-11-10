@@ -188,3 +188,47 @@ def test_acknowledged_write_accepts_same_named_fields_inside_user_documents(sess
     assert result.affected == 1 and not result.partial and not result.truncated
     assert session.connection[session.config.database].docs.find_one({"_id":931}) == {
         "_id":931, "writeConcern":{"w":0}, "nested":{"writeConcern":{"w":0}}}
+
+
+def test_cancel_during_real_parse_stops_first_write_and_new_script_recovers(session, monkeypatch):
+    import opennavicat.mongodb_query as module
+    original_parse = module.parse_mongo_queries
+
+    def parse_then_cancel(text):
+        prepared = original_parse(text)
+        session.cancel()
+        return prepared
+
+    with monkeypatch.context() as patch:
+        patch.setattr(module, "parse_mongo_queries", parse_then_cancel)
+        with pytest.raises(DatabaseError, match="cancelled") as raised:
+            execute_queries(session, "db.runCommand({insert:'docs',documents:[{_id:941}]})")
+    assert raised.value.partial_results == []
+    assert session.connection[session.config.database].docs.count_documents({}) == 0
+    result = execute_queries(session, "db.runCommand({insert:'docs',documents:[{_id:942}]})")[0]
+    assert result.affected == 1 and not result.partial
+    assert session.connection[session.config.database].docs.find_one({"_id":942}) == {"_id":942}
+
+
+def test_cancel_after_last_real_reply_keeps_the_fully_completed_write_result(session, monkeypatch):
+    original_operation = session._operation
+    cancelled = False
+
+    @contextmanager
+    def operation_cancel_after_reply(*args, **kwargs):
+        nonlocal cancelled
+        with original_operation(*args, **kwargs) as comment:
+            yield comment
+        if not cancelled:
+            cancelled = True
+            session.cancel()
+
+    with monkeypatch.context() as patch:
+        patch.setattr(session, "_operation", operation_cancel_after_reply)
+        results = execute_queries(session, "db.runCommand({insert:'docs',documents:[{_id:951}]})")
+    assert len(results) == 1
+    assert results[0].affected == 1 and not results[0].partial and not results[0].truncated
+    assert session.connection[session.config.database].docs.find_one({"_id":951}) == {"_id":951}
+    # There is no unexecuted statement to cancel or unknown result to label
+    # partial; this does not undo the already acknowledged final write.
+    assert values(execute_queries(session, "db.docs.find({_id:951})")[0]) == [{"_id":951}]

@@ -7,6 +7,7 @@ mongosh JavaScript compatibility. The full native shell remains a separate gate.
 from __future__ import annotations
 
 import contextlib
+import copy
 import hashlib
 import hmac
 import json
@@ -683,9 +684,13 @@ class MongoSession(DatabaseSession):
             # identity after dispatch. The user comment remains visible intact.
             copied = BSON(BSON.encode({"value": user_comment}, codec_options=BSON_CODEC)).decode(codec_options=BSON_CODEC)["value"]
             comment = {"OpenNavicat": comment, "userComment": copied}
-        if self._operation_depth == 0: self._cancel_requested.clear()
-        self._operation_depth += 1
         with self._active_lock:
+            # Clearing the cooperative flag and replacing the cancellation
+            # identity must be atomic with cancel's identity check. Otherwise
+            # a delayed request for the previous operation can set the new
+            # operation's flag between these two actions.
+            if self._operation_depth == 0: self._cancel_requested.clear()
+            self._operation_depth += 1
             previous = self._active_comment
             self._active_comment = comment
         try:
@@ -697,11 +702,40 @@ class MongoSession(DatabaseSession):
         finally:
             with self._active_lock:
                 if self._active_comment == comment: self._active_comment = previous
-            self._operation_depth -= 1
+                self._operation_depth -= 1
 
-    def cancel(self):
-        self._cancel_requested.set()
-        with self._active_lock: comment = self._active_comment
+    def cancellation_marker(self):
+        """Snapshot the current operation's public cancellation identity.
+
+        Capture this when scheduling a cancellation, then pass it to cancel.
+        A None snapshot intentionally cannot cancel a later operation. The
+        returned typed comment is detached from this session's active value.
+        """
+        with self._active_lock:
+            return copy.deepcopy(self._active_comment)
+
+    def cancel(self, expected_comment=_NO_COMMENT):
+        """Cancel the current operation, optionally requiring a captured marker.
+
+        No argument preserves the immediate-query cancellation contract. A
+        supplied stale marker (including None) does not set the cooperative
+        flag or open the control channel. Once accepted, network cancellation
+        targets only that captured nonce even if the owner starts new work.
+        """
+        with self._active_lock:
+            comment = self._active_comment
+            if expected_comment is not _NO_COMMENT:
+                if expected_comment is None or comment is None:
+                    return
+                # BSON equality preserves typed comments, NaN representations
+                # and field order; ordinary Python equality can conflate types.
+                try:
+                    if BSON.encode({'comment': expected_comment}, codec_options=BSON_CODEC) != BSON.encode({'comment': comment}, codec_options=BSON_CODEC):
+                        return
+                except Exception:
+                    return
+            self._cancel_requested.set()
+            comment = copy.deepcopy(comment)
         if not comment or self._control is None:
             return
         try:

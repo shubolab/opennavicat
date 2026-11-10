@@ -18,7 +18,7 @@ import xml.etree.ElementTree as ET
 
 ROOT=Path(__file__).resolve().parents[1]
 VM=("tests/test_js_codec.py","tests/test_js_native.py","tests/test_js_gate.py")
-PROTOCOL=(*VM,"tests/test_js_engine.py")
+PROTOCOL=(*VM,"tests/test_js_engine.py","tests/test_js_host_reference.py")
 COLLECT="""import json,sys,pytest
 from pathlib import Path
 class Capture:
@@ -95,7 +95,7 @@ def main(argv=None):
         if args.mode=='protocol':
             fixtures=[json.loads(path.read_text())for path in (directory/'fixtures').glob('fixture-*.json')]
             fixtures=[value for value in fixtures if value.get('run_id')==run_id]
-            if (not fixtures or {value.get('module')for value in fixtures}!={'test_js_engine'}or
+            if (not fixtures or {value.get('module')for value in fixtures}!={'test_js_engine','test_js_host_reference'}or
                 any(value.get(field)is not True for value in fixtures for field in ('cleanup_removed','owner_token_verified',
                     'port_loopback_only','native_docker_architecture_matches','external_auth_readiness'))):
                 raise RuntimeError('Native engine owned MongoDB readiness/cleanup not proven')

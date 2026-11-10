@@ -83,8 +83,8 @@ an existing BSON `['2','1','a']` object became `['1','2','a']` after original-UI
 findOne/replaceOne. This is an explicit limit to any blanket raw-BSON preservation
 claim. Original Int32 fields read as `typeof number` and `===1`, but a whole host
 document read/copy/insert still retained Int32 on the wire. The current prototype
-uses an explicit Int32 brand on decode; matching primitive typeof plus retained
-host-document metadata remains open in this checkpoint. A second controlled
+reads Int32/Double as primitive numbers and retains private original BSON type
+metadata only through a marked host-document root. A second controlled
 original-UI round established that field extraction into a fresh root, embedding
 the whole nested/array component in a fresh root, slice and spread all promote
 read Int32 values to Double. Only the unchanged original host root retains them.
@@ -93,6 +93,21 @@ equal: same-value assignment, changed value, delete/re-add, component replacemen
 and delete/re-add components all serialized plain Numbers as Double. Explicit
 Long stays Long; plain replacement Number becomes Double. These are actual wire
 observations, not evidence for a particular private implementation mechanism.
+The independent implementation uses private WeakMaps and proxy traps to record
+successful set/define/delete operations. Original metadata flows only through
+an unchanged path below a real host root. A same-value assignment invalidates
+that path; replacing a component disables the old subtree context. Fresh root
+objects do not inherit metadata merely by referencing a nested object or array.
+Explicit BSON wrapper values remain typed objects. Metadata is never an added
+document field or an authorization token.
+
+Only managed cursor documents are currently marked as host roots. Introspection
+matches primitive number values, ordinary writable/enumerable/configurable data
+descriptors, plain nested/array prototypes and a distinct opaque host prototype.
+The original private prototype member `forwardToCustomFunction` was not invoked
+or specified, and is deliberately not fabricated here. Full private prototype
+API behavior, other command-specific document-return shapes, and adversarial
+proxy/primordial interactions remain separate compatibility/audit gates.
 The actual original exposed neither public Double nor DateMS, so both are private
 codec constructors here. Original `String(Long(...))` was `Long("...")`, now
 matched; the full Long arithmetic/constructor behavior is not yet qualified.
@@ -154,6 +169,12 @@ including Windows no-console state, all-byte binary pipes and frame boundaries.
 Its Ubuntu22 fresh MongoDB job passed 87 cases with verified exact cleanup. That
 historical success does not qualify the subsequent allocator/runtime changes;
 each new source checkpoint runs the independent complete qualification again.
+After the allocator alignment fix, exact checkpoint `9b6ea99` passed
+[run 42854765118](https://github.com/shubolab/opennavicat/actions/runs/42854765118):
+55 zero-skip cases on each native target and 94 real protocol cases, including
+irreversible resource denial and preservation of already confirmed writes. That
+source qualification is retained separately from the subsequent host-metadata
+change and does not claim installed-app or full-JavaScript parity.
 Runtime allocation limits cover QuickJS memory, not total process/parent RSS.
 No host APIs is not an OS sandbox or proof against C-engine vulnerabilities.
 The JS wrapper fails closed for several mutated intrinsics, but is not a complete
@@ -190,6 +211,13 @@ sleep query followed by a successful new query. A lost-write-ack test performs a
 real insert and deliberately raises a transport error afterward; this proves the
 uncertain-outcome branch, not a naturally occurring network failure. Official
 engine source and native Mach-O build receipts live under ignored artifacts.
+
+`test_js_host_reference.py` adds synthetic real-server regressions derived from
+both original-UI own-probe rounds. A second independently owned container covers
+the host metadata cases; seed BSON remains unchanged after every copy/edit.
+The VM-only six-target lane also exercises three metadata variants through real
+native framed IPC with a synthetic parent response. Those tests explicitly have
+no database/network and never stand in for fresh MongoDB write acceptance.
 
 The separate earlier 39-case offline qualification evidence remains untouched in
 the Mongo development worktree's `artifacts/quickjs-qualification` directory.

@@ -5,9 +5,14 @@
   const stringify=JSON.stringify, parse=JSON.parse, keys=Object.keys, descriptors=Object.getOwnPropertyDescriptors;
   const ownKeys=Reflect.ownKeys, getProto=Object.getPrototypeOf, define=Object.defineProperty;
   const freeze=Object.freeze, create=Object.create, big=BigInt, isSafe=Number.isSafeInteger;
-  const brands=new WeakMap(),cursorCompletion=new WeakMap(),epoch=Date.prototype.getTime, dateISO=Date.prototype.toISOString;
+  const brands=new WeakMap(),brandTrees=new WeakMap(),origins=new WeakMap(),cursorCompletion=new WeakMap(),epoch=Date.prototype.getTime, dateISO=Date.prototype.toISOString;
   const NativeDate=Date, NativeRegExp=RegExp, NativeArray=Array, NativeU8=Uint8Array;
   const ObjectProto=Object.prototype, ArrayProto=Array.prototype, NativeObject=Object, NativeNumber=Number;
+  const NativeProxy=Proxy,reflectSet=Reflect.set,reflectDefine=Reflect.defineProperty,reflectDelete=Reflect.deleteProperty,reflectPrototype=Reflect.setPrototypeOf;
+  // An opaque host root has a distinct prototype and no visible metadata.
+  // Navicat's private forwardToCustomFunction contract has not been qualified;
+  // do not fabricate a public callable with that name.
+  const HostPrototype=freeze(create(ObjectProto));
   const NativeWeakMap=WeakMap, NativeWeakSet=WeakSet, NativeJSON=JSON, arrayMap=ArrayProto.map;
   const NativeString=String,objectIs=Object.is,bigIntToString=BigInt.prototype.toString,functionCall=Function.prototype.call;
   const arrayPush=ArrayProto.push,arraySlice=ArrayProto.slice,arraySome=ArrayProto.some,arrayIncludes=ArrayProto.includes;
@@ -52,8 +57,25 @@
   function MaxKey(){return tagged('maxkey',null,()=>'MaxKey');}
   function Code(text,scope=null){if(typeof text!=='string'||(scope!==null&&typeof scope!=='object'))throw new TypeError('BSON code data');return tagged('code',[text,scope],()=>text);}
   function DBRef(collection,id,database=null){if(typeof collection!=='string'||(database!==null&&typeof database!=='string'))throw new TypeError('DBRef');return tagged('dbref',[collection,id,database],()=>collection);}
+  function observe(target,tree) {
+    const state={target,tree,dirty:create(null),fields:create(null),root:false,invalid:false};
+    if(tree[0]==='document')for(let i=0;i<tree[1].length;i++)state.fields[tree[1][i][0]]=tree[1][i][1];
+    const proxy=new NativeProxy(target,{
+      set(t,key,value,receiver){const done=reflectSet(t,key,value,receiver);if(done)state.dirty[key]=true;return done;},
+      defineProperty(t,key,descriptor){const done=reflectDefine(t,key,descriptor);if(done)state.dirty[key]=true;return done;},
+      deleteProperty(t,key){const done=reflectDelete(t,key);if(done)state.dirty[key]=true;return done;},
+      setPrototypeOf(t,prototype){const done=reflectPrototype(t,prototype);if(done)state.invalid=true;return done;}
+    });
+    origins.set(proxy,state);return proxy;
+  }
+  function markRoot(value) {
+    const state=origins.get(value);
+    if(state&&state.tree[0]==='document') {state.root=true;reflectPrototype(state.target,HostPrototype);}
+    return value;
+  }
+  function nativeBrand(value,tree){brandTrees.set(value,tree);return value;}
   function doubleText(n) {return Object.is(n,-0)?'-0':Number.isNaN(n)?'NaN':n===Infinity?'Infinity':n===-Infinity?'-Infinity':String(n);}
-  function encode(value,depth=0,seen=new WeakSet(),allowLargeBigInt=false) {
+  function encode(value,depth=0,seen=new WeakSet(),allowLargeBigInt=false,original=null) {
     if(depth>80)throw new RangeError('BSON bridge depth');
     if(value===undefined&&allowLargeBigInt)return ['js-undefined'];
     if(value===null)return ['null'];
@@ -64,14 +86,19 @@
       // Actual Navicat18 writes ordinary JS Number as BSON Double, including
       // integers and unsafe literals already rounded by JavaScript itself.
       // Explicit Int32/Long brands remain separate and exact.
+      if(original&&original[0]==='int32'&&value===original[1]&&!objectIs(value,-0))return ['int32',value];
       return ['double',doubleText(value)];
     }
     if(typeof value!=='object')throw new TypeError('Unsupported BSON value');
     if(seen.has(value))throw new TypeError('Cyclic BSON data');
     seen.add(value);
     try {
+      const state=origins.get(value);
+      if(original&&(!state||state.tree!==original||state.invalid))original=null;
+      if(!original&&state&&state.root&&!state.invalid)original=state.tree;
       const b=brands.get(value);
       if(b) {
+        const nativeTree=brandTrees.get(value);if(nativeTree)return nativeTree;
         const [tag,data]=b;
         if(tag==='int64'||tag==='date')return [tag,data.toString()];
         if(tag==='double')return [tag,doubleText(data)];
@@ -85,16 +112,17 @@
       if(value instanceof NativeU8)return ['binary',base64(value),0];
       if(value instanceof NativeRegExp)return encode(BSONRegex(value.source,value.flags),depth+1,seen);
       if(NativeArray.isArray(value)) {
-        const names=keys(value);if(names.length!==value.length||names.some((k,i)=>k!==String(i)))throw new TypeError('Sparse or decorated arrays are not accepted');
+        const names=keys(value);if(names.length!==value.length||ownKeys(value).length!==value.length+1||names.some((k,i)=>k!==String(i)))throw new TypeError('Sparse or decorated arrays are not accepted');
         const props=descriptors(value),items=[];
-        for(let i=0;i<value.length;i++){const d=props[String(i)];if(!d||!d.enumerable||!('value'in d))throw new TypeError('Array accessors are not BSON data');items.push(encode(d.value,depth+1,seen,allowLargeBigInt));}
+        for(let i=0;i<value.length;i++){const d=props[String(i)];if(!d||!d.enumerable||!('value'in d))throw new TypeError('Array accessors are not BSON data');const old=original&&original[0]==='array'&&!state.dirty[i]?original[1][i]:null;items.push(encode(d.value,depth+1,seen,allowLargeBigInt,old));}
         return ['array',items];
       }
-      if(getProto(value)!==Object.prototype&&getProto(value)!==null)throw new TypeError('Unknown object prototype');
+      if(getProto(value)!==ObjectProto&&getProto(value)!==null&&!(state&&state.root&&!state.invalid&&getProto(value)===HostPrototype))throw new TypeError('Unknown object prototype');
       const fields=descriptors(value), result=[];
       for(const key of ownKeys(fields)) {
         const d=fields[key];if(typeof key!=='string'||!d.enumerable||!('value'in d))throw new TypeError('BSON data must have enumerable string data properties');
-        result.push([key,encode(d.value,depth+1,seen,allowLargeBigInt)]);
+        const old=original&&original[0]==='document'&&!state.dirty[key]?state.fields[key]:null;
+        result.push([key,encode(d.value,depth+1,seen,allowLargeBigInt,old)]);
       }
       return ['document',result];
     } finally {seen.delete(value);}
@@ -104,12 +132,13 @@
     const [kind,a,b,c]=tree;
     switch(kind) {
       case 'null':return null;case 'bool':case 'string':return a;
-      case 'int32':return Int32(a);case 'int64':return Long(a);case 'double':return Double(a);
-      case 'decimal128':return Decimal128(a);case 'objectid':return ObjectId(a);case 'date':return DateMS(a);
-      case 'binary':return Binary(a,b);case 'regex':return BSONRegex(a,b);case 'timestamp':return Timestamp(a,b);
-      case 'minkey':return MinKey();case 'maxkey':return MaxKey();case 'code':return Code(a,b===null?null:decode(b,depth+1));case 'dbref':return DBRef(a,decode(b,depth+1),c);
-      case 'array':return a.map(x=>decode(x,depth+1));
-      case 'document':{const obj={};for(const [key,value]of a)define(obj,key,{value:decode(value,depth+1),enumerable:true,writable:true,configurable:true});return obj;}
+      case 'int32':return a;case 'double':return Number(a);
+      case 'int64':return nativeBrand(Long(a),tree);
+      case 'decimal128':return nativeBrand(Decimal128(a),tree);case 'objectid':return nativeBrand(ObjectId(a),tree);case 'date':return nativeBrand(DateMS(a),tree);
+      case 'binary':return nativeBrand(Binary(a,b),tree);case 'regex':return nativeBrand(BSONRegex(a,b),tree);case 'timestamp':return nativeBrand(Timestamp(a,b),tree);
+      case 'minkey':return nativeBrand(MinKey(),tree);case 'maxkey':return nativeBrand(MaxKey(),tree);case 'code':return nativeBrand(Code(a,b===null?null:decode(b,depth+1)),tree);case 'dbref':return nativeBrand(DBRef(a,decode(b,depth+1),c),tree);
+      case 'array':{const arr=[];for(let i=0;i<a.length;i++)define(arr,String(i),{value:decode(a[i],depth+1),enumerable:true,writable:true,configurable:true});return observe(arr,tree);}
+      case 'document':{const obj=create(ObjectProto);for(let i=0;i<a.length;i++){const key=a[i][0],value=a[i][1];define(obj,key,{value:decode(value,depth+1),enumerable:true,writable:true,configurable:true});}return observe(obj,tree);}
       default:throw new TypeError('Unknown host data type');
     }
   }
@@ -117,7 +146,9 @@
     guard();
     const reply=parse(host(stringify({kind:'command',tree:encode(value)})));
     if(reply.ok!==true)throw new Error(reply.error||'Parent rejected command');
-    return decode(reply.tree);
+    const decoded=decode(reply.tree);
+    if(decoded&&decoded.cursor&&NativeArray.isArray(decoded.cursor.firstBatch))for(let i=0;i<decoded.cursor.firstBatch.length;i++)markRoot(decoded.cursor.firstBatch[i]);
+    return decoded;
   }
   function cursor(cmd) {
     let documents=null,index=0;

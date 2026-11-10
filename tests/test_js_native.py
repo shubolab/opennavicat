@@ -10,7 +10,7 @@ import subprocess
 from bson import BSON, Binary, Decimal128, Int64
 import pytest
 
-from opennavicat.js_engine.codec import BSON_CODEC,JS_UNDEFINED
+from opennavicat.js_engine.codec import BSON_CODEC,JS_UNDEFINED,decode,encode
 from opennavicat.js_engine.runtime import ExecutionLimits,JavaScriptError,NativeJavaScript
 
 
@@ -151,3 +151,29 @@ def test_native_late_failure_status_cannot_turn_a_terminal_frame_into_success(na
     with pytest.raises(JavaScriptError,match='exited unsuccessfully')as raised:
         native.evaluate('42')
     assert raised.value.result.child_reaped and raised.value.result.value is None
+
+
+@pytest.mark.parametrize('operation',['host-unchanged','same-value','fresh-components'])
+def test_native_host_metadata_typed_ipc_with_synthetic_parent(native,monkeypatch,operation):
+    """Offline native protocol qualification; actual server writes run elsewhere."""
+    from opennavicat.js_engine import runtime
+    seed={'_id':'seed','i32':1,'nested':{'i32':1},'arr':[1,1.0,Int64(1)]}
+    captured=[]
+    def response(self,tree):
+        command=decode(tree)
+        if 'find'in command:
+            return encode({'ok':1.0,'cursor':{'id':Int64(0),'ns':'owned.docs','firstBatch':[seed]}})
+        assert 'insert'in command
+        captured.append(command['documents'][0])
+        return encode({'ok':1.0,'n':1})
+    monkeypatch.setattr(runtime._NoDatabase,'command',response)
+    change={'host-unchanged':"const copy=d;copy._id='copy';",
+        'same-value':"const copy=d;copy._id='copy';copy.i32=1;copy.nested.i32=1;copy.arr[0]=1;",
+        'fresh-components':"const copy={_id:'copy',i32:d.i32,nested:d.nested,arr:[...d.arr]};"}[operation]
+    result=native.evaluate("const d=db.docs.findOne({_id:'seed'});"+change+"db.docs.insertOne(copy);[typeof d.i32,d.i32===1,typeof d.arr[2]]")
+    assert result.value==['number',True,'object']and result.child_reaped
+    assert len(captured)==1
+    expected={'_id':'copy','i32':1,'nested':{'i32':1},'arr':[1,1.0,Int64(1)]}
+    if operation!='host-unchanged':
+        expected['i32']=1.0;expected['nested']['i32']=1.0;expected['arr'][0]=1.0
+    assert BSON.encode(captured[0],codec_options=BSON_CODEC)==BSON.encode(expected,codec_options=BSON_CODEC)

@@ -31,7 +31,8 @@ def assets(tmp_path):
                     "extra_adapters_constructed": True, "sqlserver_tls_context_ready": True,
                     "pymongo": "4.19.0", "mongodb_adapter_constructed": True,
                     "mongodb_bson_probe": True, "mongodb_tls_context_ready": True,
-                    "navicat_windows_api_ready": True if system == "windows" else None}}}
+                    "navicat_windows_api_ready": True if system == "windows" else None,
+                    **dict.fromkeys(('native_js_helper_ready','native_js_bigint_bson_probe','native_js_cancel_probe','native_js_child_reaped','native_js_no_console','native_js_bundled'),True)}}}
         manifest = {"name": "OpenNavicat", "version": VERSION, "os": system,
             "architecture": arch, "native_host_architecture": arch,
             "installer": installer.name, "bytes": installer.stat().st_size,
@@ -99,7 +100,7 @@ def test_missing_new_driver_runtime_is_rejected(assets, field):
         gate.validate_assets(assets, VERSION)
 
 
-@pytest.mark.parametrize("field", ["extra_adapters_constructed", "sqlserver_tls_context_ready", "mongodb_adapter_constructed", "mongodb_bson_probe", "mongodb_tls_context_ready"])
+@pytest.mark.parametrize("field", ["extra_adapters_constructed", "sqlserver_tls_context_ready", "mongodb_adapter_constructed", "mongodb_bson_probe", "mongodb_tls_context_ready", 'native_js_helper_ready','native_js_bigint_bson_probe','native_js_cancel_probe','native_js_child_reaped','native_js_no_console','native_js_bundled'])
 @pytest.mark.parametrize("reported", [None, False, "true", 1])
 def test_adapter_and_tls_probe_must_be_actual_true_boolean(assets, field, reported):
     path, manifest = first_manifest(assets)

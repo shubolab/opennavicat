@@ -171,7 +171,7 @@ def test_actual_mainwindow_cancel_then_save_before_leaving_mongo_document(qtbot,
 def test_real_mongodb_query_page_runs_native_find_without_sql_formatting(qtbot, mongo_window):
     window, config, database, schema, errors, threads = mongo_window
     text = 'db.getCollection("docs").find({}).sort({"_id": 1}).limit(2)'
-    page = window.new_query(sql=text, connection_id=config.id)
+    page = window.new_query(sql=text, connection_id=config.id, query_language='legacy')
     assert page.schema == config.database and page.editor.language == "text"
     assert not page.format_button.isEnabled() and page.format_sql() is False
     assert page.editor.toPlainText() == text and not page.supports_explain
@@ -235,7 +235,7 @@ def test_actual_mainwindow_gridfs_tree_routing_and_native_download(qtbot, mongo_
 def test_mongo_query_ui_reports_actual_partial_writes_and_keeps_server_error(qtbot, mongo_window):
     window, config, database, schema, errors, threads = mongo_window
     text = "db.runCommand({insert:'docs',ordered:false,documents:[{_id:901},{_id:0},{_id:902}]})"
-    page = window.new_query(sql=text, connection_id=config.id)
+    page = window.new_query(sql=text, connection_id=config.id, query_language='legacy')
     qtbot.mouseClick(page.run_button, Qt.MouseButton.LeftButton)
     qtbot.waitUntil(lambda: bool(window.store.history()), timeout=15000); idle(qtbot, window)
     assert window.store.history()[0]["status"] == "error"

@@ -30,3 +30,6 @@ report = json.loads((root / "artifacts/packaged-smoke.json").read_text("utf-8"))
 assert report["smoke"] == "passed" and report["rows"] == 6
 assert report["runtime"]["libpq"] >= 170000, "Secure PostgreSQL cancellation requires libpq 17+"
 assert report["runtime"]["crypto_legacy_probe"] is True
+for field in ('native_js_helper_ready','native_js_bigint_bson_probe','native_js_cancel_probe',
+              'native_js_child_reaped','native_js_no_console','native_js_bundled'):
+    assert report['runtime'].get(field) is True, f'Missing compiled native JavaScript execution proof: {field}'

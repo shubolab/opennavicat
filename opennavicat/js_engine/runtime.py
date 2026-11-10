@@ -23,6 +23,7 @@ import time
 from ..database import DatabaseError
 from .records import CommandReceipt
 from .codec import decode
+from .server_errors import server_failure
 
 MAX_FRAME = 1024*1024
 
@@ -100,7 +101,7 @@ class JavaScriptResult:
 
     @property
     def has_confirmed_writes(self):
-        return any(row.writes and row.outcome in {"acknowledged","acknowledged_error"}for row in self.commands)
+        return any(row.writes and (row.outcome=='acknowledged' or row.outcome=='acknowledged_error' and row.affected is not None and row.affected>0)for row in self.commands)
 
 
 class JavaScriptError(DatabaseError):
@@ -270,6 +271,9 @@ class NativeJavaScript:
                             response = {"ok":True,"tree":bridge.command(request["tree"])}
                         except Exception as error:
                             response = {"ok":False,"error":str(error)}
+                            failure_reply=server_failure(error)
+                            if failure_reply is not None:
+                                response.update(code=failure_reply.code,codeName=failure_reply.code_name)
                         if not cancelled.is_set():
                             process.stdin.write(_frame(json.dumps(response,ensure_ascii=True,separators=(",",":")).encode()));process.stdin.flush()
                 if event is None:

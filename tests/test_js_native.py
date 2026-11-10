@@ -221,3 +221,33 @@ def test_invalid_constructor_never_reaches_database_capability(native,expression
         native.evaluate('db.runCommand({insert:"never",documents:[{_id:1,value:'+expression+'}]})')
     assert raised.value.result.child_reaped and raised.value.result.commands==()
     assert 'no database capability'not in str(raised.value)
+
+
+def test_native_index_helpers_send_control_keys_and_keep_data_filter_numbers(native,monkeypatch):
+    from opennavicat.js_engine import runtime
+    captured=[]
+    def command(self,tree):
+        captured.append(decode(tree))
+        return encode({'ok':1.0,'numIndexesBefore':1,'numIndexesAfter':2})
+    monkeypatch.setattr(runtime._NoDatabase,'command',command)
+    result=native.evaluate("db.docs.createIndex({a:1,b:-1},{name:'typed',partialFilterExpression:{limit:1},collation:{locale:'en',strength:Int32('2')},maxTimeMS:12,writeConcern:{w:1},comment:{purpose:'owned'},commitQuorum:'majority'})")
+    assert result.value=='typed' and len(captured)==1
+    command=captured[0];spec=command['indexes'][0]
+    assert spec['key']=={'a':1,'b':-1} and all(type(x)is int for x in spec['key'].values())
+    assert type(spec['partialFilterExpression']['limit'])is float
+    assert spec['collation']['strength']==2 and type(spec['collation']['strength'])is int
+    assert set(command)=={'createIndexes','indexes','maxTimeMS','writeConcern','comment','commitQuorum'}
+    assert not any(key in spec for key in ('maxTimeMS','writeConcern','comment','commitQuorum'))
+    assert result.child_reaped
+
+
+def test_native_index_options_do_not_execute_accessors_before_validation(native):
+    source="const opts={};Object.defineProperty(opts,'name',{enumerable:true,get(){db.runCommand({insert:'must-not-run',documents:[{_id:1}]});return 'owned'}});db.docs.createIndex({a:1},opts)"
+    with pytest.raises(JavaScriptError,match='data fields')as raised:native.evaluate(source)
+    assert raised.value.result.commands==() and raised.value.result.child_reaped
+
+
+def test_native_index_pattern_array_does_not_execute_accessors_before_validation(native):
+    source="const patterns=[{}];Object.defineProperty(patterns,0,{enumerable:true,get(){db.runCommand({insert:'must-not-run',documents:[{_id:1}]});return {a:1}}});db.docs.createIndexes(patterns)"
+    with pytest.raises(JavaScriptError,match='data fields')as raised:native.evaluate(source)
+    assert raised.value.result.commands==() and raised.value.result.child_reaped

@@ -26,7 +26,8 @@ from test_mongodb_session import mongodb_service, session
 
 @pytest.fixture(scope="module")
 def engine():
-    helper = Path(os.environ.get("OPENNAVICAT_TEST_JS_HELPER", Path(__file__).resolve().parents[1]/"artifacts/js-engine/opennavicat-js"))
+    name='opennavicat-js.exe'if os.name=='nt'else'opennavicat-js'
+    helper = Path(os.environ.get("OPENNAVICAT_TEST_JS_HELPER", Path(__file__).resolve().parents[1]/'artifacts/js-engine'/name))
     if not helper.exists():
         pytest.skip("Build the pinned controlled native helper with scripts/build-quickjs.py")
     return NativeJavaScript(helper)
@@ -109,7 +110,12 @@ def test_actual_native_parent_watchdog_kills_child_during_blocked_host_call(engi
         time.sleep(.3)
         # The child was blocked waiting for this response for >100ms. The
         # runtime receipt provides the independent kill/reap evidence.
-        killed_before_return.append(self.cancelled() and children[0].returncode == -9)
+        # Windows TerminateProcess and POSIX SIGKILL have different exit
+        # codes. Both must have terminated this exact child before host I/O
+        # returns; the independent receipt below still requires hard kill
+        # and reap rather than accepting a normal completed execution.
+        returncode=children[0].poll()
+        killed_before_return.append(self.cancelled() and returncode is not None and returncode != 0)
         raise RuntimeError("simulated bounded host return")
     monkeypatch.setattr(MongoDBBridge,"command",blocked)
     with pytest.raises(JavaScriptError) as raised:

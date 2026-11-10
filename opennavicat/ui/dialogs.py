@@ -14,7 +14,7 @@ from PySide6.QtGui import QRegularExpressionValidator
 from PySide6.QtWidgets import (
     QButtonGroup, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout,
     QFrame, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QListWidget, QMessageBox, QPlainTextEdit,
-    QPushButton, QRadioButton, QScrollArea, QSpinBox, QTableWidget, QTableWidgetItem,
+    QPushButton, QRadioButton, QScrollArea, QSizePolicy, QSpinBox, QTableWidget, QTableWidgetItem,
     QTabWidget, QVBoxLayout, QWidget,
 )
 
@@ -243,6 +243,10 @@ class ConnectionDialog(QDialog):
         self.host_edit = QLineEdit(config.host if config else "localhost")
         self.port_spin = QSpinBox()
         self.port_spin.setRange(1, 65535)
+        # Qt's sizeHint includes all five digits and the current style's step
+        # controls. Fixed policy keeps that native width compact while allowing
+        # layout recalculation on font/style changes; fixed pixels truncate it.
+        self.port_spin.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.user_edit = QLineEdit(config.username if config else "")
         self.password_edit = QLineEdit(config.password if config else "")
         self.password_edit.setEchoMode(QLineEdit.EchoMode.Password)
@@ -446,7 +450,7 @@ class ConnectionDialog(QDialog):
         self.ssh_port_spin = QSpinBox()
         self.ssh_port_spin.setRange(1, 65535)
         self.ssh_port_spin.setValue(getattr(config, "ssh_port", 22) if config else 22)
-        self.ssh_port_spin.setFixedWidth(78)
+        self.ssh_port_spin.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.ssh_user_edit = QLineEdit(getattr(config, "ssh_username", "") if config else "")
         self.ssh_auth_combo = QComboBox()
         for label, method in [("密码", "password"), ("公钥", "key"),
@@ -739,7 +743,6 @@ class ConnectionDialog(QDialog):
         self.remember_check.setToolTip("SQLite 3 直连不使用用户名及密码；加密扩展尚未实现。" if local else "密码仅保存在本机系统钥匙串中。")
         self.port_spin.setValue({"postgresql": 5432, "mysql": 3306, "mariadb": 3306,
                                  "sqlserver": 1433, "redis": 6379, "mongodb": 27017}.get(driver, 3306))
-        self.port_spin.setFixedWidth(78)
         if not local:
             defaults = {"postgresql": "postgres", "mysql": "", "mariadb": "", "sqlserver": "master", "redis": "0", "mongodb": ""}
             user_defaults = {"postgresql": "postgres", "mysql": "root", "mariadb": "root", "sqlserver": "", "redis": "", "mongodb": ""}

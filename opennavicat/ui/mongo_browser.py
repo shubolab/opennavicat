@@ -21,12 +21,13 @@ from PySide6.QtCore import QAbstractTableModel, QModelIndex, QSize, Qt, QTimer, 
 from PySide6.QtGui import QAction, QFontDatabase, QPalette
 from PySide6.QtWidgets import (
     QAbstractItemView, QButtonGroup, QDialog, QDialogButtonBox, QFileDialog,
-    QApplication, QHBoxLayout, QLabel, QLineEdit, QMenu, QMessageBox, QPushButton, QSizePolicy, QSpinBox,
+    QApplication, QHeaderView, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QMenu, QMessageBox, QPushButton, QSizePolicy, QSpinBox,
     QStackedWidget, QToolBar, QToolButton, QTreeWidget, QTreeWidgetItem,
     QVBoxLayout, QWidget,
 )
+from shiboken6 import isValid
 
-from ..mongodb_session import MongoDocument, MongoPage, canonical_dumps, canonical_loads
+from ..mongodb_session import BSON_CODEC, MongoDocument, MongoPage, canonical_dumps, canonical_loads
 from .editor import SqlEditor
 from .grid import DataGrid
 from .icons import tool_icon
@@ -68,7 +69,16 @@ def bson_type(value):
     if isinstance(value, Code):return "Code with scope" if value.scope is not None else "Code"
     if isinstance(value, Mapping):return "Document"
     if isinstance(value, list):return "Array"
+    if isinstance(value, str):return "String"
     return type(value).__name__
+
+
+def document_key(document):
+    """UI identity retains BSON types; Python equates int, Int64 and bool."""
+    if "_id" in document.document:
+        try:return b"id:"+BSON.encode({"_id":document.document["_id"]},codec_options=BSON_CODEC)
+        except Exception:pass
+    return b"raw:"+document.raw_bson
 
 
 def display_bson(value):
@@ -201,6 +211,9 @@ class MongoCollectionPage(QWidget):
         self._json_pending = True
         self._json_offsets = []
         self._setting_json = False
+        self._setting_selection = False
+        self._tree_document_key = None
+        self._pending_row = None
         self._tree_values = {}
         self.destroyed.connect(lambda: setattr(self, "_closed", True))
         layout = QVBoxLayout(self); layout.setContentsMargins(0,0,0,0); layout.setSpacing(0)
@@ -243,7 +256,11 @@ class MongoCollectionPage(QWidget):
         self.grid.horizontalHeader().sectionClicked.connect(self.sort_column)
         self.views.addWidget(self.grid)
         self.tree = QTreeWidget(); self.tree.setHeaderLabels(["名称","值","类型"])
-        self.tree.setColumnWidth(0,250); self.tree.setColumnWidth(1,350)
+        self.tree.setHeaderHidden(True)
+        self.tree.header().setStretchLastSection(False)
+        self.tree.header().setSectionResizeMode(1,QHeaderView.ResizeMode.Stretch)
+        self.tree.setColumnWidth(0,160); self.tree.setColumnWidth(2,140)
+        self.tree.setToolTip("当前文档的字段、值与 BSON 类型。双击字段使用 Extended JSON 编辑当前文档。")
         self.tree.itemExpanded.connect(self._expand_value)
         self.tree.currentItemChanged.connect(self._tree_selected)
         self.tree.itemDoubleClicked.connect(lambda *_args:self.edit_document())
@@ -263,16 +280,20 @@ class MongoCollectionPage(QWidget):
         self.query_label=QLabel(); self.query_label.setTextFormat(Qt.TextFormat.PlainText); self.query_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.query_label.setSizePolicy(QSizePolicy.Policy.Ignored,QSizePolicy.Policy.Preferred)
         footer.addWidget(self.query_label,1)
-        self.first_button=button("第一页","first",lambda:self.go_page(0))
-        self.previous_button=button("上一页","previous",lambda:self.go_page(max(0,self.offset-self.page_size.value())))
-        self.next_button=button("下一页","next",lambda:self.go_page(self.page.next_offset))
-        self.last_button=button("最后一页","last",self.last_page)
+        self.first_button=button("第一页","first",lambda:self.navigate("first"))
+        self.previous_button=button("上一页","previous",lambda:self.navigate("previous"))
+        self.next_button=button("下一页","next",lambda:self.navigate("next"))
+        self.last_button=button("最后一页","last",lambda:self.navigate("last"))
+        self.record_position=QLabel()
+        self.record_position.setToolTip("位置基于当前返回顺序；并发变更可能改变分页。")
+        footer.addWidget(self.record_position)
         self.page_number=QSpinBox(); self.page_number.setMinimum(1); self.page_number.setMaximum(1)
         self.page_number.setFixedWidth(55); self.page_number.editingFinished.connect(lambda:self.go_page((self.page_number.value()-1)*self.page_size.value()))
         footer.addWidget(self.page_number)
-        self.page_size=QSpinBox(); self.page_size.setRange(1,1000); self.page_size.setValue(1000)
+        self.page_size=QSpinBox(self); self.page_size.setRange(1,1000); self.page_size.setValue(1000)
         self.page_size.setFixedWidth(70); self.page_size.setToolTip("每页文档数")
-        self.page_size.editingFinished.connect(lambda:self.go_page(0)); footer.addWidget(self.page_size)
+        self.page_size.editingFinished.connect(lambda:self.go_page(0)); self.page_size.hide()
+        self.settings_button=button("设置","other",self.page_settings)
         self.view_buttons=QButtonGroup(self); self.view_buttons.setExclusive(True)
         for index,label in enumerate(("网格","树","Extended JSON")):
             item=QToolButton(); item.setText(label); item.setCheckable(True); item.setChecked(index==0)
@@ -306,22 +327,55 @@ class MongoCollectionPage(QWidget):
         return None
 
     def _grid_selected(self,current,_previous):
-        if current.isValid():self._selected_row=current.row()
-        self._update_controls()
+        if self._setting_selection or not current.isValid():return
+        target=current.row()
+        if target!=self._selected_row:
+            self._restore_grid_selection()
+            self.select_record(target)
+        else:self._update_controls()
+
+    def _restore_grid_selection(self):
+        self._setting_selection=True
+        try:
+            if self.model.columns and self.page and self.page.documents:
+                self.grid.setCurrentIndex(self.model.index(self._selected_row,0))
+        finally:self._setting_selection=False
 
     def _tree_selected(self,current,_previous):
-        if current is not None:
-            entry=self._tree_values.get(current.data(0,Qt.ItemDataRole.UserRole))
-            if entry:
-                self._selected_row=entry[0]
-                if self.model.columns:self.grid.setCurrentIndex(self.model.index(self._selected_row,0))
+        # The tree only contains the current document, never a list of records.
         self._update_controls()
 
     def _json_selected(self):
         if self._setting_json or self.views.currentWidget() is not self.json_view or not self._json_offsets:return
-        self._selected_row=max(0,bisect_right(self._json_offsets,self.json_view.textCursor().position())-1)
-        if self.model.columns:self.grid.setCurrentIndex(self.model.index(self._selected_row,0))
+        target=max(0,bisect_right(self._json_offsets,self.json_view.textCursor().position())-1)
+        if target!=self._selected_row and not self.select_record(target):self._restore_json_selection()
+
+    def _restore_json_selection(self):
+        if self._selected_row<len(self._json_offsets):
+            self._setting_json=True
+            try:
+                cursor=self.json_view.textCursor();cursor.setPosition(self._json_offsets[self._selected_row]);self.json_view.setTextCursor(cursor)
+            finally:self._setting_json=False
+
+    def select_record(self,row,*,check=True):
+        if self.loading or self._closed or not self.page or not 0<=row<len(self.page.documents):return False
+        if row!=self._selected_row and check and not self.can_discard(lambda:self.select_record(row)):return False
+        self._selected_row=row
+        self._restore_grid_selection()
+        self._render_tree()
+        if self.views.currentWidget() is self.json_view:self._restore_json_selection()
         self._update_controls()
+        return True
+
+    def _render_tree(self):
+        document=self.selected_document()
+        key=(document_key(document),document.raw_bson) if document else None
+        if key==self._tree_document_key:return
+        self._tree_document_key=key
+        self.tree.clear();self._tree_values.clear()
+        if document is not None:
+            for name,value in document.document.items():self._new_tree_item(None,name,value,self._selected_row)
+            if self.tree.topLevelItemCount():self.tree.setCurrentItem(self.tree.topLevelItem(0))
 
     def _new_tree_item(self,parent,label,value,row):
         item=QTreeWidgetItem([str(label),display_bson(value),bson_type(value)])
@@ -366,11 +420,9 @@ class MongoCollectionPage(QWidget):
         if self.page and self.page.documents:
             if view_index==0 and self.model.columns:self.grid.setCurrentIndex(self.model.index(self._selected_row,0))
             elif view_index==1:
-                current=self.tree.currentItem()
-                entry=self._tree_values.get(current.data(0,Qt.ItemDataRole.UserRole)) if current else None
-                if not entry or entry[0]!=self._selected_row:self.tree.setCurrentItem(self.tree.topLevelItem(self._selected_row))
+                self._render_tree()
             elif view_index==2 and self._selected_row<len(self._json_offsets):
-                cursor=self.json_view.textCursor();cursor.setPosition(self._json_offsets[self._selected_row]);self.json_view.setTextCursor(cursor)
+                self._restore_json_selection()
         self._update_controls()
 
     def _set_type_colors(self,value):
@@ -393,11 +445,13 @@ class MongoCollectionPage(QWidget):
         if session is None:self.show_error("连接已断开。");return False
         self._request+=1; request=self._request; binding=(self.database,self.collection)
         self.loading=self.running=True; self._update_controls()
-        def alive():return not self._closed and request==self._request
+        def alive():return isValid(self) and not self._closed and request==self._request
         def current():return alive() and self.window.sessions.get(self.connection_id) is session and binding==(self.database,self.collection)
         def stale():
             if alive():
                 self.loading=self.running=False; self._after_save=None
+                self._pending_row=None
+                if self.page:self.offset=self.page.offset
                 if self._dialog:self._dialog.set_busy(False)
                 self.show_error("连接已改变，请刷新后继续。"); self._update_controls()
         def success(value):
@@ -406,6 +460,8 @@ class MongoCollectionPage(QWidget):
         def failure(error):
             if current():
                 self.loading=self.running=False;self._after_save=None;self.show_error(error)
+                self._pending_row=None
+                if self.page:self.offset=self.page.offset
                 if failed:failed(error)
                 self._update_controls()
             else:stale()
@@ -413,16 +469,30 @@ class MongoCollectionPage(QWidget):
         return True
 
     def _idle(self,callback):
-        self.window.when_idle(lambda:callback() if not self._closed else None)
+        self.loading=self.running=True;self._update_controls()
+        def resume():
+            if isValid(self) and not self._closed:
+                self.loading=self.running=False
+                callback()
+                if isValid(self) and not self._closed:self._update_controls()
+        self.window.when_idle(resume)
 
     def load_page(self,page):
+        selected=self.selected_document()
+        previous_key=document_key(selected) if selected is not None else None
         self.message.clear();self.message.hide()
         self.page=page;self.offset=page.offset
+        self._setting_selection=True
         self.model.set_documents(page.documents)
-        self.tree.clear();self._tree_values.clear()
-        for index,document in enumerate(page.documents):self._new_tree_item(None,self.offset+index+1,document.document,index)
-        self._selected_row=min(self._selected_row,max(0,len(page.documents)-1))
+        if self._pending_row is not None:
+            target=len(page.documents)-1 if self._pending_row<0 else self._pending_row
+            self._pending_row=None
+        else:target=next((row for row,record in enumerate(page.documents) if document_key(record)==previous_key),self._selected_row)
+        self._selected_row=max(0,min(target,len(page.documents)-1))
         if page.documents and self.model.columns:self.grid.setCurrentIndex(self.model.index(self._selected_row,0))
+        self._setting_selection=False
+        self._tree_document_key=None
+        self._render_tree()
         self._json_pending=True
         self.set_view(self.views.currentIndex())
         self.query_label.setText(page.query_text);self.query_label.setToolTip(page.query_text)
@@ -450,7 +520,7 @@ class MongoCollectionPage(QWidget):
             if any(not isinstance(value,int) or isinstance(value,bool) or value not in (1,-1) for value in ordering.values()):raise ValueError("排序方向只能为 1 或 -1。")
         except Exception as error:self.show_error(error);return
         self._filter,self._sort,self._projection=filter_doc,list(ordering.items()) or None,projection or None
-        self.offset=0;self.refresh(check=False)
+        self._pending_row=0;self.offset=0;self.refresh(check=False)
 
     def sort_column(self,column):
         if not 0<=column<len(self.model.columns):return
@@ -458,9 +528,37 @@ class MongoCollectionPage(QWidget):
         direction=-1 if self._sort==[(field,1)] else 1
         self.sort_edit.setText(canonical_dumps({field:direction}));self.apply_filter()
 
-    def go_page(self,offset):
-        if self.loading or not self.can_discard(lambda:self.go_page(offset)):return
-        self.offset=max(0,offset);self.refresh(check=False)
+    def go_page(self,offset,*,selected_row=0):
+        if self.loading or not self.can_discard(lambda:self.go_page(offset,selected_row=selected_row)):return
+        self._pending_row=selected_row;self.offset=max(0,offset);self.refresh(check=False)
+
+    def navigate(self,direction):
+        if self.loading or not self.page:return
+        tree=self.views.currentWidget() is self.tree
+        if not tree:
+            if direction=="first":self.go_page(0)
+            elif direction=="previous":self.go_page(max(0,self.offset-self.page_size.value()))
+            elif direction=="next" and self.page.has_more:self.go_page(self.page.next_offset)
+            elif direction=="last":self.last_page()
+            return
+        if direction=="first":
+            if self.offset:self.go_page(0)
+            else:self.select_record(0)
+        elif direction=="previous":
+            if self._selected_row:self.select_record(self._selected_row-1)
+            elif self.offset:self.go_page(max(0,self.offset-self.page_size.value()),selected_row=-1)
+        elif direction=="next":
+            if self._selected_row+1<len(self.page.documents):self.select_record(self._selected_row+1)
+            elif self.page.has_more:self.go_page(self.page.next_offset)
+        elif direction=="last" and self.page.total:
+            last=self.page.total-1;offset=last//self.page_size.value()*self.page_size.value()
+            if offset==self.offset:self.select_record(last-offset)
+            else:self.go_page(offset,selected_row=last-offset)
+
+    def page_settings(self):
+        if self.loading or not self.can_discard(self.page_settings):return
+        value,accepted=QInputDialog.getInt(self,"记录设置","每页文档数",self.page_size.value(),1,1000)
+        if accepted:self.page_size.setValue(value);self.go_page(0)
 
     def last_page(self):
         if self.page and self.page.total is not None:self.go_page(max(0,(self.page.total-1)//self.page_size.value())*self.page_size.value())
@@ -559,11 +657,24 @@ class MongoCollectionPage(QWidget):
         self.edit_action.setEnabled(editable);self.delete_button.setEnabled(editable)
         self.export_action.setEnabled(document is not None and not self.loading)
         self.refresh_button.setEnabled(not self.loading)
-        self.collapse_action.setEnabled(self.views.currentWidget() is self.tree)
-        self.first_button.setEnabled(not self.loading and self.offset>0)
-        self.previous_button.setEnabled(not self.loading and self.offset>0)
-        self.next_button.setEnabled(not self.loading and bool(self.page and self.page.has_more))
-        self.last_button.setEnabled(not self.loading and bool(self.page and self.page.total is not None and self.page.has_more))
+        tree=self.views.currentWidget() is self.tree
+        json=self.views.currentWidget() is self.json_view
+        self.edit_action.setVisible(not json);self.columns_action.setVisible(not tree and not json)
+        self.collapse_action.setVisible(not json);self.color_action.setVisible(not tree and not json)
+        self.collapse_action.setEnabled(tree)
+        has_previous=self.offset>0 or (tree and self._selected_row>0)
+        has_next=bool(self.page and (self.page.has_more or (tree and self._selected_row+1<len(self.page.documents))))
+        self.first_button.setEnabled(not self.loading and has_previous)
+        self.previous_button.setEnabled(not self.loading and has_previous)
+        self.next_button.setEnabled(not self.loading and has_next)
+        has_last=bool(self.page and self.page.total is not None and (has_next if tree else self.page.has_more))
+        self.last_button.setEnabled(not self.loading and has_last)
+        for control,name in ((self.first_button,"第一"),(self.previous_button,"上一"),(self.next_button,"下一"),(self.last_button,"最后一")):
+            control.setToolTip(name+("条记录" if tree else "页"))
+        if tree and self.page and self.page.total is None:self.last_button.setToolTip("文档总数未知，无法定位最后一条记录。")
+        self.page_number.setVisible(not tree);self.record_position.setVisible(tree)
+        self.record_position.setText(f"第 {self.offset+self._selected_row+1:,} 条记录" if document else "没有文档")
+        self.settings_button.setEnabled(not self.loading)
         self.page_size.setEnabled(not self.loading);self.page_number.setEnabled(not self.loading)
         if document is not None and not document.editable:self.edit_action.setToolTip(document.edit_reason)
         else:self.edit_action.setToolTip("编辑选中文档 · Canonical Extended JSON")

@@ -2135,7 +2135,7 @@ class MainWindow(QMainWindow):
                     ['旧版 MongoDB 命令 / Canonical EJSON（保留原整数语义）', 'MongoDB JavaScript（普通 Number 保存为 Double）'], 0, False)
                 if not accepted: return
                 language = MONGO_JS if choice.startswith('MongoDB JavaScript') else LEGACY
-            page = self.new_query(sql=sql, query_language=language or LEGACY)
+            page = self.new_query(sql=sql, query_language=language if language is not None else LEGACY)
             if page:
                 self.store.remember_file_language(filename, sql, page.query_language)
                 page.filename = filename

@@ -60,10 +60,11 @@ def test_actual_native_bigint_variables_functions_loops_async(engine, offline):
     ("'x'.repeat(300000)","output")])
 def test_actual_native_failure_limits_and_cleanup(engine, offline, text, fragment):
     with pytest.raises(JavaScriptError) as raised:
-        engine.execute(offline,text,limits=ExecutionLimits(timeout_ms=100,heap_bytes=4*1024*1024))
+        engine.execute(offline,text,limits=ExecutionLimits(timeout_ms=1500 if fragment=='memory' else 100,heap_bytes=4*1024*1024))
     assert fragment in str(raised.value).lower()
     assert_clean(raised.value.result)
     assert raised.value.result.elapsed_ms < 2000
+    if fragment=='memory':assert raised.value.result.resource_exhausted
 
 
 def test_actual_native_explicit_cancel_does_not_block_python(engine, offline):

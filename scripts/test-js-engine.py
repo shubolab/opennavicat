@@ -46,6 +46,12 @@ def protocol_module():
     module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module);return module
 
 
+def source_environment():
+    # Preserve native DLL bootstrap sitecustomize before pytest/hashlib runs.
+    pythonpath=os.pathsep.join(value for value in (str(ROOT),os.environ.get('PYTHONPATH',''))if value)
+    return dict(os.environ,PYTHONPATH=pythonpath,PYTEST_DISABLE_PLUGIN_AUTOLOAD='1')
+
+
 def main(argv=None):
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--mode',choices=('vm','protocol','qt','qt-protocol'),required=True)
@@ -82,7 +88,10 @@ def main(argv=None):
         'qt':'real-qt-component-contracts-and-native-helper-vm-only-no-database-capability',
         'qt-protocol':'real-qt-component-native-helper-and-fresh-mongodb-production-chain',
     }[args.mode]
-    environment=dict(os.environ,PYTHONPATH=str(ROOT),PYTEST_DISABLE_PLUGIN_AUTOLOAD='1')
+    # Preserve the source build's native DLL bootstrap sitecustomize (notably
+    # Windows ARM64), which must run before pytest/hashlib loads CPython's SSL.
+    # Frozen/installed smoke separately strips these developer/SDK paths.
+    environment=source_environment()
     environment.pop('OPENNAVICAT_TEST_MONGODB_ENDPOINT',None)
     if is_qt:environment['QT_QPA_PLATFORM']='offscreen'
     cleanup_verified=not is_protocol

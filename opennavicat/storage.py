@@ -305,7 +305,7 @@ class Store:
         self.flush()
 
     def record(self, config, sql, elapsed, status, *, query_language=LEGACY):
-        if query_language not in LANGUAGES: raise ValueError('Unknown query language')
+        if not isinstance(query_language, str) or query_language not in LANGUAGES: raise ValueError('Unknown query language')
         with closing(sqlite3.connect(self.history_path)) as db, db:
             db.execute("INSERT INTO history(created, connection_id, connection_name, sql, elapsed, status, query_language) VALUES (?, ?, ?, ?, ?, ?, ?)",
                        (datetime.now(timezone.utc).isoformat(timespec="seconds"), config.id, config.name, sql, elapsed, status, query_language))
@@ -317,7 +317,7 @@ class Store:
             return [dict(r) for r in db.execute("SELECT * FROM history WHERE sql LIKE ? OR connection_name LIKE ? ORDER BY id DESC LIMIT 200", (f"%{search}%", f"%{search}%"))]
 
     def add_favorite(self, name, sql, connection_id, *, query_language=LEGACY):
-        if query_language not in LANGUAGES: raise ValueError('Unknown query language')
+        if not isinstance(query_language, str) or query_language not in LANGUAGES: raise ValueError('Unknown query language')
         self.state["favorites"].append({"name": name, "sql": sql, "connection_id": connection_id, 'query_language': query_language})
         self.flush()
 
@@ -326,7 +326,7 @@ class Store:
         return entry.get('query_language') if entry.get('sha256') == hashlib.sha256(text.encode('utf-8')).hexdigest() else None
 
     def remember_file_language(self, filename, text, language):
-        if language not in LANGUAGES: raise ValueError('Unknown query language')
+        if not isinstance(language, str) or language not in LANGUAGES: raise ValueError('Unknown query language')
         self.state.setdefault('query_files', {})[str(Path(filename).resolve())] = {
             'sha256': hashlib.sha256(text.encode('utf-8')).hexdigest(), 'query_language': language}
         self.flush()

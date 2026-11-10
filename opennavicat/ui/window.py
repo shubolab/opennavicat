@@ -5,7 +5,7 @@ import uuid
 import json
 import threading
 from copy import deepcopy
-from dataclasses import replace
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 
 from PySide6.QtCore import QByteArray, QSize, Qt, QThreadPool, QTimer, Signal
@@ -51,6 +51,18 @@ from .mongo_index_designer import MongoIndexDesignerPage, MongoIndexDeleteDialog
 
 DESIGNER_PAGES = (TableDesignerPage, IndexDesignerPage, TriggerDesignerPage, MongoIndexDesignerPage)
 MONGO_PAGES = (MongoCollectionPage, MongoGridFSPage)
+
+
+@dataclass(frozen=True)
+class _ConnectionEdit:
+    # Serialized only in process memory: an immutable accepted snapshot, with
+    # credentials excluded from repr and never read back from a closed dialog.
+    configuration: str = field(repr=False)
+    remember: tuple[bool, bool, bool, bool]
+
+    def config(self):
+        return ConnectionConfig(**json.loads(self.configuration))
+
 
 SAMPLE_QUERY = """-- Explore your sample workspace. Select SQL to run only that selection.
 SELECT
@@ -466,6 +478,8 @@ class MainWindow(QMainWindow):
         self._connecting = set()
         self._closing_mongo = False
         self._closing_connections = set()
+        self._connection_edit_tokens = {}
+        self._connection_edit_failure_handler = None
         self._mongo_index_jobs = {}
         self._mongo_index_delete_dialogs = {}
         self._closed = False
@@ -1058,7 +1072,7 @@ class MainWindow(QMainWindow):
         for index in range(self.tabs.count()):
             document = self.tabs.widget(index)
             if isinstance(document, TablePage) and (document.connection_id, document.schema) == (page.connection_id, page.schema) and document.table in affected_tables and document.model is not None and document.model.pending:
-                page._after_save = None
+                self._cancel_designer_retry(page)
                 page.show_error(ValueError("请先提交或取消该表数据页中的未保存记录，再保存结构变更。"))
                 return
         snapshot, draft = deepcopy(page.snapshot), deepcopy(definition)
@@ -1087,7 +1101,7 @@ class MainWindow(QMainWindow):
             if retry is not None:
                 self.when_idle(retry)
         def failed(error):
-            page._after_save = None
+            self._cancel_designer_retry(page)
             page.show_error(error)
         self.submit(work, done, failed, label="保存表设计", finished=lambda: page.set_busy(False))
 
@@ -1202,7 +1216,7 @@ class MainWindow(QMainWindow):
         if page.suppress_save_preview and snapshot.exists and plan is None:
             plan = lambda: mongo_index_tools.plan_index(session, snapshot, draft)
         elif plan is None or plan.definition != definition or plan.snapshot.fingerprint != page.snapshot.fingerprint:
-            page._after_save = None
+            self._cancel_designer_retry(page)
             page.show_error(DatabaseError("请先确认当前索引的最终脚本预览。"))
             return
         def done(updated):
@@ -1215,7 +1229,7 @@ class MainWindow(QMainWindow):
                 self.when_idle(retry)
         def failed(error):
             if self._index_page_alive(page):
-                page._after_save = None
+                self._cancel_designer_retry(page)
                 page.show_error(error)
         return self._apply_mongo_index_plan(page.connection_id, session, plan, done, failed, page)
 
@@ -1342,10 +1356,12 @@ class MainWindow(QMainWindow):
         if answer == QMessageBox.StandardButton.Save:
             # Closing and disconnecting resume only after a successful save;
             # cancelling the preview leaves both draft and connection intact.
+            if getattr(page, "_after_save", None) is not retry:
+                self._cancel_designer_retry(page)
             page._after_save = retry
             page.request_save()
             if page._save_dialog is not None:
-                page._save_dialog.rejected.connect(lambda: setattr(page, "_after_save", None))
+                page._save_dialog.rejected.connect(lambda: self._cancel_designer_retry(page))
             return False
         return True
 
@@ -1381,6 +1397,9 @@ class MainWindow(QMainWindow):
         if success:
             task.signals.succeeded.connect(lambda result: deliver(success, result))
         task.signals.failed.connect(lambda error: deliver(failure or self.error, error))
+        abort_edit = self._connection_edit_failure_handler
+        if abort_edit is not None:
+            task.signals.failed.connect(lambda _error: abort_edit())
         def cleanup():
             self.tasks.discard(task)
             if self._closed or not isValid(self):
@@ -1673,14 +1692,102 @@ class MainWindow(QMainWindow):
         result = dialog.get_config()
         if result is None:
             return
-        if result.id in self.sessions:
-            if not self.disconnect(result.id):
+        payload = _ConnectionEdit(json.dumps(asdict(result), ensure_ascii=True, allow_nan=False),
+            (bool(dialog.remember_password), bool(dialog.remember_ssh_password),
+             bool(dialog.remember_ssh_key_passphrase), bool(dialog.remember_ssl_password)))
+        token = object()
+        self._connection_edit_tokens[result.id] = token
+        expected = self.sessions.get(result.id)
+        existing = result.id in self.configs
+        self._continue_connection_edit(result.id, token, payload, expected, existing)
+
+    def _cancel_connection_edit(self, connection_id, token):
+        if self._connection_edit_tokens.get(connection_id) is token:
+            self._connection_edit_tokens.pop(connection_id)
+
+    def _continue_connection_edit(self, connection_id, token, payload, expected, existing):
+        def cancel():
+            self._cancel_connection_edit(connection_id, token)
+        def current():
+            return (isValid(self) and not self._closed and not self._closing_mongo
+                    and self._connection_edit_tokens.get(connection_id) is token
+                    and (not existing or connection_id in self.configs))
+        if not current():
+            cancel()
+            return
+        def resume():
+            self._continue_connection_edit(connection_id, token, payload, expected, existing)
+        resume.cancelled = cancel
+        if self.tasks:
+            self.when_idle(resume)
+            return
+        session = self.sessions.get(connection_id)
+        if ((session is not None and session is not expected)
+                or connection_id in self._connecting or connection_id in self._closing_connections):
+            cancel()
+            self.statusBar().showMessage("连接状态已改变；此次设置没有保存。", 5000)
+            return
+        def commit():
+            if not current():
+                cancel()
                 return
+            if connection_id in self.sessions or connection_id in self._connecting:
+                cancel()
+                self.statusBar().showMessage("连接状态已改变；此次设置没有保存。", 5000)
+                return
+            cancel()
+            self._store_connection_edit(payload)
+        if session is None:
+            commit()
+            return
+        previous_failure = self._connection_edit_failure_handler
+        self._connection_edit_failure_handler = cancel
         try:
-            self.store.save_connection(result, dialog.remember_password,
-                remember_ssh=dialog.remember_ssh_password,
-                remember_ssh_key=dialog.remember_ssh_key_passphrase,
-                remember_ssl=dialog.remember_ssl_password)
+            if self.disconnect(connection_id, after=commit, retry=resume):
+                return
+        except Exception as error:
+            cancel()
+            if isValid(self) and not self._closed:
+                self.error(error)
+            return
+        finally:
+            self._connection_edit_failure_handler = previous_failure
+        # A dirty document's Save may open a sheet or start an asynchronous
+        # write. Retain this same continuation; Cancel/validation/failure drops
+        # it instead of reopening settings or saving stale widget values later.
+        holders = []
+        for index in range(self.tabs.count()):
+            page = self.tabs.widget(index)
+            if getattr(page, "connection_id", None) == connection_id:
+                holders.extend([page, getattr(page, "key_page", None)])
+        pending = [page for page in holders if page is not None and getattr(page, "_after_save", None) is resume]
+        if not pending:
+            cancel()
+            return
+        for page in pending:
+            dialog = getattr(page, "_save_dialog", None) or getattr(page, "_dialog", None)
+            if dialog is not None:
+                def rejected(page=page):
+                    if isValid(page) and getattr(page, "_after_save", None) is resume:
+                        page._after_save = None
+                    cancel()
+                dialog.rejected.connect(rejected)
+            elif not self.tasks and not getattr(page, "loading", False):
+                self._cancel_designer_retry(page)
+
+    @staticmethod
+    def _cancel_designer_retry(page):
+        retry, page._after_save = getattr(page, "_after_save", None), None
+        cancelled = getattr(retry, "cancelled", None)
+        if callable(cancelled):
+            cancelled()
+
+    def _store_connection_edit(self, payload):
+        result = payload.config()
+        remember, remember_ssh, remember_ssh_key, remember_ssl = payload.remember
+        try:
+            self.store.save_connection(result, remember,
+                remember_ssh=remember_ssh, remember_ssh_key=remember_ssh_key, remember_ssl=remember_ssl)
         except Exception as exc:
             self.error(f"The operating system keychain could not save the password. The connection was not saved.\n\n{exc}")
             return
@@ -2304,24 +2411,32 @@ class MainWindow(QMainWindow):
         if self.active_id:
             self.disconnect(self.active_id)
 
-    def disconnect(self, connection_id):
+    def disconnect(self, connection_id, *, after=None, retry=None):
+        if self._closed or not isValid(self):
+            return False
         if connection_id in self._closing_connections:
             return False
         if self.tasks:
             QMessageBox.information(self, "操作进行中", "请等待当前操作完成后再关闭连接。")
             return False
         pages = [(i, self.tabs.widget(i)) for i in range(self.tabs.count()) if getattr(self.tabs.widget(i), "connection_id", None) == connection_id]
+        retry = retry or (lambda: self.disconnect(connection_id, after=after))
         for _, page in pages:
             if isinstance(page, TablePage) and not page.can_discard():
                 return False
-            if isinstance(page, (RedisBrowserPage, *MONGO_PAGES)) and not page.can_discard(lambda: self.disconnect(connection_id)):
+            if isinstance(page, (RedisBrowserPage, *MONGO_PAGES)) and not page.can_discard(retry):
                 return False
-            if isinstance(page, DESIGNER_PAGES) and not self.can_leave_designer(page, lambda: self.disconnect(connection_id)):
+            if isinstance(page, DESIGNER_PAGES) and not self.can_leave_designer(page, retry):
                 return False
         for dialog, owner in tuple(self._mongo_index_delete_dialogs.items()):
             if owner == connection_id:
                 dialog.reject()
         session = self.sessions.get(connection_id)
+        def completed(_value=None):
+            result = self._finish_disconnect(connection_id, session, pages)
+            if result and after is not None:
+                self.when_idle(after)
+            return result
         if session and session.in_transaction:
             if QMessageBox.question(self, "事务尚未结束", "回滚尚未提交的事务并关闭连接？", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel) != QMessageBox.StandardButton.Yes:
                 return False
@@ -2338,12 +2453,14 @@ class MainWindow(QMainWindow):
                     if isinstance(page, MONGO_PAGES):
                         page._closed = False
                 self.error(error)
-            self.submit(session.close, lambda _value: self._finish_disconnect(connection_id, session, pages),
-                        failed, label="关闭 MongoDB 连接")
+                cancelled = getattr(retry, "cancelled", None)
+                if callable(cancelled):
+                    cancelled()
+            self.submit(session.close, completed, failed, label="关闭 MongoDB 连接")
             return True
         if session:
             session.close()
-        return self._finish_disconnect(connection_id, session, pages)
+        return completed()
 
     def _finish_disconnect(self, connection_id, session, pages):
         self._closing_connections.discard(connection_id)
@@ -2769,5 +2886,6 @@ class MainWindow(QMainWindow):
             self.error(exc)
             event.ignore()
             return
+        self._connection_edit_tokens.clear()
         self._closed = True
         event.accept()

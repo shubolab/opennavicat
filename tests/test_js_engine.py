@@ -20,13 +20,14 @@ import pytest
 from opennavicat.database import ConnectionConfig
 from opennavicat.mongodb_session import BSON_CODEC, MongoSession
 from opennavicat.js_engine.runtime import ExecutionLimits, JavaScriptError, NativeJavaScript
+from opennavicat.js_engine.payload import helper_name
 from opennavicat.js_engine.codec import JS_UNDEFINED
 from test_mongodb_session import mongodb_service, session
 
 
 @pytest.fixture(scope="module")
 def engine():
-    helper = Path(os.environ.get("OPENNAVICAT_TEST_JS_HELPER", Path(__file__).resolve().parents[1]/"artifacts/js-engine/opennavicat-js"))
+    helper = Path(os.environ.get("OPENNAVICAT_TEST_JS_HELPER", Path(__file__).resolve().parents[1]/"artifacts/js-engine"/helper_name()))
     if not helper.exists():
         pytest.skip("Build the pinned controlled native helper with scripts/build-quickjs.py")
     return NativeJavaScript(helper)

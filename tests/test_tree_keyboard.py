@@ -1,5 +1,6 @@
 """Keyboard activation reaches the real database and table workspace."""
 import sqlite3
+from contextlib import closing
 import pytest
 
 from PySide6.QtCore import Qt
@@ -12,9 +13,10 @@ from opennavicat.ui.window import MainWindow, TablePage
 @pytest.mark.parametrize("key", [Qt.Key.Key_Return, Qt.Key.Key_Enter])
 def test_enter_opens_connection_then_real_table(qtbot, tmp_path, monkeypatch, key):
     database = tmp_path / "sample.sqlite"
-    with sqlite3.connect(database) as connection:
+    with closing(sqlite3.connect(database)) as connection:
         connection.execute("CREATE TABLE products(id INTEGER PRIMARY KEY, name TEXT)")
         connection.execute("INSERT INTO products VALUES(1, 'Generated sample')")
+        connection.commit()
     store = Store(tmp_path / "workspace")
     config = ConnectionConfig("keyboard-sample", "Generated keyboard sample", database=str(database))
     store.save_connection(config)

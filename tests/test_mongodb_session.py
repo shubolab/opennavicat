@@ -98,22 +98,54 @@ def mongodb_service(request):
         if report:
             report.parent.mkdir(parents=True,exist_ok=True)
             report.write_text(json.dumps(evidence,indent=2)+'\n')
+    def owned_info(info):
+        labels=info.get('Config',{}).get('Labels',{}) or {}
+        if (info.get('Id')!=container or info.get('Name')!='/'+name or
+            labels.get('opennavicat.test')!='true' or
+            labels.get('opennavicat.task')!='mongodb-adapter-tests' or
+            labels.get('opennavicat.mongodb-protocol-fixture')!=token or
+            labels.get('opennavicat.mongodb-protocol-run')!=run_id):
+            raise RuntimeError('Refusing MongoDB fixture access without exact ownership')
+        return info
+    def diagnostics(info):
+        owned_info(info)
+        state=info.get('State',{})
+        # Publish only bounded, selected state; Docker inspect's environment,
+        # mounts and configuration can contain credentials and are never dumped.
+        evidence['server_state']={key:state.get(key) for key in
+            ('Status','Running','ExitCode','OOMKilled','StartedAt','FinishedAt')}
+        evidence['server_state']['Error']=str(state.get('Error','')).replace('fixture-password','<redacted>')[:2000]
+        try:
+            logs=subprocess.run(['docker','logs','--tail','60',container],capture_output=True,text=True,timeout=10)
+            evidence['server_log_available']=logs.returncode==0
+            if report:
+                report.with_suffix('.log').write_text((logs.stdout+logs.stderr).replace('fixture-password','<redacted>'))
+        except Exception as exc:
+            evidence['server_log_error_type']=type(exc).__name__
+        receipt()
+    def require_running():
+        info=owned_info(json.loads(_docker('inspect',container))[0])
+        if info.get('State',{}).get('Running') is not True:
+            evidence['failure_phase']='server-startup'
+            diagnostics(info)
+            raise RuntimeError('Owned MongoDB exited before external auth readiness; see redacted state/log receipt')
+        return info
     container=None
     receipt()
     try:
         daemon=json.loads(_docker('info','--format','{{json .}}'))
         evidence.update(docker_os=daemon['OSType'],docker_architecture=daemon['Architecture'])
         if daemon['OSType']!='linux':raise RuntimeError('Owned MongoDB tests require a Linux Docker daemon')
-        container=_docker('run','--detach','--rm','--name',name,'--label','opennavicat.test=true',
+        container=_docker('run','--detach','--name',name,'--label','opennavicat.test=true',
             '--label','opennavicat.task=mongodb-adapter-tests','--label','opennavicat.mongodb-protocol-fixture='+token,
             '--label','opennavicat.mongodb-protocol-run='+run_id,'--publish','127.0.0.1::27017',
             '-e','MONGO_INITDB_ROOT_USERNAME=fixture','-e','MONGO_INITDB_ROOT_PASSWORD=fixture-password','mongo:8.0','--bind_ip_all')
         evidence['container_id']=container
         receipt()
-        info=json.loads(_docker('inspect',container))[0]
-        assert info['Id']==container and info['Name']=='/'+name
-        assert info['Config']['Labels'].get('opennavicat.mongodb-protocol-fixture')==token
+        info=owned_info(json.loads(_docker('inspect',container))[0])
         evidence['owner_token_verified']=True
+        evidence['image_id']=info['Image']
+        require_running()
         image_arch=_docker('image','inspect',info['Image'],'--format','{{.Architecture}}')
         canonical={'aarch64':'arm64','arm64':'arm64','x86_64':'amd64','amd64':'amd64'}
         assert canonical.get(image_arch)==canonical.get(daemon['Architecture']) and canonical.get(image_arch)
@@ -124,13 +156,18 @@ def mongodb_service(request):
         port=int(mapping.rsplit(':',1)[1]);config=config_for(port)
         deadline=time.monotonic()+30
         while True:
+            require_running()
             probe=MongoSession(config)
             try:
                 probe.connect()
                 evidence['server_version']=probe.connection.server_info()['version']
                 break
             except DatabaseError:
-                if time.monotonic()>deadline:raise
+                require_running()
+                if time.monotonic()>deadline:
+                    evidence['failure_phase']='external-auth-readiness-timeout'
+                    diagnostics(json.loads(_docker('inspect',container))[0])
+                    raise
                 time.sleep(.1)
             finally:probe.close()
         evidence['external_auth_readiness']=True
@@ -144,13 +181,8 @@ def mongodb_service(request):
             if container:
                 inspected=subprocess.run(['docker','inspect',container],capture_output=True,text=True,timeout=20)
                 if inspected.returncode==0:
-                    info=json.loads(inspected.stdout)[0]
-                    if (info['Id']!=container or info['Name']!='/'+name or
-                        info['Config']['Labels'].get('opennavicat.mongodb-protocol-fixture')!=token):
-                        raise RuntimeError('Refusing MongoDB fixture cleanup without exact ownership')
-                    logs=subprocess.run(['docker','logs','--tail','60',container],capture_output=True,text=True,timeout=10)
-                    if report:
-                        report.with_suffix('.log').write_text((logs.stdout+logs.stderr).replace('fixture-password','<redacted>'))
+                    info=owned_info(json.loads(inspected.stdout)[0])
+                    diagnostics(info)
                     _docker('rm','--force','--volumes',container)
                 remaining=_docker('container','ls','--all','--no-trunc','--filter','id='+container,'--format','{{.ID}}')
                 if remaining:raise RuntimeError('Owned MongoDB container cleanup did not complete')
@@ -717,3 +749,52 @@ def test_real_gridfs_metadata_dates_reject_precision_loss_before_bucket_creation
     exact=datetime(2026,1,2,3,4,5,123000,timezone.utc)
     saved=session.upload_file(db,bucket,source,metadata={'date':exact})
     assert saved.document['metadata']['date']==exact
+
+
+def test_fixture_early_exit_retains_redacted_state_logs_and_exact_cleanup(tmp_path,monkeypatch):
+    import test_mongodb_session as module
+    from types import SimpleNamespace
+    token='a'*32;identity='b'*64;run_id='c'*32
+    name='opennavicat-mongo-owned-'+token[:12]
+    info={'Id':identity,'Name':'/'+name,'Image':'owned-image','Config':{'Labels':{
+        'opennavicat.test':'true','opennavicat.task':'mongodb-adapter-tests',
+        'opennavicat.mongodb-protocol-fixture':token,'opennavicat.mongodb-protocol-run':run_id},
+        'Env':['MUST_NOT_DUMP_PRIVATE_ENV=sentinel']},
+        'State':{'Running':False,'Status':'exited','ExitCode':14,'OOMKilled':False,
+            'Error':'owned fixture-password startup error'}}
+    commands=[]
+    def docker(*args):
+        commands.append(args)
+        if args[0]=='info':return json.dumps({'OSType':'linux','Architecture':'amd64'})
+        if args[0]=='run':
+            assert '--rm'not in args
+            return identity
+        if args[0]=='inspect':return json.dumps([info])
+        if args[0]=='rm':
+            assert args==('rm','--force','--volumes',identity)
+            return identity
+        if args[:2]==('container','ls'):return ''
+        pytest.fail('Exited container must not reach port mapping or readiness waits')
+    def process(args,**kwargs):
+        if args[1]=='inspect':return SimpleNamespace(returncode=0,stdout=json.dumps([info]),stderr='')
+        assert args[1:]==['logs','--tail','60',identity]
+        return SimpleNamespace(returncode=0,stdout='owned fixture-password diagnostic',stderr=' stderr')
+    monkeypatch.setenv('OPENNAVICAT_TEST_MONGODB','1')
+    monkeypatch.setenv('OPENNAVICAT_MONGODB_PROTOCOL_RUN_ID',run_id)
+    monkeypatch.setenv('OPENNAVICAT_MONGODB_PROTOCOL_REPORT_DIR',str(tmp_path))
+    monkeypatch.setattr(module.uuid,'uuid4',lambda:SimpleNamespace(hex=token))
+    monkeypatch.setattr(module.shutil,'which',lambda name:'/owned/docker')
+    monkeypatch.setattr(module,'_docker',docker)
+    monkeypatch.setattr(module.subprocess,'run',process)
+    monkeypatch.setattr(module.MongoSession,'connect',lambda *_args:pytest.fail('A stopped fixture must not connect'))
+    request=SimpleNamespace(module=SimpleNamespace(__name__='test_mongodb_session'))
+    generator=module.mongodb_service.__wrapped__(request)
+    with pytest.raises(RuntimeError,match='exited before external auth readiness'):next(generator)
+    receipt=json.loads((tmp_path/('fixture-'+token+'.json')).read_text())
+    assert receipt['cleanup_removed'] is True and receipt['owner_token_verified'] is True
+    assert receipt['server_state']['ExitCode']==14 and receipt['server_state']['OOMKilled'] is False
+    assert receipt['failure_phase']=='server-startup'
+    text='\n'.join(path.read_text() for path in tmp_path.iterdir())
+    assert 'fixture-password'not in text and 'MUST_NOT_DUMP_PRIVATE_ENV'not in text
+    assert '<redacted>'in text and 'owned <redacted> diagnostic stderr'in text
+    assert sum(args[0]=='rm' for args in commands)==1

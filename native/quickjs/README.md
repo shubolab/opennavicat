@@ -37,8 +37,17 @@ acknowledgement records and cancellation. Script wrappers cannot expand that
 authority. The native VM deadline bounds JavaScript work; an independent parent
 watchdog must also terminate/reap the child while a host DB operation blocks.
 
+The helper uses the public `JS_NewRuntime2` custom allocator with aligned block
+headers, a total quota and an irreversible out-of-JS failure bit. A nonce-bound
+resource frame makes the parent deny subsequent DB operations. This is necessary
+because the official default allocator's Error-allocation fallback can throw
+null, and a changed bootstrap actually caught that OOM and returned 42. The
+original 39-case fixed corpus remains historical evidence, not a universal
+uncatchability guarantee. Final child exit status is checked after a terminal
+frame; confirmed DB writes remain in receipts when child cleanup fails.
+
 Confirmed writes are never presented as rolled back when a later command fails.
 Write concern/network acknowledgement uncertainty is explicit. This milestone
-will implement real `find`/`findOne`/aggregate chains, runCommand and basic writes
+implements real `find`/`findOne`/aggregate chains, runCommand and basic writes
 with generated fixture data. Complete mongosh/Navicat helper/global semantics,
 streaming cursors and arbitrary raw-BSON representation remain open gates.

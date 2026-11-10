@@ -5,7 +5,7 @@
   const stringify=JSON.stringify, parse=JSON.parse, keys=Object.keys, descriptors=Object.getOwnPropertyDescriptors;
   const ownKeys=Reflect.ownKeys, getProto=Object.getPrototypeOf, define=Object.defineProperty;
   const freeze=Object.freeze, create=Object.create, big=BigInt, isSafe=Number.isSafeInteger;
-  const brands=new WeakMap(), epoch=Date.prototype.getTime, dateISO=Date.prototype.toISOString;
+  const brands=new WeakMap(),cursorCompletion=new WeakMap(),epoch=Date.prototype.getTime, dateISO=Date.prototype.toISOString;
   const NativeDate=Date, NativeRegExp=RegExp, NativeArray=Array, NativeU8=Uint8Array;
   const ObjectProto=Object.prototype, ArrayProto=Array.prototype, NativeObject=Object, NativeNumber=Number;
   const NativeWeakMap=WeakMap, NativeWeakSet=WeakSet, NativeJSON=JSON, arrayMap=ArrayProto.map;
@@ -123,15 +123,16 @@
     let documents=null,index=0;
     function set(key,value){if(documents!==null)throw new Error('Cursor already executed');cmd[key]=value;return api;}
     function load(){if(documents===null)documents=command(cmd).cursor.firstBatch;}
+    function remaining(){load();const result=documents.slice(index);index=documents.length;return result;}
     const api={sort(value){return set('sort',value);},skip(value){return set('skip',value);},
       limit(value){return set('limit',value);},batchSize(value){if(cmd.aggregate){if(documents!==null)throw new Error('Cursor already executed');cmd.cursor.batchSize=value;return api;}return set('batchSize',value);},
       maxTimeMS(value){return set('maxTimeMS',value);},
       hasNext(){load();return index<documents.length;},next(){load();if(index>=documents.length)throw new Error('Cursor exhausted');return documents[index++];},
-      toArray(){load();const result=documents.slice(index);index=documents.length;return result;},
+      toArray:remaining,
       forEach(fn){if(typeof fn!=='function')throw new TypeError('Cursor callback');while(api.hasNext())fn(api.next());},
       map(fn){if(typeof fn!=='function')throw new TypeError('Cursor callback');const result=[];while(api.hasNext())result.push(fn(api.next()));return result;},
       close(){documents=[];index=0;}};
-    return api;
+    cursorCompletion.set(api,remaining);return api;
   }
   function options(value,allowed){if(!value||typeof value!=='object')throw new TypeError('Options document required');for(const key of keys(value))if(!allowed.includes(key))throw new TypeError('Unsupported prototype option: '+key);return value;}
   function collection(name) {if(typeof name!=='string'||!name||name.includes('\0'))throw new TypeError('Collection name');
@@ -150,5 +151,5 @@
   }
   const db=new Proxy(freeze({getCollection:collection,runCommand:command}),{get(target,name){if(typeof name!=='string')return undefined;return Object.prototype.hasOwnProperty.call(target,name)?target[name]:collection(name);}});
   for(const [name,value]of Object.entries({db,Long,NumberLong:Long,Int32,NumberInt:Int32,Decimal128,NumberDecimal:Decimal128,ObjectId,Binary,BinData,BSONRegex,Timestamp,MinKey,MaxKey,Code,DBRef}))define(globalThis,name,{value,writable:false,configurable:false});
-  return value => {guard();return stringify(encode(value,0,new WeakSet(),true));};
+  return value => {guard();const finish=cursorCompletion.get(value);if(finish)value=finish();return stringify(encode(value,0,new WeakSet(),true));};
 })()

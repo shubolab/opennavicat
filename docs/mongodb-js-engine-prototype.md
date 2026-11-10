@@ -60,6 +60,10 @@ Exceeding row/BSON delivery bounds produces an error with no fake empty/end or
 successful silently truncated result. This is not full lazy/streaming mongosh
 cursor behavior. Terminal `$out`/`$merge` writes do not receive an injected result
 limit that would alter the requested write.
+Final expressions returning a managed find/aggregate cursor are also executed
+and materialized; an explicit `.toArray()` is not required. A terminal frame is
+accepted only if the child subsequently exits successfully. A late native
+failure retains confirmed command receipts and is not returned as query success.
 
 The tagged bridge distinguishes Int32, Int64, Double (including negative zero),
 Decimal128, ObjectId, binary subtype, millisecond dates beyond JS Date's range,
@@ -80,7 +84,15 @@ findOne/replaceOne. This is an explicit limit to any blanket raw-BSON preservati
 claim. Original Int32 fields read as `typeof number` and `===1`, but a whole host
 document read/copy/insert still retained Int32 on the wire. The current prototype
 uses an explicit Int32 brand on decode; matching primitive typeof plus retained
-host-document metadata remains open. Extraction into a new object was not tested.
+host-document metadata remains open in this checkpoint. A second controlled
+original-UI round established that field extraction into a fresh root, embedding
+the whole nested/array component in a fresh root, slice and spread all promote
+read Int32 values to Double. Only the unchanged original host root retains them.
+Assignments invalidate the affected path even if the new value is numerically
+equal: same-value assignment, changed value, delete/re-add, component replacement
+and delete/re-add components all serialized plain Numbers as Double. Explicit
+Long stays Long; plain replacement Number becomes Double. These are actual wire
+observations, not evidence for a particular private implementation mechanism.
 The actual original exposed neither public Double nor DateMS, so both are private
 codec constructors here. Original `String(Long(...))` was `Long("...")`, now
 matched; the full Long arithmetic/constructor behavior is not yet qualified.
@@ -105,14 +117,43 @@ cannot undo confirmed writes. Cleanup time may extend beyond the execution
 deadline, and server cancellation can be denied; outcome receipts must remain
 authoritative in those cases.
 
+An important retained counterexample corrects the earlier offline POC's scope.
+QuickJS-NG's Error construction falls back to JS null if allocating the Error
+itself fails. A newer bootstrap with the same preserved official engine helper
+made `try { allocate until OOM } catch {} 42` actually succeed. The original 39
+cases passed their fixed corpus; they did not prove a universal uncatchable-OOM
+guarantee. The ignored counterexample receipt preserves exact helper/bootstrap
+hashes, source text and successful 42 result, and the old report has an addendum
+while its original bytes/logs/binary are preserved.
+
+The controlled helper therefore uses the official `JS_NewRuntime2` allocator
+interface. Its allocation quota, aligned block headers and irreversible failure
+bit live outside JS. The first failure emits a nonce-bound resource notification
+without allocating a JS Error. The parent marks the execution denied and refuses
+any further database operation; the native bridge also checks the quota flag.
+The final result cannot turn resource exhaustion into success even if JS catches
+the null fallback. Real tests prove that an earlier confirmed insert remains,
+later reads/writes never dispatch, and the helper is reaped. The quota includes
+the allocator headers and engine allocation arenas, not total OS RSS or parent
+memory. Official engine source is unchanged; no unmerged engine patch is used.
+
 The native process layer now has Windows binary pipe mode/QPC and exact Popen
-kill/reap with CREATE_NO_WINDOW; POSIX uses monotonic clocks and an owned process
-group. A bounded reader thread handles pipes on all three systems. Temporary
+kill/reap with CREATE_NO_WINDOW; POSIX uses monotonic clocks and an isolated child
+session. Killing targets the exact Popen child on all platforms: group lookup
+showed a deadline/natural-exit race on macOS and is not needed by a helper with
+no process-spawn API. A bounded reader thread handles pipes on all systems. Temporary
 directories are removed only after child reaping/handle close, including Windows.
 Only the local macOS ARM64 execution is established until the independent
 six-target feature-branch qualification job actually passes; none is packaging
 or installed-app acceptance. The helper runs without a DB via `engine.evaluate`
 for native syntax/typed-IPC/cancellation testing with only PyMongo/sqlparse/pytest.
+The prior checkpoint `e485e15` actually passed all six source/helper targets in
+[run 42849579454](https://github.com/shubolab/opennavicat/actions/runs/42849579454):
+52 cases per target with zero skips and native PE/ELF/Mach-O architecture checks,
+including Windows no-console state, all-byte binary pipes and frame boundaries.
+Its Ubuntu22 fresh MongoDB job passed 87 cases with verified exact cleanup. That
+historical success does not qualify the subsequent allocator/runtime changes;
+each new source checkpoint runs the independent complete qualification again.
 Runtime allocation limits cover QuickJS memory, not total process/parent RSS.
 No host APIs is not an OS sandbox or proof against C-engine vulnerabilities.
 The JS wrapper fails closed for several mutated intrinsics, but is not a complete

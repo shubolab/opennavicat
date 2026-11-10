@@ -68,12 +68,14 @@ def test_native_no_host_or_database_capabilities(native):
 @pytest.mark.parametrize('source,fragment',[
     ('while(true){}',''),
     ("const a=[];for(;;)a.push('x'.repeat(4096))",'memory'),
+    ("try{const a=[];for(;;)a.push('x'.repeat(4096))}catch(e){}42",'memory'),
     ('function again(){return again()+1;}again()','stack'),
     ('new Promise(()=>{})','pending'),
     ('Promise.reject(new Error("generated rejection"));42','generated rejection'),
     ('function again(){Promise.resolve().then(again)}again();42','job'),
     ('import("os")','load'),
     ('"x".repeat(300000)','output'),
+    ('throw null','null'),
 ])
 def test_native_limits_errors_and_reaping(native,source,fragment):
     with pytest.raises(JavaScriptError) as raised:
@@ -133,3 +135,19 @@ def test_native_intrinsics_cannot_silently_change_bson_values(native,source):
 def test_native_array_accessors_are_not_executed_during_data_encoding(native):
     with pytest.raises(JavaScriptError,match='accessors'):
         native.evaluate('const a=[1];Object.defineProperty(a,0,{enumerable:true,get(){throw new Error("must not call getter")}});a')
+
+
+def test_native_late_failure_status_cannot_turn_a_terminal_frame_into_success(native,monkeypatch):
+    from opennavicat.js_engine import runtime
+    original=runtime.subprocess.Popen
+    def failed_status(*args,**kwargs):
+        process=original(*args,**kwargs);wait=process.wait
+        def later(*a,**k):
+            status=wait(*a,**k)
+            if status==0:process.returncode=73;return 73
+            return status
+        process.wait=later;return process
+    monkeypatch.setattr(runtime.subprocess,'Popen',failed_status)
+    with pytest.raises(JavaScriptError,match='exited unsuccessfully')as raised:
+        native.evaluate('42')
+    assert raised.value.result.child_reaped and raised.value.result.value is None

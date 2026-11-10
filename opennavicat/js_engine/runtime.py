@@ -13,7 +13,6 @@ import platform
 from pathlib import Path
 import secrets
 import queue
-import signal
 import struct
 import subprocess
 import tempfile
@@ -67,6 +66,7 @@ class JavaScriptResult:
     open_cursors: int = 0
     open_sessions: int = 0
     native_state: dict = field(default_factory=dict)
+    resource_exhausted: bool = False
 
     @property
     def uncertain_writes(self):
@@ -117,6 +117,7 @@ class NativeJavaScript:
         if not isinstance(source,str) or len(source.encode()) > MAX_FRAME:
             raise DatabaseError("JavaScript source exceeds its text byte limit")
         cancelled = threading.Event()
+        resource_denied = threading.Event()
         finished = threading.Event()
         external = cancel_event or threading.Event()
         started = time.monotonic()
@@ -126,7 +127,7 @@ class NativeJavaScript:
         else:
             from .bridge import MongoDBBridge
             bridge = MongoDBBridge(session, database or session._selected_schema or session.config.database,
-                deadline=deadline, cancelled=cancelled.is_set, max_rows=limits.max_rows, max_bson_bytes=limits.max_bson_bytes)
+                deadline=deadline, cancelled=lambda:cancelled.is_set()or resource_denied.is_set(), max_rows=limits.max_rows, max_bson_bytes=limits.max_bson_bytes)
         token = secrets.token_hex(32)
         event = None
         failure = ""
@@ -143,8 +144,10 @@ class NativeJavaScript:
             nonlocal hard_killed
             if process.poll() is None:
                 try:
-                    if os.name=="nt":process.kill()
-                    else:os.killpg(process.pid, signal.SIGKILL)
+                    # The controlled helper exposes no child-spawn API. Kill
+                    # exactly this Popen child on every platform; group lookup
+                    # can race a naturally exiting POSIX child at the deadline.
+                    process.kill()
                     hard_killed = True
                 except ProcessLookupError:
                     pass
@@ -224,6 +227,11 @@ class NativeJavaScript:
                             break
                         payload,buffer = buffer[4:length+4],buffer[length+4:]
                         message = json.loads(payload)
+                        if message.get("kind")=="resource_limit":
+                            if message.get("operation")!=token:
+                                raise DatabaseError("Invalid JavaScript resource-limit binding")
+                            resource_denied.set()
+                            raise DatabaseError("JavaScript memory allocation limit exceeded; further database operations denied")
                         if message.get("kind") != "bridge":
                             if event is not None or message.get("kind") not in {"result","error"}:
                                 raise DatabaseError("Invalid native JavaScript terminal frame")
@@ -263,6 +271,9 @@ class NativeJavaScript:
                     process.wait(timeout=.25)
                 except subprocess.TimeoutExpired:
                     stop_child();process.wait()
+                if process.returncode != 0 and not failure:
+                    failure="Native JavaScript child exited unsuccessfully after emitting its result ("+str(process.returncode)+")"
+                    value=None
                 if reader is not None:reader.join()
                 stderr = process.stderr.read(8193).decode(errors="replace")[:8192]
                 for stream in (process.stdin,process.stdout,process.stderr):
@@ -271,7 +282,7 @@ class NativeJavaScript:
                 stderr = ""
             if temporary is not None:temporary.cleanup()
         result = JavaScriptResult(value,tuple(bridge.receipts),(time.monotonic()-started)*1000,
-            cancelled.is_set(),process is not None and process.poll() is not None,hard_killed,stderr,failure,bridge.open_cursors,bridge.open_sessions,event.get("native",{})if event else {})
+            cancelled.is_set(),process is not None and process.poll() is not None,hard_killed,stderr,failure,bridge.open_cursors,bridge.open_sessions,event.get("native",{})if event else {},resource_denied.is_set())
         if failure:
             raise JavaScriptError(failure,result)
         return result

@@ -174,6 +174,34 @@ const grouped=db.docs.aggregate([{$group:{_id:'$group',total:{$sum:'$amount'}}},
     assert_clean(result)
 
 
+def test_real_final_find_and_aggregate_cursors_execute_without_toarray(engine,session):
+    session.connection[session.config.database].docs.insert_many([{'_id':i}for i in range(4)])
+    result=engine.execute(session,'db.docs.find({_id:{$gte:1}}).sort({_id:1}).limit(2).batchSize(1)')
+    assert result.value==[{'_id':1},{'_id':2}]
+    assert_clean(result)
+    grouped=engine.execute(session,'db.docs.aggregate([{$group:{_id:null,n:{$sum:1}}}])')
+    assert grouped.value==[{'_id':None,'n':4.0}]
+    assert_clean(grouped)
+
+
+def test_real_confirmed_write_remains_when_native_child_final_status_fails(engine,session,monkeypatch):
+    from opennavicat.js_engine import runtime
+    original=runtime.subprocess.Popen
+    def failed_status(*args,**kwargs):
+        process=original(*args,**kwargs);wait=process.wait
+        def later(*a,**k):
+            status=wait(*a,**k)
+            if status==0:process.returncode=73;return 73
+            return status
+        process.wait=later;return process
+    monkeypatch.setattr(runtime.subprocess,'Popen',failed_status)
+    with pytest.raises(JavaScriptError,match='exited unsuccessfully')as raised:
+        engine.execute(session,'db.docs.insertOne({_id:1});42')
+    assert raised.value.result.confirmed_write_count==1 and raised.value.result.has_confirmed_writes
+    assert session.connection[session.config.database].docs.find_one({'_id':1})is not None
+    assert_clean(raised.value.result)
+
+
 def test_real_update_delete_and_typed_command_comment(engine, session):
     result=engine.execute(session,"""
 db.docs.insertMany([{_id:1,n:1},{_id:2,n:2},{_id:3,n:3}]);
@@ -271,6 +299,27 @@ def test_real_cancel_after_confirmed_write_keeps_write_and_session_reusable(engi
     assert session.connection[session.config.database].docs.find_one({'_id':1})is not None
     assert_clean(raised.value.result)
     assert engine.execute(session,'db.docs.findOne({_id:1})').value=={'_id':1}
+
+
+def test_real_memory_exhaustion_cannot_be_caught_to_dispatch_a_later_write(engine,session):
+    with pytest.raises(JavaScriptError,match='memory')as raised:
+        engine.execute(session,"try{const a=[];for(;;)a.push('x'.repeat(4096))}catch(e){}db.docs.insertOne({_id:1})",
+            limits=ExecutionLimits(heap_bytes=4*1024*1024))
+    assert raised.value.result.commands==()
+    assert raised.value.result.resource_exhausted
+    assert session.connection[session.config.database].docs.find_one({'_id':1})is None
+    assert_clean(raised.value.result)
+
+
+def test_real_memory_limit_keeps_confirmed_write_but_denies_later_read_or_write(engine,session):
+    with pytest.raises(JavaScriptError,match='memory')as raised:
+        engine.execute(session,"db.docs.insertOne({_id:1});try{const a=[];for(;;)a.push('x'.repeat(4096))}catch(e){}try{db.docs.findOne({_id:1})}catch(e){}db.docs.insertOne({_id:2})",
+            limits=ExecutionLimits(heap_bytes=4*1024*1024))
+    result=raised.value.result
+    assert result.resource_exhausted and result.confirmed_write_count==1
+    assert len(result.commands)==1 and result.commands[0].verb=='insert'
+    assert session.connection[session.config.database].docs.count_documents({})==1
+    assert_clean(result)
 
 
 def test_real_network_acknowledgement_failure_is_uncertain_not_rollback(engine, session, monkeypatch):

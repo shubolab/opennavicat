@@ -8,6 +8,7 @@ from __future__ import annotations
 import contextlib
 import copy
 import math
+import json
 import os
 import shutil
 import subprocess
@@ -16,6 +17,7 @@ import time
 import uuid
 from dataclasses import replace
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
 from bson import BSON, Binary, Code, DBRef, Decimal128, Int64, MaxKey, MinKey, ObjectId, Regex, Timestamp
@@ -81,27 +83,79 @@ def _docker(*args):
 
 
 @pytest.fixture(scope='module')
-def mongodb_service():
+def mongodb_service(request):
     if os.environ.get('OPENNAVICAT_TEST_MONGODB') != '1':
         pytest.skip('Set OPENNAVICAT_TEST_MONGODB=1 for a new fixture-owned disposable MongoDB server')
     if not shutil.which('docker'):pytest.skip('Disposable MongoDB integration needs Docker')
-    name='opennavicat-mongo-owned-'+uuid.uuid4().hex[:12]
-    container=_docker('run','--detach','--rm','--name',name,'--label','opennavicat.test=true',
-        '--label','opennavicat.task=mongodb-adapter-tests','--publish','127.0.0.1::27017',
-        '-e','MONGO_INITDB_ROOT_USERNAME=fixture','-e','MONGO_INITDB_ROOT_PASSWORD=fixture-password','mongo:8.0','--bind_ip_all')
+    token=uuid.uuid4().hex
+    name='opennavicat-mongo-owned-'+token[:12]
+    run_id=os.environ.get('OPENNAVICAT_MONGODB_PROTOCOL_RUN_ID','')
+    directory=os.environ.get('OPENNAVICAT_MONGODB_PROTOCOL_REPORT_DIR')
+    report=Path(directory)/('fixture-'+token+'.json') if directory else None
+    evidence=dict(module=request.module.__name__,run_id=run_id,container_name=name,owner_token=token,
+        owner_token_verified=False,cleanup_removed=False,image='mongo:8.0')
+    def receipt():
+        if report:
+            report.parent.mkdir(parents=True,exist_ok=True)
+            report.write_text(json.dumps(evidence,indent=2)+'\n')
+    container=None
+    receipt()
     try:
-        port=int(_docker('port',container,'27017/tcp').rsplit(':',1)[1]);config=config_for(port)
+        daemon=json.loads(_docker('info','--format','{{json .}}'))
+        evidence.update(docker_os=daemon['OSType'],docker_architecture=daemon['Architecture'])
+        if daemon['OSType']!='linux':raise RuntimeError('Owned MongoDB tests require a Linux Docker daemon')
+        container=_docker('run','--detach','--rm','--name',name,'--label','opennavicat.test=true',
+            '--label','opennavicat.task=mongodb-adapter-tests','--label','opennavicat.mongodb-protocol-fixture='+token,
+            '--label','opennavicat.mongodb-protocol-run='+run_id,'--publish','127.0.0.1::27017',
+            '-e','MONGO_INITDB_ROOT_USERNAME=fixture','-e','MONGO_INITDB_ROOT_PASSWORD=fixture-password','mongo:8.0','--bind_ip_all')
+        evidence['container_id']=container
+        receipt()
+        info=json.loads(_docker('inspect',container))[0]
+        assert info['Id']==container and info['Name']=='/'+name
+        assert info['Config']['Labels'].get('opennavicat.mongodb-protocol-fixture')==token
+        evidence['owner_token_verified']=True
+        image_arch=_docker('image','inspect',info['Image'],'--format','{{.Architecture}}')
+        canonical={'aarch64':'arm64','arm64':'arm64','x86_64':'amd64','amd64':'amd64'}
+        assert canonical.get(image_arch)==canonical.get(daemon['Architecture']) and canonical.get(image_arch)
+        evidence.update(image_id=info['Image'],image_architecture=image_arch,native_docker_architecture_matches=True)
+        mapping=_docker('port',container,'27017/tcp')
+        assert mapping.startswith('127.0.0.1:') and '\n'not in mapping
+        evidence['port_loopback_only']=True
+        port=int(mapping.rsplit(':',1)[1]);config=config_for(port)
         deadline=time.monotonic()+30
         while True:
             probe=MongoSession(config)
-            try:probe.connect();break
+            try:
+                probe.connect()
+                evidence['server_version']=probe.connection.server_info()['version']
+                break
             except DatabaseError:
                 if time.monotonic()>deadline:raise
                 time.sleep(.1)
             finally:probe.close()
+        evidence['external_auth_readiness']=True
+        receipt()
         yield config
+    except BaseException as exc:
+        evidence['error_type']=type(exc).__name__
+        raise
     finally:
-        subprocess.run(['docker','rm','--force',container],capture_output=True,timeout=30)
+        try:
+            if container:
+                inspected=subprocess.run(['docker','inspect',container],capture_output=True,text=True,timeout=20)
+                if inspected.returncode==0:
+                    info=json.loads(inspected.stdout)[0]
+                    if (info['Id']!=container or info['Name']!='/'+name or
+                        info['Config']['Labels'].get('opennavicat.mongodb-protocol-fixture')!=token):
+                        raise RuntimeError('Refusing MongoDB fixture cleanup without exact ownership')
+                    logs=subprocess.run(['docker','logs','--tail','60',container],capture_output=True,text=True,timeout=10)
+                    if report:
+                        report.with_suffix('.log').write_text((logs.stdout+logs.stderr).replace('fixture-password','<redacted>'))
+                    _docker('rm','--force','--volumes',container)
+                remaining=_docker('container','ls','--all','--no-trunc','--filter','id='+container,'--format','{{.ID}}')
+                if remaining:raise RuntimeError('Owned MongoDB container cleanup did not complete')
+            evidence['cleanup_removed']=True
+        finally:receipt()
 
 
 @pytest.fixture

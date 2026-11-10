@@ -140,6 +140,14 @@ jobs:
           tests/test_query_protocols.py tests/test_redis_browser_ui.py
           tests/test_extra_driver_window.py
           --junitxml=artifacts/security-integration/protocol-results.xml
+      - name: Verify MongoDB native protocol, query and MainWindow workspaces
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python scripts/test-mongodb-protocol.py --evidence artifacts/security-integration/mongodb-protocol
+      - name: Verify real MongoDB TLS and SSH connections
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python scripts/test-mongodb-security.py --evidence artifacts/security-integration/mongodb-security
       - uses: actions/upload-artifact@v4
         if: always()
         with:

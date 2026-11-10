@@ -6,7 +6,8 @@ Navicat, reads a keychain, decrypts a password, or writes to its source. Passwor
 migration deliberately remains a separate, explicit operation. Reports and
 profile reprs are redacted; callers must also avoid logging ``profile.config``.
 
-Linux's documented connections.json location retains a bounded parser. Windows
+Linux native discovery identifies bounded sources without assuming the macOS
+record/authentication shape; explicit-root legacy fixtures remain review-only. Windows
 native discovery reads only plain allowlisted metadata and always requires
 manual review: its live Navicat18 value/type mapping has not been accepted.
 """
@@ -456,6 +457,19 @@ def _require_windows_review(profile, issues):
                    unsupported_fields=tuple(sorted(set(profile.unsupported_fields) | {"windows_native_format"})))
 
 
+def _native_linux_report():
+    from .navicat_linux import discover_linux_sources
+    found = discover_linux_sources()
+    issues = [ImportIssue(item.code, item.message, blocking=item.blocking) for item in found.issues]
+    if issues:
+        # Presence/prefix inspection does not establish a native record schema.
+        # This existing incomplete-source marker protects stored identities and
+        # groups rather than treating an unknown source as an authoritative [] .
+        issues.append(ImportIssue("unsupported_source_structure",
+            "Linux native connection discovery remains review-only; no profile schema has been accepted.", blocking=True))
+    return NavicatImportReport(issues=tuple(issues), sources_found=found.sources_found, platform="linux")
+
+
 def _native_windows_report(snapshot):
     """Display plain Windows metadata without inventing transport/auth semantics."""
     issues = [ImportIssue(item.code, item.message, blocking=item.blocking) for item in snapshot.issues]
@@ -554,7 +568,9 @@ def discover_navicat_profiles(root: str | os.PathLike | None = None, *, platform
     """Discover metadata without opening connections or reading stored secrets.
 
     An explicit root is a Navicat CC directory, its Common directory, or one
-    exact conn.plist/connections.json file. It is never recursively searched.
+    exact conn.plist/connections.json file. Linux explicit-root parsing is a
+    legacy/synthetic compatibility API, never native schema acceptance. It is
+    never recursively searched.
     Native Windows metadata stays blocked until explicitly edited and reviewed.
     All exceptions become redacted issues, including parser messages that might
     otherwise contain user values.
@@ -563,6 +579,8 @@ def discover_navicat_profiles(root: str | os.PathLike | None = None, *, platform
     issues: list[ImportIssue] = []
     profiles: list[ImportedProfile] = []
     sources = 0
+    if platform.startswith("linux") and root is None:
+        return _native_linux_report()
     if platform == "win32" and root is None:
         if registry_reader is None:
             from .navicat_windows import read_windows_navicat_registry
@@ -586,9 +604,6 @@ def discover_navicat_profiles(root: str | os.PathLike | None = None, *, platform
         if platform == "darwin":
             base = Path.home() / "Library/Application Support/PremiumSoft CyberTech/Navicat CC"
             path = base / "Common/conn.plist"
-        elif platform.startswith("linux"):
-            base = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "navicat"
-            path = base / "Common/connections.json"
         else:
             return NavicatImportReport(issues=(ImportIssue("unsupported_platform", "No native metadata source is established on this platform."),), platform=platform)
     else:
@@ -637,7 +652,13 @@ def discover_navicat_profiles(root: str | os.PathLike | None = None, *, platform
         issues.append(ImportIssue("unresolved_group_members", "Some virtual-group members do not match a discovered connection."))
     for driver, name, record, scope in records:
         try:
-            converted = _convert(driver, name, record, str(path), "macos-plist" if path.suffix.lower() == ".plist" else "linux-json", tuple(groups.get((driver, name), ())), issues, scope)
+            converted = _convert(driver, name, record, str(path), "macos-plist" if path.suffix.lower() == ".plist" else "linux-legacy-json", tuple(groups.get((driver, name), ())), issues, scope)
+            if platform.startswith("linux"):
+                issues.append(ImportIssue("linux_native_format_review",
+                    "Explicit Linux JSON parsing is a legacy fixture interface; native settings require verification.",
+                    converted.source_id, ("linux_native_format",), True))
+                converted = replace(converted, blocked=True, config_complete=False,
+                    unsupported_fields=tuple(sorted(set(converted.unsupported_fields) | {"linux_native_format"})))
             profiles.append(replace(converted, groups_complete=groups_complete))
         except Exception:
             # No raw exception text: malformed content can include credentials.

@@ -1,12 +1,13 @@
-# 0.6 候选：MongoDB 文档、原生命令、GridFS 与安全验证
+# 0.6.1：MongoDB 文档、原生命令、GridFS 与安全验证
 
-记录日期：2026-11-10，Asia/Shanghai。**0.6 系列当前准备以 0.6.1 交付。0.6.0 正式 tag 因 Qt 测试收尾错误没有公开 Release；保留失败标签，修补后以新标签重新执行六目标门禁。公开下载核验须在发布后进行。**
-本文件记录 `work/mongodb-adapter` 开发分支上已经取得的有界证据，不把组件测试、源码 smoke 或参考程序观察当作最终安装包验收。
-源码版本现为 **0.6.1**；前期 0.6.0 的源码和冻结包证据保留各自版本，不能替代 0.6.1 最终安装包与公开发布记录。
+记录日期：2026-11-10，Asia/Shanghai。**[v0.6.1](https://github.com/shubolab/opennavicat/releases/tag/v0.6.1) 已于 2026-11-10 14:19:45 UTC 发布为预发行里程碑，Release ID 440457098。六份安装包与两份校验资料共八项公开资产均已匿名实际下载核验。**
+冻结源码为 **`cd189a01eaaeeabeb219bf03aebc94655f4f3fe1`**；正式 [tag CI 42831946788](https://github.com/shubolab/opennavicat/actions/runs/42831946788)
+的六目标与数据库专项、发布器均 success。0.6.0 因测试收尾错误没有公开 Release，旧失败标签保留且未移动。
+本文件分别记录开发组件测试、源码 smoke、原版观察与最终安装包验收，前期 0.6.0 证据保留各自版本和适用范围。
 
-开发 checkpoint 包括 `288beb1`（BSON 文档适配器及工作区）、`8bf794c`（连接设置及 URI）、
+早期开发 checkpoint 包括 `288beb1`（BSON 文档适配器及工作区）、`8bf794c`（连接设置及 URI）、
 `586a0e3`（GridFS 页面）、`02765ae`（传输、元数据与 GridFS 后端）、`f519876`（上传元数据日期精度）和
-`84b45d3`（真实 MongoDB CI 门禁）。这些 checkpoint 不代表最终发布源码已冻结。
+`84b45d3`（真实 MongoDB CI 门禁）。这些 checkpoint 均不能替代上述最终 tag 的验收。
 0.5 的历史证据见 [0.5 验证记录](validation-0.5.md)，不替代本轮新增 MongoDB 路径的验证。
 
 ## 参考来源与适用范围
@@ -198,15 +199,46 @@ README 的唯一 GIF 也以 0.6.1 实际重录：1440×900、126 帧、21 秒，
 
 | 本轮最终目标 | 原生构建及安装/运行/卸载 | 公开资产下载核验 |
 | --- | --- | --- |
-| Windows amd64 | 修补后 main 通过；正式 tag 待执行 | 待发布后 |
-| Windows arm64 | 修补后 main 通过；正式 tag 待执行 | 待发布后 |
-| macOS amd64 | 修补后 main 通过；正式 tag 待执行 | 待发布后 |
-| macOS arm64 | 修补后 main 通过；正式 tag 待执行 | 待发布后 |
-| Linux amd64 | 修补后 main 通过；正式 tag 待执行 | 待发布后 |
-| Linux arm64 | 修补后 main 通过；正式 tag 待执行 | 待发布后 |
+| Windows amd64 | 正式 0.6.1 tag 全部通过 | HTTP 200、实际字节/摘要/manifest 一致 |
+| Windows arm64 | 正式 0.6.1 tag 全部通过 | HTTP 200、实际字节/摘要/manifest 一致 |
+| macOS amd64 | 正式 0.6.1 tag 全部通过 | HTTP 200、实际字节/摘要/manifest 一致 |
+| macOS arm64 | 正式 0.6.1 tag 全部通过 | HTTP 200、实际字节/摘要/manifest 一致 |
+| Linux amd64 | 正式 0.6.1 tag 全部通过 | HTTP 200、实际字节/摘要/manifest 一致 |
+| Linux arm64 | 正式 0.6.1 tag 全部通过 | HTTP 200、实际字节/摘要/manifest 一致 |
 
-最终六份安装报告须由对应原生架构的实际打包程序产生，核对原生映像、动态依赖、BSON 与 TLS 探针，
-并实际安装、启动、运行和卸载。发布器继续要求六安装包、manifest、摘要及公开下载字节核验。
+最终六份安装报告由对应原生架构的实际打包程序产生，原生映像、动态依赖、BSON 与 TLS 探针均通过，
+并实际安装、启动、运行和卸载。每目标收集 1,104 项：macOS/Linux 为 **788 passed、316 skipped**，
+Windows 为 **787 passed、317 skipped**，零失败/错误；未启用真实服务的跳过不计作协议验收。
+独立数据库 job 四报告仍为 **380 passed、0 skipped**，五个 MongoDB 容器和证书目录均确认清理。
+各目标冻结 smoke 版本 0.6.1、SQLite 6×4，MongoDB 适配器、原生 BSON、TLS context 和既有加密探针均为严格布尔 true。
+独立收据复核在 `artifacts/mongodb/tag-v0.6.1-ci/verified-summary.json`。
+
+公开下载核验除 GitHub API size/digest 外，实际重新计算全部八项资产的字节和 SHA-256，
+核对六安装包与 `SHA256SUMS`、`build-manifests.json` 一致，并再次检查六目标安装证明。
+回执为 `artifacts/release-v0.6.1/public-verification.json`；公开资产集合严格为六安装包加两份资料，没有用 ZIP 代替安装包。
+
+发布后 macOS 两份公开 DMG 均只读装载并与完整原生 payload 清单逐项相等，Intel 113 个、ARM64 112 个原生映像。
+ARM64 包在隔离复制安装中实际完成 Cocoa 6×4 及全部运行时探针；普通启动两次验证存量连接自动发现、分组和去重，
+四类秘密字段均为空，未打开数据库 TCP 连接。临时应用、工作区和所有挂载卷已清理。
+只保留计数和布尔结果，不发布用户连接名、主机或配置内容；见 `artifacts/release-v0.6.1/macos/final-receipt.json`。
+
+发布后 Linux ARM64 的公开 DEB 另在唯一 fresh Ubuntu 24.04.5/aarch64、glibc 2.39 容器中实装，
+实际 XCB 运行示例查询 6×4、中文显示及全部 MongoDB/BSON/TLS/旧加密探针均通过。
+240 个实际 ELF 与 manifest 闭包一致；随后 dpkg purge、自有临时目录及精确 owner 容器删除均核验通过。
+这是客户端构造和 codec/TLS 探针，不冒充该容器已经连接外部 MongoDB；没有进行 WSL GUI 验收。
+方法、安装及最终清理回执在 `artifacts/release-v0.6.1/linux/final-verification.json` 和
+`linux/clean-ubuntu-arm64/install-receipt.json`。首次本机预检遇到 zstd 归档格式后，仅修正忽略的验证 helper；
+正式容器实装只有一次，未修改公开 DEB 或产品源码。
+
+发布后 Windows amd64 公开安装器在隔离验证路径实际安装成功，主程序 SHA 与正式 manifest 一致。
+RDP 已实际执行 SQLite 6×4，查看九类连接管理器、MongoDB General/密码/TLS/SSH 设置，
+并连接本次生成的 loopback MongoDB 读取八类导航、八列集合统计及三条产品文档。
+已见 Decimal128 的文本小数位和 Binary 摘要；Int64 完整值被列宽省略，树字段还未展开核对。
+随后测试机的远控黑屏遮挡了画面，界面输入立即停止；EJSON 保存、原生 find/aggregate、GridFS 预览及下载**尚未验证**。
+自有服务的独立只读快照确认数据类型与值保持，但不能替代这些缺失的 Windows GUI 操作。
+本次临时应用和合成服务保留等待恢复画面，补充会话的关闭/卸载还未进行；这与正式 CI 中已通过的六目标安装卸载分别记录。
+观察回执是 `artifacts/release-v0.6.1/windows/gui-observation.json`，没有将远程私人桌面截图写入仓库。
+发布器继续要求六安装包、manifest 和摘要，额外的公开下载字节核验独立执行。
 只改 CI/打包字段、导入客户端成功或默认跳过外部服务的测试均不能替代这些步骤。
 
 MongoDB SRV/Replica Set/Shard Cluster、非 primary 读取、全部认证方式、集合及索引专用设计器、

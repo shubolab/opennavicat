@@ -84,7 +84,9 @@ def assert_fits(qtbot, spin):
     # The useful contract is complete visible text, not exact equality with a
     # size hint that native layout/DPI rounding can change by a few pixels.
     try:
-        qtbot.waitUntil(lambda: fits(spin), timeout=2000)
+        qtbot.waitUntil(lambda: fits(spin) and spin.width() <= (
+            spin.sizeHint().width() + spin.findChild(QLineEdit).fontMetrics().maxWidth()
+        ), timeout=2000)
     except Exception:
         pytest.fail(json.dumps(geometry(spin), ensure_ascii=True))
     line = spin.findChild(QLineEdit)
@@ -194,9 +196,10 @@ def test_actual_editor_font_can_grow_independently_from_spin_font(qtbot):
         assert_fits(qtbot, spin)
         assert line.font().pixelSize() == 42 and spin.font().pixelSize() == 12
         assert spin.width() > initial and spin.value() == 65535
+        expanded = spin.width()
         font.setPixelSize(12)
         line.setFont(font)
-        qtbot.waitUntil(lambda: spin.width() < initial * 2)
         assert_fits(qtbot, spin)
+        assert spin.width() < expanded
     dialog.reject()
     assert dialog.get_config() is None

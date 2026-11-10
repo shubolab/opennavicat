@@ -46,8 +46,12 @@ def wait_for(predicate, timeout=10):
 
 
 def command(args, **kwargs):
-    return subprocess.run(args, check=True, text=True, stdout=subprocess.PIPE,
-                          stderr=subprocess.PIPE, timeout=kwargs.pop("timeout", 30), **kwargs).stdout.strip()
+    try:
+        return subprocess.run(args, check=True, text=True, stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE, timeout=kwargs.pop("timeout", 30), **kwargs).stdout.strip()
+    except subprocess.CalledProcessError as error:
+        error.add_note("Owned fixture command stderr: " + error.stderr)
+        raise
 
 
 @pytest.fixture(scope="module")
@@ -152,6 +156,9 @@ class OwnedDatabase:
                                "GRANT ALL ON security_fixture.* TO 'security_client'@'%';")
             self.version = self.admin_sql("SELECT version()")
         except BaseException:
+            REPORT.mkdir(parents=True, exist_ok=True)
+            logs = subprocess.run(["docker", "logs", self.name], text=True, capture_output=True)
+            (REPORT / (driver + "-setup.log")).write_text(logs.stdout + logs.stderr, "utf-8")
             self.close()
             raise
     def admin_sql(self, sql):
@@ -162,11 +169,23 @@ class OwnedDatabase:
         return command(["docker", "exec", "--env", "MYSQL_PWD=" + DB_PASSWORD, self.name,
                         program, "--protocol=socket", "--default-character-set=utf8mb4", "-uroot", "--batch", "--skip-column-names", "-e", sql], timeout=10)
     def ready(self):
+        import pymysql
         try:
             self.admin_sql("SELECT 1")
-            with socket.create_connection(("127.0.0.1", self.port), 0.2):
-                return True
-        except (subprocess.SubprocessError, OSError):
+            if self.driver == "postgresql":
+                with socket.create_connection(("127.0.0.1", self.port), 0.2):
+                    return True
+            # Docker's published socket may accept before a temporary init
+            # server finishes. Require a real TLS root login, not just TCP.
+            import ssl
+            context = ssl.create_default_context(cafile=str(self.certificates["ca"]))
+            with pymysql.connect(host="localhost", port=self.port, database="security_fixture", user="root",
+                                 password=DB_PASSWORD, ssl=context, connect_timeout=2,
+                                 read_timeout=2, write_timeout=2) as connection:
+                with connection.cursor() as cursor:
+                    cursor.execute("SELECT 1")
+                    return cursor.fetchone() == (1,)
+        except (subprocess.SubprocessError, OSError, pymysql.MySQLError):
             return False
     def config(self, **overrides):
         values = dict(id=uuid.uuid4().hex, name="Isolated security " + self.driver,
@@ -407,7 +426,8 @@ class OwnedSSHServer:
         except (OSError, EOFError):
             pass
         finally:
-            channel.close()
+            with contextlib.suppress(OSError, EOFError, self.paramiko.SSHException):
+                channel.close()
     def close(self):
         self.stop.set(); self.listener.close()
         for transport in self.transports:
@@ -415,6 +435,8 @@ class OwnedSSHServer:
         self.thread.join(2)
         for thread in self.threads:
             thread.join(2)
+        self.private_key.unlink(missing_ok=True)
+        self.agent_key.unlink(missing_ok=True)
 
 
 @pytest.fixture

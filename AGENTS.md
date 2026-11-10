@@ -48,6 +48,14 @@ workflow declaration or emulated x64 executable is not an arm64 installer.
 Publish a release only after all six installer assets and checksums are verified;
 clearly describe the implemented milestone and remaining full-parity gaps.
 
+The user subsequently requested pausing this goal **after the first usable
+six-target installer Release is published and verified downloadable**. Finish
+that release first, then pause without starting another feature milestone. The
+user plans to update the local Navicat installation. On an explicit resume,
+inspect the then-installed version and its actual UI again, and use that latest
+reference to continue the original complete-function/UI goal. Do not assume the
+current 16.1.1 observations establish parity with the future updated reference.
+
 - Use `.venv/bin/python` on macOS/Linux; the workspace environment uses Python 3.13.
 - Keep all Qt widget reads and writes on the GUI thread. Database work goes
   through the window's serial background task queue. Cancellation has a separate

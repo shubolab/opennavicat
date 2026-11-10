@@ -1,4 +1,5 @@
 """Visual relationships must use actual metadata and stay connected when moved."""
+from contextlib import closing
 import sqlite3
 import xml.etree.ElementTree as ET
 
@@ -11,7 +12,7 @@ from opennavicat.ui.diagram import SchemaDiagram
 
 def test_real_foreign_key_diagram_movement_and_native_exports(qtbot, tmp_path):
     path = tmp_path / "diagram.sqlite"
-    with sqlite3.connect(path) as db:
+    with closing(sqlite3.connect(path)) as db, db:
         db.executescript('''
             CREATE TABLE authors (id INTEGER PRIMARY KEY, name TEXT NOT NULL);
             CREATE TABLE books (id INTEGER PRIMARY KEY, author_id INTEGER REFERENCES authors(id), title TEXT);

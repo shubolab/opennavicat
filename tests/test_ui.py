@@ -1,6 +1,8 @@
 """Exercise the real native UI, background queue, driver and workspace together."""
 from __future__ import annotations
 
+from contextlib import closing
+
 import sqlite3
 import json
 
@@ -173,7 +175,7 @@ def test_tree_filter_grid_edit_apply_persists_and_discard(qtbot, window):
     assert not page.model.pending
     assert page.total == 0
     db_path = window.configs[page.connection_id].database
-    with sqlite3.connect(db_path) as db:
+    with closing(sqlite3.connect(db_path)) as db, db:
         assert db.execute("SELECT name FROM customers WHERE id=2").fetchone() == ("Lin Updated",)
 
     page.filter.clear()
@@ -211,7 +213,7 @@ def test_designer_review_execute_and_table_browser(qtbot, window):
     assert not page.running
     assert "CREATE TABLE" in page.editor.toPlainText()
     # The form produces a reviewable query; creation starts only on Run.
-    with sqlite3.connect(window.configs[page.connection_id].database) as db:
+    with closing(sqlite3.connect(window.configs[page.connection_id].database)) as db, db:
         assert not db.execute("SELECT 1 FROM sqlite_master WHERE name='designed_table'").fetchall()
     run_query(qtbot, window, page)
     window.refresh_tree()

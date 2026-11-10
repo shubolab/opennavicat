@@ -6,6 +6,8 @@ the reference comparison documented in docs/parity-matrix.md.
 """
 from __future__ import annotations
 
+from contextlib import closing
+
 import sqlite3
 import threading
 
@@ -74,7 +76,7 @@ def test_object_first_shell_and_sidebar_bottom_search_without_product_accounts(q
 def test_categories_and_object_list_use_real_rootpages_indexes_and_triggers(qtbot, window):
     page = open_sample(qtbot, window)
     path = window.configs[page.connection_id].database
-    with sqlite3.connect(path) as db:
+    with closing(sqlite3.connect(path)) as db, db:
         db.execute("CREATE TRIGGER parity_products_updated AFTER UPDATE ON products BEGIN SELECT 1; END")
         rootpages = dict(db.execute("SELECT name,rootpage FROM sqlite_schema WHERE type='table'"))
         indexed = {name: bool(db.execute(f'PRAGMA index_list("{name}")').fetchall())

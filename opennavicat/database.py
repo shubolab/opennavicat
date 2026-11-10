@@ -19,7 +19,6 @@ from datetime import date, datetime, time as datetime_time
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Iterator
-from urllib.parse import quote
 
 import sqlparse
 
@@ -33,7 +32,7 @@ class ConnectionConfig:
     host: str = "localhost"
     port: int = 0
     username: str = ""
-    password: str = ""
+    password: str = field(default="", repr=False)
     ssl_mode: str = "prefer"
     read_only: bool = False
     connect_timeout: int = 10
@@ -41,15 +40,15 @@ class ConnectionConfig:
     ssl_cert: str = ""
     ssl_key: str = ""
     ssl_crl: str = ""
-    ssl_key_password: str = ""
+    ssl_key_password: str = field(default="", repr=False)
     ssh_enabled: bool = False
     ssh_host: str = ""
     ssh_port: int = 22
     ssh_username: str = ""
     ssh_auth_method: str = "password"
-    ssh_password: str = ""
+    ssh_password: str = field(default="", repr=False)
     ssh_key_file: str = ""
-    ssh_key_passphrase: str = ""
+    ssh_key_passphrase: str = field(default="", repr=False)
     ssh_compression: bool = False
     ssh_host_key: str = ""
 
@@ -156,7 +155,7 @@ class DatabaseSession:
                     raise ValueError("SQLite uses local files and does not support SSH TCP forwarding")
                 database = c.database or ":memory:"
                 if c.read_only and database != ":memory:":
-                    database = f"file:{quote(str(Path(database).expanduser().resolve()), safe='/')}?mode=ro"
+                    database = Path(database).expanduser().resolve().as_uri() + "?mode=ro"
                     connection = sqlite3.connect(database, uri=True, isolation_level=None,
                                                  check_same_thread=False, timeout=c.connect_timeout)
                 else:

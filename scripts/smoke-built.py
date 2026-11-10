@@ -14,10 +14,15 @@ else:
     executable = root / "dist/OpenNavicat/OpenNavicat"
 environment = os.environ.copy()
 environment.setdefault("QT_QPA_PLATFORM", "offscreen")
+environment.pop("PYTHONPATH", None)
+native_build_directory = environment.pop("OPENNAVICAT_LIBPQ_DIR", "")
+if native_build_directory:
+    environment["PATH"] = os.pathsep.join(path for path in environment.get("PATH", "").split(os.pathsep)
+        if os.path.normcase(os.path.normpath(path)) != os.path.normcase(os.path.normpath(native_build_directory)))
 subprocess.run([str(executable), "--smoke-test", "--smoke-report", str(root / "artifacts/packaged-smoke.json"),
                "--screenshot", str(root / "artifacts/packaged-workbench.png")],
                cwd=root, env=environment, check=True, timeout=45)
 import json
 report = json.loads((root / "artifacts/packaged-smoke.json").read_text("utf-8"))
 assert report["smoke"] == "passed" and report["rows"] == 6
-assert report["runtime"]["libpq"] > 0
+assert report["runtime"]["libpq"] >= 170000, "Secure PostgreSQL cancellation requires libpq 17+"

@@ -1,4 +1,5 @@
 """Native connection editor layout and explicitly requested connection tests."""
+from contextlib import closing
 import sqlite3
 import threading
 import base64
@@ -80,7 +81,7 @@ def test_sqlite_existing_or_new_is_explicit_and_save_does_not_connect(qtbot, tmp
 
 def test_test_connection_reads_real_sqlite_and_closes_session(qtbot, tmp_path, monkeypatch):
     database = tmp_path / "existing.sqlite3"
-    with sqlite3.connect(database) as db:
+    with closing(sqlite3.connect(database)) as db, db:
         db.execute("CREATE TABLE original (value TEXT)")
         db.execute("INSERT INTO original VALUES ('keep me')")
     closed = []
@@ -103,7 +104,7 @@ def test_test_connection_reads_real_sqlite_and_closes_session(qtbot, tmp_path, m
     assert closed == [True]
     assert dialog.test_button.isEnabled()
     assert dialog.get_config() is None
-    with sqlite3.connect(database) as db:
+    with closing(sqlite3.connect(database)) as db, db:
         assert db.execute("SELECT * FROM original").fetchall() == [("keep me",)]
         assert db.execute("PRAGMA integrity_check").fetchone() == ("ok",)
 

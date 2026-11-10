@@ -1,5 +1,6 @@
 """Data interchange fidelity and durable workspace behavior, without real secrets."""
 import json
+from contextlib import closing
 import sqlite3
 import sys
 from types import SimpleNamespace
@@ -103,7 +104,7 @@ def test_history_and_favorites_survive_restart(tmp_path):
 def test_sample_is_repeatable_and_relationally_consistent(tmp_path):
     path = create_sample(tmp_path)
     assert create_sample(tmp_path) == path
-    with sqlite3.connect(path) as db:
+    with closing(sqlite3.connect(path)) as db, db:
         assert db.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
         assert db.execute("PRAGMA foreign_key_check").fetchall() == []
         assert db.execute("SELECT count(*) FROM customers").fetchone()[0] == 6
@@ -186,3 +187,11 @@ def test_hydrate_unsaved_supplied_credentials_and_legacy_db_cache(tmp_path):
     assert not store.path.exists()
     store.passwords["cached"] = "legacy-process-cache"
     assert store.hydrate(ConnectionConfig("cached", "Cached")).password == "legacy-process-cache"
+
+
+def test_connection_repr_does_not_expose_any_secret():
+    config = ConnectionConfig("redaction", "Public name", password="db-private",
+        ssh_password="ssh-private", ssh_key_passphrase="ssh-key-private", ssl_key_password="tls-private")
+    representation = repr(config)
+    assert "Public name" in representation
+    assert all(secret not in representation for secret in ("db-private", "ssh-private", "ssh-key-private", "tls-private"))

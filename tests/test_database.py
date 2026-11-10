@@ -1,4 +1,5 @@
 """Behavioral database tests: mutations, transactions, bounds and SQL edge cases."""
+from contextlib import closing
 import sqlite3
 import threading
 import time
@@ -90,8 +91,9 @@ def test_triggers_multi_statement_and_generated_columns(session):
 
 
 def test_read_only_mode_and_filename_uri(tmp_path):
-    path = tmp_path / "strange?#.sqlite"
-    with sqlite3.connect(path) as c:
+    import os
+    path = tmp_path / ("strange # 空格.sqlite" if os.name == "nt" else "strange?#.sqlite")
+    with closing(sqlite3.connect(path)) as c, c:
         c.execute("CREATE TABLE t (id INTEGER PRIMARY KEY)")
     s = DatabaseSession(ConnectionConfig("ro", "Read only", database=str(path), read_only=True))
     assert s.count_rows("main", "t") == 0
@@ -126,7 +128,7 @@ def test_backup_is_consistent_and_rejects_overwrite(session, tmp_path):
     session.execute("CREATE TABLE t (id INTEGER PRIMARY KEY); INSERT INTO t VALUES (10)")
     path = tmp_path / "snapshot.sqlite"
     session.backup_to(str(path))
-    with sqlite3.connect(path) as c:
+    with closing(sqlite3.connect(path)) as c, c:
         assert c.execute("SELECT id FROM t").fetchall() == [(10,)]
         assert c.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
     with pytest.raises(FileExistsError):

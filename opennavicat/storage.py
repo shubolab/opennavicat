@@ -1,6 +1,8 @@
 """Local profiles, OS-keychain secrets, and query history."""
 from __future__ import annotations
 
+from contextlib import closing
+
 import json
 import os
 import sqlite3
@@ -35,7 +37,7 @@ class Store:
         self.passwords: dict[str, str] = {}
         self.secrets: dict[tuple[str, str], str] = {}
         self.history_path = self.directory / "history.sqlite3"
-        with sqlite3.connect(self.history_path) as db:
+        with closing(sqlite3.connect(self.history_path)) as db, db:
             db.execute("CREATE TABLE IF NOT EXISTS history (id INTEGER PRIMARY KEY, created TEXT, connection_id TEXT, connection_name TEXT, sql TEXT, elapsed REAL, status TEXT)")
         try:
             self.history_path.chmod(0o600)
@@ -159,13 +161,13 @@ class Store:
         self.flush()
 
     def record(self, config, sql, elapsed, status):
-        with sqlite3.connect(self.history_path) as db:
+        with closing(sqlite3.connect(self.history_path)) as db, db:
             db.execute("INSERT INTO history(created, connection_id, connection_name, sql, elapsed, status) VALUES (?, ?, ?, ?, ?, ?)",
                        (datetime.now(timezone.utc).isoformat(timespec="seconds"), config.id, config.name, sql, elapsed, status))
             db.execute("DELETE FROM history WHERE id NOT IN (SELECT id FROM history ORDER BY id DESC LIMIT 2000)")
 
     def history(self, search=""):
-        with sqlite3.connect(self.history_path) as db:
+        with closing(sqlite3.connect(self.history_path)) as db, db:
             db.row_factory = sqlite3.Row
             return [dict(r) for r in db.execute("SELECT * FROM history WHERE sql LIKE ? OR connection_name LIKE ? ORDER BY id DESC LIMIT 200", (f"%{search}%", f"%{search}%"))]
 
@@ -176,7 +178,7 @@ class Store:
 
 def create_sample(directory: Path) -> Path:
     path = directory / "sample-workspace.sqlite3"
-    with sqlite3.connect(path) as db:
+    with closing(sqlite3.connect(path)) as db, db:
         if db.execute("SELECT name FROM sqlite_master WHERE name='customers'").fetchone():
             return path
         db.executescript("""

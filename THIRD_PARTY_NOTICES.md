@@ -21,8 +21,9 @@ authority for the exact version and accompanying license files on each build hos
 | keyring and platform backends | OS-managed credential storage | MIT for keyring; backend dependencies retain separate licenses. [Source](https://github.com/jaraco/keyring). |
 | PyInstaller | Desktop executable packaging | GPL with bootloader exception; selected files Apache-2.0. [License and exception](https://pyinstaller.org/en/stable/license.html). |
 
-This project uses unmodified binary wheels from the configured Python package
-index. Qt and driver libraries remain separate dynamically linked components in
+This project uses unmodified Python wheels from the configured package index,
+with the native Windows ARM64 libpq build described below as an exception.
+Qt and driver libraries remain separate dynamically linked components in
 the directory/application bundle. The Python package, editable source and build
 recipe are supplied so the application can also be run with independently
 installed compatible libraries. No dependency is represented as being licensed

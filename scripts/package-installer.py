@@ -239,13 +239,13 @@ def build_macos(payload: Path, output: Path, version: str, architecture: str) ->
 def debian_control(version: str, architecture: str, installed_kib: int, libc_version: str) -> str:
     if not re.fullmatch(r"\d+(?:\.\d+)+", libc_version):
         raise PackagingError("Could not determine the native Linux glibc baseline")
-    dependencies = [f"libc6 (>= {libc_version})", "libegl1", "libopengl0",
+    dependencies = [f"libc6 (>= {libc_version})", "libstdc++6", "libgcc-s1", "libgl1", "libegl1", "libopengl0",
         "libglib2.0-0t64 | libglib2.0-0", "libdbus-1-3", "libxkbcommon0",
         "libxkbcommon-x11-0", "libxcb1", "libx11-xcb1", "libxcb-cursor0",
         "libxcb-icccm4", "libxcb-keysyms1", "libxcb-image0", "libxcb-render-util0",
         "libxcb-shape0", "libxcb-randr0", "libxcb-xfixes0", "libxcb-sync1",
         "libxcb-xinerama0", "libxcb-util1", "libxcb-xkb1", "libxcb-glx0",
-        "libfontconfig1", "libfreetype6"]
+        "libfontconfig1", "libfreetype6", "fonts-noto-cjk"]
     return (f"Package: opennavicat\nVersion: {version}\nSection: database\nPriority: optional\n"
         f"Architecture: {architecture}\nMaintainer: OpenNavicat contributors\nInstalled-Size: {installed_kib}\n"
         "Homepage: https://github.com/shubolab/opennavicat\nDepends: " + ", ".join(dependencies) + "\n"
@@ -298,7 +298,7 @@ def validate_smoke_report(path: Path, version: str, architecture: str, operating
     if normalize_arch(runtime.get("machine", "")) != architecture:
         raise PackagingError(f"Installed application ran with the wrong CPU architecture: {runtime}")
     expected_os = {"windows": "Windows", "macos": "Darwin", "linux": "Linux"}[operating_system]
-    if runtime.get("os") != expected_os or not isinstance(runtime.get("libpq"), int) or runtime["libpq"] <= 0:
+    if runtime.get("os") != expected_os or not isinstance(runtime.get("libpq"), int) or runtime["libpq"] < 170000:
         raise PackagingError(f"Installed application did not load the native database runtime: {runtime}")
     if not all(runtime.get(name) for name in ("qt", "psycopg", "pymysql", "paramiko", "cryptography")):
         raise PackagingError(f"An installed database/SSH driver did not load: {runtime}")
@@ -310,6 +310,11 @@ def smoke_installed(executable: Path, directory: Path, version: str, architectur
     report = directory / "runtime-smoke.json"
     environment = os.environ.copy()
     environment.setdefault("QT_QPA_PLATFORM", "offscreen")
+    environment.pop("PYTHONPATH", None)
+    native_build_directory = environment.pop("OPENNAVICAT_LIBPQ_DIR", "")
+    if native_build_directory:
+        environment["PATH"] = os.pathsep.join(path for path in environment.get("PATH", "").split(os.pathsep)
+            if os.path.normcase(os.path.normpath(path)) != os.path.normcase(os.path.normpath(native_build_directory)))
     environment["OPENNAVICAT_DATA_DIR"] = str(directory / "isolated-workspace")
     run([executable, "--smoke-test", "--smoke-report", report],
         cwd=directory, env=environment, timeout=90)

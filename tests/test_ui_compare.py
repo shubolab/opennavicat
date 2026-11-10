@@ -1,6 +1,8 @@
 """Preview-first data comparison exercised through the native Qt workflow."""
 from __future__ import annotations
 
+from contextlib import closing
+
 import sqlite3
 import sys
 from types import SimpleNamespace
@@ -21,7 +23,7 @@ TARGET_ROWS = [(1, "old target value", 2.5), (2, "unchanged", None), (4, "target
 
 
 def rows(path):
-    with sqlite3.connect(path) as db:
+    with closing(sqlite3.connect(path)) as db, db:
         return db.execute("SELECT id, value, amount FROM things ORDER BY id").fetchall()
 
 
@@ -39,7 +41,7 @@ def comparison_workspace(qtbot, tmp_path, monkeypatch):
                                        ("target", "Target fixture", TARGET_ROWS)]:
         path = tmp_path / f"{connection_id}.sqlite3"
         paths[connection_id] = path
-        with sqlite3.connect(path) as db:
+        with closing(sqlite3.connect(path)) as db, db:
             db.execute("CREATE TABLE things (id INTEGER PRIMARY KEY, value TEXT, amount REAL)")
             db.executemany("INSERT INTO things VALUES (?, ?, ?)", data)
         store.save_connection(ConnectionConfig(connection_id, name, database=str(path)))
@@ -137,7 +139,7 @@ def test_compare_preview_reads_only_then_confirmed_apply(comparison_workspace, q
 def test_stale_comparison_apply_rolls_back_without_clobbering_other_writer(comparison_workspace, qtbot):
     window, paths, errors, confirmations = comparison_workspace
     page = compare_via_dialog(qtbot, window)
-    with sqlite3.connect(paths["target"]) as other_writer:
+    with closing(sqlite3.connect(paths["target"])) as other_writer, other_writer:
         other_writer.execute("UPDATE things SET value='concurrent writer' WHERE id=1")
     before = rows(paths["target"])
     qtbot.mouseClick(page.deletes, Qt.MouseButton.LeftButton)

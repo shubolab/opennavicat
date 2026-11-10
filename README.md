@@ -140,9 +140,10 @@ dist/OpenNavicat.app/Contents/MacOS/OpenNavicat --smoke-test
 该命令创建临时示例数据库，通过真实后台连接运行查询，验证结果后退出。
 它也实际加载 PostgreSQL、MySQL 和 SSH/加密依赖；`--smoke-report <path>` 保存运行时版本、
 架构与驱动报告。Windows arm64 使用原生 libpq（通过 `scripts/build-libpq-windows.ps1`
-构建）与 psycopg 的 Python 绑定，运行源码时需把 libpq DLL 目录放入 PATH；安装包直接包含它。
+构建）与 psycopg 的 Python 绑定，运行源码时需把 libpq DLL 目录放入 PATH 并设置
+`OPENNAVICAT_LIBPQ_DIR`；该脚本也配置加密库的 OpenSSL 源码构建路径。安装包直接包含运行库。
 `--demo` 则打开可交互的持久示例工作区。具体环境、测试数量、已构建产物及尚未验收项
-见 [0.2 验证记录](docs/validation-0.2.md)（[0.1 历史记录](docs/validation.md)）。Linux 容器构建可执行 `scripts/build-linux.sh`，
+见 [0.3 验证记录](docs/validation-0.3.md)（[0.2](docs/validation-0.2.md)、[0.1 历史记录](docs/validation.md)）。Linux 容器构建可执行 `scripts/build-linux.sh`，
 它在独立环境中测试、打包并运行产物，输出到 `artifacts/linux/`。
 
 ## 参考、实现与许可证

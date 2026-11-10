@@ -206,10 +206,10 @@ def test_real_authentication_failure_is_typed_and_cleanup_allows_reconnect(mongo
     finally:bad.close()
 
 
-def test_relational_and_unaccepted_shell_facades_fail_explicitly():
+def test_relational_facades_and_unaccepted_javascript_fail_explicitly():
     session=MongoSession(config_for())
-    with pytest.raises(DatabaseError,match='Native command'):
-        session.execute('db.docs.find({})')
+    with pytest.raises(DatabaseError):
+        session.execute('process.exit()')
     for name in ['columns','foreign_keys','fetch_table','update_row','delete_row','import_rows','backup_to']:
         with pytest.raises(DatabaseError,match='document APIs'):getattr(session,name)('ignored')
 
@@ -325,3 +325,330 @@ def test_unaccepted_read_preference_is_not_ignored(monkeypatch):
     monkeypatch.setattr(module,'MongoClient',lambda **kw:pytest.fail('Unsupported routing must not connect'))
     with pytest.raises(DatabaseError,match='read preferences'):
         MongoSession(config_for(mongo_read_preference='secondary')).connect()
+
+
+@pytest.mark.parametrize('fraction', ['0010001', '0000001', '00000000000000001', '1234567'])
+def test_date_fraction_source_cannot_be_truncated_before_validation(fraction):
+    with pytest.raises(DatabaseError, match='millisecond'):
+        canonical_loads('{"x":{"$date":"2026-01-01T00:00:00.'+fraction+'Z"}}')
+
+
+def test_ssh_pool_context_keeps_original_identity_without_global_changes():
+    from opennavicat.mongodb_session import _tunnel_pool_class
+    from pymongo.pool_options import PoolOptions
+    import ssl
+    context = ssl.create_default_context()
+    calls = []
+    class Context:
+        verify_mode = ssl.CERT_REQUIRED
+        check_hostname = True
+        def wrap_socket(self, sock, **kwargs):
+            calls.append((sock, kwargs)); return 'wrapped'
+    original = Context()
+    options = PoolOptions(ssl_context=original)
+    pool_type = _tunnel_pool_class('database.example.invalid')
+    pool = pool_type(('127.0.0.1', 19999), options)
+    try:
+        assert pool.opts._ssl_context.verify_mode == ssl.CERT_REQUIRED
+        assert pool.opts._ssl_context.check_hostname is True
+        assert options._ssl_context is original
+        assert context.check_hostname is True
+        assert pool.opts._ssl_context.wrap_socket('socket', server_hostname='127.0.0.1', session='cache') == 'wrapped'
+        assert calls == [('socket', {'server_hostname':'database.example.invalid', 'session':'cache'})]
+    finally:
+        pool.close()
+
+
+def test_ssh_transport_customization_is_valid_in_pinned_real_client():
+    from opennavicat.mongodb_session import _tunnel_pool_class
+    client = MongoClient(host='127.0.0.1', port=19999, connect=False, tls=True,
+                         _pool_class=_tunnel_pool_class('database.example.invalid'))
+    try:
+        assert client.options.pool_options._ssl_context.check_hostname
+        # The actual PyMongo topology must use the same customization for both
+        # operation and monitoring sockets, not a test-only substitute.
+        operation = client._topology._create_pool_for_server(('127.0.0.1',19999))
+        monitor = client._topology._create_pool_for_monitor(('127.0.0.1',19999))
+        try:
+            for pool in (operation, monitor):
+                assert pool.opts._ssl_context._hostname == 'database.example.invalid'
+                assert pool.opts._ssl_context.check_hostname
+        finally:
+            operation.close(); monitor.close()
+    finally:
+        client.close()
+
+
+def test_real_gridfs_binary_roundtrip_metadata_cas_and_no_replace(session, tmp_path):
+    from gridfs import GridFSBucket
+    db=session.config.database; bucket='own_files'
+    content=bytes(range(256))*3000+b'\0\xff'
+    source=tmp_path/'sample.bin';source.write_bytes(content)
+    ticks=[]
+    uploaded=session.upload_file(db,bucket,source,metadata={'typed':Int64(1)},progress=lambda done,total:ticks.append((done,total)))
+    assert not uploaded.editable and uploaded.document['length']==len(content)
+    assert uploaded.document['md5']==__import__('hashlib').md5(content,usedforsecurity=False).hexdigest()
+    assert ticks[0]==(0,len(content)) and ticks[-1]==(len(content),len(content))
+    assert all(a[0]<=b[0] for a,b in zip(ticks,ticks[1:]))
+    assert GridFSBucket(session.connection[db],bucket_name=bucket).open_download_stream(uploaded.document['_id']).read()==content
+    listed=session.list_files(db,bucket,limit=1)
+    assert len(listed.documents)==1 and not listed.has_more
+    target=tmp_path/'download.bin'
+    assert session.download_file(db,bucket,uploaded.document['_id'],target,expected=listed.documents[0])==len(content)
+    assert target.read_bytes()==content
+    target.write_bytes(b'keep-existing')
+    with pytest.raises(DatabaseError,match='already exists'):
+        session.download_file(db,bucket,uploaded.document['_id'],target,expected=uploaded)
+    assert target.read_bytes()==b'keep-existing'
+    assert session.download_file(db,bucket,uploaded.document['_id'],target,overwrite=True,expected=uploaded)==len(content)
+    assert target.read_bytes()==content
+    session.connection[db][bucket+'.files'].update_one({'_id':uploaded.document['_id']},{'$set':{'filename':'peer.bin'}})
+    with pytest.raises(MongoConflictError):session.delete_file(db,bucket,expected=uploaded)
+    assert session.connection[db][bucket+'.chunks'].count_documents({})==3
+    fresh=session.list_files(db,bucket).documents[0]
+    session.delete_file(db,bucket,expected=fresh)
+    assert session.list_files(db,bucket).documents==[]
+    assert session.connection[db][bucket+'.chunks'].count_documents({})==0
+
+
+def test_real_gridfs_cancel_upload_removes_only_own_chunks_and_download_keeps_destination(session,tmp_path):
+    db=session.config.database;bucket='cancel_files'
+    source=tmp_path/'source.txt';source.write_bytes(b'a'*(255*1024*3))
+    good=session.upload_file(db,bucket,source)
+    cancelled=threading.Event()
+    def stop(done,total):
+        if done:cancelled.set()
+    with pytest.raises(DatabaseError,match='cancelled'):
+        session.upload_file(db,bucket,source,progress=stop,cancelled=cancelled.is_set)
+    assert session.connection[db][bucket+'.files'].count_documents({})==1
+    assert session.connection[db][bucket+'.chunks'].count_documents({})==3
+    cancelled.clear()
+    target=tmp_path/'keep.txt';target.write_bytes(b'original')
+    with pytest.raises(DatabaseError,match='cancelled'):
+        session.download_file(db,bucket,good.document['_id'],target,overwrite=True,expected=good,
+                              progress=stop,cancelled=cancelled.is_set)
+    assert target.read_bytes()==b'original'
+    assert list(tmp_path.glob('.opennavicat-download-*'))==[]
+    # The cancelled callback is consulted before bucket creation or source opens.
+    with pytest.raises(DatabaseError,match='cancelled'):
+        session.upload_file(db,'never_created',tmp_path/'missing',cancelled=lambda:True)
+    assert 'never_created.files'not in session.connection[db].list_collection_names()
+
+
+def test_real_gridfs_download_failure_or_target_race_never_truncates_existing_file(session,tmp_path):
+    db=session.config.database;bucket='race_files'
+    source=tmp_path/'source.bin';source.write_bytes(b'b'*(255*1024*2))
+    good=session.upload_file(db,bucket,source)
+    target=tmp_path/'race.bin'
+    def create_target(done,total):
+        if done and not target.exists():target.write_bytes(b'other-process')
+    with pytest.raises(DatabaseError,match='already exists'):
+        session.download_file(db,bucket,good.document['_id'],target,expected=good,progress=create_target)
+    assert target.read_bytes()==b'other-process'
+    assert list(tmp_path.glob('.opennavicat-download-*'))==[]
+    # A corrupted chunk is diagnosed by the true uploaded MD5, before commit.
+    session.connection[db][bucket+'.chunks'].update_one({'files_id':good.document['_id'],'n':0},{'$set':{'data':Binary(b'c'*(255*1024))}})
+    with pytest.raises(DatabaseError,match='checksum'):
+        session.download_file(db,bucket,good.document['_id'],target,overwrite=True,expected=good)
+    assert target.read_bytes()==b'other-process'
+
+
+def test_real_gridfs_read_only_and_stale_namespace_do_not_mutate(session,tmp_path):
+    db=session.config.database;bucket='readonly_files'
+    source=tmp_path/'a';source.write_bytes(b'one')
+    value=session.upload_file(db,bucket,source)
+    session.config.read_only=True
+    try:
+        with pytest.raises(DatabaseError,match='read-only'):session.upload_file(db,bucket,source)
+        with pytest.raises(DatabaseError,match='read-only'):session.delete_file(db,bucket,value)
+        readonly_snapshot=session.list_files(db,bucket).documents[0]
+        target=tmp_path/'read';session.download_file(db,bucket,value.document['_id'],target,expected=readonly_snapshot)
+        assert target.read_bytes()==b'one'
+    finally:session.config.read_only=False
+    session.connection[db][bucket+'.files'].drop();session.connection[db].create_collection(bucket+'.files')
+    with pytest.raises(MongoConflictError):session.delete_file(db,bucket,value)
+
+
+def test_safe_shell_literal_parser_preserves_bson_constructors_and_query_order():
+    from opennavicat.mongodb_session import parse_mongo_queries
+    commands=parse_mongo_queries('''// own fixture query
+        db.getCollection('docs').find({n:Long('9007199254740995'), money:Decimal128('1.00'),
+            binary:BinData(128,'AP8='), at:ISODate('2026-01-01T00:00:00.0010000Z'),
+            nested:{flag:true, missing:null}, name:/a.*b/im, key:ObjectId('000000000000000000000001'),
+            unicode:'\\uD83D\\uDE80'}, {n:1}).sort({n:-1}).limit(4).skip(2);
+        db.docs.aggregate([{$match:{status:'ready'}},{$group:{_id:'$status',n:{$sum:1}}}]).limit(3).toArray()
+    ''')
+    first, second=commands
+    assert first['find']=='docs' and first['projection']=={'n':1}
+    assert first['sort']=={'n':-1} and first['skip']==2 and first['limit']==4
+    values=first['filter']
+    assert type(values['n']) is Int64 and values['n']==9007199254740995
+    assert values['money']==Decimal128('1.00')
+    assert values['binary']==Binary(b'\0\xff',128)
+    assert values['at'].microsecond==1000 and values['unicode']=='🚀'
+    assert values['key']==ObjectId('000000000000000000000001')
+    assert values['name'].flags==Regex('a.*b','im').flags
+    assert second['pipeline'][-1]=={'$limit':3}
+
+
+@pytest.mark.parametrize('text',[
+    "db.docs.find({x:process.exit()})", "db.docs.find({x:require('fs')})",
+    "db.docs.find({x:(function(){return 1})()})", "db.docs.find({x:1,x:2})",
+    "db.docs.find({x:1}); db.docs.find({x:unknown})", "db.docs.find({x:/a/g})",
+    "db.docs.find({x:Long('9223372036854775808')})", "db.docs.find({x:Binary.createFromBase64('!',128)})",
+    "db.docs.find({x:ISODate('2026-01-01T00:00:00.0010001Z')})",
+    "db.docs.find({x:new Date('2026-01-01T00:00:00.0000001Z')})",
+    'db.docs.find(EJSON.parse(\'{"x":{"$date":"2026-01-01T00:00:00.00000000000000001Z"}}\'))',
+    "db.docs.find({x:'\\uD800'})", "db.docs.find({}).where('arbitrary code')",
+])
+def test_safe_shell_parser_rejects_code_ambiguous_data_and_lossy_dates(text):
+    from opennavicat.mongodb_session import parse_mongo_queries
+    with pytest.raises(DatabaseError):parse_mongo_queries(text)
+
+
+def test_safe_shell_parser_canonical_command_and_negative_single_batch_limit():
+    from opennavicat.mongodb_session import parse_mongo_queries
+    assert parse_mongo_queries('{"find":"docs","filter":{"x":{"$numberLong":"9007199254740993"}}}')[0]['filter']['x']==Int64(9007199254740993)
+    assert parse_mongo_queries('db.docs.find({}).limit(-3)')[0]['singleBatch'] is True
+    assert parse_mongo_queries('db.runCommand({ping:1});')[0]=={'ping':1}
+
+
+def test_real_gridfs_failed_chunk_write_cleans_new_upload_only(session,tmp_path,monkeypatch):
+    from pymongo.synchronous.database import Database
+    db=session.config.database;bucket='failed_files'
+    source=tmp_path/'source';source.write_bytes(b'a'*(255*1024*3))
+    original=session.upload_file(db,bucket,source)
+    command=Database.command
+    fired=[]
+    def failing(database,value,*args,**kwargs):
+        if (database.name==db and isinstance(value,dict) and value.get('insert')==bucket+'.chunks'
+            and value['documents'][0]['n']==1 and not fired):
+            fired.append(True)
+            raise OSError('owned simulated network interruption')
+        return command(database,value,*args,**kwargs)
+    monkeypatch.setattr(Database,'command',failing)
+    with pytest.raises(DatabaseError,match='network interruption'):
+        session.upload_file(db,bucket,source)
+    assert fired and session.connection[db][bucket+'.files'].count_documents({})==1
+    assert session.connection[db][bucket+'.chunks'].count_documents({})==3
+    assert session.list_files(db,bucket).documents[0].raw_bson==original.raw_bson
+
+
+def test_real_gridfs_empty_file_and_progress_callback_error_cleanup(session,tmp_path):
+    db=session.config.database;bucket='empty_files'
+    source=tmp_path/'empty';source.write_bytes(b'')
+    original=session.upload_file(db,bucket,source)
+    assert original.document['length']==0
+    target=tmp_path/'out'
+    assert session.download_file(db,bucket,original.document['_id'],target,expected=original)==0
+    assert target.read_bytes()==b''
+    source.write_bytes(b'a'*(255*1024*2))
+    def fail(done,total):
+        if done:raise RuntimeError('owned callback failure')
+    with pytest.raises(DatabaseError,match='callback failure'):session.upload_file(db,bucket,source,progress=fail)
+    assert session.connection[db][bucket+'.files'].count_documents({})==1
+    assert session.connection[db][bucket+'.chunks'].count_documents({})==0
+
+
+def test_operation_comment_preserves_typed_user_value_and_nested_lifecycle():
+    value=MongoSession(config_for());value.connection=object()
+    user={'n':Int64(1),'binary':Binary(b'\0\xff',128),'text':'own'}
+    with value._operation(user_comment=user) as comment:
+        assert comment['userComment']==user and type(comment['userComment']['n']) is Int64
+        user['text']='changed-after-dispatch'
+        assert comment['userComment']['text']=='own'
+        with value._operation() as nested:
+            assert isinstance(nested,str) and value._active_comment==nested
+        assert value._active_comment==comment and value._operation_depth==1
+    assert value._active_comment is None and value._operation_depth==0
+    with pytest.raises(Exception):
+        with value._operation(user_comment=object()):pass
+    assert value._operation_depth==0 and value._active_comment is None
+
+
+def test_real_cancel_targets_own_typed_comment_and_finishes_query(session):
+    from pymongo import timeout
+    db=session.config.database
+    session.connection[db].docs.insert_one({'_id':1})
+    failures=[];started=threading.Event()
+    def query():
+        try:
+            with session._operation(user_comment={'purpose':'owned-cancel','n':Int64(1)}) as comment:
+                started.set()
+                list(session.connection[db].docs.find({'$where':'sleep(4000); return true;'},comment=comment,max_time_ms=6000))
+        except DatabaseError as exc:failures.append(exc)
+    worker=threading.Thread(target=query)
+    worker.start();assert started.wait(2)
+    try:
+        deadline=time.monotonic()+3
+        while time.monotonic()<deadline:
+            with timeout(1):
+                rows=list(session._control.admin.aggregate([{'$currentOp':{'allUsers':False}},
+                    {'$match':{'command.comment':session._active_comment}}]))
+            if rows:break
+            time.sleep(.02)
+        assert rows,'Owned long query was not visible to its cancellation channel'
+        when=time.monotonic();session.cancel();worker.join(3)
+        assert not worker.is_alive() and failures and time.monotonic()-when<3
+        assert session._active_comment is None
+    finally:
+        worker.join(8)
+        assert not worker.is_alive()
+
+
+def test_real_gridfs_bucket_replacement_during_upload_does_not_publish_file(session,tmp_path):
+    db=session.config.database;bucket='changed_files'
+    source=tmp_path/'source';source.write_bytes(b'own file')
+    changed=[]
+    def replace_chunks(done,total):
+        if done and not changed:
+            changed.append(True)
+            session.connection[db][bucket+'.chunks'].drop()
+            session.connection[db].create_collection(bucket+'.chunks')
+            session.connection[db][bucket+'.chunks'].insert_one({'_id':'keep-peer','marker':'new namespace'})
+    with pytest.raises(DatabaseError):
+        session.upload_file(db,bucket,source,progress=replace_chunks)
+    assert changed and session.connection[db][bucket+'.files'].count_documents({})==0
+    assert session.connection[db][bucket+'.chunks'].find_one({'_id':'keep-peer'})['marker']=='new namespace'
+
+
+def test_real_gridfs_lost_publication_ack_cleans_only_new_file_or_retains_complete_uncertain_upload(session,tmp_path,monkeypatch):
+    from pymongo.synchronous.database import Database
+    db=session.config.database;bucket='ack_files'
+    source=tmp_path/'source';source.write_bytes(b'a'*(255*1024*2))
+    original=session.upload_file(db,bucket,source)
+    command=Database.command
+    state={'lost':False,'deny_cleanup':False}
+    def uncertain(database,value,*args,**kwargs):
+        if database.name==db and isinstance(value,dict):
+            if value.get('insert')==bucket+'.files' and not state['lost']:
+                result=command(database,value,*args,**kwargs)
+                state['lost']=True
+                raise OSError('owned lost publication acknowledgement')
+            if value.get('delete')==bucket+'.files' and state['deny_cleanup']:
+                raise OperationFailure('owned metadata cleanup denied',code=13)
+        return command(database,value,*args,**kwargs)
+    from pymongo.errors import OperationFailure
+    monkeypatch.setattr(Database,'command',uncertain)
+    with pytest.raises(DatabaseError,match='lost publication acknowledgement'):
+        session.upload_file(db,bucket,source)
+    assert session.connection[db][bucket+'.files'].count_documents({})==1
+    assert session.connection[db][bucket+'.chunks'].count_documents({})==2
+    state.update(lost=False,deny_cleanup=True)
+    with pytest.raises(DatabaseError,match='cleanup was not confirmed'):
+        session.upload_file(db,bucket,source)
+    # Cleanup permission failure must not delete chunks beneath a complete
+    # published file whose wire acknowledgement was lost.
+    assert session.connection[db][bucket+'.files'].count_documents({})==2
+    assert session.connection[db][bucket+'.chunks'].count_documents({})==4
+    from gridfs import GridFSBucket
+    for row in session.list_files(db,bucket).documents:
+        assert GridFSBucket(session.connection[db],bucket_name=bucket).open_download_stream(row.document['_id']).read()==source.read_bytes()
+    assert session.connection[db][bucket+'.files'].find_one({'_id':original.document['_id']})
+
+
+@pytest.mark.parametrize('token',['NaN','Infinity','-Infinity'])
+def test_ejson_parse_constructor_obeys_json_nonfinite_syntax(token):
+    from opennavicat.mongodb_session import parse_mongo_queries
+    with pytest.raises(DatabaseError):
+        parse_mongo_queries("db.docs.find(EJSON.parse('{\"x\":"+token+"}'))")

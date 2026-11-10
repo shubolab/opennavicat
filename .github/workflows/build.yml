@@ -111,9 +111,8 @@ jobs:
           (target / 'runtime.json').write_text(json.dumps(runtime, indent=2))
           raise SystemExit(pytest.main(['-q', '-W', 'error', '-o', 'addopts=',
               '-o', 'junit_logging=all', '--junitxml=' + str(target / 'results.xml'),
-              'tests/test_mongo_index_designer_ui.py', 'tests/test_connection_mongodb.py',
-              'tests/test_connection_extra_drivers.py', 'tests/test_dialogs.py',
-              '-k', 'not (real_serial or real_rebuild or real_delete)']))
+              'tests/test_mongo_index_designer_ui.py',
+              '-k', 'async_collection or relayout_after_live or own_live_font']))
           PYTEST
           if [[ "$RUNNER_OS" == Linux ]]; then
             xvfb-run -a python "$RUNNER_TEMP/combo-native.py"

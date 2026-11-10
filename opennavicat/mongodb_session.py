@@ -341,6 +341,8 @@ class _MongoLiteralParser:
             if c in '\r\n':
                 if c == '\r' and self.text[self.pos:self.pos+1] == '\n': self.pos += 1
                 continue
+            if c in '123456789' or (c == '0' and self.text[self.pos:self.pos+1].isdigit()):
+                raise DatabaseError('Legacy numeric string escapes are not supported; use explicit Unicode or hexadecimal escapes')
             if c in ('u','x'):
                 count = 4 if c == 'u' else 2
                 digits = self.text[self.pos:self.pos+count]

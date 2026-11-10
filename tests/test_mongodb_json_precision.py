@@ -30,3 +30,14 @@ def test_editor_accepts_representable_json_double(literal):
 def test_explicit_extended_json_nonfinite_values_remain_available(literal):
     result = canonical_loads(json.dumps({"value": {"$numberDouble": literal}}))["value"]
     assert math.isnan(result) if literal == "NaN" else result == float(literal)
+
+
+@pytest.mark.parametrize("escape", [r"\1", r"\8", r"\9", r"\00", r"\01", r"\377"])
+def test_native_string_numeric_escapes_cannot_silently_change_data(escape):
+    with pytest.raises(DatabaseError, match="numeric string escapes"):
+        parse_mongo_queries("db.docs.find({value:'" + escape + "'})")
+
+
+@pytest.mark.parametrize("escape", [r"\0", r"\x00", r"\u0000"])
+def test_explicit_null_string_escapes_preserve_value(escape):
+    assert parse_mongo_queries("db.docs.find({value:'" + escape + "'})")[0]["filter"]["value"] == "\0"

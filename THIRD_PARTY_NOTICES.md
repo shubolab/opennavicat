@@ -16,6 +16,8 @@ authority for the exact version and accompanying license files on each build hos
 | PyMySQL | MySQL and MariaDB driver | MIT. [Source and license](https://github.com/PyMySQL/PyMySQL). |
 | python-tds | SQL Server TDS protocol driver | MIT. [Source and license](https://github.com/denisenkom/pytds). |
 | redis-py | Redis RESP protocol client | MIT. [Source and license](https://github.com/redis/redis-py). |
+| PyMongo / BSON | MongoDB protocol and native typed BSON codecs | Apache-2.0, as declared by the installed 4.19.0 wheel metadata. [Source and license](https://github.com/mongodb/mongo-python-driver). |
+| dnspython | MongoDB driver DNS support | ISC, as declared by the installed 2.9.2 wheel metadata. [Source and license](https://github.com/rthalley/dnspython). |
 | pyOpenSSL | SQL Server TLS transport | Apache-2.0. [Source and license](https://github.com/pyca/pyopenssl). |
 | certifi | Default SQL Server trusted CA bundle | MPL-2.0. [Source and license](https://github.com/certifi/python-certifi). |
 | Paramiko | SSH authentication, host-key validation and TCP forwarding | LGPL-2.1-or-later (as stated in the shipped source headers). [Source and license](https://github.com/paramiko/paramiko). |

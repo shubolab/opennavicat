@@ -405,3 +405,29 @@ def test_redis_invalid_database_is_blocked_before_default_database_can_be_used(s
         write_source(source,{"REDIS":{"Synthetic":row}})
         p = discover(source).profiles[0]
     assert p.blocked and "database" in p.unsupported_fields
+
+
+def test_observed_mongo_password_standalone_fields_are_prefilled_without_unblocking_or_secrets(source):
+    row = profile(port="27017", authmechanism="Password", authsource="admin", connmethod="Standalone",
+                  readpreference="Primary", retryreads=False, retrywrites=True,
+                  usesrvrecord=False, replicasetname="", memberlist=[], password="GENERATED-SECRET")
+    write_source(source, {"MongoDB": {"Generated MongoDB": row}})
+    report = discover(source)
+    imported = report.profiles[0]
+    assert imported.config.mongo_auth_mechanism == "DEFAULT"
+    assert imported.config.mongo_auth_source == "admin"
+    assert imported.config.mongo_connection_type == "standalone"
+    assert imported.config.mongo_read_preference == "primary"
+    assert imported.config.mongo_retry_reads is False and imported.config.mongo_retry_writes is True
+    assert not imported.config.mongo_srv and imported.config.mongo_members == ""
+    assert imported.blocked and "mongodb_source_settings_review" in {issue.code for issue in report.issues}
+    assert "driver_not_available" not in {issue.code for issue in report.issues}
+    assert imported.config.password == "" and "GENERATED-SECRET" not in repr(report)
+
+
+@pytest.mark.parametrize("field", ["initialsessionqueries", "connectionparameters"])
+def test_unmapped_source_session_options_require_review_instead_of_silent_omission(source, field):
+    write_source(source, {"PostgreSQL": {"Generated": profile(**{field: "synthetic option"})}})
+    report = discover(source)
+    assert report.profiles[0].blocked and field in report.profiles[0].unsupported_fields
+    assert "source_session_options_review" in {issue.code for issue in report.issues}

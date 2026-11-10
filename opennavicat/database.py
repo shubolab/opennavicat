@@ -23,7 +23,7 @@ from typing import Any, Iterator
 import sqlparse
 
 
-SUPPORTED_DRIVERS = frozenset({"sqlite", "postgresql", "mysql", "mariadb", "sqlserver", "redis"})
+SUPPORTED_DRIVERS = frozenset({"sqlite", "postgresql", "mysql", "mariadb", "sqlserver", "redis", "mongodb"})
 
 
 @dataclass
@@ -54,6 +54,15 @@ class ConnectionConfig:
     ssh_key_passphrase: str = field(default="", repr=False)
     ssh_compression: bool = False
     ssh_host_key: str = ""
+    mongo_auth_source: str = "admin"
+    mongo_auth_mechanism: str = "DEFAULT"
+    mongo_connection_type: str = "standalone"
+    mongo_srv: bool = False
+    mongo_replica_set: str = ""
+    mongo_members: str = ""
+    mongo_read_preference: str = "primary"
+    mongo_retry_reads: bool = True
+    mongo_retry_writes: bool = True
 
 
 @dataclass
@@ -64,6 +73,7 @@ class QueryResult:
     elapsed_ms: float = 0.0
     truncated: bool = False
     sql: str = ""
+    partial: bool = False
 
 
 class DatabaseError(RuntimeError):
@@ -138,6 +148,9 @@ class DatabaseSession:
             if config.driver == "sqlserver":
                 from .sqlserver_session import SqlServerSession
                 return object.__new__(SqlServerSession)
+            if config.driver == "mongodb":
+                from .mongodb_session import MongoSession
+                return object.__new__(MongoSession)
         return object.__new__(cls)
 
     def __init__(self, config: ConnectionConfig):

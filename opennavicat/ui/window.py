@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 import uuid
+import json
 from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
@@ -16,6 +17,7 @@ from PySide6.QtWidgets import (
     QSpinBox, QSplitter, QStackedWidget, QStyle, QTabWidget, QTableWidget,
     QTableWidgetItem, QToolBar, QToolButton, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget,
 )
+from shiboken6 import isValid
 
 from ..database import ConnectionConfig, DatabaseSession, SUPPORTED_DRIVERS
 from ..navicat_profiles import discover_navicat_profiles
@@ -33,14 +35,17 @@ from .editor import SqlEditor, pretty_sql
 from .grid import DataGrid, DataModel
 from .compare import CompareTargetDialog, ComparisonPage
 from .diagram import SchemaDiagram
-from .workspace import ObjectBrowser, Inspector
+from .workspace import ObjectBrowser, Inspector, OBJECT_LABELS, object_symbol
 from .icons import icon as workbench_icon, tool_icon
 from .query import QueryPage
 from .table_designer import TableDesignerPage
 from .schema_object_designer import IndexDesignerPage, TriggerDesignerPage
 from .redis_browser import RedisBrowserPage, RedisKeyPage
+from .mongo_browser import MongoCollectionPage
+from .mongo_gridfs import MongoGridFSPage
 
 DESIGNER_PAGES = (TableDesignerPage, IndexDesignerPage, TriggerDesignerPage)
+MONGO_PAGES = (MongoCollectionPage, MongoGridFSPage)
 
 SAMPLE_QUERY = """-- Explore your sample workspace. Select SQL to run only that selection.
 SELECT
@@ -442,6 +447,8 @@ class MainWindow(QMainWindow):
         self.active_schema = "main"
         self.query_number = 0
         self._connecting = set()
+        self._closing_mongo = False
+        self._closing_connections = set()
         self._closed = False
         self._navicat_discovering = False
         self._navicat_pending_configs = set()
@@ -516,6 +523,11 @@ class MainWindow(QMainWindow):
             toolbar.addAction(action)
             self.category_actions[kind] = action
         self.category_actions["table"].setChecked(True)
+        self.mongo_pipeline_action = self.action("管道", lambda: self.show_objects("mongo_pipeline"), icon="query")
+        self.mongo_pipeline_action.setEnabled(False)
+        self.mongo_pipeline_action.setToolTip("MongoDB 可视化聚合管道设计器尚未实现")
+        self.mongo_pipeline_action.setVisible(False)
+        toolbar.insertAction(self.category_actions["query"], self.mongo_pipeline_action)
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         toolbar.addWidget(spacer)
@@ -695,18 +707,35 @@ class MainWindow(QMainWindow):
                 self.object_page.selection_changed()
 
     def show_objects(self, kind="table"):
-        if self.active_id not in self.sessions:
+        if self.active_id not in self.sessions or self.active_id in self._closing_connections or self._closing_mongo:
             return
         if self.configs[self.active_id].driver == "redis" and kind == "table":
             kind = "redis_data"
+        if self.configs[self.active_id].driver == "mongodb":
+            kind = {"table": "mongo_collection", "view": "mongo_view", "index": "mongo_index",
+                    "function": "mongo_function"}.get(kind, kind)
+            other = self.category_actions["other"]
+            selected = kind in {"mongo_index", "mongo_mapreduce", "mongo_bucket"}
+            other.setText(OBJECT_LABELS[kind] if selected else "其它")
+            other.setIcon(tool_icon(object_symbol(kind) if selected else "other"))
         for key, action in self.category_actions.items():
             if action.isCheckable():
-                action.setChecked(key == kind)
+                action.setChecked(key == kind or {"table": "mongo_collection", "view": "mongo_view",
+                    "index": "mongo_index"}.get(key) == kind)
         self.tabs.setCurrentWidget(self.object_page)
         self.object_page.set_context(self.active_id, self.active_schema, kind)
 
     def show_other_tools(self):
         menu = QMenu(self)
+        if self.configs.get(self.active_id) and self.configs[self.active_id].driver == "mongodb":
+            for title, kind, available in [("索引", "mongo_index", True), ("MapReduce", "mongo_mapreduce", False),
+                                           ("GridFS 存储桶", "mongo_bucket", True)]:
+                action = menu.addAction(title, lambda checked=False, kind=kind: self.show_objects(kind))
+                action.setEnabled(available and self.active_id in self.sessions)
+                if not available:
+                    action.setToolTip("此专用工具仍待实现。")
+            menu.exec(self.mapToGlobal(self.rect().center()))
+            return
         menu.addAction("数据同步…", self.compare_data)
         menu.addAction("ER 图表", self.open_diagram)
         menu.addAction("查询历史…", self.show_history)
@@ -765,8 +794,69 @@ class MainWindow(QMainWindow):
             if self.tabs.currentWidget() is page:
                 self.setWindowTitle(title)
 
+    def open_mongo_collection(self, info):
+        connection_id, database = info["id"], info["schema"]
+        if connection_id not in self.sessions or connection_id in self._closing_connections or self._closing_mongo or self.configs[connection_id].driver != "mongodb":
+            return None
+        kind = info.get("kind", "mongo_collection")
+        if kind == "mongo_bucket":
+            return self.open_mongo_bucket(info)
+        if kind not in {"mongo_collection", "mongo_timeseries", "mongo_view"}:
+            self.statusBar().showMessage(f"{OBJECT_LABELS.get(kind, '此对象')}的专用工具仍待实现。", 5000)
+            return None
+        collection = info.get("name", info.get("table"))
+        for index in range(self.tabs.count()):
+            page = self.tabs.widget(index)
+            if isinstance(page, MongoCollectionPage) and (page.connection_id, page.database, page.collection) == (connection_id, database, collection):
+                self.tabs.setCurrentWidget(page)
+                return page
+        page = MongoCollectionPage(self, connection_id, database, collection,
+            kind="view" if kind == "mongo_view" else kind)
+        page.titleChanged.connect(lambda *_: self.update_mongo_title(page))
+        page.focusRequested.connect(lambda enabled: self.focus_workspace(page, enabled))
+        self.tabs.addTab(page, workbench_icon(object_symbol(kind), 20), collection)
+        self.tabs.setCurrentWidget(page)
+        self.update_mongo_title(page)
+        return page
+
+    def update_mongo_title(self, page):
+        index = self.tabs.indexOf(page)
+        config = self.configs.get(page.connection_id)
+        if index >= 0 and config is not None:
+            name = page.bucket if isinstance(page, MongoGridFSPage) else page.collection
+            title = f"{name}@{page.database} ({config.name})" + (" *" if page.dirty else "")
+            if isinstance(page, MongoGridFSPage):
+                title += " - GridFS"
+            self.tabs.setTabText(index, title)
+            if self.tabs.currentWidget() is page:
+                self.setWindowTitle(title)
+                self.inspector.show_object({"name": name, "schema": page.database,
+                    "kind": "mongo_bucket" if isinstance(page, MongoGridFSPage) else "mongo_view" if page.kind == "view" else page.kind}, config)
+
+    def open_mongo_bucket(self, info):
+        connection_id, database = info["id"], info["schema"]
+        config = self.configs.get(connection_id)
+        if connection_id not in self.sessions or not config or config.driver != "mongodb" or connection_id in self._closing_connections or self._closing_mongo:
+            return None
+        bucket = info.get("name", info.get("table"))
+        for index in range(self.tabs.count()):
+            page = self.tabs.widget(index)
+            if isinstance(page, MongoGridFSPage) and (page.connection_id, page.database, page.bucket) == (connection_id, database, bucket):
+                self.tabs.setCurrentWidget(page)
+                return page
+        page = MongoGridFSPage(self, connection_id, database, bucket)
+        page.focusRequested.connect(lambda enabled: self.focus_workspace(page, enabled))
+        page.titleChanged.connect(lambda *_: self.update_mongo_title(page))
+        self.tabs.addTab(page, workbench_icon("database", 20), bucket)
+        self.tabs.setCurrentWidget(page)
+        self.update_mongo_title(page)
+        return page
+
     def design_object(self, info):
         config = self.configs.get(info["id"])
+        if config and config.driver == "mongodb":
+            self.statusBar().showMessage("MongoDB 的集合及索引专用设计器仍待实现。", 5000)
+            return None
         if config and config.driver == "sqlite":
             if info["kind"] in {"index", "trigger"}:
                 return self.open_object_designer(info["id"], info["schema"], info["kind"], info.get("name", ""))
@@ -1014,15 +1104,22 @@ class MainWindow(QMainWindow):
         self.submit(lambda: session.execute(sql), done, label="删除对象")
 
     def submit(self, function, success=None, failure=None, label="Working", finished=None, pool=None):
+        if self._closed or not isValid(self):
+            return
         task = Task(function)
         self.tasks.add(task)
         self.status.setText(label + "…")
         self.progress.show()
+        def deliver(callback, *args):
+            if not self._closed and isValid(self):
+                callback(*args)
         if success:
-            task.signals.succeeded.connect(success)
-        task.signals.failed.connect(failure or self.error)
+            task.signals.succeeded.connect(lambda result: deliver(success, result))
+        task.signals.failed.connect(lambda error: deliver(failure or self.error, error))
         def cleanup():
             self.tasks.discard(task)
+            if self._closed or not isValid(self):
+                return
             if finished:
                 finished()
             if not self.tasks:
@@ -1348,6 +1445,9 @@ class MainWindow(QMainWindow):
             self.connect_id(self.active_id)
 
     def connect_id(self, connection_id, after=None):
+        if connection_id in self._closing_connections or self._closing_mongo:
+            self.statusBar().showMessage("正在关闭连接，请等待操作完成。", 3000)
+            return
         if connection_id in self.sessions:
             if after:
                 after()
@@ -1455,7 +1555,7 @@ class MainWindow(QMainWindow):
         self.connect_id(config.id, after)
 
     def when_idle(self, callback):
-        if self._closed:
+        if self._closed or not isValid(self):
             return
         if self.tasks:
             QTimer.singleShot(25, self, lambda: self.when_idle(callback))
@@ -1464,7 +1564,7 @@ class MainWindow(QMainWindow):
 
     def load_schemas(self, connection_id):
         session = self.sessions.get(connection_id)
-        if session is None or self._closed:
+        if session is None or self._closed or self._closing_mongo or connection_id in self._closing_connections:
             return
         def done(schemas):
             if self.sessions.get(connection_id) is session:
@@ -1504,7 +1604,7 @@ class MainWindow(QMainWindow):
 
     def load_objects(self, item, info):
         session = self.sessions.get(info["id"])
-        if session is None:
+        if session is None or self._closing_mongo or info["id"] in self._closing_connections:
             return
         info["loaded"] = True
         item.setData(0, Qt.ItemDataRole.UserRole, info)
@@ -1514,30 +1614,39 @@ class MainWindow(QMainWindow):
             return
         self._loading_object_nodes.add(key)
         def current():
-            return not self._closed and self._tree_generation == generation and self.sessions.get(info["id"]) is session
+            return not self._closed and not self._closing_mongo and info["id"] not in self._closing_connections and self._tree_generation == generation and self.sessions.get(info["id"]) is session
         def render(item, objects):
             expanded = {item.child(i).text(0) for i in range(item.childCount()) if item.child(i).isExpanded()}
             item.takeChildren()
             completions = []
             categories = [("数据", "redis_data", "table"), ("查询", "query", "query"), ("备份", "backup", "backup")] if session.config.driver == "redis" else [("表", "table", "table"), ("视图", "view", "view"), ("查询", "query", "query"), ("备份", "backup", "backup")]
+            if session.config.driver == "mongodb":
+                categories = [("集合", "mongo_collection", "table"), ("视图", "mongo_view", "view"),
+                    ("函数", "mongo_function", "function"), ("索引", "mongo_index", "index"),
+                    ("MapReduce", "mongo_mapreduce", "query"), ("聚合管道", "mongo_pipeline", "query"),
+                    ("GridFS 存储桶", "mongo_bucket", "database"), ("查询", "query", "query")]
             for label, kind, symbol in categories:
                 category = QTreeWidgetItem([label])
                 category.setIcon(0, workbench_icon(symbol, 16))
                 category.setData(0, Qt.ItemDataRole.UserRole, {"type": "category", "id": info["id"], "schema": info["schema"], "kind": kind})
                 item.addChild(category)
                 category.setExpanded(label in expanded)
+                if kind in {"mongo_function", "mongo_mapreduce", "mongo_pipeline"}:
+                    category.setDisabled(True)
+                    category.setToolTip(0, "此专用工具尚未实现，仍在完整对齐范围内。")
                 if kind == "redis_data":
                     child = QTreeWidgetItem(["(所有数据)"])
                     child.setIcon(0, workbench_icon("table", 16))
                     child.setData(0, Qt.ItemDataRole.UserRole, {"type": "object", "id": info["id"], "schema": info["schema"], "table": "(所有数据)", "name": "(所有数据)", "kind": "redis_data"})
                     category.addChild(child)
-                if kind in {"table", "view"}:
+                if kind in {"table", "view", "mongo_collection", "mongo_view", "mongo_bucket", "mongo_index"}:
                     for obj in objects:
-                        if obj["kind"] != kind:
+                        matching = obj["kind"] == kind or kind == "mongo_collection" and obj["kind"] == "mongo_timeseries"
+                        if not matching or obj.get("system"):
                             continue
                         child = QTreeWidgetItem([obj["name"]])
-                        child.setData(0, Qt.ItemDataRole.UserRole, {"type": "object", "id": info["id"], "schema": info["schema"], "table": obj["name"], "name": obj["name"], "kind": kind})
-                        child.setIcon(0, workbench_icon(kind, 16))
+                        child.setData(0, Qt.ItemDataRole.UserRole, dict(obj, type="object", id=info["id"], schema=info["schema"], table=obj["name"]))
+                        child.setIcon(0, workbench_icon(object_symbol(obj["kind"]), 16))
                         category.addChild(child)
                         completions.append(obj["name"])
             return completions
@@ -1553,11 +1662,12 @@ class MainWindow(QMainWindow):
                 completions = render(target, objects)
             for index in range(self.tabs.count()):
                 page = self.tabs.widget(index)
-                if isinstance(page, QueryPage) and page.connection_id == info["id"]:
+                if isinstance(page, QueryPage) and (page.connection_id, page.schema) == (info["id"], info["schema"]):
                     page.editor.set_completions(completions)
             self.filter_tree(self.tree_filter.text())
-            if self.tabs.currentWidget() is self.object_page and self.active_id == info["id"]:
-                self.show_objects("table")
+            if self.tabs.currentWidget() is self.object_page and (self.active_id, self.active_schema) == (info["id"], info["schema"]):
+                kind = self.object_page.kind if (self.object_page.connection_id, self.object_page.schema) == (info["id"], info["schema"]) else "table"
+                self.show_objects(kind)
         def failed(error):
             self._loading_object_nodes.discard(key)
             if not current():
@@ -1567,7 +1677,12 @@ class MainWindow(QMainWindow):
                 target_info["loaded"] = False
                 target.setData(0, Qt.ItemDataRole.UserRole, target_info)
             self.error(error)
-        self.submit(lambda: [] if session.config.driver == "redis" else session.objects(info["schema"]), done, failed, "读取对象")
+        def work():
+            objects = [] if session.config.driver == "redis" else session.objects(info["schema"])
+            if session.config.driver == "mongodb":
+                objects += [dict(obj, kind="mongo_index") for obj in session.indexes(info["schema"])]
+            return objects
+        self.submit(work, done, failed, "读取对象")
 
     def tree_selected(self, item, column=0):
         info = item.data(0, Qt.ItemDataRole.UserRole)
@@ -1599,6 +1714,8 @@ class MainWindow(QMainWindow):
     def open_table(self, info):
         if info["kind"] == "redis_data":
             return self.open_redis_browser(info["id"], info["schema"])
+        if self.configs[info["id"]].driver == "mongodb":
+            return self.open_mongo_collection(info)
         for i in range(self.tabs.count()):
             page = self.tabs.widget(i)
             if isinstance(page, TablePage) and not getattr(page, "_structure_only", False) and (page.connection_id, page.schema, page.table) == (info["id"], info["schema"], info["table"]):
@@ -1615,7 +1732,9 @@ class MainWindow(QMainWindow):
         if self.active_id in self.sessions:
             self.load_schemas(self.active_id)
         page = self.tabs.currentWidget()
-        if isinstance(page, TablePage):
+        if isinstance(page, MONGO_PAGES):
+            page.refresh()
+        elif isinstance(page, TablePage):
             page.refresh()
         elif isinstance(page, RedisBrowserPage):
             page.refresh()
@@ -1663,9 +1782,18 @@ class MainWindow(QMainWindow):
                 menu.addAction("刷新", self.refresh_tree)
             if info["type"] == "object":
                 redis = self.configs[info["id"]].driver == "redis"
-                menu.addAction("打开数据" if redis else "打开表", lambda: self.open_table(info))
+                mongo = self.configs[info["id"]].driver == "mongodb"
+                menu.addAction("打开数据" if redis else "打开集合" if mongo else "打开表", lambda: self.open_table(info))
                 if redis:
                     menu.addAction("新建 Redis 命令", lambda: self.new_query(connection_id=info["id"]))
+                elif mongo:
+                    def mongo_query():
+                        name = json.dumps(info["table"], ensure_ascii=True)
+                        page = self.new_query(sql=f"db.getCollection({name}).find({{}}).limit(1000)", connection_id=info["id"])
+                        if page:
+                            page.schema = info["schema"]
+                            page.refresh_label()
+                    menu.addAction("新建 MongoDB 查询", mongo_query)
                 else:
                     def select_query():
                         session = self.sessions[info["id"]]
@@ -1743,7 +1871,8 @@ class MainWindow(QMainWindow):
             if schema:
                 session.use_schema(schema)
             return session.execute(sql, limit)
-        self.submit(work, done, failed, "Executing SQL", finish)
+        label = "执行 MongoDB 查询" if session.config.driver == "mongodb" else "执行 Redis 命令" if session.config.driver == "redis" else "执行 SQL"
+        self.submit(work, done, failed, label, finish)
 
     def stop(self):
         # Cancellation targets the executing connection, not an arbitrary profile.
@@ -1762,6 +1891,9 @@ class MainWindow(QMainWindow):
     def transaction(self, sql):
         session = self.sessions.get(self.active_id)
         if session:
+            if session.config.driver in {"redis", "mongodb"}:
+                self.statusBar().showMessage("此驱动不使用 SQL 事务命令；专用事务工具仍待实现。", 5000)
+                return
             statement = "BEGIN TRANSACTION" if sql == "BEGIN" and session.config.driver == "sqlserver" else sql
             self.submit(lambda: session.execute(statement), label=sql.title())
 
@@ -1775,6 +1907,9 @@ class MainWindow(QMainWindow):
         if isinstance(page, RedisBrowserPage):
             self.set_active(page.connection_id, page.schema)
             self.update_redis_title(page)
+        if isinstance(page, MONGO_PAGES):
+            self.set_active(page.connection_id, page.database)
+            self.update_mongo_title(page)
         if isinstance(page, (QueryPage, TablePage)):
             self.set_active(page.connection_id, getattr(page, "schema", None))
             config = self.configs.get(page.connection_id)
@@ -1790,20 +1925,24 @@ class MainWindow(QMainWindow):
         if not hasattr(self, "run_action") or not hasattr(self, "status"):
             return
         page = self.tabs.currentWidget()
-        connected = self.active_id in self.sessions
+        connected = self.active_id in self.sessions and self.active_id not in self._closing_connections and not self._closing_mongo
         if hasattr(self, "category_actions"):
             config = self.configs.get(self.active_id)
             sqlite = bool(config and config.driver == "sqlite")
             redis = bool(config and config.driver == "redis")
-            self.category_actions["table"].setText("数据" if redis else "表")
+            mongo = bool(config and config.driver == "mongodb")
+            self.category_actions["table"].setText("集合" if mongo else "数据" if redis else "表")
             for key in ("view", "function", "other", "index", "trigger"):
                 self.category_actions[key].setVisible(not redis)
-            self.category_actions["index"].setVisible(sqlite)
-            self.category_actions["trigger"].setVisible(sqlite)
             self.category_actions["function"].setVisible(not sqlite and not redis)
             self.category_actions["other"].setVisible(not sqlite and not redis)
             self.category_actions["index"].setVisible(sqlite)
+            if not mongo:
+                self.category_actions["other"].setText("其它")
+                self.category_actions["other"].setIcon(tool_icon("other"))
             self.category_actions["trigger"].setVisible(sqlite)
+            self.category_actions["backup"].setVisible(not mongo)
+            self.mongo_pipeline_action.setVisible(mongo)
             for key in ("table", "view", "index", "trigger", "query", "backup", "model", "other"):
                 self.category_actions[key].setEnabled(connected)
             other = self.category_actions["other"]
@@ -1811,13 +1950,19 @@ class MainWindow(QMainWindow):
             self.main_toolbar.removeAction(other)
             self.main_toolbar.removeAction(user)
             before = self.category_actions["query"]
-            for action in ([user, other] if sqlite else [other, user]):
-                self.main_toolbar.insertAction(before, action)
+            if mongo:
+                self.main_toolbar.insertAction(self.category_actions["index"], user)
+                self.main_toolbar.insertAction(self.mongo_pipeline_action, other)
+            else:
+                for action in ([user, other] if sqlite else [other, user]):
+                    self.main_toolbar.insertAction(before, action)
         self.query_action.setEnabled(self.active_id in self.configs and self.configs[self.active_id].driver in SUPPORTED_DRIVERS)
-        relational = connected and self.configs[self.active_id].driver != "redis"
+        relational = connected and self.configs[self.active_id].driver not in {"redis", "mongodb"}
         self.table_action.setEnabled(relational and not self.configs[self.active_id].read_only)
         self.diagram_action.setEnabled(relational)
         self.category_actions["model"].setEnabled(relational)
+        if hasattr(self, "object_page"):
+            self.object_page.update_actions()
         self.run_action.setEnabled(isinstance(page, QueryPage) and not page.running)
         self.stop_action.setEnabled(not self._cancelling and any(isinstance(self.tabs.widget(i), QueryPage) and self.tabs.widget(i).running for i in range(self.tabs.count())))
         self.import_action.setEnabled(isinstance(page, TablePage) and page.kind == "table" and not self.configs[page.connection_id].read_only)
@@ -1829,16 +1974,21 @@ class MainWindow(QMainWindow):
             self.status.setText(f"{len(page.current_result().rows)} 条记录")
         elif isinstance(page, TablePage) and page.model is not None and not page.loading:
             self.status.setText(f"{page.total} 条记录在第 {page.offset // int(page.page_size.currentText()) + 1} 页")
+        elif isinstance(page, MONGO_PAGES) and page.page is not None and not page.loading:
+            unit = "文件" if isinstance(page, MongoGridFSPage) else "文档"
+            self.status.setText(f"本页 {len(page.page.documents)} 个{unit}" + (" · 已编辑" if page.dirty else ""))
         elif isinstance(page, DESIGNER_PAGES) and page.definition is not None and not page.loading:
             self.status.setText((f"字段数: {len(page.definition.columns)}" if hasattr(page.definition, "columns") else "触发器") + (" · 已编辑" if page.dirty else ""))
         elif page is self.object_page and not self.tasks:
-            self.status.setText(f"{len(self.object_page.records)} " + {"table": "表", "view": "视图", "query": "查询", "backup": "备份"}.get(self.object_page.kind, "对象"))
+            self.status.setText(self.object_page.status_text())
 
     def disconnect_active(self):
         if self.active_id:
             self.disconnect(self.active_id)
 
     def disconnect(self, connection_id):
+        if connection_id in self._closing_connections:
+            return False
         if self.tasks:
             QMessageBox.information(self, "操作进行中", "请等待当前操作完成后再关闭连接。")
             return False
@@ -1846,7 +1996,7 @@ class MainWindow(QMainWindow):
         for _, page in pages:
             if isinstance(page, TablePage) and not page.can_discard():
                 return False
-            if isinstance(page, RedisBrowserPage) and not page.can_discard(lambda: self.disconnect(connection_id)):
+            if isinstance(page, (RedisBrowserPage, *MONGO_PAGES)) and not page.can_discard(lambda: self.disconnect(connection_id)):
                 return False
             if isinstance(page, DESIGNER_PAGES) and not self.can_leave_designer(page, lambda: self.disconnect(connection_id)):
                 return False
@@ -1854,13 +2004,36 @@ class MainWindow(QMainWindow):
         if session and session.in_transaction:
             if QMessageBox.question(self, "事务尚未结束", "回滚尚未提交的事务并关闭连接？", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel) != QMessageBox.StandardButton.Yes:
                 return False
+        if session and session.config.driver == "mongodb":
+            # MongoClient.close can drain cursors and send commands. Keep that
+            # work on the same serial owner as reads/writes, then change widgets.
+            self._closing_connections.add(connection_id)
+            for _, page in pages:
+                if isinstance(page, MONGO_PAGES):
+                    page._closed = True
+            def failed(error):
+                self._closing_connections.discard(connection_id)
+                for _, page in pages:
+                    if isinstance(page, MONGO_PAGES):
+                        page._closed = False
+                self.error(error)
+            self.submit(session.close, lambda _value: self._finish_disconnect(connection_id, session, pages),
+                        failed, label="关闭 MongoDB 连接")
+            return True
         if session:
             session.close()
-            del self.sessions[connection_id]
+        return self._finish_disconnect(connection_id, session, pages)
+
+    def _finish_disconnect(self, connection_id, session, pages):
+        self._closing_connections.discard(connection_id)
+        if self.sessions.get(connection_id) is session:
+            self.sessions.pop(connection_id, None)
         if self.object_page.connection_id == connection_id:
             self.object_page.refresh()
         for index, page in reversed(pages):
-            if isinstance(page, (TablePage, RedisBrowserPage, *DESIGNER_PAGES)):
+            if isinstance(page, (TablePage, RedisBrowserPage, *MONGO_PAGES, *DESIGNER_PAGES)):
+                if isinstance(page, MONGO_PAGES):
+                    page._closed = True
                 self.tabs.removeTab(index)
                 page.deleteLater()
         if connection_id in self._navicat_pending_configs:
@@ -1905,7 +2078,7 @@ class MainWindow(QMainWindow):
             return
         if isinstance(page, DESIGNER_PAGES) and not self.can_leave_designer(page, lambda: self.close_tab(self.tabs.indexOf(page))):
             return
-        if isinstance(page, RedisBrowserPage) and not page.can_discard(lambda: self.close_tab(self.tabs.indexOf(page))):
+        if isinstance(page, (RedisBrowserPage, *MONGO_PAGES)) and not page.can_discard(lambda: self.close_tab(self.tabs.indexOf(page))):
             return
         if isinstance(page, QueryPage) and page.modified:
             answer = QMessageBox.question(self, "保存查询", "关闭前保存此查询？", QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel)
@@ -1914,10 +2087,12 @@ class MainWindow(QMainWindow):
             if answer == QMessageBox.StandardButton.Save and not self.save_sql(page=page):
                 return
         self.tabs.removeTab(index)
+        if isinstance(page, MONGO_PAGES):
+            page._closed = True
         page.deleteLater()
 
     def open_sql(self):
-        filename, _ = QFileDialog.getOpenFileName(self, "打开查询", "", "SQL files (*.sql);;All files (*)")
+        filename, _ = QFileDialog.getOpenFileName(self, "打开查询", "", "Queries (*.sql *.js *.json *.redis);;All files (*)")
         if not filename:
             return
         try:
@@ -1932,7 +2107,9 @@ class MainWindow(QMainWindow):
 
     def save_sql(self, checked=False, page=None):
         page = page or self.tabs.currentWidget()
-        if isinstance(page, (RedisBrowserPage, *DESIGNER_PAGES)):
+        if isinstance(page, MongoGridFSPage):
+            return False
+        if isinstance(page, (RedisBrowserPage, MongoCollectionPage, *DESIGNER_PAGES)):
             page.request_save()
             return False  # schema writes are asynchronous, never a synchronous SQL-file save.
         if not isinstance(page, QueryPage):
@@ -1940,7 +2117,8 @@ class MainWindow(QMainWindow):
         filename = page.filename
         if not filename:
             redis = self.configs[page.connection_id].driver == "redis"
-            filename, _ = QFileDialog.getSaveFileName(self, "保存查询", "commands.redis" if redis else "query.sql", "Redis commands (*.redis *.txt)" if redis else "SQL files (*.sql)")
+            mongo = self.configs[page.connection_id].driver == "mongodb"
+            filename, _ = QFileDialog.getSaveFileName(self, "保存查询", "query.js" if mongo else "commands.redis" if redis else "query.sql", "MongoDB queries (*.js *.json)" if mongo else "Redis commands (*.redis *.txt)" if redis else "SQL files (*.sql)")
         if not filename:
             return False
         try:
@@ -2150,12 +2328,15 @@ class MainWindow(QMainWindow):
         QMessageBox.information(self, "Keyboard shortcuts", "Use Command on macOS and Control on Windows/Linux.\n\nNew connection: Ctrl+Shift+N\nNew query: Ctrl+N\nOpen SQL: Ctrl+O\nSave SQL: Ctrl+S\nRun selection / script: Ctrl+Enter\nFind in SQL: Ctrl+F\nFormat SQL: Ctrl+Shift+F\nQuery history: Ctrl+H\nRefresh: F5\nCopy grid selection: Ctrl+C")
 
     def about(self):
-        QMessageBox.about(self, "关于 OpenNavicat", f"<h2>OpenNavicat {__version__}</h2><p>原生桌面数据库工具。</p><p>SQLite · PostgreSQL · MySQL · MariaDB · SQL Server · Redis<br>Qt 6 / Python · MIT License</p><p>完整界面及工具功能还原进行中。</p>")
+        QMessageBox.about(self, "关于 OpenNavicat", f"<h2>OpenNavicat {__version__}</h2><p>原生桌面数据库工具。</p><p>SQLite · PostgreSQL · MySQL · MariaDB · SQL Server · Redis · MongoDB<br>Qt 6 / Python · MIT License</p><p>完整界面及工具功能还原进行中。</p>")
 
     def closeEvent(self, event):
+        if self._closing_mongo:
+            event.ignore()
+            return
         if self.tasks:
             self.stop()
-            QMessageBox.information(self, "操作进行中", "已请求停止正在执行的 SQL。请等待操作完成后再关闭窗口。")
+            QMessageBox.information(self, "操作进行中", "已请求停止正在执行的查询。请等待操作完成后再关闭窗口。")
             event.ignore()
             return
         for i in range(self.tabs.count()):
@@ -2166,9 +2347,34 @@ class MainWindow(QMainWindow):
             if isinstance(page, TablePage) and not page.can_discard():
                 event.ignore()
                 return
-            if isinstance(page, RedisBrowserPage) and not page.can_discard(self.close):
+            if isinstance(page, (RedisBrowserPage, *MONGO_PAGES)) and not page.can_discard(self.close):
                 event.ignore()
                 return
+        mongo_sessions = [(identifier, session) for identifier, session in self.sessions.items()
+                          if session.config.driver == "mongodb"]
+        if mongo_sessions:
+            self._closing_mongo = True
+            mongo_pages = [self.tabs.widget(index) for index in range(self.tabs.count())
+                           if isinstance(self.tabs.widget(index), MONGO_PAGES)]
+            for page in mongo_pages:
+                page._closed = True
+            def close_mongo():
+                for _, session in mongo_sessions:
+                    session.close()
+            def closed(_value):
+                for identifier, session in mongo_sessions:
+                    if self.sessions.get(identifier) is session:
+                        self.sessions.pop(identifier)
+                self._closing_mongo = False
+                self.when_idle(self.close)
+            def failed(error):
+                self._closing_mongo = False
+                for page in mongo_pages:
+                    page._closed = False
+                self.error(error)
+            self.submit(close_mongo, closed, failed, label="关闭 MongoDB 连接")
+            event.ignore()
+            return
         if any(session.in_transaction for session in self.sessions.values()):
             if QMessageBox.question(self, "事务尚未结束", "回滚尚未提交的事务并退出？", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel) != QMessageBox.StandardButton.Yes:
                 event.ignore()

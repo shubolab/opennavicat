@@ -99,7 +99,9 @@ def report(architecture="arm64", version="0.3.0"):
             "libpq": 180000, "qt": "6.12.0", "psycopg": "3.3.8", "pymysql": "1.2.4",
             "paramiko": "5.1.0", "cryptography": "46.0.0", "crypto_legacy_probe": True,
             "python_tds": "1.17.1", "redis": "8.1.0", "pyopenssl": "26.4.0",
-            "certifi": "2026.10.23", "sqlserver_default_ca_present": True, "extra_adapters_constructed": True, "sqlserver_tls_context_ready": True}}
+            "certifi": "2026.10.23", "sqlserver_default_ca_present": True, "extra_adapters_constructed": True, "sqlserver_tls_context_ready": True,
+            "pymongo": "4.19.0", "mongodb_adapter_constructed": True,
+            "mongodb_bson_probe": True, "mongodb_tls_context_ready": True}}
 
 
 def test_empty_windowed_process_stdout_is_not_an_installed_smoke(tmp_path):
@@ -121,6 +123,20 @@ def test_installed_report_must_prove_architecture_version_and_driver_loading(tmp
     path = tmp_path / "report.json"
     path.write_text(json.dumps(value_report))
     with pytest.raises(installer.PackagingError, match=error):
+        installer.validate_smoke_report(path, "0.3.0", "arm64", "windows")
+
+
+@pytest.mark.parametrize("field", ["mongodb_adapter_constructed", "mongodb_bson_probe", "mongodb_tls_context_ready"])
+@pytest.mark.parametrize("value", [None, False, "true", 1])
+def test_installed_mongodb_probe_cannot_be_missing_or_truthy_text(tmp_path, field, value):
+    payload = report()
+    if value is None:
+        payload["runtime"].pop(field)
+    else:
+        payload["runtime"][field] = value
+    path = tmp_path / "report.json"
+    path.write_text(json.dumps(payload))
+    with pytest.raises(installer.PackagingError, match="MongoDB"):
         installer.validate_smoke_report(path, "0.3.0", "arm64", "windows")
 
 

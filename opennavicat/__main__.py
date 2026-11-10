@@ -37,6 +37,8 @@ def main():
         import redis
         import OpenSSL
         import certifi
+        import pymongo
+        import bson
         import importlib.metadata
         import ssl
         from cryptography.hazmat.backends import default_backend
@@ -53,10 +55,29 @@ def main():
             host="localhost", database="master", username="smoke", ssl_mode="verify-full"))
         redis_session = DatabaseSession(ConnectionConfig("native-smoke-redis", "Generated smoke", driver="redis",
             database="0", ssl_mode="disable"))
+        mongo_session = DatabaseSession(ConnectionConfig("native-smoke-mongo", "Generated smoke", driver="mongodb",
+            database="admin", ssl_mode="verify-full"))
         adapters_constructed = (sqlserver.__class__.__module__ == "opennavicat.sqlserver_session"
             and redis_session.__class__.__module__ == "opennavicat.redis_session")
         if not adapters_constructed:
             raise RuntimeError("Native SQL Server / Redis factory did not construct the actual adapters")
+        mongo_constructed = mongo_session.__class__.__module__ == "opennavicat.mongodb_session"
+        if not mongo_constructed:
+            raise RuntimeError("Native MongoDB factory did not construct its actual adapter")
+        from .mongodb_session import BSON_CODEC, canonical_dumps, canonical_loads
+        document = {"long": bson.Int64(9007199254740993), "decimal": bson.Decimal128("1.00"),
+                    "binary": bson.Binary(b"\x00\xff\r\n", 128)}
+        expected_bson = bson.BSON.encode(document, codec_options=BSON_CODEC)
+        bson_probe = (bson.BSON.encode(canonical_loads(canonical_dumps(document)), codec_options=BSON_CODEC) == expected_bson
+                      and bson.has_c() and pymongo.has_c())
+        if not bson_probe:
+            raise RuntimeError("The packaged native BSON codec did not preserve its typed test document")
+        # connect=False initializes PyMongo's actual TLS configuration without
+        # starting server discovery or connecting to an external database.
+        with pymongo.MongoClient(**mongo_session._connection_options()) as probe_client:
+            mongo_tls_ready = probe_client.options.pool_options._ssl_context is not None
+        if not mongo_tls_ready:
+            raise RuntimeError("The packaged MongoDB TLS context did not initialize")
         tls_options = sqlserver._connection_options()
         import pytds.tls
         tls_context = pytds.tls.create_context(tls_options["cafile"])
@@ -64,6 +85,7 @@ def main():
             raise RuntimeError("Native SQL Server TLS context did not initialize")
         sqlserver.close()
         redis_session.close()
+        mongo_session.close()
         runtime = {"version": __version__, "os": platform.system(),
             "machine": platform.machine(), "python": platform.python_version(),
             "qt": QLibraryInfo.version().toString(), "psycopg": psycopg.__version__,
@@ -71,6 +93,9 @@ def main():
             "pymysql": pymysql.VERSION_STRING, "paramiko": paramiko.__version__,
             "python_tds": importlib.metadata.version("python-tds"), "redis": redis.__version__,
             "pyopenssl": OpenSSL.__version__, "certifi": certifi.__version__,
+            "pymongo": pymongo.version,
+            "mongodb_adapter_constructed": mongo_constructed, "mongodb_bson_probe": bool(bson_probe),
+            "mongodb_tls_context_ready": mongo_tls_ready,
             "sqlserver_default_ca_present": Path(certifi.where()).is_file(),
             "extra_adapters_constructed": adapters_constructed,
             "sqlserver_tls_context_ready": tls_context is not None,

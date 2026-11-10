@@ -268,6 +268,8 @@ class QueryPage(QWidget):
             return "dbo"
         if config.driver == "redis":
             return config.database or "0"
+        if config.driver == "mongodb":
+            return config.database or "admin"
         if config.driver == "sqlite":
             return "main"
         active = getattr(self.window, "active_schema", None)
@@ -277,20 +279,21 @@ class QueryPage(QWidget):
 
     def _apply_protocol_mode(self):
         native = self.protocol_driver == "redis"
-        self.editor.set_language("redis" if native else "sql")
-        self.editor.setPlaceholderText('Redis 原生命令，每行一条；参数支持 CLI 引号和 \\xNN 字节转义。' if native else "")
-        self.schema_picker.setToolTip("Redis 数据库编号" if native else "数据库 / 模式")
+        mongo = self.protocol_driver == "mongodb"
+        self.editor.set_language("text" if mongo else "redis" if native else "sql")
+        self.editor.setPlaceholderText('MongoDB：Canonical Extended JSON 命令，或 db.getCollection(...).find(...)/aggregate(...)。完整 mongosh JavaScript 仍待实现。' if mongo else 'Redis 原生命令，每行一条；参数支持 CLI 引号和 \\xNN 字节转义。' if native else "")
+        self.schema_picker.setToolTip("MongoDB 数据库" if mongo else "Redis 数据库编号" if native else "数据库 / 模式")
         self._update_protocol_actions()
 
     def _update_protocol_actions(self):
-        native = self.protocol_driver == "redis"
+        native = self.protocol_driver in {"redis", "mongodb"}
         self.format_button.setEnabled(not native)
-        self.format_button.setToolTip("Redis 原生命令不使用 SQL 格式化。" if native else "格式化 SQL")
+        self.format_button.setToolTip("此原生查询不使用 SQL 格式化。" if native else "格式化 SQL")
         self.builder_button.setEnabled(False)
-        self.builder_button.setToolTip("Redis 使用原生命令，不使用 SQL 查询创建工具。" if native else "查询创建工具（尚未实现）")
+        self.builder_button.setToolTip("MongoDB 可视化聚合管道设计器尚未实现。" if self.protocol_driver == "mongodb" else "Redis 使用原生命令，不使用 SQL 查询创建工具。" if native else "查询创建工具（尚未实现）")
         self.explain_button.setEnabled(not self.running and self.supports_explain)
         if native:
-            self.explain_button.setToolTip("Redis 原生命令不支持 SQL EXPLAIN。")
+            self.explain_button.setToolTip("MongoDB explain 专用工具尚未实现。" if self.protocol_driver == "mongodb" else "Redis 原生命令不支持 SQL EXPLAIN。")
         elif self.protocol_driver == "sqlserver":
             self.explain_button.setToolTip("SQL Server 执行计划尚未实现。")
         else:
@@ -356,7 +359,7 @@ class QueryPage(QWidget):
             self.window.tabs.setTabText(index, f"{name} *")
 
     def format_sql(self):
-        if self.protocol_driver == "redis":
+        if self.protocol_driver in {"redis", "mongodb"}:
             return False
         self.editor.setPlainText(pretty_sql(self.editor.toPlainText()))
         return True
@@ -400,7 +403,7 @@ class QueryPage(QWidget):
             widget.deleteLater()
 
     def show_results(self, results):
-        if self.protocol_driver == "redis":
+        if self.protocol_driver in {"redis", "mongodb"}:
             session = getattr(self.window, "sessions", {}).get(self.connection_id)
             selected = getattr(session, "_selected_schema", None)
             if selected is not None and str(selected) != self.schema:
@@ -416,6 +419,7 @@ class QueryPage(QWidget):
         info = []
         for number, result in enumerate(results, 1):
             info.extend([f"[{number}] {result.sql.strip()}",
+                         "此命令只取得部分结果；请结合下方错误检查实际完成的操作。" if result.partial else "",
                          f"受影响的行数：{result.affected:,}    执行时间：{result.elapsed_ms:.3f} ms",
                          "已达到返回记录限制。" if result.truncated else "", ""])
         self.info.setPlainText("\n".join(info))
@@ -427,7 +431,7 @@ class QueryPage(QWidget):
         self.summary.verticalHeader().setDefaultSectionSize(20)
         self.summary.horizontalHeader().setStretchLastSection(True)
         for row, result in enumerate(results):
-            for column, value in enumerate([row + 1, "成功", result.affected, f"{result.elapsed_ms:.3f} ms"]):
+            for column, value in enumerate([row + 1, "部分完成" if result.partial else "成功", result.affected, f"{result.elapsed_ms:.3f} ms"]):
                 self.summary.setItem(row, column, QTableWidgetItem(str(value)))
         self.results.addTab(self.summary, "摘要")
         first_grid = None

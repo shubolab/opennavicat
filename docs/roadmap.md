@@ -25,7 +25,7 @@
 
 ## 阶段三：全部驱动、对象与安全管理
 
-- 补齐Oracle、MongoDB、Snowflake和参考所列云数据库连接；SQL Server与Redis在0.5已有真实核心适配，六个已接入驱动仍须补齐全部选项/认证/HTTP及适用高级设置。0.3已通过真实SSH/TLS核心测试，保留该基础，同时完成18参考及全部驱动/平台的安全选项对照。
+- 补齐Oracle、Snowflake和参考所列云数据库连接；SQL Server与Redis在0.5已有真实核心适配，MongoDB在0.6开发分支接入standalone、类型保持文档读写与原生工作区。各驱动仍须补齐全部拓扑/选项/认证/HTTP及适用高级设置。0.3已通过真实SSH/TLS核心测试，保留该基础，同时完成18参考及全部驱动/平台的安全选项对照。
 - 按驱动补齐数据库/schema、表、索引、约束、外键、视图、触发器、函数、过程、序列、事件、物化视图等对象的可视化管理；通用 SQL 执行不能替代这些工具。
 - 补齐PostgreSQL扩展/类型/外部对象、Oracle包/链接/回收站/Data Pump、SQL Server专属对象及MongoDB普通/时序集合/文档/索引/GridFS等实际参考能力。
 - Snowflake覆盖Standard/Hybrid/Dynamic表、warehouse/role/namespace、原生客户端依赖及DB MFA/SSO；Redis覆盖Sentinel及适用拓扑、key类型/TTL/数据库、ACL的command/key/channel规则。不能用普通关系型表格或只改连接名称代替专用工具。

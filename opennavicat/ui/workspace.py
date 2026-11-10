@@ -13,6 +13,16 @@ from PySide6.QtWidgets import (
 
 from .icons import icon, tool_icon
 
+OBJECT_LABELS = {"table": "表", "view": "视图", "index": "索引", "trigger": "触发器",
+    "redis_data": "数据", "query": "查询", "backup": "备份", "mongo_collection": "集合",
+    "mongo_timeseries": "时间序列集合", "mongo_view": "视图", "mongo_index": "索引",
+    "mongo_function": "函数", "mongo_mapreduce": "MapReduce", "mongo_pipeline": "聚合管道",
+    "mongo_bucket": "GridFS 存储桶"}
+
+def object_symbol(kind):
+    return {"mongo_collection": "table", "mongo_timeseries": "table", "mongo_view": "view",
+            "mongo_index": "index", "mongo_bucket": "database"}.get(kind, kind)
+
 
 class ObjectBrowser(QWidget):
     def __init__(self, window):
@@ -84,7 +94,7 @@ class ObjectBrowser(QWidget):
 
     def set_context(self, connection_id, schema, kind="table"):
         self.connection_id, self.schema, self.kind = connection_id, schema, kind
-        label = {"table": "表", "view": "视图", "index": "索引", "trigger": "触发器", "redis_data": "数据", "query": "查询", "backup": "备份"}.get(kind, "对象")
+        label = OBJECT_LABELS.get(kind, "对象")
         self.open_action.setText("打开" + label)
         self.design_action.setText("设计" + label)
         self.new_action.setText("新建" + label)
@@ -92,6 +102,11 @@ class ObjectBrowser(QWidget):
         headers = {"index": ["名称", "唯一键", "自动索引", "表名称", "根页面"],
                    "trigger": ["名称", "类型", "表名称", "触发", ""]}.get(kind,
                    ["名称", "根页面", "有索引", "有触发器", ""])
+        if kind == "mongo_collection":
+            headers = ["名称", "文档数", "已固定", "内存中的总大小", "对象的平均大小", "存储大小", "索引数", "索引的总大小"]
+        elif kind.startswith("mongo_"):
+            headers = ["名称", "集合", "类型", "", ""] if kind == "mongo_index" else ["名称", "", "", "", ""]
+        self.table.setColumnCount(len(headers))
         self.table.setHorizontalHeaderLabels(headers)
         self.system_indexes_action.setVisible(kind == "index")
         if kind == "redis_data":
@@ -100,7 +115,7 @@ class ObjectBrowser(QWidget):
         self.refresh()
 
     def refresh(self):
-        if self.window._closed:
+        if self.window._closed or getattr(self.window, "_closing_mongo", False) or self.connection_id in getattr(self.window, "_closing_connections", ()):
             return
         session = self.window.sessions.get(self.connection_id)
         selected = self.selected()
@@ -124,6 +139,18 @@ class ObjectBrowser(QWidget):
             return
         show_system = self.system_indexes_check.isChecked()
         def work():
+            if session.config.driver == "mongodb":
+                if kind == "mongo_index":
+                    return [dict(obj, kind=kind, schema=schema, id=connection_id)
+                            for obj in session.indexes(schema)], 0
+                if kind in {"mongo_function", "mongo_mapreduce", "mongo_pipeline"}:
+                    return [], 0
+                all_objects = session.objects(schema)
+                matching = {"mongo_collection", "mongo_timeseries"} if kind == "mongo_collection" else {kind}
+                objects = [dict(obj, id=connection_id) for obj in all_objects
+                           if obj["kind"] in matching and not obj.get("system")]
+                hidden = sum(obj["kind"] in matching and bool(obj.get("system")) for obj in all_objects)
+                return objects, hidden
             if session.config.driver == "sqlite" and kind in {"index", "trigger"}:
                 from ..schema_objects import load_trigger
                 rows = session._query(f"SELECT name,tbl_name,rootpage,sql FROM {session.quote_identifier(schema)}.sqlite_schema WHERE type=? ORDER BY name", (kind,))
@@ -157,7 +184,7 @@ class ObjectBrowser(QWidget):
             return objects, 0
         def done(result):
             objects, hidden = result
-            if (self.connection_id, self.schema, self.kind) == (connection_id, schema, kind):
+            if self.window.sessions.get(connection_id) is session and not getattr(self.window, "_closing_mongo", False) and connection_id not in getattr(self.window, "_closing_connections", ()) and (self.connection_id, self.schema, self.kind) == (connection_id, schema, kind):
                 self.hidden_system_indexes = hidden
                 self.show_objects(objects)
         self.window.submit(work, done, label="读取对象")
@@ -171,12 +198,22 @@ class ObjectBrowser(QWidget):
                 values = [entry["name"], "是" if entry.get("unique") else "否", "是" if entry.get("automatic") else "否", entry["table"], entry.get("rootpage", "")]
             elif self.kind == "trigger":
                 values = [entry["name"], "View" if entry.get("owner_type") == "view" else "Table", entry["table"], entry.get("timing", "") + " " + entry.get("event", ""), ""]
+            elif self.kind == "mongo_collection":
+                stats = entry.get("stats", {})
+                values = [entry["name"], stats.get("count", ""),
+                    ("是" if stats["capped"] else "否") if "capped" in stats else "",
+                    stats.get("size", ""), stats.get("avgObjSize", ""), stats.get("storageSize", ""),
+                    stats.get("nindexes", ""), stats.get("totalIndexSize", "")]
+            elif self.kind == "mongo_index":
+                values = [entry["name"], entry.get("collection", ""), str(entry.get("keys", "")), "", ""]
+            elif self.kind.startswith("mongo_"):
+                values = [entry["name"], "", "", "", ""]
             if self.kind in {"query", "backup", "redis_data"}:
                 values = [entry["name"], "", "", "", ""]
             for column, value in enumerate(values):
                 item = QTableWidgetItem(str(value))
                 if column == 0:
-                    item.setIcon(icon(entry["kind"] if entry["kind"] != "query" else "query", 16))
+                    item.setIcon(icon(object_symbol(entry["kind"]), 16))
                     item.setData(Qt.ItemDataRole.UserRole, entry)
                 self.table.setItem(row, column, item)
         self.filter_rows(self.search.text())
@@ -186,7 +223,12 @@ class ObjectBrowser(QWidget):
                     self.table.setCurrentCell(row, 0)
                     break
         self.update_actions()
-        self.window.status.setText(f"{len(objects)} " + {"table": "表", "view": "视图", "index": "索引", "trigger": "触发器", "redis_data": "数据", "query": "查询", "backup": "备份"}.get(self.kind, "对象") + (f" · 隐藏 {getattr(self, 'hidden_system_indexes', 0)} 个系统索引" if self.kind == "index" else ""))
+        self.window.status.setText(self.status_text())
+
+    def status_text(self):
+        hidden = getattr(self, "hidden_system_indexes", 0)
+        suffix = f" · 隐藏 {hidden} 个系统项目" if hidden and self.kind.startswith("mongo_") else f" · 隐藏 {hidden} 个系统索引" if self.kind == "index" else ""
+        return f"{len(self.records)} " + OBJECT_LABELS.get(self.kind, "对象") + suffix
 
     def selected(self):
         row = self.table.currentRow()
@@ -207,15 +249,15 @@ class ObjectBrowser(QWidget):
 
     def update_actions(self):
         selected = self.selected() is not None
-        connected = self.connection_id in self.window.sessions
+        connected = self.connection_id in self.window.sessions and self.connection_id not in getattr(self.window, "_closing_connections", ()) and not getattr(self.window, "_closing_mongo", False)
         writable = connected and not self.window.configs[self.connection_id].read_only
-        self.open_action.setEnabled(selected)
+        self.open_action.setEnabled(selected and self.kind != "mongo_index")
         self.design_action.setEnabled(selected and self.kind in {"table", "view", "index", "trigger"})
         self.new_action.setEnabled(writable and self.kind in {"table", "index", "trigger"})
         self.delete_action.setEnabled(writable and selected and self.kind in {"table", "view", "index", "trigger"} and not self.selected().get("automatic"))
         self.import_action.setEnabled(writable and selected and self.kind == "table")
         self.export_action.setEnabled(connected and selected and self.kind in {"table", "view"})
-        self.er_action.setEnabled(connected and self.window.configs[self.connection_id].driver != "redis")
+        self.er_action.setEnabled(connected and self.window.configs[self.connection_id].driver not in {"redis", "mongodb"})
 
     def filter_rows(self, text):
         text = text.casefold()
@@ -326,9 +368,9 @@ class Inspector(QWidget):
 
     def show_object(self, info, config=None, ddl=""):
         kind = info.get("kind", "query")
-        self.symbol.setPixmap(icon(kind if kind in {"table", "view", "index", "trigger", "backup"} else "query", 48).pixmap(48, 48))
+        self.symbol.setPixmap(icon(object_symbol(kind), 48).pixmap(48, 48))
         self.title.setText(info.get("name", info.get("table", "无标题")))
-        self.kind.setText({"table": "表", "view": "视图", "index": "索引", "trigger": "触发器", "redis_data": "数据", "query": "查询", "backup": "备份"}.get(kind, kind))
+        self.kind.setText(OBJECT_LABELS.get(kind, kind))
         self.connection.setText(config.name if config else "")
         self.schema.setText(info.get("schema", ""))
         details = []

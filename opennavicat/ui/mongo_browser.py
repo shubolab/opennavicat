@@ -12,6 +12,8 @@ from copy import deepcopy
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
+import os
+import tempfile
 
 from bson import BSON, Binary, Code, Decimal128, Int64, ObjectId, Regex, Timestamp
 from bson.datetime_ms import DatetimeMS
@@ -31,6 +33,23 @@ from .icons import tool_icon
 
 
 _MISSING = object()
+
+
+def _write_export(path, payload):
+    """Replace a selected export only after all bytes reached its own volume."""
+    destination = Path(path)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(prefix=".opennavicat-export-", dir=destination.parent, delete=False) as stream:
+            temporary = Path(stream.name)
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, destination)
+        temporary = None
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
 
 
 def bson_type(value):
@@ -529,7 +548,7 @@ class MongoCollectionPage(QWidget):
                 self.show_error("此文档不能无损转换为 Extended JSON；请导出原始 BSON。");return
             payload=text.encode("utf-8")
         else:payload=bytes(document.raw_bson)
-        self._submit(lambda _session:Path(filename).write_bytes(payload),lambda _value:None,"导出 MongoDB 文档")
+        self._submit(lambda _session:_write_export(filename, payload),lambda _value:None,"导出 MongoDB 文档")
 
     def _update_controls(self):
         if not hasattr(self,"add_button"):return

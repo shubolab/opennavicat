@@ -291,10 +291,12 @@ def validate_smoke_report(path: Path, version: str, architecture: str, operating
         raise PackagingError("Installed application did not write its runtime smoke report")
     report = json.loads(path.read_text("utf-8"))
     runtime = report.get("runtime", {})
-    if not all(report.get("runtime", {}).get(field) for field in ("python_tds", "redis", "pyopenssl", "certifi", "sqlserver_default_ca_present")):
+    if not all(report.get("runtime", {}).get(field) for field in ("python_tds", "redis", "pyopenssl", "certifi", "sqlserver_default_ca_present", "pymongo")):
         raise PackagingError("Installed SQL Server / Redis runtime or CA bundle is missing")
     if any(report.get("runtime", {}).get(field) is not True for field in ("extra_adapters_constructed", "sqlserver_tls_context_ready")):
         raise PackagingError("Installed native database adapters or SQL Server TLS context did not initialize")
+    if any(runtime.get(field) is not True for field in ("mongodb_adapter_constructed", "mongodb_bson_probe", "mongodb_tls_context_ready")):
+        raise PackagingError("Installed MongoDB adapter, native BSON codec or TLS context did not initialize")
     if report.get("smoke") != "passed" or report.get("rows") != 6:
         raise PackagingError(f"Installed SQL smoke did not return six real rows: {report}")
     if runtime.get("version") != version:

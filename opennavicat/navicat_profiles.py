@@ -262,13 +262,16 @@ def _convert(driver: str, name: str, original: Mapping, source: str, source_form
     provider = record.get("serviceprovider", "")
     if provider not in ("", "0", 0, "Default", "default"):
         issue("unsupported_service_provider", "The source service-provider authentication settings need review.", ("serviceprovider",))
-    if driver != "redis":
+    if driver not in {"redis", "mongodb"}:
         for field_name in ("authenticationmode", "authmode", "authmethod", "authmechanism", "connmethod"):
             auth_value = record.get(field_name)
             if auth_value not in (None, "", 0, "0", "Default", "default", "password", "Password", "Normal", "normal"):
                 issue("unsupported_database_authentication", "The database authentication mode needs review.", (field_name,))
     if record.get("unknownjsonproperties"):
         issue("unknown_connection_options", "The source contains additional connection options that need review.", ("unknownjsonproperties",))
+    for key in ("initialsessionqueries", "connectionparameters"):
+        if record.get(key):
+            issue("source_session_options_review", "The source has additional session options that require explicit review.", (key,))
     tls = _enabled(record.get("usessl", False if driver == "sqlite" else None))
     if tls is None:
         issue("unknown_tls_state", "The source TLS enablement state is not recognized.", ("usessl",))
@@ -395,8 +398,26 @@ def _convert(driver: str, name: str, original: Mapping, source: str, source_form
             issue("unknown_redis_authentication", "The Redis authentication mode needs review.", ("authenticationmode",))
     if record.get("customdblist") and _enabled(record.get("usecustomdblist", False)):
         issue("database_filter_not_migrated", "The source database visibility filter is retained as an unsupported option.", ("usecustomdblist", "customdblist"), False)
-    if driver in {"oracle", "mongodb", "snowflake"}:
+    if driver in {"oracle", "snowflake"}:
         issue("driver_not_available", "This connection family is retained but its adapter is not yet available.", ("driver",))
+    if driver == "mongodb":
+        config.mongo_auth_source = _text(record.get("authsource"))
+        mechanism = _text(record.get("authmechanism"))
+        config.mongo_auth_mechanism = "DEFAULT" if mechanism == "Password" else mechanism or "UNKNOWN"
+        config.mongo_connection_type = "standalone" if record.get("connmethod") == "Standalone" else _text(record.get("connmethod")) or "UNKNOWN"
+        config.mongo_replica_set = _text(record.get("replicasetname"))
+        members = record.get("memberlist", [])
+        config.mongo_members = json.dumps(members, ensure_ascii=False) if members else ""
+        config.mongo_read_preference = "primary" if record.get("readpreference") == "Primary" else _text(record.get("readpreference")) or "UNKNOWN"
+        config.mongo_srv = _enabled(record.get("usesrvrecord", False)) is not False
+        for source, target in (("retryreads", "mongo_retry_reads"), ("retrywrites", "mongo_retry_writes")):
+            flag = _enabled(record.get(source))
+            if flag is None:
+                issue("mongodb_retry_options_review", "The MongoDB retry setting requires review.", (source,))
+            else:
+                setattr(config, target, flag)
+        issue("mongodb_source_settings_review", "The MongoDB source authentication and topology settings require explicit review before opening.", ("authmechanism", "authsource", "connmethod"))
+    if driver in {"oracle", "mongodb", "snowflake"}:
         for key in ("authmechanism", "authsource", "authkerberosprincipal", "authkerberosservicename",
                     "authx509subjectname", "replicasetname", "memberlist", "connmethod",
                     "readpreference", "role", "serviceprovider"):

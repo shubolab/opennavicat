@@ -74,7 +74,7 @@ def test_all_nine_families_groups_and_explicit_review_blocks_round_trip(tmp_path
                          unsupported_fields=("authenticationmode",) if driver == "sqlserver" else ()) for driver in drivers]
     store = Store(tmp_path)
     counts = store.sync_navicat_profiles(report(*profiles))
-    assert counts["added"] == 9 and counts["blocked"] == 4
+    assert counts["added"] == 9 and counts["blocked"] == 3
     restarted = Store(tmp_path)
     by_driver = {config.driver: config for config in restarted.connections()}
     assert set(by_driver) == set(drivers)
@@ -85,9 +85,9 @@ def test_all_nine_families_groups_and_explicit_review_blocks_round_trip(tmp_path
         assert metadata["source_format"] == "macos-plist" and metadata["platform"] == "darwin"
         assert metadata["group_paths"] == [["Work", "Development"], ["Secondary"]]
         assert metadata["requires_secrets"] == ["password"]
-        assert metadata["blocked"] == (driver in {"oracle", "mongodb", "snowflake", "sqlserver"})
+        assert metadata["blocked"] == (driver in {"oracle", "snowflake", "sqlserver"})
         assert not metadata["locally_edited"] and not metadata["source_missing"] and metadata["last_seen"]
-        if driver in {"oracle", "mongodb", "snowflake"}:
+        if driver in {"oracle", "snowflake"}:
             assert "driver" in metadata["unsupported_fields"]
     assert not vault[1]
 

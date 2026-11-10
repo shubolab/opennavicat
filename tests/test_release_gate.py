@@ -28,7 +28,9 @@ def assets(tmp_path):
                     "paramiko": "fixture", "cryptography": "fixture", "crypto_legacy_probe": True,
                     "python_tds": "1.17.1", "redis": "8.1.0", "pyopenssl": "26.4.0",
                     "certifi": "2026.10.23", "sqlserver_default_ca_present": True,
-                    "extra_adapters_constructed": True, "sqlserver_tls_context_ready": True}}}
+                    "extra_adapters_constructed": True, "sqlserver_tls_context_ready": True,
+                    "pymongo": "4.19.0", "mongodb_adapter_constructed": True,
+                    "mongodb_bson_probe": True, "mongodb_tls_context_ready": True}}}
         manifest = {"name": "OpenNavicat", "version": VERSION, "os": system,
             "architecture": arch, "native_host_architecture": arch,
             "installer": installer.name, "bytes": installer.stat().st_size,
@@ -85,7 +87,7 @@ def test_tag_must_match_source_version_before_publication(assets):
         gate.publish("v9.9.9", assets, verify_only=True)
 
 
-@pytest.mark.parametrize("field", ["python_tds", "redis", "pyopenssl", "certifi", "sqlserver_default_ca_present"])
+@pytest.mark.parametrize("field", ["python_tds", "redis", "pyopenssl", "certifi", "sqlserver_default_ca_present", "pymongo"])
 def test_missing_new_driver_runtime_is_rejected(assets, field):
     path, manifest = first_manifest(assets)
     manifest["verification"]["runtime"]["runtime"].pop(field)
@@ -96,7 +98,7 @@ def test_missing_new_driver_runtime_is_rejected(assets, field):
         gate.validate_assets(assets, VERSION)
 
 
-@pytest.mark.parametrize("field", ["extra_adapters_constructed", "sqlserver_tls_context_ready"])
+@pytest.mark.parametrize("field", ["extra_adapters_constructed", "sqlserver_tls_context_ready", "mongodb_adapter_constructed", "mongodb_bson_probe", "mongodb_tls_context_ready"])
 @pytest.mark.parametrize("reported", [None, False, "true", 1])
 def test_adapter_and_tls_probe_must_be_actual_true_boolean(assets, field, reported):
     path, manifest = first_manifest(assets)

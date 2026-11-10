@@ -252,7 +252,7 @@ def test_refresh_keeps_mongodb_index_context_and_other_toolbar_label(qtbot, mong
     window.show_objects("mongo_index"); idle(qtbot, window)
     assert window.object_page.kind == "mongo_index" and window.category_actions["other"].text() == "索引"
     window.refresh_tree(); idle(qtbot, window)
-    assert window.object_page.kind == "mongo_index" and window.object_page.table.columnCount() == 5
+    assert window.object_page.kind == "mongo_index" and window.object_page.table.columnCount() == 9
     assert window.category_actions["other"].text() == "索引" and not errors
 
 

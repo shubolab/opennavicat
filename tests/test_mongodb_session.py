@@ -134,7 +134,8 @@ def mongodb_service(request):
     receipt()
     try:
         daemon=json.loads(_docker('info','--format','{{json .}}'))
-        evidence.update(docker_os=daemon['OSType'],docker_architecture=daemon['Architecture'])
+        evidence.update(docker_os=daemon['OSType'],docker_architecture=daemon['Architecture'],
+                        docker_kernel_version=daemon.get('KernelVersion'))
         if daemon['OSType']!='linux':raise RuntimeError('Owned MongoDB tests require a Linux Docker daemon')
         container=_docker('run','--detach','--name',name,'--label','opennavicat.test=true',
             '--label','opennavicat.task=mongodb-adapter-tests','--label','opennavicat.mongodb-protocol-fixture='+token,
@@ -765,7 +766,7 @@ def test_fixture_early_exit_retains_redacted_state_logs_and_exact_cleanup(tmp_pa
     commands=[]
     def docker(*args):
         commands.append(args)
-        if args[0]=='info':return json.dumps({'OSType':'linux','Architecture':'amd64'})
+        if args[0]=='info':return json.dumps({'OSType':'linux','Architecture':'amd64','KernelVersion':'6.8.0-owned'})
         if args[0]=='run':
             assert '--rm'not in args
             return identity
@@ -794,6 +795,7 @@ def test_fixture_early_exit_retains_redacted_state_logs_and_exact_cleanup(tmp_pa
     assert receipt['cleanup_removed'] is True and receipt['owner_token_verified'] is True
     assert receipt['server_state']['ExitCode']==14 and receipt['server_state']['OOMKilled'] is False
     assert receipt['failure_phase']=='server-startup'
+    assert receipt['docker_kernel_version']=='6.8.0-owned'
     text='\n'.join(path.read_text() for path in tmp_path.iterdir())
     assert 'fixture-password'not in text and 'MUST_NOT_DUMP_PRIVATE_ENV'not in text
     assert '<redacted>'in text and 'owned <redacted> diagnostic stderr'in text

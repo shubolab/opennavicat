@@ -92,7 +92,8 @@ class OwnedMongoSecurity:
     def start(self):
         daemon = _docker("info", "--format", "{{.OSType}}/{{.Architecture}}").stdout.strip()
         assert daemon.startswith("linux/"), "The fixture requires a Linux Docker daemon"
-        self.evidence.update(docker_os_architecture=daemon, client_os=platform.system(),
+        kernel=_docker('info', '--format', '{{.KernelVersion}}').stdout.strip()
+        self.evidence.update(docker_os_architecture=daemon, docker_kernel_version=kernel, client_os=platform.system(),
                              client_architecture=platform.machine())
         self.environment.write_text("OWN_MONGO_USER=fixture\nOWN_MONGO_PASSWORD=" + self.password + "\n")
         self.environment.chmod(0o600)

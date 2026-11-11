@@ -20,6 +20,10 @@ Python + Qt Widgets（PySide6），数据库连接、SQL 和结果均在本机�
 [OpenNavicat v0.9.0](https://github.com/shubolab/opennavicat/releases/tag/v0.9.0)。
 八个公开资产已匿名下载，并分别核对 GitHub 大小/digest 与 `SHA256SUMS`。
 
+main 的后续开发已加入普通/时间序列集合和视图工具，并按原版实测重排普通集合七页、
+接通存储引擎与索引默认配置。它们尚未进入上述 0.9.0 安装器；当前验证和剩余差距见
+[恢复快照](docs/snapshot/2026-11-11-resume.md) 与 [集合存储页记录](docs/mongodb-collection-storage.md)。
+
 最新可用里程碑为 **v0.9.0**，提供三个操作系统、两种架构的六份安装包。
 现有 **SQLite、PostgreSQL、MySQL、MariaDB、SQL Server、Redis、MongoDB** 七种核心驱动，
 使用隔离数据库进行了真实协议、读写及界面集成验证。本版保留 Linux 历史连接及分组发现、

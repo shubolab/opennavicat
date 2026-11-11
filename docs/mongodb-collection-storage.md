@@ -99,11 +99,11 @@ still requires the explicitly entered sheet name and confirmed backend plan.
 The embedded collection index list omits `_id_` as observed; the server catalog,
 metadata counts and standalone index tool continue to retain that index.
 
-Integrated macOS ARM64 checks: **1567 passed / 544 conditionally skipped** in the
+Integrated macOS ARM64 checks: **1573 passed / 544 conditionally skipped** in the
 default full-source suite and **226 passed / zero skipped/failed/error** in the
 collection runner. The latter used six distinct owned native loopback MongoDB
 8.0.34 fixtures, independently confirmed absent after cleanup. Evidence is in
-`artifacts/collection-storage/integrated/` and `full-source.xml`; qualified source
+`artifacts/collection-storage/integrated/` and `final-source.xml`; qualified source
 file hashes match this checkpoint. The full-source service/platform skips are
 not counted as live execution, and the overlapping runs are not summed.
 The collection/shared-designer modules and two real MainWindow storage paths

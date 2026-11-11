@@ -432,3 +432,75 @@ def test_real_server_permission_denial_cannot_change_the_collection(session):
         assert 'validator' not in tools.load_collection(session, snapshot.schema, 'docs').definition.options
     finally:
         restricted.close(); admin.command({'dropUser': username})
+
+
+def test_real_drop_plan_rejects_namespace_replacement_then_drops_only_the_sealed_uuid(session):
+    db = session.connection[session.config.database]
+    db.drop_collection('drop_target')
+    db.drop_target.insert_one({'keep': True})
+    sealed = tools.load_collection(session, session.config.database, 'drop_target')
+    plan = tools.plan_drop(session, sealed)
+    assert plan.commands[0]['drop'] == 'drop_target'
+    assert plan.commands[0]['collectionUUID'] == sealed.namespace_uuid
+    assert 'permanent' in plan.warnings[0].lower()
+
+    db.drop_collection('drop_target')
+    db.drop_target.insert_one({'replacement': True})
+    with pytest.raises(tools.CollectionApplyError) as error:
+        tools.apply_operation(session, plan)
+    assert error.value.outcome.status == 'not_started'
+    assert db.drop_target.find_one() == {'_id': db.drop_target.find_one()['_id'], 'replacement': True}
+
+    current = tools.load_collection(session, session.config.database, 'drop_target')
+    result = tools.apply_operation(session, tools.plan_drop(session, current))
+    assert result.snapshot is None and result.outcome.status == 'acknowledged'
+    assert result.outcome.collection_absent is True
+    assert 'drop_target' not in db.list_collection_names()
+
+
+def test_real_clear_deletes_documents_but_preserves_uuid_options_indexes_and_collection(session):
+    db = session.connection[session.config.database]
+    db.drop_collection('clear_target')
+    db.create_collection('clear_target', validator={'n': {'$gte': 0}})
+    db.clear_target.insert_many([{'_id': 1, 'n': 1}, {'_id': 2, 'n': 2}, {'_id': 3, 'n': 3}])
+    db.clear_target.create_index([('n', 1)], name='n_1')
+    snapshot = tools.load_collection(session, session.config.database, 'clear_target')
+    uuid = snapshot.namespace_uuid
+    plan = tools.plan_clear(session, snapshot)
+    assert plan.commands[0]['delete'] == 'clear_target'
+    assert plan.commands[0]['deletes'] == [{'q': {}, 'limit': 0, 'collation': {'locale': 'simple'}}]
+    assert plan.commands[0]['collectionUUID'] == uuid
+    assert any('estimated count' in warning.lower() for warning in plan.warnings)
+
+    result = tools.apply_operation(session, plan)
+    assert result.outcome.status == 'acknowledged' and result.outcome.remaining_documents == 0
+    assert result.snapshot.namespace_uuid == uuid and result.snapshot.definition == snapshot.definition
+    assert db.clear_target.count_documents({}) == 0
+    assert 'n_1' in db.clear_target.index_information()
+    assert tools.load_collection(session, session.config.database, 'clear_target').definition == snapshot.definition
+
+
+@pytest.mark.parametrize('planner', [tools.plan_drop, tools.plan_clear])
+def test_real_drop_and_clear_permission_denial_preserves_collection(session, planner):
+    from opennavicat.mongodb_session import MongoSession
+    admin = session.connection.admin
+    username = 'collection_drop_reader'
+    admin.command({'createUser': username, 'pwd': 'synthetic-reader-password',
+        'roles': [{'role': 'read', 'db': session.config.database}]})
+    restricted = MongoSession(replace(session.config, username=username, password='synthetic-reader-password'))
+    database = session.connection[session.config.database]
+    database.docs.insert_one({'_id': 'permission-probe', 'preserved': True})
+    before = tools.load_collection(session, session.config.database, 'docs')
+    try:
+        restricted.connect()
+        snapshot = tools.load_collection(restricted, session.config.database, 'docs')
+        plan = planner(restricted, snapshot)
+        with pytest.raises(tools.CollectionApplyError) as error:
+            tools.apply_operation(restricted, plan)
+        assert error.value.outcome.status == 'server_error'
+        assert error.value.outcome.reply['code'] == 13
+        after = tools.load_collection(session, session.config.database, 'docs')
+        assert after.namespace_uuid == before.namespace_uuid
+        assert database.docs.find_one({'_id': 'permission-probe'}) == {'_id': 'permission-probe', 'preserved': True}
+    finally:
+        restricted.close(); admin.command({'dropUser': username})

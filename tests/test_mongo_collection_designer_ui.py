@@ -6,11 +6,14 @@ from copy import deepcopy
 import pytest
 
 from opennavicat.database import DatabaseError
+from bson import Binary
+
 from opennavicat.mongodb_collections import (
     CollectionApplyError, CollectionDefinition, CollectionOutcome, CollectionPlan, CollectionSnapshot,
 )
 from opennavicat.ui.mongo_collection_designer import (
-    MongoCollectionDesignerPage, MongoCollectionSaveDialog, collection_error_text,
+    MongoCollectionDesignerPage, MongoCollectionOperationDialog, MongoCollectionSaveDialog,
+    collection_error_text,
 )
 
 
@@ -144,3 +147,27 @@ def test_apply_error_formatter_keeps_status_reply_and_observation():
     assert 'MongoConflictError' in text
     assert 'readback became read-only' in text
     assert '不会自动回滚' in text
+
+
+
+@pytest.mark.parametrize(
+    "operation,command,button_text",
+    [("drop", {"drop": "locked", "collectionUUID": Binary(b"\0" * 16, 4), "writeConcern": {"w": 1}}, "删除"),
+     ("clear", {"delete": "locked", "deletes": [{"q": {}, "limit": 0}],
+                "collectionUUID": Binary(b"\0" * 16, 4), "writeConcern": {"w": 1}}, "清空")],
+)
+def test_permanent_collection_operation_requires_explicit_checkbox(qtbot, operation, command, button_text):
+    snapshot = CollectionSnapshot(
+        "demo_catalog", "locked", CollectionDefinition("locked"), exists=True)
+    plan = CollectionPlan(snapshot, snapshot.definition, [command], True, ["permanent warning"])
+    dialog = MongoCollectionOperationDialog(plan, operation)
+    qtbot.addWidget(dialog)
+    accepted = []
+    dialog.accepted.connect(lambda: accepted.append(True))
+    assert dialog.confirm_button.text() == button_text
+    assert not dialog.confirm_button.isEnabled()
+    assert "db.runCommand" in dialog.preview.toPlainText()
+    dialog.permanent_check.setChecked(True)
+    assert dialog.confirm_button.isEnabled()
+    dialog.accept()
+    assert accepted == [True]

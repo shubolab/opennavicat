@@ -168,7 +168,7 @@ def test_real_collection_designer_creates_and_collmods_with_worker_owned_io(qtbo
     browser.table.setCurrentCell(row, 0)
     browser.update_actions()
     assert browser.new_action.isEnabled() and browser.design_action.isEnabled()
-    assert not browser.delete_action.isEnabled()
+    assert browser.delete_action.isEnabled() and browser.clear_action.isEnabled()
     entry = dict(browser.selected(), table="ui_created")
     assert window.design_object(entry) is page
     assert not errors and threads
@@ -376,3 +376,38 @@ def test_real_window_stop_inflight_collection_uses_cancel_pool_and_preserves_dra
     qtbot.mouseClick(dialog.save_button, Qt.MouseButton.LeftButton)
     idle(qtbot, window)
     assert "blocked_collection" in database.list_collection_names() and not page.dirty
+
+
+def test_real_window_clear_and_drop_collection_require_permanent_confirmation(qtbot, mongo_window):
+    window, config, database, schema, errors, threads = mongo_window
+    window.set_active(config.id, config.database)
+    window.show_objects("table")
+    idle(qtbot, window)
+    browser = window.object_page
+    row = next(index for index, entry in enumerate(browser.records) if entry["name"] == "docs")
+    browser.table.setCurrentCell(row, 0)
+    browser.update_actions()
+    assert browser.delete_action.isEnabled() and browser.clear_action.isEnabled()
+    docs_info = dict(browser.selected(), table="docs")
+
+    assert window.clear_mongo_collection(docs_info) is True
+    qtbot.waitUntil(lambda: len(window._mongo_collection_operation_dialogs) == 1, timeout=15000)
+    dialog = next(iter(window._mongo_collection_operation_dialogs))
+    assert not dialog.confirm_button.isEnabled() and '"delete"' in dialog.plan.command_text
+    dialog.permanent_check.setChecked(True)
+    qtbot.mouseClick(dialog.confirm_button, Qt.MouseButton.LeftButton)
+    idle(qtbot, window)
+    assert database.docs.count_documents({}) == 0
+    assert "_id_" in database.docs.index_information()
+
+    database.drop_ui.insert_one({"_id": 1, "kept": True})
+    drop_info = dict(docs_info, name="drop_ui", table="drop_ui")
+    assert window.delete_mongo_collection(drop_info) is True
+    qtbot.waitUntil(lambda: len(window._mongo_collection_operation_dialogs) == 1, timeout=15000)
+    dialog = next(iter(window._mongo_collection_operation_dialogs))
+    assert not dialog.confirm_button.isEnabled() and '"drop"' in dialog.plan.command_text
+    dialog.permanent_check.setChecked(True)
+    qtbot.mouseClick(dialog.confirm_button, Qt.MouseButton.LeftButton)
+    idle(qtbot, window)
+    assert "drop_ui" not in database.list_collection_names()
+    assert not errors and threads

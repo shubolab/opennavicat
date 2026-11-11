@@ -8,3 +8,6 @@
 完整功能与 UI 的验收范围以 [parity-matrix.md](../parity-matrix.md) 为准；
 快照记录某个时点的交接事实，不缩小完整 Navicat 还原目标。
 原始 REA、测试、安装器与运行证据主要保存在本机 ignored 的 `artifacts/`，不会随 Git clone 自动恢复。
+
+分支已收敛为 `main` 与 `work/mongodb-collections-next`；旧 ref 的提交与恢复归档见
+[分支索引](2026-11-11-branches.json)。本机旧工作树及其中未提交/ignored 资料保留。

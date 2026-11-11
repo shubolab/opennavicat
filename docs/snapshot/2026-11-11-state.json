@@ -20,8 +20,10 @@
   },
   "main": {
     "base_before_snapshot": "a59d1e65db81d31f38ff84c0df0a424490ec828d",
-    "product_version": "0.8.1",
-    "this_handoff_changes": "Documentation and parity ledger only"
+    "product_version": "0.9.0-candidate",
+    "this_handoff_changes": "Qualified 0.9 product merged normally, then documentation only; public release remains 0.8.1",
+    "qualified_product_source_sha": "92079b928f41d00c2b5ed2deeaabd7c20d200d44",
+    "candidate_merge_commit": "d725b228a070c35ea6e4f587ad43b9381e3c64de"
   },
   "published": {
     "tag": "v0.8.1",
@@ -38,7 +40,7 @@
   },
   "candidate": {
     "version": "0.9.0",
-    "branch": "work/0.9-release",
+    "branch": null,
     "source_sha": "92079b928f41d00c2b5ed2deeaabd7c20d200d44",
     "worktree": "../opennavicat-next-09",
     "integration_sha": "f9c492362afe750510b3c01057bc794991d35ad1",
@@ -100,7 +102,10 @@
       "width": 1440,
       "height": 900
     },
-    "main_snapshot_documentation_diverges_from_frozen_candidate": true
+    "historical_ci_branch": "work/0.9-release",
+    "included_in_main": true,
+    "worktree_mode": "detached",
+    "main_merge_sha_is_not_exact_preflight_sha": true
   },
   "future_checkpoints": [
     {
@@ -115,7 +120,10 @@
       "fresh_fixtures": 1,
       "fixture_cleanup_verified": true,
       "receipt": "../opennavicat-mongo-collections/artifacts/mongo-collections/checkpoint-final/summary.json",
-      "integrated_into_candidate": false
+      "integrated_into_candidate": false,
+      "original_branch_deleted": true,
+      "current_branch": "work/mongodb-collections-next",
+      "original_worktree_mode": "detached"
     },
     {
       "topic": "Static collection designer reference; not runtime observation",
@@ -128,7 +136,10 @@
       "nodes": 1709,
       "edges": 1533,
       "rea_exported_and_closed": true,
-      "runtime_pages_defaults_save_cancel_verified": false
+      "runtime_pages_defaults_save_cancel_verified": false,
+      "original_branch_deleted": true,
+      "current_branch": "work/mongodb-collections-next",
+      "original_worktree_mode": "detached"
     }
   ],
   "parity_ledger": {
@@ -146,14 +157,41 @@
     "do_not_install_wsl_desktop": true,
     "old_primary_dist_application_preserved": true,
     "unknown_older_worktrees_and_ignored_evidence_preserved": true,
-    "raw_evidence_and_local_artifacts_not_in_git": true
+    "raw_evidence_and_local_artifacts_not_in_git": true,
+    "previous_mongodb_and_redis_reference_services_retained": true
   },
   "next_steps": [
-    "Verify exact refs/clean worktrees and read this handoff plus parity ledger",
+    "Verify main/next refs, exact historical commits, clean/dirty worktree boundaries and this handoff plus parity ledger",
     "Independently complete formal 0.9 tag CI and public verification if resuming release",
     "Preserve frozen 920 or requalify any new source SHA; do not reset main or retag",
-    "Use fresh CUA inventory after user reopened the reference, with owned fixture only",
+    "Preserve frozen 920 or qualify new source SHA; do not reset main, retag or remerge already-consolidated commits",
     "Review c9 backend, observe actual collection designer, then implement UI/worker lifecycle and CI integration",
     "Continue all remaining full-function and three-platform UI gates"
-  ]
+  ],
+  "consolidation": {
+    "retained_local_and_remote_branches": [
+      "main",
+      "work/mongodb-collections-next"
+    ],
+    "next_worktree": "../opennavicat-mongodb-next",
+    "next_product_merge_checkpoint": "5701b5405dbb8ceda1293c884cab26c3bf62167f",
+    "deleted_local_branches": 26,
+    "deleted_remote_branches": 20,
+    "preserved_detached_worktrees": 25,
+    "preserved_dirty_worktrees": 6,
+    "no_worktree_directory_removed": true,
+    "archive_tag": "archive/2026-11-11-branch-consolidation",
+    "archive_commit": "389497532a46c1754d5f97dfedfb98a4720f8c78",
+    "branch_tip_index": "2026-11-11-branches.json",
+    "local_integrity_evidence": "artifacts/branch-consolidation-20261111/",
+    "uncommitted_worktree_paths": [
+      "../opennavicat-connection-manager",
+      "../opennavicat-driver-dialogs",
+      "../opennavicat-navicat-import",
+      "../opennavicat-object-designers",
+      "../opennavicat-redis-adapter",
+      "../opennavicat-sqlserver-adapter"
+    ]
+  },
+  "updated_at": "2026-11-11T10:41:33+08:00"
 }

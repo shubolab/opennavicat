@@ -144,12 +144,13 @@
   ],
   "parity_ledger": {
     "path": "../parity-matrix.md",
-    "gate_rows": 126,
+    "gate_rows": 131,
     "partial": 70,
-    "missing": 55,
+    "missing": 60,
     "scope_only_confirmed": 1,
     "bounded_existing_fact_rows": 6,
-    "full_tool_or_one_to_one_ui_gate_finally_accepted": 0
+    "full_tool_or_one_to_one_ui_gate_finally_accepted": 0,
+    "ai_gate_rows_included": 5
   },
   "preserve": {
     "dell_rdp_windows_gui_deferred": true,
@@ -193,5 +194,5 @@
       "../opennavicat-sqlserver-adapter"
     ]
   },
-  "updated_at": "2026-11-11T10:41:33+08:00"
+  "updated_at": "2026-11-11T10:44:10+08:00"
 }

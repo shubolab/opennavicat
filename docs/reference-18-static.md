@@ -23,6 +23,10 @@ REA 的资源会话仍使用 `executable_sha256: null`，没有把这份摘要�
 可执行目标或已绑定的原生分析快照。这份下载包为 ARM64，不能由此推断其它 Navicat
 下载包、Windows 或 Linux 版本的架构支持。
 
+Windows 当前安装由独立静态记录补充：[Navicat Premium 18.0.6 静态参考身份](reference-windows-18.0.6.md)。
+该安装主程序 SHA-256 为 `23e325a375a53b0443f6a29dd34e932ec0d89dc13ffc463c1a2fc3e07071212f`；
+它只证明 Windows 18.0.6 静态产物身份，不能替代本稿的 macOS 18.0.5 build 321，也不能关闭运行 UI 门禁。
+
 新版 plist 新增 `.nmodel` 模型工作区、`.nbi` BI 工作区、`.nagg` 聚合管线关联，
 保留 `.ncharts` 和部分 `.ndm2/.ndmc2/.ndml2`，实体快捷方式新增 `.nescsnowflake`。
 文件关联不是文件兼容性证明：旧格式迁移、往返保存和外部文件导入仍需独立验证。

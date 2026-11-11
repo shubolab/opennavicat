@@ -6,7 +6,10 @@ import base64
 
 from bson import BSON
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtWidgets import QComboBox, QFormLayout, QLabel, QLineEdit, QPlainTextEdit, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFormLayout, QLabel, QLineEdit,
+    QPlainTextEdit, QVBoxLayout, QWidget,
+)
 
 from opennavicat.database import DatabaseError
 from opennavicat.mongodb_session import (
@@ -56,6 +59,38 @@ class MongoViewSaveDialog(TableSaveDialog):
             self.preview.setPlainText('请输入视图名称。'); return
         self.preview.setPlainText('正在生成视图命令…')
         self.previewRequested.emit(deepcopy(self.definition))
+
+
+class MongoViewDropDialog(QDialog):
+    """Permanent view-drop confirmation with the exact reviewed command."""
+
+    def __init__(self, plan, parent=None):
+        super().__init__(parent)
+        self.plan = deepcopy(plan)
+        self.setWindowTitle('删除视图')
+        self.setWindowModality(Qt.WindowModality.WindowModal)
+        self.resize(720, 500)
+        layout = QVBoxLayout(self)
+        subject = plan.snapshot.schema + '.' + plan.snapshot.name
+        label = QLabel(f'永久删除视图 {subject}？')
+        label.setWordWrap(True); layout.addWidget(label)
+        self.warning = QLabel('\n'.join(plan.warnings)); self.warning.setWordWrap(True); layout.addWidget(self.warning)
+        self.preview = SqlEditor(); self.preview.set_language('text'); self.preview.setReadOnly(True)
+        try: self.preview.setPlainText(plan.command_script)
+        except DatabaseError as error: self.preview.setPlainText('无法生成执行脚本：\n' + str(error) + '\n\n' + plan.command_text)
+        layout.addWidget(self.preview, 1)
+        self.permanent_check = QCheckBox('我了解此操作是永久性的、不会自动回滚，并且视图没有 UUID；最终检查后由其他客户端替换的同名视图也可能被删除')
+        layout.addWidget(self.permanent_check)
+        self.buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        self.confirm_button = self.buttons.button(QDialogButtonBox.StandardButton.Ok)
+        self.confirm_button.setText('删除'); self.confirm_button.setEnabled(False)
+        self.buttons.button(QDialogButtonBox.StandardButton.Cancel).setText('取消')
+        self.permanent_check.toggled.connect(self.confirm_button.setEnabled)
+        self.buttons.accepted.connect(self.accept); self.buttons.rejected.connect(self.reject)
+        layout.addWidget(self.buttons)
+
+    def accept(self):
+        if self.plan is not None and self.permanent_check.isChecked(): super().accept()
 
 
 class MongoViewDesignerPage(_ObjectDesignerPage):

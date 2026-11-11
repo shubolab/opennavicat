@@ -185,6 +185,11 @@ read-only, and sends load/plan/apply through MainWindow's serial worker queue.
 Array parsing uses the same duplicate-key, finite-number, BSON-type and date
 precision safeguards as document editing. Missing source, existing target and
 stale catalog paths are surfaced without retrying or dropping a peer namespace.
+Dedicated permanent drop uses the same reviewed-plan boundary: the complete raw
+view catalog is checked before dispatch, but because an ordinary view has no
+UUID the dialog explicitly warns that a peer replacement in the final race is
+not CAS-protected. The Catalog, stale and cancel paths are all verified against
+an owned MongoDB service.
 
 ## Identity, concurrency and create idempotency
 
@@ -260,9 +265,9 @@ It reuses the receipt-backed, run-label-specific emergency cleanup for
 timeout/interrupt. It never accepts a reference endpoint. Logs/receipts exclude
 Docker environment dumps and private certificate/key/URI files.
 
-The current Linux WSL amd64 proof passed **134 cases with zero skips** and six
+The current Linux WSL amd64 proof passed **139 cases with zero skips** and six
 independently cleaned MongoDB 8.0.34 fixtures. The exact run identity and source
-hashes are retained under `artifacts/mongo-collections/view-20261111b/`. The shared
+hashes are retained under `artifacts/mongo-collections/drop-20261111/`. The shared
 database-security CI job executes this runner. The earlier macOS ARM64
 backend-only proof remains historical and does not cover this UI.
 
@@ -287,7 +292,7 @@ user workspaces and Navicat configuration are not used.
 Additional Linux WSL amd64 checks in this checkpoint:
 
 - `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q -W error`:
-  **1492 passed, 521 conditionally skipped, 0 failed/error**. Default-service
+  **1493 passed, 525 conditionally skipped, 0 failed/error**. Default-service
   skips are not counted as real database execution; the owned runner above
   covers this feature's Mongo scope without skips.
 - `.venv/bin/python -m opennavicat --smoke-test`: **passed**, 6 rows / 4 columns,

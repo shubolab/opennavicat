@@ -58,7 +58,7 @@ from .mongo_collection_designer import (
     collection_error_text,
 )
 from .mongo_timeseries_designer import MongoTimeSeriesDesignerPage
-from .mongo_view_designer import MongoViewDesignerPage
+from .mongo_view_designer import MongoViewDesignerPage, MongoViewDropDialog
 from .mongo_maintenance import MongoMaintenanceConfirmDialog, MongoMaintenanceResultDialog
 
 DESIGNER_PAGES = (TableDesignerPage, IndexDesignerPage, TriggerDesignerPage, MongoIndexDesignerPage, MongoCollectionDesignerPage, MongoTimeSeriesDesignerPage, MongoViewDesignerPage)
@@ -498,6 +498,7 @@ class MainWindow(QMainWindow):
         self._mongo_view_jobs = {}
         self._mongo_index_delete_dialogs = {}
         self._mongo_collection_operation_dialogs = {}
+        self._mongo_view_drop_dialogs = {}
         self._mongo_collection_copy_dialogs = {}
         self._mongo_maintenance_dialogs = set()
         self._closed = False
@@ -2060,6 +2061,82 @@ class MainWindow(QMainWindow):
                 if (self.object_page.connection_id, self.object_page.schema) == (connection_id, schema): self.object_page.refresh()
         self.when_idle(refresh)
 
+    def delete_mongo_view(self, info):
+        config = self.configs.get(info.get('id'))
+        session = self.sessions.get(info.get('id'))
+        schema, name = info.get('schema'), info.get('name', info.get('table'))
+        if (config is None or config.driver != 'mongodb' or config.read_only or session is None
+                or not schema or not name or self._closing_mongo or info.get('id') in self._closing_connections
+                or self._mongo_view_jobs or self._mongo_view_drop_dialogs or self._cancelling):
+            return None
+        identity = info['id'], schema, name
+        for index in range(self.tabs.count()):
+            page = self.tabs.widget(index)
+            if isinstance(page, MongoViewDesignerPage) and self._mongo_view_identity(page) == identity and page.dirty:
+                self.statusBar().showMessage('请先保存或关闭该视图的未保存设计草稿。', 5000)
+                return None
+            if (isinstance(page, MongoCollectionPage)
+                    and (page.connection_id, page.schema, page.collection) == identity
+                    and (page.loading or page.dirty or page._dialog is not None)):
+                self.statusBar().showMessage('请先等待视图数据加载完成，再执行永久删除。', 5000)
+                return None
+        def current():
+            return self._collection_session_current(identity[0], session)
+        def work():
+            snapshot = mongo_view_tools.load_view(session, schema, name)
+            return mongo_view_tools.plan_drop(session, snapshot)
+        def ready(plan):
+            if not current():
+                return
+            dialog = MongoViewDropDialog(plan, self)
+            self._mongo_view_drop_dialogs[dialog] = identity[0]
+            def accepted():
+                self._apply_mongo_view_drop(
+                    identity[0], session, deepcopy(dialog.plan),
+                    lambda _result: self._mongo_view_drop_succeeded(identity),
+                    lambda error: self.error(DatabaseError(collection_error_text(error))),
+                )
+            dialog.accepted.connect(accepted)
+            def finished(_result):
+                self._mongo_view_drop_dialogs.pop(dialog, None)
+                dialog.deleteLater()
+            dialog.finished.connect(finished)
+            dialog.open()
+        self.submit(work, ready, lambda error: self.error(DatabaseError(collection_error_text(error))),
+            label='读取视图删除预览')
+        return True
+
+    def _mongo_view_drop_succeeded(self, identity):
+        connection_id, schema, name = identity
+        for index in reversed(range(self.tabs.count())):
+            page = self.tabs.widget(index)
+            matches = ((isinstance(page, MongoViewDesignerPage) and self._mongo_view_identity(page) == identity)
+                or (isinstance(page, MongoCollectionPage)
+                    and (page.connection_id, page.schema, page.collection) == identity))
+            if matches:
+                self.tabs.removeTab(index); page.deleteLater()
+        self.statusBar().showMessage(f'视图 {schema}.{name} 已删除。', 7000)
+
+    def _apply_mongo_view_drop(self, connection_id, session, plan, success, failure):
+        if not self._collection_session_current(connection_id, session) or self._cancelling:
+            return
+        token = uuid.uuid4().hex; cancelled, started = threading.Event(), threading.Event()
+        self._mongo_view_jobs[token] = (session, cancelled, started)
+        def work():
+            started.set()
+            if cancelled.is_set():
+                raise DatabaseError('视图删除已在执行命令前取消。')
+            return mongo_view_tools.apply_drop_plan(session, plan, cancelled=cancelled.is_set)
+        def done(result):
+            if self._collection_session_current(connection_id, session):
+                success(result); self._refresh_mongo_view_context(connection_id, session, plan.snapshot.schema)
+        def failed(error):
+            if self._collection_session_current(connection_id, session):
+                failure(error); self._refresh_mongo_view_context(connection_id, session, plan.snapshot.schema)
+        def finish():
+            self._mongo_view_jobs.pop(token, None)
+        self.submit(work, done, failed, label='删除视图', finished=finish)
+
     def set_schema_preview_suppressed(self, value):
         previous = self.store.state.get("suppress_schema_save_preview", False)
         self.store.state["suppress_schema_save_preview"] = bool(value)
@@ -2990,6 +3067,7 @@ class MainWindow(QMainWindow):
                             menu.addAction("设计视图", lambda: self.design_object(info)).setEnabled(connected)
                             menu.addAction("新建视图…", lambda: self.open_mongo_view_designer(
                                 info["id"], info["schema"])).setEnabled(writable)
+                            menu.addAction("删除视图…", lambda: self.delete_mongo_view(info)).setEnabled(writable)
                         else:
                             menu.addAction("设计集合", lambda: self.design_object(info)).setEnabled(connected)
                             maintenance = menu.addMenu("维护")
@@ -3269,7 +3347,7 @@ class MainWindow(QMainWindow):
             if isinstance(page, DESIGNER_PAGES) and not self.can_leave_designer(page, retry):
                 return False
         for dialogs in (self._mongo_index_delete_dialogs, self._mongo_collection_operation_dialogs,
-                        self._mongo_collection_copy_dialogs):
+                        self._mongo_collection_copy_dialogs, self._mongo_view_drop_dialogs):
             for dialog, owner in tuple(dialogs.items()):
                 if owner == connection_id:
                     dialog.reject()
@@ -3751,7 +3829,7 @@ class MainWindow(QMainWindow):
                 event.ignore()
                 return
         for dialogs in (self._mongo_index_delete_dialogs, self._mongo_collection_operation_dialogs,
-                        self._mongo_collection_copy_dialogs):
+                        self._mongo_collection_copy_dialogs, self._mongo_view_drop_dialogs):
             for dialog in tuple(dialogs):
                 dialog.reject()
         for dialog in tuple(self._mongo_maintenance_dialogs):

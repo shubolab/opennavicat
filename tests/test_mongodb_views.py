@@ -83,6 +83,48 @@ def test_view_with_ambiguous_extended_json_pipeline_is_read_only(source, session
     assert any('Canonical Extended JSON' in issue for issue in snapshot.issues)
 
 
+def test_real_view_drop_is_permanent_and_catalog_bound(source, session):
+    db = source
+    db.drop_collection('drop_view')
+    db.command({'create': 'drop_view', 'viewOn': 'view_source', 'pipeline': [{'$match': {'n': 1}}]})
+    snapshot = tools.load_view(session, session.config.database, 'drop_view')
+    plan = tools.plan_drop(session, snapshot)
+    assert plan.commands == [{'drop': 'drop_view', 'writeConcern': {'w': 1}}]
+    assert 'not an atomic compare-and-swap' in plan.warnings[0] and 'peer view' in plan.warnings[1]
+    result = tools.apply_drop_plan(session, plan)
+    assert result.outcome.status == 'acknowledged' and result.outcome.collection_absent is True
+    assert 'drop_view' not in db.list_collection_names()
+
+
+def test_real_view_drop_rejects_stale_catalog_and_peer_replacement(source, session):
+    db = source
+    db.drop_collection('drop_stale')
+    db.command({'create': 'drop_stale', 'viewOn': 'view_source', 'pipeline': [{'$match': {'n': 1}}]})
+    snapshot = tools.load_view(session, session.config.database, 'drop_stale')
+    plan = tools.plan_drop(session, snapshot)
+    db.drop_collection('drop_stale')
+    db.command({'create': 'drop_stale', 'viewOn': 'view_source', 'pipeline': [{'$match': {'n': 2}}]})
+    with pytest.raises(tools.CollectionApplyError) as error:
+        tools.apply_drop_plan(session, plan)
+    assert error.value.outcome.status == 'not_started'
+    assert [row['_id'] for row in db.drop_stale.find()] == [2]
+
+
+def test_view_drop_rejects_collections_and_cancel_before_io(source, session):
+    snapshot = tools.new_view(session, session.config.database)
+    with pytest.raises(DatabaseError, match='ordinary view'):
+        tools.plan_drop(session, snapshot)
+    db = source
+    db.drop_collection('drop_cancel')
+    db.command({'create': 'drop_cancel', 'viewOn': 'view_source', 'pipeline': []})
+    snapshot = tools.load_view(session, session.config.database, 'drop_cancel')
+    cancelled = threading.Event(); cancelled.set()
+    with pytest.raises(tools.CollectionApplyError) as error:
+        tools.apply_drop_plan(session, tools.plan_drop(session, snapshot), cancelled=cancelled.is_set)
+    assert error.value.outcome.cancelled and error.value.outcome.status == 'not_started'
+    assert 'drop_cancel' in db.list_collection_names()
+
+
 def test_real_view_missing_source_and_permission_denial(source, session):
     snapshot, definition = draft(session, 'view_missing', 'missing_source')
     with pytest.raises(MongoConflictError, match='source namespace'):

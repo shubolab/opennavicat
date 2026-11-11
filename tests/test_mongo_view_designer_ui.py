@@ -7,7 +7,7 @@ import pytest
 
 from opennavicat.database import DatabaseError
 from opennavicat.mongodb_views import ViewDefinition, ViewPlan, ViewSnapshot
-from opennavicat.ui.mongo_view_designer import MongoViewDesignerPage, MongoViewSaveDialog
+from opennavicat.ui.mongo_view_designer import MongoViewDesignerPage, MongoViewDropDialog, MongoViewSaveDialog
 
 
 @pytest.fixture
@@ -61,3 +61,15 @@ def test_existing_view_name_is_readonly_but_pipeline_is_editable(qtbot):
     assert page.source_combo.isEnabled() and not page.pipeline_editor.isReadOnly()
     page.pipeline_editor.setPlainText('[]')
     assert page.dirty and page.draft().pipeline == []
+
+
+def test_view_drop_dialog_requires_permanent_acknowledgement(qtbot, page):
+    plan = ViewPlan(page.snapshot, ViewDefinition('active_docs', 'docs', []), [{'drop': 'active_docs'}], True,
+                    ['Drop is permanent.', 'Ordinary views have no UUID.'])
+    dialog = MongoViewDropDialog(plan)
+    qtbot.addWidget(dialog)
+    assert not dialog.confirm_button.isEnabled()
+    assert '"drop"' in dialog.preview.toPlainText()
+    assert 'UUID' in dialog.permanent_check.text() and 'no UUID' in dialog.warning.text()
+    dialog.permanent_check.setChecked(True)
+    assert dialog.confirm_button.isEnabled()

@@ -231,7 +231,7 @@ def test_real_window_mongo_view_designer_creates_updates_and_routes_object_page(
     row = next(index for index, entry in enumerate(browser.records) if entry['name'] == 'view_ui')
     browser.table.setCurrentCell(row, 0)
     browser.update_actions()
-    assert browser.new_view_action.isEnabled() and browser.design_action.isEnabled()
+    assert browser.new_view_action.isEnabled() and browser.design_action.isEnabled() and browser.delete_action.isEnabled()
     entry = dict(browser.selected(), table='view_ui')
     assert window.design_object(entry) is page
 
@@ -257,7 +257,7 @@ def test_real_window_mongo_view_designer_creates_updates_and_routes_object_page(
     monkeypatch.setattr(window_module, 'QMenu', FakeMenu)
     window.tree.scrollToItem(view_item)
     window.tree_menu(window.tree.visualItemRect(view_item).center())
-    assert captured and '设计视图' in captured[0] and '新建视图…' in captured[0] and '打开视图' in captured[0]
+    assert captured and '设计视图' in captured[0] and '新建视图…' in captured[0] and '打开视图' in captured[0] and '删除视图…' in captured[0]
     assert threads and not errors
 
 
@@ -296,6 +296,31 @@ def test_real_window_mongo_view_designer_refuses_missing_target_and_stale_defini
     idle(qtbot, window)
     assert 'changed after loading' in stale.message.text()
     assert [row['_id'] for row in database.stale_view.find()] == [0]
+    assert threads and not errors
+
+
+def test_real_window_delete_mongo_view_requires_permanent_confirmation(qtbot, mongo_window):
+    window, config, database, schema, errors, threads = mongo_window
+    database.command({'create': 'delete_view_ui', 'viewOn': 'docs', 'pipeline': [{'$match': {'_id': 1}}]})
+    page = window.open_mongo_view_designer(config.id, config.database, 'delete_view_ui')
+    qtbot.waitUntil(lambda: page.snapshot is not None and page.snapshot.exists and not page.loading, timeout=15000)
+    info = {'id': config.id, 'schema': config.database, 'name': 'delete_view_ui', 'table': 'delete_view_ui', 'kind': 'mongo_view'}
+    original_pipeline = page.pipeline_editor.toPlainText()
+    page.pipeline_editor.setPlainText('[{"$match": {"_id": 5}}]')
+    assert page.dirty and window.delete_mongo_view(info) is None
+    assert '未保存' in window.statusBar().currentMessage()
+    page.pipeline_editor.setPlainText(original_pipeline)
+    assert not page.dirty
+    assert window.delete_mongo_view(info) is True
+    qtbot.waitUntil(lambda: len(window._mongo_view_drop_dialogs) == 1, timeout=15000)
+    dialog = next(iter(window._mongo_view_drop_dialogs))
+    assert not dialog.confirm_button.isEnabled()
+    assert '"drop"' in dialog.preview.toPlainText() and 'not an atomic compare-and-swap' in dialog.warning.text()
+    dialog.permanent_check.setChecked(True)
+    dialog.confirm_button.click()
+    idle(qtbot, window)
+    assert 'delete_view_ui' not in database.list_collection_names()
+    qtbot.waitUntil(lambda: not isValid(page), timeout=15000)
     assert threads and not errors
 
 

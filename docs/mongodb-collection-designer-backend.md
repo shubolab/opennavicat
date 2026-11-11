@@ -197,20 +197,19 @@ Docker environment dumps and private certificate/key/URI files.
 
 The current Linux WSL amd64 proof passed **60 cases with zero skips** and two
 independently cleaned MongoDB 8.0.34 fixtures. The shared database-security CI job
-now declares this runner; a branch run has not yet been claimed as six-target or
-packaged qualification. The earlier macOS ARM64 backend-only proof remains
+executes this runner. The earlier macOS ARM64 backend-only proof remains
 historical and does not cover this UI.
 
-Shared CI [42998282507](https://github.com/shubolab/opennavicat/actions/runs/42998282507)
-on main commit `0cd5ae7ac31fbdfd4b61a5f7befe2fbb7ee88d24` completed all **7 jobs
-successfully**: six native desktop targets and the database-security job. The new
-ordinary-collection runner step passed inside that job, and each desktop job
-completed source tests, helper qualification, packaging, installation, launch and
-uninstall for its target. This is a main-branch preflight, not a tag, public
-Release or six-installer download acceptance. A first macOS amd64 run exposed the
-existing JS output-limit test racing helper startup; the test now allows enough
-startup time to reach the real output limit, and the complete JS protocol rerun
-passed 193/193 without skips.
+Shared CI [43001726401](https://github.com/shubolab/opennavicat/actions/runs/43001726401)
+on main commit `7e9f92e5bbd5b2c09f6bab4ec5f39b40fb903622` completed all **7 jobs
+successfully**: six native desktop targets and the database-security job. The
+ordinary-collection runner step passed inside that job with the drop/clear UI
+scope, and each desktop job completed source tests, helper qualification,
+packaging, installation, launch and uninstall for its target. This is a
+main-branch preflight, not a tag, public Release or six-installer download
+acceptance. An earlier macOS amd64 run exposed the existing JS output-limit test
+racing helper startup; the test now allows enough startup time to reach the real
+output limit, and the complete JS protocol rerun passed 193/193 without skips.
 
 The proof does not qualify Windows/macOS UI against the reference application,
 public release assets, or the retained Dell environment. Existing fixtures,

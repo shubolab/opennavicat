@@ -13,7 +13,7 @@ jobs:
       matrix:
         os: [ubuntu-22.04, ubuntu-24.04, ubuntu-24.04-arm]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
       - name: Inspect resolver metadata and service state
         shell: bash
@@ -83,7 +83,7 @@ jobs:
           total=0
           printf '## DNS lookup results\n\n| Identity | Host | Status | Exit |\n| --- | --- | --- | --- |\n' >> "$GITHUB_STEP_SUMMARY"
           for identity in root _apt; do
-            for host in archive.ubuntu.com security.ubuntu.com ports.ubuntu.com github.com api.github.com pypi.org files.pythonhosted.org; do
+            for host in archive.ubuntu.com security.ubuntu.com ports.ubuntu.com github.com api.github.com pypi.org files.pythonhosted.org mirrors.tuna.tsinghua.edu.cn mirrors.ustc.edu.cn; do
               total=$((total + 1))
               printf '\n::group::getent identity=%s host=%s\n' "$identity" "$host"
               if sudo -n -u "$identity" timeout --kill-after=2s 8s getent ahosts "$host" > "$diagnostic_dir/lookup.txt" 2>&1; then
@@ -109,5 +109,67 @@ jobs:
             "$total" "$((total - failed))" "$failed" >> "$GITHUB_STEP_SUMMARY"
           if test "$failed" -ne 0; then
             printf '::error::One or more bounded DNS probes failed; inspect the per-identity results.\n'
+            exit 1
+          fi
+
+      - name: Probe signed Ubuntu mirror transport over HTTPS
+        if: always()
+        shell: bash
+        run: |
+          set -u
+          architecture=$(dpkg --print-architecture)
+          case "$architecture" in
+            amd64) archive_path=ubuntu ;;
+            arm64) archive_path=ubuntu-ports ;;
+            *) printf '::error::Unsupported native architecture: %s\n' "$architecture"; exit 1 ;;
+          esac
+          codename=$(awk -F= '$1 == "VERSION_CODENAME" {gsub(/["\047]/, "", $2); print $2}' /etc/os-release)
+          if ! [[ "$codename" =~ ^[a-z][a-z0-9]*$ ]]; then
+            printf '::error::Could not identify the actual Ubuntu codename.\n'
+            exit 1
+          fi
+          diagnostic_dir=$(mktemp -d)
+          trap 'rm -rf -- "$diagnostic_dir"' EXIT
+          failed=0
+          total=0
+          printf '\n## Ubuntu mirror HTTPS transport\n\nArchitecture: %s; codename: %s; archive path: %s.\n\n' \
+            "$architecture" "$codename" "$archive_path" >> "$GITHUB_STEP_SUMMARY"
+          printf '| Identity | InRelease URL | Status | HTTP | Exit |\n| --- | --- | --- | --- | --- |\n' >> "$GITHUB_STEP_SUMMARY"
+          for identity in root _apt; do
+            for host in mirrors.tuna.tsinghua.edu.cn mirrors.ustc.edu.cn; do
+              for suite in "$codename" "$codename-updates" "$codename-security"; do
+                total=$((total + 1))
+                url="https://$host/$archive_path/dists/$suite/InRelease"
+                printf '\n::group::HTTPS HEAD identity=%s url=%s\n' "$identity" "$url"
+                if http_code=$(sudo -n -u "$identity" timeout --kill-after=2s 14s curl \
+                    --head --silent --show-error --fail --location --max-redirs 3 \
+                    --connect-timeout 4 --max-time 12 --retry 0 \
+                    --proto '=https' --proto-redir '=https' \
+                    --output /dev/null --write-out '%{http_code}' "$url" 2> "$diagnostic_dir/error.txt"); then
+                  status=0
+                  if test "$http_code" = 200; then result=PASS; else result=FAIL; fi
+                else
+                  status=$?
+                  case "$status" in
+                    28|124|137) result=TIMEOUT ;;
+                    127) result=UNAVAILABLE ;;
+                    *) result=FAIL ;;
+                  esac
+                fi
+                if test "$result" != PASS; then failed=$((failed + 1)); fi
+                sed -n '1,4p' "$diagnostic_dir/error.txt"
+                printf 'identity=%s url=%s status=%s http=%s exit=%s\n' \
+                  "$identity" "$url" "$result" "$http_code" "$status"
+                printf '| %s | %s | %s | %s | %s |\n' \
+                  "$identity" "$url" "$result" "$http_code" "$status" >> "$GITHUB_STEP_SUMMARY"
+                printf '::endgroup::\n'
+              done
+            done
+          done
+          printf '\nHTTPS probes: total=%s passed=%s failed=%s\n' "$total" "$((total - failed))" "$failed"
+          printf '\nHTTPS total: %s; passed: %s; failed: %s. HEAD proves transport only; no archive signature or package qualification is claimed.\n' \
+            "$total" "$((total - failed))" "$failed" >> "$GITHUB_STEP_SUMMARY"
+          if test "$failed" -ne 0; then
+            printf '::error::One or more HTTPS InRelease probes failed; no package source or DNS setting was changed.\n'
             exit 1
           fi

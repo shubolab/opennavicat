@@ -214,16 +214,17 @@ independently cleaned MongoDB 8.0.34 fixtures. The shared database-security CI j
 executes this runner. The earlier macOS ARM64 backend-only proof remains
 historical and does not cover this UI.
 
-Shared CI [43004258975](https://github.com/shubolab/opennavicat/actions/runs/43004258975)
-on main commit `0c2191a85ce180a57a30e6a1a0593f093ea03edc` completed all **7 jobs
+Shared CI [43009963212](https://github.com/shubolab/opennavicat/actions/runs/43009963212)
+on main commit `b9e4b98b93b17e6b8b0d8c7c516d92e37256076a` completed all **7 jobs
 successfully**: six native desktop targets and the database-security job. The
-ordinary-collection runner step passed inside that job with the drop/clear/rename
-UI scope, and each desktop job completed source tests, helper qualification,
+collection/time-series runner passed inside that job with the create/design,
+drop/clear/rename and time-series scope, and each desktop job completed source tests, helper qualification,
 packaging, installation, launch and uninstall for its target. This is a
 main-branch preflight, not a tag, public Release or six-installer download
-acceptance. An earlier macOS amd64 run exposed the existing JS output-limit test
-racing helper startup; the test now allows enough startup time to reach the real
-output limit, and the complete JS protocol rerun passed 193/193 without skips.
+acceptance. macOS amd64 runs exposed existing JS output/null tests racing helper
+startup; both now allow enough startup time to reach their real semantic failure,
+while the complete native VM scope passed 101/101 and JS protocol rerun passed
+193/193 without skips.
 
 The proof does not qualify Windows/macOS UI against the reference application,
 public release assets, or the retained Dell environment. Existing fixtures,

@@ -23,6 +23,7 @@ from opennavicat.ui.mongo_browser import MongoCollectionPage
 from opennavicat.ui.mongo_gridfs import MongoGridFSPage
 from opennavicat.ui.mongo_collection_designer import MongoCollectionDesignerPage
 from opennavicat.ui.mongo_timeseries_designer import MongoTimeSeriesDesignerPage
+from opennavicat.ui.mongo_maintenance import MongoMaintenanceConfirmDialog, MongoMaintenanceResultDialog
 from opennavicat.ui.window import MainWindow, TablePage
 from test_mongodb_session import mongodb_service  # Reuse the owned-container fixture contract.
 
@@ -516,3 +517,44 @@ def test_real_window_copy_collection_data_and_structure_with_staging(qtbot, mong
     assert database.docs_copy_structure.count_documents({}) == 0
     assert "copy_name_idx" in database.docs_copy_structure.index_information()
     assert not errors and threads
+
+
+def test_real_window_collection_maintenance_validate_full_and_reindex(qtbot, mongo_window):
+    window, config, database, schema, errors, threads = mongo_window
+    info = {"id": config.id, "schema": config.database, "name": "docs", "table": "docs", "kind": "mongo_collection"}
+    before_count = database.docs.count_documents({})
+    before_indexes = database.docs.index_information()
+
+    assert window.validate_mongo_collection(info, False) is True
+    idle(qtbot, window)
+    qtbot.waitUntil(lambda: any(isinstance(dialog, MongoMaintenanceResultDialog) for dialog in window._mongo_maintenance_dialogs), timeout=15000)
+    result = next(dialog for dialog in window._mongo_maintenance_dialogs if isinstance(dialog, MongoMaintenanceResultDialog))
+    assert result.windowTitle() == '集合验证结果' and 'valid' in result.report.toPlainText()
+    result.reject(); idle(qtbot, window)
+
+    assert window.validate_mongo_collection(info, True) is True
+    qtbot.waitUntil(lambda: any(isinstance(dialog, MongoMaintenanceConfirmDialog) for dialog in window._mongo_maintenance_dialogs), timeout=15000)
+    confirm = next(dialog for dialog in window._mongo_maintenance_dialogs if isinstance(dialog, MongoMaintenanceConfirmDialog))
+    assert 'checkBSONConformance' in confirm.preview.toPlainText()
+    confirm.ack.setChecked(True)
+    qtbot.mouseClick(confirm.confirm, Qt.MouseButton.LeftButton)
+    idle(qtbot, window)
+    qtbot.waitUntil(lambda: any(isinstance(dialog, MongoMaintenanceResultDialog) for dialog in window._mongo_maintenance_dialogs), timeout=15000)
+    result = next(dialog for dialog in window._mongo_maintenance_dialogs if isinstance(dialog, MongoMaintenanceResultDialog))
+    assert result.windowTitle() == '完整集合验证结果'
+    result.reject(); idle(qtbot, window)
+
+    assert window.reindex_mongo_collection(info) is True
+    qtbot.waitUntil(lambda: any(isinstance(dialog, MongoMaintenanceConfirmDialog) for dialog in window._mongo_maintenance_dialogs), timeout=15000)
+    confirm = next(dialog for dialog in window._mongo_maintenance_dialogs if isinstance(dialog, MongoMaintenanceConfirmDialog))
+    assert 'reIndex' in confirm.preview.toPlainText()
+    confirm.ack.setChecked(True)
+    qtbot.mouseClick(confirm.confirm, Qt.MouseButton.LeftButton)
+    idle(qtbot, window)
+    qtbot.waitUntil(lambda: any(isinstance(dialog, MongoMaintenanceResultDialog) for dialog in window._mongo_maintenance_dialogs), timeout=15000)
+    result = next(dialog for dialog in window._mongo_maintenance_dialogs if isinstance(dialog, MongoMaintenanceResultDialog))
+    assert result.windowTitle() == '重建集合索引结果'
+    result.reject(); idle(qtbot, window)
+    assert database.docs.count_documents({}) == before_count
+    assert database.docs.index_information() == before_indexes
+    assert not errors

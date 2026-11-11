@@ -34,6 +34,7 @@ from .. import schema_objects as object_schema_tools
 from .. import mongodb_indexes as mongo_index_tools
 from .. import mongodb_collections as mongo_collection_tools
 from .. import mongodb_collection_copy as mongo_collection_copy_tools
+from .. import mongodb_collection_maintenance as mongo_maintenance_tools
 from .. import mongodb_timeseries as mongo_timeseries_tools
 from .connection_manager import ConnectionManagerDialog
 from .dialogs import ConnectionDialog, RowDialog, TableDesignerDialog, confirm_ssh_host_key
@@ -56,6 +57,7 @@ from .mongo_collection_designer import (
     collection_error_text,
 )
 from .mongo_timeseries_designer import MongoTimeSeriesDesignerPage
+from .mongo_maintenance import MongoMaintenanceConfirmDialog, MongoMaintenanceResultDialog
 
 DESIGNER_PAGES = (TableDesignerPage, IndexDesignerPage, TriggerDesignerPage, MongoIndexDesignerPage, MongoCollectionDesignerPage, MongoTimeSeriesDesignerPage)
 MONGO_PAGES = (MongoCollectionPage, MongoGridFSPage)
@@ -494,6 +496,7 @@ class MainWindow(QMainWindow):
         self._mongo_index_delete_dialogs = {}
         self._mongo_collection_operation_dialogs = {}
         self._mongo_collection_copy_dialogs = {}
+        self._mongo_maintenance_dialogs = set()
         self._closed = False
         self._navicat_discovering = False
         self._navicat_pending_configs = set()
@@ -1478,6 +1481,68 @@ class MainWindow(QMainWindow):
                 if (self.object_page.connection_id, self.object_page.schema) == (connection_id, schema):
                     self.object_page.refresh()
         self.when_idle(refresh)
+
+    def validate_mongo_collection(self, info, full=False):
+        return self.run_mongo_collection_maintenance(info, "validate", full=full)
+
+    def reindex_mongo_collection(self, info):
+        return self.run_mongo_collection_maintenance(info, "reindex")
+
+    def run_mongo_collection_maintenance(self, info, operation, *, full=False):
+        config = self.configs.get(info.get("id"))
+        session = self.sessions.get(info.get("id"))
+        schema, name, kind = info.get("schema"), info.get("name", info.get("table")), info.get("kind")
+        if (operation not in {"validate", "reindex"} or config is None or config.driver != "mongodb"
+                or session is None or not schema or not name or kind not in {"mongo_collection", "mongo_timeseries"}
+                or self._closing_mongo or info.get("id") in self._closing_connections
+                or self._mongo_collection_jobs or self._cancelling):
+            return None
+        if operation == "reindex" and (kind != "mongo_collection" or config.read_only):
+            return None
+        def run_job():
+            token = uuid.uuid4().hex
+            cancelled, started = threading.Event(), threading.Event()
+            self._mongo_collection_jobs[token] = (session, cancelled, started)
+            def work():
+                started.set()
+                if cancelled.is_set():
+                    raise DatabaseError("集合维护已在执行前取消。")
+                if kind == "mongo_timeseries":
+                    snapshot = mongo_timeseries_tools.load_time_series(session, schema, name)
+                else:
+                    snapshot = mongo_collection_tools.load_collection(session, schema, name)
+                if operation == "validate":
+                    return mongo_maintenance_tools.validate_collection(session, snapshot, full=full, cancelled=cancelled.is_set)
+                return mongo_maintenance_tools.reindex_collection(session, snapshot, cancelled=cancelled.is_set)
+            def done(result):
+                if not self._collection_session_current(info["id"], session):
+                    return
+                dialog = MongoMaintenanceResultDialog(result, self)
+                self._mongo_maintenance_dialogs.add(dialog)
+                dialog.finished.connect(lambda *_: (self._mongo_maintenance_dialogs.discard(dialog), dialog.deleteLater()))
+                dialog.open()
+                self.statusBar().showMessage("集合维护已完成。", 6000)
+            def failed(error):
+                if self._collection_session_current(info["id"], session):
+                    self.error(error)
+            def finish(): self._mongo_collection_jobs.pop(token, None)
+            label = "完整验证集合" if operation == "validate" and full else "验证集合" if operation == "validate" else "重建集合索引"
+            self.submit(work, done, failed, label=label, finished=finish)
+        if operation == "reindex" or full:
+            command = (f'db.runCommand({{validate: {json.dumps(name)}, full: true, checkBSONConformance: true}})'
+                if operation == "validate" else f'db.runCommand({{reIndex: {json.dumps(name)}}})')
+            title = "完整验证集合" if operation == "validate" else "重建集合索引"
+            warning = ("完整验证可能耗时并影响写入性能；报告会绑定当前集合 UUID。"
+                if operation == "validate" else "reIndex 会重建普通集合的索引；MongoDB 不支持对 view/time-series 执行。")
+            dialog = MongoMaintenanceConfirmDialog(title, f"{schema}.{name}", command, warning,
+                "验证" if operation == "validate" else "重建", self)
+            self._mongo_maintenance_dialogs.add(dialog)
+            dialog.accepted.connect(run_job)
+            dialog.finished.connect(lambda *_: (self._mongo_maintenance_dialogs.discard(dialog), dialog.deleteLater()))
+            dialog.open()
+        else:
+            run_job()
+        return True
 
     def copy_mongo_collection(self, info, mode):
         config = self.configs.get(info.get("id"))
@@ -2756,6 +2821,11 @@ class MainWindow(QMainWindow):
                             and not self._closing_mongo)
                         writable = connected and not self.configs[info["id"]].read_only
                         menu.addAction("设计集合", lambda: self.design_object(info)).setEnabled(connected)
+                        maintenance = menu.addMenu("维护")
+                        maintenance.addAction("验证集合（常规）", lambda: self.validate_mongo_collection(info, False)).setEnabled(connected)
+                        maintenance.addAction("验证集合（完整）", lambda: self.validate_mongo_collection(info, True)).setEnabled(connected)
+                        maintenance.addAction("重建集合索引", lambda: self.reindex_mongo_collection(info)).setEnabled(
+                            writable and info.get("kind") == "mongo_collection")
                         if info.get("kind") == "mongo_collection":
                             menu.addAction("新建时间序列集合…", lambda: self.open_mongo_timeseries_designer(
                                 info["id"], info["schema"])).setEnabled(writable)
@@ -3026,6 +3096,8 @@ class MainWindow(QMainWindow):
             for dialog, owner in tuple(dialogs.items()):
                 if owner == connection_id:
                     dialog.reject()
+        for dialog in tuple(self._mongo_maintenance_dialogs):
+            dialog.reject()
         session = self.sessions.get(connection_id)
         def completed(_value=None):
             result = self._finish_disconnect(connection_id, session, pages)
@@ -3485,6 +3557,8 @@ class MainWindow(QMainWindow):
                         self._mongo_collection_copy_dialogs):
             for dialog in tuple(dialogs):
                 dialog.reject()
+        for dialog in tuple(self._mongo_maintenance_dialogs):
+            dialog.reject()
         mongo_sessions = [(identifier, session) for identifier, session in self.sessions.items()
                           if session.config.driver == "mongodb"]
         if mongo_sessions:

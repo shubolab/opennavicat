@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Qualify ordinary-collection backend and MainWindow UI with fresh MongoDB.
+"""Qualify MongoDB collection, view and MainWindow UI paths with fresh MongoDB.
 
 This standalone checkpoint does not widen the released database-security job's
 scope. Missing prerequisites/skips are failures, not protocol acceptance.
@@ -28,6 +28,14 @@ TARGETS = [
     'tests/test_mongodb_timeseries.py',
     'tests/test_mongodb_collection_copy.py',
     'tests/test_mongodb_collection_maintenance.py',
+    'tests/test_mongodb_views.py',
+    'tests/test_mongodb_session.py::test_canonical_array_editor_preserves_bson_types_and_rejects_duplicate_fields',
+    'tests/test_mongo_collection_designer_ui.py',
+    'tests/test_mongo_timeseries_designer_ui.py',
+    'tests/test_mongo_maintenance_ui.py',
+    'tests/test_mongo_inspector_ui.py',
+    'tests/test_mongo_view_designer_ui.py',
+    'tests/test_mongo_window.py::test_real_window_mongo_tree_statistics_typed_page_and_sqlite_switch',
     'tests/test_mongo_window.py::test_real_collection_designer_creates_and_collmods_with_worker_owned_io',
     'tests/test_mongo_window.py::test_real_window_stop_inflight_collection_uses_cancel_pool_and_preserves_draft',
     'tests/test_mongo_window.py::test_real_window_clear_and_drop_collection_require_permanent_confirmation',
@@ -35,8 +43,10 @@ TARGETS = [
     'tests/test_mongo_window.py::test_real_window_timeseries_designer_creates_and_updates_bucketing_and_expiry',
     'tests/test_mongo_window.py::test_real_window_copy_collection_data_and_structure_with_staging',
     'tests/test_mongo_window.py::test_real_window_collection_maintenance_validate_reindex_and_compact',
+    'tests/test_mongo_window.py::test_real_window_mongo_view_designer_creates_updates_and_routes_object_page',
+    'tests/test_mongo_window.py::test_real_window_mongo_view_designer_refuses_missing_target_and_stale_definition',
 ]
-EXPECTED_FIXTURE_MODULES = {'test_mongodb_collections', 'test_mongodb_timeseries', 'test_mongodb_collection_copy', 'test_mongodb_collection_maintenance', 'test_mongo_window'}
+EXPECTED_FIXTURE_MODULES = {'test_mongodb_collections', 'test_mongodb_timeseries', 'test_mongodb_collection_copy', 'test_mongodb_collection_maintenance', 'test_mongodb_views', 'test_mongo_window'}
 COLLECT = '''import json,sys,pytest
 from pathlib import Path
 class Collect:
@@ -63,22 +73,24 @@ def main():
     spec = importlib.util.spec_from_file_location('owned_mongodb_fixture_cleanup', ROOT / 'scripts/test-mongodb-protocol.py')
     cleanup = importlib.util.module_from_spec(spec); spec.loader.exec_module(cleanup)
     summary = {'verified': False, 'scope': TARGETS, 'run_id': run_id,
-        'reference_endpoint_used': False, 'execution_scope': 'mongodb-collection-timeseries-copy-maintenance-backend-and-mainwindow', 'emergency_removed': [],
+        'reference_endpoint_used': False, 'execution_scope': 'mongodb-collection-timeseries-copy-maintenance-view-inspector-backend-and-mainwindow', 'emergency_removed': [],
         'runtime': {'system': platform.system(), 'machine': platform.machine(), 'python': platform.python_version(),
             'pymongo': pymongo.version, 'bson_c': bson.has_c()},
         'base_revision': subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=ROOT, check=True, capture_output=True, text=True).stdout.strip(),
         'source_sha256': {path: hashlib.sha256((ROOT / path).read_bytes()).hexdigest() for path in
             ('opennavicat/mongodb_collections.py', 'opennavicat/mongodb_timeseries.py',
              'opennavicat/mongodb_collection_copy.py', 'opennavicat/mongodb_collection_maintenance.py',
-             'opennavicat/mongodb_session.py', 'opennavicat/ui/mongo_collection_designer.py',
+             'opennavicat/mongodb_views.py', 'opennavicat/mongodb_session.py',
+             'opennavicat/ui/mongo_collection_designer.py', 'opennavicat/ui/mongo_view_designer.py',
              'opennavicat/ui/mongo_timeseries_designer.py', 'opennavicat/ui/mongo_maintenance.py',
              'opennavicat/ui/window.py',
              'opennavicat/ui/workspace.py', 'opennavicat/js_engine/server_errors.py',
              'tests/test_mongodb_collections.py', 'tests/test_mongodb_timeseries.py',
              'tests/test_mongodb_collection_copy.py', 'tests/test_mongodb_collection_maintenance.py',
-    'tests/test_mongodb_collection_maintenance.py',
+             'tests/test_mongodb_views.py',
              'tests/test_mongodb_session.py', 'tests/test_mongo_collection_designer_ui.py',
              'tests/test_mongo_timeseries_designer_ui.py', 'tests/test_mongo_maintenance_ui.py',
+             'tests/test_mongo_inspector_ui.py', 'tests/test_mongo_view_designer_ui.py',
              'tests/test_mongo_window.py',
              '.github/workflows/build.yml', 'scripts/test-mongodb-collections.py')}}
     process = None

@@ -16,12 +16,14 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QFileDialog, QInputDialog, QMessageBox
 from shiboken6 import isValid
 
+import opennavicat.ui.window as window_module
 from opennavicat.database import ConnectionConfig, DatabaseSession
 from opennavicat.mongodb_session import MongoSession, canonical_dumps, canonical_loads
 from opennavicat.storage import Store
 from opennavicat.ui.mongo_browser import MongoCollectionPage
 from opennavicat.ui.mongo_gridfs import MongoGridFSPage
 from opennavicat.ui.mongo_collection_designer import MongoCollectionDesignerPage
+from opennavicat.ui.mongo_view_designer import MongoViewDesignerPage
 from opennavicat.ui.mongo_timeseries_designer import MongoTimeSeriesDesignerPage
 from opennavicat.ui.mongo_maintenance import MongoMaintenanceConfirmDialog, MongoMaintenanceResultDialog
 from opennavicat.ui.window import MainWindow, TablePage
@@ -117,6 +119,12 @@ def test_real_window_mongo_tree_statistics_typed_page_and_sqlite_switch(qtbot, m
     assert [browser.table.horizontalHeaderItem(i).text() for i in range(8)] == [
         "名称", "文档数", "已固定", "内存中的总大小", "对象的平均大小", "存储大小", "索引数", "索引的总大小"]
     assert [record["name"] for record in browser.records] == ["docs"]
+    browser.table.setCurrentCell(0, 0)
+    browser.selection_changed()
+    inspector_text = window.inspector.details.text()
+    assert "文档数\n6" in inspector_text
+    assert "索引数\n1" in inspector_text
+    assert "内存中的总大小" in inspector_text and "存储大小" in inspector_text
     page = open_collection(qtbot, window, config)
     assert page.model.rowCount() == 6
     assert page.page.documents[0].document["long"] == Int64(9007199254740993)
@@ -183,6 +191,112 @@ def test_real_mongo_view_uses_typed_readonly_workspace(qtbot, mongo_window):
     assert all(not record.editable for record in page.page.documents)
     assert page.add_document() is None
     assert not window.table_action.isEnabled() and not window.import_action.isEnabled()
+
+
+def test_real_window_mongo_view_designer_creates_updates_and_routes_object_page(qtbot, mongo_window, monkeypatch):
+    window, config, database, schema, errors, threads = mongo_window
+    page = window.open_mongo_view_designer(config.id, config.database)
+    assert isinstance(page, MongoViewDesignerPage)
+    qtbot.waitUntil(lambda: page.snapshot is not None and not page.loading, timeout=15000)
+    assert 'docs' in [page.source_combo.itemText(index) for index in range(page.source_combo.count())]
+    assert not page.save_action.isEnabled()
+
+    page.name_edit.setText('view_ui')
+    page.source_combo.setCurrentText('docs')
+    page.pipeline_editor.setPlainText('[{"$match": {"_id": {"$gte": 2}}}]')
+    page.request_save()
+    dialog = page._save_dialog
+    qtbot.waitUntil(lambda: dialog is not None and dialog.save_button.isEnabled(), timeout=15000)
+    assert dialog.plan.commands[0]['create'] == 'view_ui'
+    assert 'collectionUUID' not in dialog.plan.commands[0]
+    assert 'not an atomic compare-and-swap' in dialog.plan.warnings[0]
+    dialog.save_button.click()
+    idle(qtbot, window)
+    assert page.snapshot.exists and page.snapshot.definition.name == 'view_ui'
+    assert [row['_id'] for row in database.view_ui.find().sort('_id', 1)] == [2, 3, 4, 5]
+
+    page.pipeline_editor.setPlainText('[{"$match": {"_id": 4}}]')
+    page.request_save()
+    dialog = page._save_dialog
+    qtbot.waitUntil(lambda: dialog is not None and dialog.save_button.isEnabled(), timeout=15000)
+    assert dialog.plan.commands[0]['collMod'] == 'view_ui' and 'collectionUUID' not in dialog.plan.commands[0]
+    dialog.save_button.click()
+    idle(qtbot, window)
+    assert [row['_id'] for row in database.view_ui.find()] == [4]
+
+    window.set_active(config.id, config.database)
+    window.show_objects('view')
+    idle(qtbot, window)
+    browser = window.object_page
+    row = next(index for index, entry in enumerate(browser.records) if entry['name'] == 'view_ui')
+    browser.table.setCurrentCell(row, 0)
+    browser.update_actions()
+    assert browser.new_view_action.isEnabled() and browser.design_action.isEnabled()
+    entry = dict(browser.selected(), table='view_ui')
+    assert window.design_object(entry) is page
+
+    window.refresh_tree(); idle(qtbot, window)
+    tree_root = window.connection_item(config.id)
+    schema_item = next(tree_root.child(i) for i in range(tree_root.childCount()) if tree_root.child(i).text(0) == config.database)
+    schema_item.setExpanded(True); window.tree_expand(schema_item); idle(qtbot, window)
+    view_category = next(schema_item.child(i) for i in range(schema_item.childCount()) if schema_item.child(i).text(0) == '视图')
+    qtbot.waitUntil(lambda: any(view_category.child(i).text(0) == 'view_ui' for i in range(view_category.childCount())), timeout=15000)
+    view_item = next(view_category.child(i) for i in range(view_category.childCount()) if view_category.child(i).text(0) == 'view_ui')
+    captured = []
+    class FakeAction:
+        def text(self): return self.label
+        def setEnabled(self, _enabled): return self
+        def __init__(self, label=''): self.label = label
+    class FakeMenu:
+        def __init__(self, *_args): self.entries = []
+        def addAction(self, value, *_args, **_kwargs):
+            self.entries.append(value.text() if hasattr(value, 'text') else str(value)); return FakeAction()
+        def addSeparator(self, *_args, **_kwargs): self.entries.append('')
+        def addMenu(self, label): self.entries.append(label); return FakeMenu()
+        def exec(self, *_args, **_kwargs): captured.append(self.entries)
+    monkeypatch.setattr(window_module, 'QMenu', FakeMenu)
+    window.tree.scrollToItem(view_item)
+    window.tree_menu(window.tree.visualItemRect(view_item).center())
+    assert captured and '设计视图' in captured[0] and '新建视图…' in captured[0] and '打开视图' in captured[0]
+    assert threads and not errors
+
+
+def test_real_window_mongo_view_designer_refuses_missing_target_and_stale_definition(qtbot, mongo_window):
+    window, config, database, schema, errors, threads = mongo_window
+    page = window.open_mongo_view_designer(config.id, config.database)
+    qtbot.waitUntil(lambda: page.snapshot is not None and not page.loading, timeout=15000)
+
+    page.name_edit.setText('missing_view')
+    page.source_combo.setCurrentText('missing_source')
+    page.pipeline_editor.setPlainText('[]')
+    page.request_save()
+    dialog = page._save_dialog
+    qtbot.waitUntil(lambda: dialog is not None and not dialog.save_button.isEnabled() and 'source namespace' in dialog.preview.toPlainText(), timeout=15000)
+    assert 'source namespace' in page.message.text()
+    dialog.reject(); qtbot.waitUntil(lambda: page._save_dialog is None, timeout=5000)
+
+    page.name_edit.setText('docs')
+    page.source_combo.setCurrentText('docs')
+    page.request_save()
+    dialog = page._save_dialog
+    qtbot.waitUntil(lambda: dialog is not None and not dialog.save_button.isEnabled() and 'already exists' in dialog.preview.toPlainText(), timeout=15000)
+    assert 'already exists' in page.message.text()
+    dialog.reject(); qtbot.waitUntil(lambda: page._save_dialog is None, timeout=5000)
+
+    database.command({'create': 'stale_view', 'viewOn': 'docs', 'pipeline': [{'$match': {'_id': 1}}]})
+    stale = window.open_mongo_view_designer(config.id, config.database, 'stale_view')
+    qtbot.waitUntil(lambda: stale.snapshot is not None and stale.snapshot.exists and not stale.loading, timeout=15000)
+    stale.pipeline_editor.setPlainText('[{"$match": {"_id": 2}}]')
+    stale.request_save()
+    dialog = stale._save_dialog
+    qtbot.waitUntil(lambda: dialog is not None and dialog.save_button.isEnabled(), timeout=15000)
+    database.drop_collection('stale_view')
+    database.command({'create': 'stale_view', 'viewOn': 'docs', 'pipeline': [{'$match': {'_id': 0}}]})
+    dialog.save_button.click()
+    idle(qtbot, window)
+    assert 'changed after loading' in stale.message.text()
+    assert [row['_id'] for row in database.stale_view.find()] == [0]
+    assert threads and not errors
 
 
 @pytest.mark.parametrize("leaving", ["tab", "disconnect", "application"])

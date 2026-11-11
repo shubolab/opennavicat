@@ -64,6 +64,7 @@ class ObjectBrowser(QWidget):
         self.design_action = self.add_action("设计表", "design", self.design_selected)
         self.new_action = self.add_action("新建表", "add", window.new_browser_object)
         self.new_timeseries_action = self.add_action("新建时间序列集合", "add", window.new_mongo_timeseries)
+        self.new_view_action = self.add_action("新建视图", "add", window.new_mongo_view)
         self.delete_action = self.add_action("删除表", "delete", self.drop_selected)
         self.clear_action = self.add_action("清空集合", "delete", self.clear_selected)
         self.rename_action = self.add_action("重命名集合", "design", self.rename_selected)
@@ -133,6 +134,8 @@ class ObjectBrowser(QWidget):
         self.clear_action.setVisible(kind == "mongo_collection")
         self.rename_action.setVisible(kind == "mongo_collection")
         self.new_timeseries_action.setVisible(kind == "mongo_collection")
+        self.new_view_action.setVisible(kind in {"mongo_collection", "mongo_view"})
+        self.new_action.setVisible(kind != "mongo_view")
         headers = {"index": ["名称", "唯一键", "自动索引", "表名称", "根页面"],
                    "trigger": ["名称", "类型", "表名称", "触发", ""]}.get(kind,
                    ["名称", "根页面", "有索引", "有触发器", ""])
@@ -312,7 +315,7 @@ class ObjectBrowser(QWidget):
         writable = connected and not self.window.configs[self.connection_id].read_only
         self.open_action.setEnabled(selected and self.kind != "mongo_index")
         self.design_action.setEnabled(connected and selected and self.kind in {
-            "table", "view", "index", "trigger", "mongo_index", "mongo_collection", "mongo_timeseries"})
+            "table", "view", "index", "trigger", "mongo_index", "mongo_collection", "mongo_timeseries", "mongo_view"})
         self.new_action.setEnabled(writable and self.kind in {"table", "index", "trigger", "mongo_index", "mongo_collection"})
         self.delete_action.setEnabled(writable and selected and self.kind in {
             "table", "view", "index", "trigger", "mongo_index", "mongo_collection"}
@@ -320,6 +323,7 @@ class ObjectBrowser(QWidget):
         self.clear_action.setEnabled(writable and selected and self.kind == "mongo_collection")
         self.rename_action.setEnabled(writable and selected and self.kind == "mongo_collection")
         self.new_timeseries_action.setEnabled(writable and self.kind == "mongo_collection")
+        self.new_view_action.setEnabled(writable and self.kind in {"mongo_collection", "mongo_view"})
         for shortcut in getattr(self, "_delete_shortcuts", ()):
             shortcut.setEnabled(self.kind == "mongo_index" and self.delete_action.isEnabled())
         self.import_action.setEnabled(writable and selected and self.kind == "table")
@@ -379,16 +383,20 @@ class ObjectBrowser(QWidget):
             self.window.rename_mongo_collection(entry)
 
     def context_menu(self, pos):
-        if self.kind not in {"mongo_index", "mongo_collection"}:
+        if self.kind not in {"mongo_index", "mongo_collection", "mongo_view"}:
             return
         item = self.table.itemAt(pos)
         if item is not None:
             self.table.setCurrentCell(item.row(), 0)
         menu = QMenu(self)
         self.update_actions()
-        actions = (self.design_action, self.new_action, self.delete_action)
         if self.kind == "mongo_collection":
-            actions += (self.new_timeseries_action, self.rename_action, self.clear_action)
+            actions = (self.design_action, self.new_action, self.new_timeseries_action, self.new_view_action,
+                       self.rename_action, self.clear_action, self.delete_action)
+        elif self.kind == "mongo_view":
+            actions = (self.design_action, self.new_view_action)
+        else:
+            actions = (self.design_action, self.new_action, self.delete_action)
         for action in actions:
             menu.addAction(action)
         if self.kind == "mongo_collection":
@@ -488,6 +496,18 @@ class Inspector(QWidget):
         details = []
         if "rootpage" in info:
             details.extend(["根页面", str(info["rootpage"]), "", "有索引", "是" if info.get("indexed") else "否", "", "有触发器", "是" if info.get("triggers") else "否"])
+        if kind in {"mongo_collection", "mongo_timeseries"}:
+            stats = info.get("stats", {})
+            count = stats.get("count")
+            details.extend([
+                "文档数", f"{int(count):,}" if isinstance(count, (int, float)) and not isinstance(count, bool) else "—", "",
+                "已固定", ("是" if stats.get("capped") else "否") if "capped" in stats else "—", "",
+                "内存中的总大小", _byte_size(stats.get("size"), exact=True), "",
+                "对象的平均大小", _byte_size(stats.get("avgObjSize"), exact=True), "",
+                "存储大小", _byte_size(stats.get("storageSize"), exact=True), "",
+                "索引数", str(stats.get("nindexes", "—")), "",
+                "索引的总大小", _byte_size(stats.get("totalIndexSize"), exact=True),
+            ])
         if kind == "mongo_index":
             options = info.get("options", {})
             details.extend(["集合名称", info.get("collection", ""), "", "字段",

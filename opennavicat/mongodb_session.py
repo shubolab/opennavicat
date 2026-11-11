@@ -79,6 +79,22 @@ def canonical_dumps(document: dict[str, Any]) -> str:
     return json_util.dumps(document, json_options=JSON_OPTIONS, ensure_ascii=True, indent=2)
 
 
+def canonical_array_dumps(values: list[Any]) -> str:
+    """Serialize a BSON array without weakening document-editor validation."""
+    if not isinstance(values, list):
+        raise DatabaseError("An array value is required")
+    try:
+        raw = BSON.encode({"value": values}, codec_options=BSON_CODEC)
+        if BSON.encode(BSON(raw).decode(codec_options=BSON_CODEC), codec_options=BSON_CODEC) != raw:
+            raise ValueError()
+        text = json_util.dumps(values, json_options=JSON_OPTIONS, ensure_ascii=True, indent=2)
+        if BSON.encode({"value": json_util.loads(text, json_options=JSON_OPTIONS)}, codec_options=BSON_CODEC) != raw:
+            raise ValueError()
+        return text
+    except Exception as exc:
+        raise DatabaseError("The array cannot be serialized as exact BSON") from exc
+
+
 def _unique_pairs(pairs):
     result = {}
     for key, value in pairs:
@@ -147,6 +163,21 @@ def canonical_loads(text: str) -> dict[str, Any]:
     except Exception as exc:
         # Parser reprs can include document values. Keep the boundary generic.
         raise DatabaseError("Invalid canonical Extended JSON document") from exc
+
+
+def canonical_array_loads(text: str) -> list[Any]:
+    """Parse one canonical EJSON array using the document editor's safeguards."""
+    if not isinstance(text, str):
+        raise DatabaseError("Invalid canonical Extended JSON array")
+    try:
+        value = canonical_loads('{"value":' + text + '}')["value"]
+        if not isinstance(value, list):
+            raise DatabaseError("An array value is required")
+        return value
+    except DatabaseError:
+        raise
+    except Exception as exc:
+        raise DatabaseError("Invalid canonical Extended JSON array") from exc
 
 
 

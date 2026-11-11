@@ -288,6 +288,8 @@ class MongoCollectionDesignerPage(_ObjectDesignerPage):
         self.index_table.verticalHeader().hide()
         self.index_table.horizontalHeader().setStretchLastSection(True)
         indexes.addWidget(self.index_table, 1)
+        self.index_message = QLabel(); self.index_message.setWordWrap(True); self.index_message.hide()
+        indexes.addWidget(self.index_message)
         indexes.addWidget(QLabel('索引通过独立索引设计器保存；集合选项保存不会修改索引。'))
         self.new_index_button.clicked.connect(lambda: self.newIndexRequested.emit())
         self.edit_index_button.clicked.connect(self._edit_index)
@@ -346,6 +348,7 @@ class MongoCollectionDesignerPage(_ObjectDesignerPage):
         return self.table
 
     def set_indexes(self, rows):
+        self.index_message.clear(); self.index_message.hide()
         self.index_rows = [deepcopy(row) for row in rows]
         self.index_table.setRowCount(0)
         for row in self.index_rows:
@@ -366,6 +369,11 @@ class MongoCollectionDesignerPage(_ObjectDesignerPage):
             for column, value in enumerate(values):
                 self.index_table.setItem(table_row, column, QTableWidgetItem(str(value)))
             self.index_table.item(table_row, 0).setData(Qt.ItemDataRole.UserRole, deepcopy(row))
+        self._update_index_buttons()
+
+    def set_index_error(self, error):
+        self.index_message.setText('索引读取失败：' + str(error))
+        self.index_message.show()
         self._update_index_buttons()
 
     def _selected_index(self):

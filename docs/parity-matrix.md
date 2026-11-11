@@ -35,6 +35,7 @@
 | L18-04 | root同轮实际新建连接窗口 | 已打开全新窗口，观察供应商过滤栏、九驱动、图标/列表切换、搜索、URI新建，并展开14供应商节点；完整别名及截图由root另档归档，未执行这些网络数据库连接。 |
 | M18-01–M18-08 | [18 MongoDB实际运行观察](ui-reference-18-mongodb.md) | 自有样例的分类/集合统计/原生查询/BSON视图、GridFS上传预览下载与清理、临时索引保存删除；所有未执行菜单、完整JS和三平台对齐仍开放。 |
 | MC18-01–MC18-07 | [18 普通集合设计器运行观察](ui-reference-18-mongodb-collections.md) | macOS/MongoDB 8 自有 fixture 的七页顺序/默认状态、内嵌索引与隐藏 `_id_`、两个集合级存储脚本页、普通创建/取消/保存/重开；未执行的 JSON Schema、内嵌索引写入、时序及其它平台继续开放。 |
+| MV18-01–MV18-06 | [18 验证器运行观察](ui-reference-18-mongodb-validation.md) | 普通 MongoDB 8/macOS 的22 BSON类型与Multiple实际约束区、原始片段模态窗、Schema/Query保存/错误/取消/重开及独立写入；类型声明接受不代表全部BSON值编辑通过，根模式/外部转换/独立字符串边界/其它平台仍开放。 |
 | S-W | [window.py](../opennavicat/ui/window.py)、[workspace.py](../opennavicat/ui/workspace.py)、[query.py](../opennavicat/ui/query.py)、[theme.py](../opennavicat/ui/theme.py) | 0.2 按实际参考重建的部分工作台、对象/信息区、表和查询页；尚未完成完整对照。 |
 | S-D | [dialogs.py](../opennavicat/ui/dialogs.py)、[editor.py](../opennavicat/ui/editor.py)、[grid.py](../opennavicat/ui/grid.py) | 现有连接/新表/记录对话框、SQL 和网格组件。 |
 | S-E | [database.py](../opennavicat/database.py) | SQLite/PostgreSQL/MySQL/MariaDB四驱动、基础metadata/SQL/行修改；其余五个数据库族和完整对象管理仍有缺口。 |

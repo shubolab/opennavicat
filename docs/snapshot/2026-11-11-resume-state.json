@@ -104,8 +104,9 @@
   "ci_after_storage": {
     "id": 43051367511,
     "source_sha": "7c65c70d6822cf7607cceaa06a860b1561893a53",
-    "last_observed_status": "queued",
-    "all_targets_qualified": false
+    "last_observed_status": "in_progress",
+    "all_targets_qualified": false,
+    "linux_amd64_and_security_dependency_steps_completed": true
   },
   "network_diagnostics": {
     "root_and_apt_dns_run": 43049633684,
@@ -115,5 +116,19 @@
     "tuna_https_passed": 18,
     "ustc_arm_updates_timeouts": 2,
     "signatures_or_installs_qualified_by_head": false
-  }
+  },
+  "local_packaged_macos": {
+    "source_checkout_sha": "cf02a7b",
+    "source_product_checkpoint": "7c65c70d6822cf7607cceaa06a860b1561893a53",
+    "architecture": "arm64",
+    "private_development_package_not_public_release": true,
+    "installer_verified": true,
+    "installed": true,
+    "launched": true,
+    "uninstalled": true,
+    "publisher_signed": false,
+    "notarized": false,
+    "receipt": "artifacts/collection-storage/local-packaged-receipt.json"
+  },
+  "superseded_by": "2026-11-12-state.json"
 }

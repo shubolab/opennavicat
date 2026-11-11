@@ -1,0 +1,173 @@
+{
+  "schema_version": 2,
+  "captured_at": "2026-11-12T00:07:27.575248+08:00",
+  "handoff": "2026-11-12-progress.md",
+  "previous_handoff": "2026-11-11-resume.md",
+  "historical_snapshot_superseded": [
+    "unpublished 0.9 candidate",
+    "backend-only next branch"
+  ],
+  "goal": {
+    "status": "active",
+    "complete": false,
+    "scope": "Independent native Qt, complete Navicat database tools and 1:1 retained UI on Windows/Linux/macOS"
+  },
+  "reference": {
+    "path": "/Users/wangshubo/Downloads/Navicat Premium.app",
+    "version": "18.0.5",
+    "build": "321",
+    "plist_reverified": true,
+    "ordinary_collection_live_observations": "../ui-reference-18-mongodb-collections.md",
+    "ordinary_collection_full_parity_verified": false,
+    "validation_runtime_investigation": "completed_bounded_macOS_MongoDB_8_scope",
+    "validation_observations": "../ui-reference-18-mongodb-validation.md",
+    "validation_fixture_and_two_anonymous_volumes_cleaned": true
+  },
+  "main_at_resume": "929a0277de826ecb5bc465d1ce92f203f650d74f",
+  "published": {
+    "tag": "v0.9.0",
+    "source_sha": "c5f30995a0211d7f5f5c31177543d191a17b001a",
+    "formal_run_id": 42983388008,
+    "public_metadata_rechecked": true,
+    "asset_count": 8,
+    "native_installers": 6,
+    "all_asset_bytes_redownloaded_this_resume": false
+  },
+  "ci_at_resume": {
+    "id": 43043705231,
+    "source_sha": "929a0277de826ecb5bc465d1ce92f203f650d74f",
+    "conclusion": "failure",
+    "successful_targets": [
+      "windows-amd64",
+      "windows-arm64",
+      "macos-amd64",
+      "macos-arm64"
+    ],
+    "failed_jobs": [
+      "linux-amd64",
+      "linux-arm64",
+      "Real database TLS and SSH"
+    ],
+    "observed_error": "libEGL.so.1 missing after required apt step timed out and ignored failure"
+  },
+  "local_runtime": {
+    "system": "Darwin",
+    "architecture": "arm64",
+    "python": "3.13.11",
+    "qt": "6.12.0",
+    "native_js_build_verified": true
+  },
+  "evidence": "artifacts/resume-20261111/",
+  "next_steps": [
+    "Audit six actual installer artifacts and receipts from completed003c486 preflight, then freeze next exact-source candidate",
+    "Complete actual original JSON Schema/Query validation observation and lossless editing model/UI integration",
+    "Prepare next frozen six-target release and record the single application GIF after version selection",
+    "Continue all original full-function and platform UI gates"
+  ],
+  "full_parity_verified": false,
+  "reference_runtime_correction": "Original saved new-collection draft also retains an empty index list; automatic post-create refresh was withdrawn",
+  "implementation_commits": [
+    "c25e2a4",
+    "51f5e0f478b65c6254bf975c802b54de198f76bb",
+    "9a65cf5",
+    "7c65c70d6822cf7607cceaa06a860b1561893a53"
+  ],
+  "ci_after_fixes": {
+    "id": 43048278680,
+    "source_sha": "51f5e0f478b65c6254bf975c802b54de198f76bb",
+    "last_observed_status": "completed",
+    "all_targets_qualified": false,
+    "conclusion": "failure",
+    "failed_scope": "Linux required dependency setup: Ubuntu-domain DNS timeouts; four Windows/macOS native targets succeeded"
+  },
+  "local_validation": {
+    "full_source": {
+      "passed": 1573,
+      "skipped": 544,
+      "failed": 0,
+      "errors": 0,
+      "seconds": 76.24
+    },
+    "collections_runner": {
+      "passed": 226,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0,
+      "owned_fixtures": 6,
+      "independently_cleaned": true
+    },
+    "cocoa_designer_and_mainwindow": {
+      "passed": 51,
+      "skipped": 0
+    },
+    "source_cocoa_smoke_passed": true,
+    "dependency_command_stub_tests": 16,
+    "all_protocol_source_hashes_match": true
+  },
+  "updated_at": "2026-11-11T23:45:10.492946+08:00",
+  "ci_after_storage": {
+    "id": 43051367511,
+    "source_sha": "7c65c70d6822cf7607cceaa06a860b1561893a53",
+    "last_observed_status": "completed",
+    "all_targets_qualified": false,
+    "linux_amd64_and_security_dependency_steps_completed": true,
+    "conclusion": "failure",
+    "failed_scope": "Both Linux installer verification steps needed undeclared-in-preflight libxcb-xinerama0 from unavailable default mirror",
+    "macos_arm64": "cancelled"
+  },
+  "network_diagnostics": {
+    "root_and_apt_dns_run": 43049633684,
+    "mirror_transport_run": 43050245236,
+    "ubuntu_dns_failed_on_all_three_runners": true,
+    "github_pypi_dns_passed": true,
+    "tuna_https_passed": 18,
+    "ustc_arm_updates_timeouts": 2,
+    "signatures_or_installs_qualified_by_head": false
+  },
+  "local_packaged_macos": {
+    "source_checkout_sha": "cf02a7b",
+    "source_product_checkpoint": "7c65c70d6822cf7607cceaa06a860b1561893a53",
+    "architecture": "arm64",
+    "private_development_package_not_public_release": true,
+    "installer_verified": true,
+    "installed": true,
+    "launched": true,
+    "uninstalled": true,
+    "publisher_signed": false,
+    "notarized": false,
+    "receipt": "artifacts/collection-storage/local-packaged-receipt.json"
+  },
+  "main_checkpoint": "003c4861840aedf0cb989d06d12c5000294ed660",
+  "later_recorder_preparation_commit": "fa2dbc5",
+  "ci_current": {
+    "id": 43053509506,
+    "source_sha": "003c4861840aedf0cb989d06d12c5000294ed660",
+    "last_observed_status": "completed",
+    "all_targets_qualified": false,
+    "conclusion": "success",
+    "native_desktop_jobs_successful": 6,
+    "security_successful": true,
+    "publisher": "skipped",
+    "installer_artifact_audit": "in_progress"
+  },
+  "dependency_contract_tests": {
+    "passed": 88,
+    "skipped": 0,
+    "helper_cases": 20,
+    "scope": "Linux dependency helper plus installer contracts"
+  },
+  "demo_preparation": {
+    "source_commit": "fa2dbc5",
+    "passed": 27,
+    "skipped": 0,
+    "new_storage_phases": 4,
+    "full_recording_executed": false,
+    "gif_replaced": false
+  },
+  "validator_foundation": {
+    "source_commit": "d6e63cf",
+    "pure_tests_passed": 68,
+    "ui_integrated": false,
+    "full_builder_qualified": false
+  }
+}

@@ -1,0 +1,159 @@
+{
+  "schema_version": 1,
+  "captured_at": "2026-11-11T10:31:05+08:00",
+  "handoff": "2026-11-11-handoff.md",
+  "repository": "git@github.com:shubolab/opennavicat.git",
+  "goal": {
+    "complete": false,
+    "handoff_requested_by_user": true,
+    "pause_after_committed_handoff": true,
+    "scope": "Independent native Qt; complete Navicat database tools and 1:1 UI on Windows/Linux/macOS",
+    "excluded": "Product account/login/registration/activation/subscription/cloud-account-team collaboration only"
+  },
+  "reference": {
+    "path": "/Users/wangshubo/Downloads/Navicat Premium.app",
+    "version": "18.0.5",
+    "build": "321",
+    "user_reopened_before_handoff": true,
+    "fresh_ui_handle_after_reopen_verified": false,
+    "ordinary_collection_runtime_parity_verified": false
+  },
+  "main": {
+    "base_before_snapshot": "a59d1e65db81d31f38ff84c0df0a424490ec828d",
+    "product_version": "0.8.1",
+    "this_handoff_changes": "Documentation and parity ledger only"
+  },
+  "published": {
+    "tag": "v0.8.1",
+    "source_sha": "e7b0e1ac986db32b4c216df78c25146f163b760f",
+    "url": "https://github.com/shubolab/opennavicat/releases/tag/v0.8.1",
+    "formal_run_id": 42896305119,
+    "formal_attempt": 1,
+    "formal_all_eight_jobs_success": true,
+    "anonymous_assets_verified": 8,
+    "native_installers_verified": 6,
+    "formal_public_installer_byte_chains_verified": 6,
+    "public_macos_arm64_cocoa_verified": true,
+    "final_receipt": "artifacts/release-v0.8.1/verification.json"
+  },
+  "candidate": {
+    "version": "0.9.0",
+    "branch": "work/0.9-release",
+    "source_sha": "92079b928f41d00c2b5ed2deeaabd7c20d200d44",
+    "worktree": "../opennavicat-next-09",
+    "integration_sha": "f9c492362afe750510b3c01057bc794991d35ad1",
+    "tag_created": false,
+    "formal_run_started": false,
+    "public_release_created": false,
+    "preflight": {
+      "run_id": 42901942839,
+      "event": "workflow_dispatch",
+      "attempt": 1,
+      "passed": true,
+      "six_native_jobs_success": true,
+      "security_success": true,
+      "publisher": "skipped",
+      "receipt": "artifacts/release-v0.9.0/preflight-92079b9/verification.json",
+      "vm_passed_per_target": 101,
+      "qt_passed_per_target": 4,
+      "fresh_mongodb_fixtures": 14,
+      "fixture_cleanup_verified": true,
+      "source_results": {
+        "linux_amd64_and_arm64_each": {
+          "passed": 1440,
+          "skipped": 440
+        },
+        "windows_amd64_and_arm64_each": {
+          "passed": 1351,
+          "skipped": 565
+        },
+        "macos_amd64_and_arm64_each": {
+          "passed": 1458,
+          "skipped": 440
+        }
+      },
+      "security_zero_skip_cases": {
+        "pg_mysql_mariadb_tls_ssh": 75,
+        "sqlserver_redis": 131,
+        "mongodb_protocol": 274,
+        "mongodb_tls_ssh": 22,
+        "javascript_protocol": 193,
+        "javascript_qt": 12
+      }
+    },
+    "local_final_source": {
+      "passed": 1462,
+      "skipped": 436,
+      "failed": 0,
+      "errors": 0
+    },
+    "local_cocoa_connection_lifecycle": {
+      "passed": 12,
+      "skipped": 0
+    },
+    "gif": {
+      "path": "docs/assets/opennavicat-demo.gif",
+      "sha256": "39a12fa63a6d1cdc057952d52379d0062675ad24d78575f4f110721856b1d01c",
+      "bytes": 705220,
+      "frames": 179,
+      "duration_seconds": 29.84,
+      "width": 1440,
+      "height": 900
+    },
+    "main_snapshot_documentation_diverges_from_frozen_candidate": true
+  },
+  "future_checkpoints": [
+    {
+      "topic": "Ordinary MongoDB collection backend; no UI integration",
+      "branch": "work/mongodb-collection-designer",
+      "sha": "c9f536aef83e88d3b5092012eaafd43567c62f14",
+      "base_sha": "f9c492362afe750510b3c01057bc794991d35ad1",
+      "worktree": "../opennavicat-mongo-collections",
+      "new_files": 4,
+      "qualification_passed": 53,
+      "qualification_skipped": 0,
+      "fresh_fixtures": 1,
+      "fixture_cleanup_verified": true,
+      "receipt": "../opennavicat-mongo-collections/artifacts/mongo-collections/checkpoint-final/summary.json",
+      "integrated_into_candidate": false
+    },
+    {
+      "topic": "Static collection designer reference; not runtime observation",
+      "branch": "work/mongodb-collection-reference",
+      "sha": "d6ec9ea1c48fba0d3937011e9aa8d01ea83bb291",
+      "base_sha": "92079b928f41d00c2b5ed2deeaabd7c20d200d44",
+      "worktree": "../opennavicat-mongo-collection-reference",
+      "new_files": 1,
+      "nib_files": 11,
+      "nodes": 1709,
+      "edges": 1533,
+      "rea_exported_and_closed": true,
+      "runtime_pages_defaults_save_cancel_verified": false
+    }
+  ],
+  "parity_ledger": {
+    "path": "../parity-matrix.md",
+    "gate_rows": 126,
+    "partial": 70,
+    "missing": 55,
+    "scope_only_confirmed": 1,
+    "bounded_existing_fact_rows": 6,
+    "full_tool_or_one_to_one_ui_gate_finally_accepted": 0
+  },
+  "preserve": {
+    "dell_rdp_windows_gui_deferred": true,
+    "wsl_without_desktop_gui_deferred": true,
+    "do_not_install_wsl_desktop": true,
+    "old_primary_dist_application_preserved": true,
+    "unknown_older_worktrees_and_ignored_evidence_preserved": true,
+    "raw_evidence_and_local_artifacts_not_in_git": true
+  },
+  "next_steps": [
+    "Verify exact refs/clean worktrees and read this handoff plus parity ledger",
+    "Independently complete formal 0.9 tag CI and public verification if resuming release",
+    "Preserve frozen 920 or requalify any new source SHA; do not reset main or retag",
+    "Use fresh CUA inventory after user reopened the reference, with owned fixture only",
+    "Review c9 backend, observe actual collection designer, then implement UI/worker lifecycle and CI integration",
+    "Continue all remaining full-function and three-platform UI gates"
+  ]
+}

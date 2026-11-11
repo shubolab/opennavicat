@@ -42,11 +42,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          packages=(libegl1 libopengl0 libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-shape0 libxkbcommon-x11-0 libglib2.0-0t64 fonts-noto-cjk xvfb xauth)
           for attempt in 1 2 3; do
-            if sudo timeout 300s apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update && sudo timeout 300s env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y libegl1 libopengl0 libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-shape0 libxkbcommon-x11-0 libglib2.0-0t64 fonts-noto-cjk xvfb xauth; then
+            if sudo timeout 180s env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 install -y --no-install-recommends "${packages[@]}"; then
               exit 0
             fi
-            echo "apt attempt ${attempt} failed; retrying" >&2
+            echo "apt install attempt ${attempt} failed; refreshing indexes" >&2
+            sudo timeout 120s apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 update || true
             sleep $((attempt * 10))
           done
           exit 1
@@ -149,11 +151,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          packages=(libegl1 libopengl0 libxcb-cursor0 libxkbcommon-x11-0 libglib2.0-0 redis-server)
           for attempt in 1 2 3; do
-            if sudo timeout 300s apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update && sudo timeout 300s env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y libegl1 libopengl0 libxcb-cursor0 libxkbcommon-x11-0 libglib2.0-0 redis-server; then
+            if sudo timeout 180s env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 install -y --no-install-recommends "${packages[@]}"; then
               exit 0
             fi
-            echo "apt attempt ${attempt} failed; retrying" >&2
+            echo "apt install attempt ${attempt} failed; refreshing indexes" >&2
+            sudo timeout 120s apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 update || true
             sleep $((attempt * 10))
           done
           exit 1

@@ -18,6 +18,8 @@ class Commands:
         self.installed = set()
         self.apt_calls = []
         self.sources = []
+        self.source_paths = []
+        self.list_paths = []
         self.cleanup = []
 
     def __call__(self, command, **kwargs):
@@ -38,18 +40,24 @@ class Commands:
         source = next((value.split("=", 1)[1] for value in command
                        if value.startswith("Dir::Etc::sourcelist=")), None)
         if source:
-            self.sources.append(Path(source).read_text())
+            content = Path(source).read_text()
+            self.sources.append(content)
+            self.source_paths.append(source)
+            self.list_paths.append(next(value.split("=", 1)[1] for value in command
+                                        if value.startswith("Dir::State::lists=")))
             assert "Dir::Etc::sourceparts=-" in command
+        is_tuna = bool(source and "mirrors.tuna.tsinghua.edu.cn" in content)
         if "update" in command:
             assert "APT::Update::Error-Mode=any" in command
-            return SimpleNamespace(returncode=100 if self.mode == "refresh-failed" else 0)
-        if self.mode in ("fallback", "refresh-failed", "install-failed") and not source:
+            failed = self.mode == "refresh-failed" or self.mode in ("tuna", "tuna-missing") and not is_tuna
+            return SimpleNamespace(returncode=100 if failed else 0)
+        if self.mode in ("fallback", "refresh-failed", "install-failed", "tuna", "tuna-missing", "official-install-failed") and not source:
             return SimpleNamespace(returncode=124)  # runner HTTP mirror timed out
-        if self.mode == "install-failed" and source:
+        if source and (self.mode == "install-failed" or self.mode == "official-install-failed" and not is_tuna):
             return SimpleNamespace(returncode=100)
         packages = command[command.index("--no-install-recommends") + 1:]
         self.installed.update(package for package in packages
-                              if self.mode != "missing" or package != "libegl1")
+                              if self.mode not in ("missing", "tuna-missing") or package != "libegl1")
         return SimpleNamespace(returncode=0)
 
 
@@ -96,6 +104,64 @@ def test_http_timeout_uses_signed_native_https_fallback(command_stub, arch, expe
     assert not helper.missing_packages(helper.packages_for("desktop", "noble"))
 
 
+@pytest.mark.parametrize("codename,arch,profile,archive", [
+    ("jammy", "amd64", "database-security", "ubuntu"),
+    ("noble", "amd64", "desktop", "ubuntu"),
+    ("noble", "arm64", "desktop", "ubuntu-ports"),
+])
+def test_canonical_dns_failure_uses_verified_transport_with_ubuntu_signature_key(
+    command_stub, monkeypatch, codename, arch, profile, archive,
+):
+    monkeypatch.setattr(helper, "ubuntu_codename", lambda: codename)
+    command_stub.mode, command_stub.arch = "tuna", arch
+    helper.install(profile)
+    assert len(command_stub.apt_calls) == 4
+    assert [command[3] for command in command_stub.apt_calls] == ["90s", "180s", "180s", "240s"]
+    assert len(command_stub.sources) == 3
+    assert "mirrors.tuna.tsinghua.edu.cn" not in command_stub.sources[0]
+    for source in command_stub.sources[1:]:
+        assert len(source.splitlines()) == 3
+        for line, suffix in zip(source.splitlines(), ("", "-updates", "-security"), strict=True):
+            assert line == (
+                "deb [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] "
+                f"https://mirrors.tuna.tsinghua.edu.cn/{archive} "
+                f"{codename}{suffix} main restricted universe multiverse"
+            )
+    assert command_stub.source_paths[0] != command_stub.source_paths[1]
+    assert command_stub.source_paths[1] == command_stub.source_paths[2]
+    assert command_stub.list_paths[0] != command_stub.list_paths[1]
+    assert command_stub.list_paths[1] == command_stub.list_paths[2]
+    assert len(command_stub.cleanup) == 2
+    assert all(not Path(path).exists() for path in command_stub.cleanup)
+    assert not helper.missing_packages(helper.packages_for(profile, codename))
+    assert not any("trusted=yes" in option or "AllowUnauthenticated=true" in option or
+                   "AllowInsecureRepositories=true" in option or "Verify-Peer=false" in option
+                   for command in command_stub.apt_calls for option in command)
+    for command in command_stub.apt_calls:
+        assert "APT::Get::AllowUnauthenticated=false" in command
+        assert "Acquire::AllowInsecureRepositories=false" in command
+        assert "Acquire::AllowDowngradeToInsecureRepositories=false" in command
+        assert "Acquire::https::Verify-Peer=true" in command
+        assert "Acquire::https::Verify-Host=true" in command
+
+
+def test_canonical_install_failure_can_fall_back_to_tuna(command_stub):
+    command_stub.mode = "official-install-failed"
+    helper.install("desktop")
+    assert len(command_stub.apt_calls) == 5
+    assert len(command_stub.cleanup) == 2
+    assert not helper.missing_packages(helper.packages_for("desktop", "noble"))
+
+
+def test_tuna_success_reply_cannot_hide_missing_mandatory_library(command_stub):
+    command_stub.mode = "tuna-missing"
+    with pytest.raises(RuntimeError, match="dependencies are still missing: libegl1"):
+        helper.install("desktop")
+    assert "mirrors.tuna.tsinghua.edu.cn" in command_stub.sources[-1]
+    assert len(command_stub.cleanup) == 2
+    assert all(not Path(path).exists() for path in command_stub.cleanup)
+
+
 @pytest.mark.parametrize("mode,message", [
     ("refresh-failed", "package-index refresh failed"),
     ("install-failed", "dependency installation failed"),
@@ -105,8 +171,10 @@ def test_required_package_gate_fails_closed(command_stub, mode, message):
     command_stub.mode = mode
     with pytest.raises(RuntimeError, match=message):
         helper.install("database-security")
-    assert len(command_stub.cleanup) == 1
-    assert not Path(command_stub.cleanup[0]).exists()
+    assert len(command_stub.cleanup) == 2
+    assert all(not Path(path).exists() for path in command_stub.cleanup)
+    assert "mirrors.tuna.tsinghua.edu.cn" not in command_stub.sources[0]
+    assert "mirrors.tuna.tsinghua.edu.cn" in command_stub.sources[-1]
 
 
 def test_profiles_select_glib_for_the_actual_ubuntu_release():
@@ -116,9 +184,10 @@ def test_profiles_select_glib_for_the_actual_ubuntu_release():
     assert "redis-server" in helper.packages_for("database-security", "jammy")
 
 
-def test_unknown_fallback_architecture_is_rejected():
+@pytest.mark.parametrize("sources", [helper.official_sources, helper.tuna_sources])
+def test_unknown_fallback_architecture_is_rejected(sources):
     with pytest.raises(RuntimeError, match="Unsupported native"):
-        helper.official_sources("noble", "riscv64")
+        sources("noble", "riscv64")
 
 
 def test_non_ubuntu_or_invalid_codename_is_rejected(tmp_path):

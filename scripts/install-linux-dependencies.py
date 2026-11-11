@@ -4,6 +4,8 @@
 The runner's mirror+http Azure source can stall before Qt libraries are present.
 Keep its cached-index fast path, but never continue to tests with missing packages.
 Fallback sources and indexes are temporary; system apt configuration is untouched.
+Official Ubuntu HTTPS is tried before TUNA, whose transport was probed on each
+native CI target. Both use the preinstalled Ubuntu archive signing key.
 """
 from __future__ import annotations
 
@@ -17,7 +19,12 @@ import tempfile
 
 COMMON = ("libegl1", "libopengl0", "libxcb-cursor0", "libxkbcommon-x11-0")
 APT_OPTIONS = ("-o", "Acquire::Retries=2", "-o", "Acquire::http::Timeout=20",
-               "-o", "Acquire::https::Timeout=20", "-o", "Dpkg::Lock::Timeout=60")
+               "-o", "Acquire::https::Timeout=20", "-o", "Dpkg::Lock::Timeout=60",
+               "-o", "APT::Get::AllowUnauthenticated=false",
+               "-o", "Acquire::AllowInsecureRepositories=false",
+               "-o", "Acquire::AllowDowngradeToInsecureRepositories=false",
+               "-o", "Acquire::https::Verify-Peer=true",
+               "-o", "Acquire::https::Verify-Host=true")
 
 
 def ubuntu_codename(path=Path("/etc/os-release")):
@@ -76,22 +83,20 @@ def official_sources(codename, architecture):
     return "".join(f"deb {signed} {uri} {suite} {components}\n" for uri, suite in suites)
 
 
-def install(profile):
-    codename = ubuntu_codename()
-    packages = packages_for(profile, codename)
-    missing = missing_packages(packages)
-    if not missing:
-        print("All mandatory Linux dependencies are already installed", flush=True)
-        return
-    print("Installing mandatory Linux dependencies: " + ", ".join(missing), flush=True)
-    if apt(["install", "-y", "--no-install-recommends", *missing], 90):
-        missing = missing_packages(packages)
-        if not missing:
-            return
-    print("Runner mirror failed or left packages missing; using official Ubuntu HTTPS sources", flush=True)
-    architecture = subprocess.run(["dpkg", "--print-architecture"], check=True,
-                                  capture_output=True, text=True).stdout.strip()
-    sources = official_sources(codename, architecture)
+def tuna_sources(codename, architecture):
+    if architecture not in {"amd64", "arm64"}:
+        raise RuntimeError(f"Unsupported native Ubuntu architecture: {architecture}")
+    archive = "ubuntu" if architecture == "amd64" else "ubuntu-ports"
+    return "".join(
+        "deb [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] "
+        f"https://mirrors.tuna.tsinghua.edu.cn/{archive} {codename}{suffix} "
+        "main restricted universe multiverse\n"
+        for suffix in ("", "-updates", "-security")
+    )
+
+
+def install_from_sources(packages, sources):
+    """Return a failed-attempt reason; never reuse another provider's indexes."""
     with tempfile.TemporaryDirectory(prefix="opennavicat-apt-") as directory:
         root = Path(directory)
         # apt's _apt sandbox needs to traverse these generated public files.
@@ -107,18 +112,50 @@ def install(profile):
         # as a usable new index. No external runner repositories are contacted.
         try:
             if not apt(["-o", "APT::Update::Error-Mode=any", "update"], 180, options):
-                raise RuntimeError("Official Ubuntu HTTPS package-index refresh failed")
+                return "package-index refresh failed"
+            missing = missing_packages(packages)
+            if not missing:
+                return None
             if not apt(["install", "-y", "--no-install-recommends", *missing], 240, options):
-                raise RuntimeError("Mandatory Linux dependency installation failed")
+                return "dependency installation failed"
+            missing = missing_packages(packages)
+            if missing:
+                return "dependencies are still missing: " + ", ".join(missing)
+            return None
         finally:
             # apt creates root/_apt-owned index directories. Return only this
             # generated tree to the caller so TemporaryDirectory can remove it.
             subprocess.run(["sudo", "chown", "-R", f"{os.getuid()}:{os.getgid()}",
                             str(root)], check=True)
+
+
+def install(profile):
+    codename = ubuntu_codename()
+    packages = packages_for(profile, codename)
     missing = missing_packages(packages)
-    if missing:
-        raise RuntimeError("Mandatory Linux dependencies are still missing: " + ", ".join(missing))
-    print("All mandatory Linux dependencies are installed", flush=True)
+    if not missing:
+        print("All mandatory Linux dependencies are already installed", flush=True)
+        return
+    print("Installing mandatory Linux dependencies: " + ", ".join(missing), flush=True)
+    if apt(["install", "-y", "--no-install-recommends", *missing], 90):
+        if not missing_packages(packages):
+            return
+    architecture = subprocess.run(["dpkg", "--print-architecture"], check=True,
+                                  capture_output=True, text=True).stdout.strip()
+    attempts = (
+        ("Official Ubuntu HTTPS", official_sources(codename, architecture)),
+        ("TUNA HTTPS with Ubuntu archive signatures", tuna_sources(codename, architecture)),
+    )
+    failures = []
+    for label, sources in attempts:
+        print("Trying " + label + " in isolated temporary apt sources/indexes", flush=True)
+        reason = install_from_sources(packages, sources)
+        if reason is None:
+            print("All mandatory Linux dependencies are installed", flush=True)
+            return
+        failures.append(label + ": " + reason)
+        print(failures[-1], flush=True)
+    raise RuntimeError("All signed Ubuntu HTTPS attempts failed; " + "; ".join(failures))
 
 
 def main():

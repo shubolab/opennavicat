@@ -38,6 +38,9 @@ MONGO_CONNECTION_NAME = "MongoDB · 生成示例"
 MONGO_DATABASE = "demo_catalog"
 MONGO_COLLECTION = "products"
 MONGO_BUCKET = "sample_files"
+MONGO_STORAGE_COLLECTION = "generated_storage"
+MONGO_STORAGE_TEXT = '{ wiredTiger: { configString: "block_compressor=zlib" } }'
+MONGO_INDEX_DEFAULTS_TEXT = '{ storageEngine: { wiredTiger: { configString: "prefix_compression=false" } } }'
 QUERY = """-- 以下客户、城市和订单均为程序生成的示例数据
 SELECT
     c.name AS customer,
@@ -55,6 +58,34 @@ function sampleRow(product) {
     return {sku: product.sku, stock: product.stock, price: product.price};
 }
 products.map(sampleRow);'''
+
+
+def mongo_storage_options():
+    return {
+        "storageEngine": {"wiredTiger": {"configString": "block_compressor=zlib"}},
+        "indexOptionDefaults": {"storageEngine": {"wiredTiger": {"configString": "prefix_compression=false"}}},
+    }
+
+
+def verify_mongo_storage_values(catalog, statistics, document_count):
+    """Check independent native-server facts, never a UI snapshot or echo."""
+    from bson import BSON
+    from opennavicat.mongodb_session import BSON_CODEC
+
+    expected = mongo_storage_options()
+    try:
+        matches = (catalog["name"] == MONGO_STORAGE_COLLECTION and catalog["type"] == "collection"
+            and BSON.encode(catalog["options"], codec_options=BSON_CODEC) == BSON.encode(expected, codec_options=BSON_CODEC)
+            and type(document_count) is int and document_count == 0
+            and "block_compressor=zlib" in statistics["wiredTiger"]["creationString"]
+            and "prefix_compression=false" in statistics["indexDetails"]["_id_"]["creationString"])
+    except Exception:
+        matches = False
+    if not matches:
+        raise RuntimeError("The generated collection storage was not independently verified.")
+    return {"collection": MONGO_STORAGE_COLLECTION, "options_verified": True,
+        "empty_collection_verified": True, "collection_storage_verified": True,
+        "default_index_storage_verified": True}
 
 
 def verify_mongo_query_values(tree, rows):
@@ -236,6 +267,37 @@ class OwnedMongoDemo:
                 raise RuntimeError("The exact owned MongoDB container still exists after cleanup.")
         self.removed = True
 
+    def verify_storage_collection(self):
+        """Read only this run's new collection using a separate native client."""
+        from pymongo import MongoClient, timeout as mongo_timeout
+        from opennavicat.mongodb_session import BSON_CODEC
+
+        if threading.get_ident() == threading.main_thread().ident:
+            raise RuntimeError("Independent demo storage verification needs its background owner.")
+        self.inspect()
+        try:
+            with MongoClient(host=self.host, port=self.port, username=self.username,
+                    password=self.password, authSource="admin", directConnection=True,
+                    serverSelectionTimeoutMS=3000, connectTimeoutMS=3000) as client:
+                with mongo_timeout(8):
+                    database = client.get_database(MONGO_DATABASE, codec_options=BSON_CODEC)
+                    with database.list_collections(filter={"name": MONGO_STORAGE_COLLECTION}) as cursor:
+                        records = []
+                        for row in cursor:
+                            if records:
+                                raise RuntimeError("The generated demo collection catalog is ambiguous.")
+                            records.append(row)
+                    if len(records) != 1:
+                        raise RuntimeError("The generated demo collection is missing.")
+                    statistics = database.command({"collStats": MONGO_STORAGE_COLLECTION})
+                    count = database[MONGO_STORAGE_COLLECTION].count_documents({}, limit=1)
+                    verification = verify_mongo_storage_values(records[0], statistics, count)
+            self.inspect()
+            return verification
+        except Exception:
+            # Native exception text can include the private loopback endpoint.
+            raise RuntimeError("Independent generated collection storage verification failed.") from None
+
     def receipt(self):
         return {"image": "mongo:8.0", "server_version": self.server_version,
             "image_architecture": self.architecture, "loopback_only": True,
@@ -304,6 +366,29 @@ def assert_visible_privacy(window, temporary, mongo=None):
                 or (mongo is not None and (any(value in text for value in (mongo.password,mongo.username,mongo.name,mongo.owner))
                     or re.search(r"(?<!\w)"+str(mongo.port)+r"(?!\w)",text)))):
             raise RuntimeError("A visible demo widget contains a service endpoint or credential field.")
+
+
+def fit_capture_image(source, width, height, *, save_sheet=False):
+    """Keep the actual modal's proportions on a plain neutral GIF canvas."""
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QColor, QImage, QPainter
+
+    if source.isNull():
+        raise RuntimeError("The actual demo widget did not produce a capture.")
+    if not save_sheet:
+        image = source.scaled(width, height, Qt.AspectRatioMode.IgnoreAspectRatio,
+                              Qt.TransformationMode.SmoothTransformation)
+        image.setDevicePixelRatio(1)
+        return image
+    image = source.scaled(width, height, Qt.AspectRatioMode.KeepAspectRatio,
+                          Qt.TransformationMode.SmoothTransformation)
+    image.setDevicePixelRatio(1)
+    canvas = QImage(width, height, QImage.Format.Format_ARGB32_Premultiplied)
+    canvas.fill(QColor('#202124'))
+    painter = QPainter(canvas)
+    painter.drawImage((width - image.width()) // 2, (height - image.height()) // 2, image)
+    painter.end()
+    return canvas
 
 
 def generated_sample(directory):
@@ -438,7 +523,9 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
     state = {"recording": False, "count": 0, "error": None,
              "phases": [], "query": None, "designer": None, "shutdown": False,
              "mongo_page": None, "gridfs_page": None, "mongo_query": None,
-             "mongo_index_page": None, "sqlite_closed_in_worker": False}
+             "mongo_index_page": None, "sqlite_closed_in_worker": False,
+             "mongo_storage_page": None, "mongo_storage_verification": None,
+             "capture_target": window}
     deadline = time.monotonic() + 120
     capture_timer = QTimer(app)
     capture_timer.setInterval(round(1000 / args.fps))
@@ -466,12 +553,18 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
                 raise RuntimeError("The demo encountered a profile outside its generated workspace.")
             # This is a guard, not pixel redaction. A leaking frame is never saved.
             assert_visible_privacy(window,temporary,mongo)
+            target = state["capture_target"]
+            if target is not window:
+                # A real app sheet is grabbed directly, never composited into a
+                # synthetic main-window image or sampled from the desktop.
+                if not target.isVisible():
+                    raise RuntimeError("The generated demo sheet closed before its capture.")
+                assert_visible_privacy(target,temporary,mongo)
             for job in io_jobs:
                 if job.done() and job.exception() is not None:
                     raise RuntimeError("The generated demo background I/O failed.") from job.exception()
-            pixmap = window.grab()
-            image = pixmap.toImage().scaled(args.width, args.height,
-                Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            pixmap = target.grab()
+            image = fit_capture_image(pixmap.toImage(), args.width, args.height, save_sheet=target is not window)
             image.setDevicePixelRatio(1)
             destination = frames / f"frame-{state['count']:05d}.png"
             def save_frame(frame, path):
@@ -485,7 +578,11 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
     capture_timer.timeout.connect(capture)
 
     def phase(name):
-        state["phases"].append({"name": name, "first_frame": state["count"]})
+        target = state["capture_target"]
+        state["phases"].append({"name": name, "first_frame": state["count"],
+            "surface": "main_window" if target is window else "save_sheet",
+            "source_size_logical": [target.width(), target.height()],
+            "fit": "existing_main_window_scale" if target is window else "keep_aspect_centered_neutral_letterbox"})
 
     def wait_for(predicate, callback, description):
         def poll():
@@ -758,7 +855,106 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
         if "createIndex(" not in state["mongo_index_page"].sql_preview.toPlainText():
             raise RuntimeError("The demo index did not render its actual helper preview.")
         phase("mongodb_index_script_preview")
-        hold(2.5, finish)
+        hold(2.5, open_mongo_storage)
+
+    def open_mongo_storage():
+        from opennavicat.ui.mongo_collection_designer import MongoCollectionDesignerPage
+
+        page = window.open_mongo_collection_designer(MONGO_CONNECTION_ID, MONGO_DATABASE)
+        if not isinstance(page, MongoCollectionDesignerPage):
+            raise RuntimeError("The demo did not open the integrated collection designer.")
+        state["mongo_storage_page"] = page
+        wait_for(lambda: page.snapshot is not None and not page.loading and idle(), mongo_storage_ready,
+                 "opening a new generated collection draft")
+
+    def mongo_storage_ready():
+        page = state["mongo_storage_page"]
+        if page.snapshot.exists or page.definition.name:
+            raise RuntimeError("The storage demo must start with a new unnamed draft.")
+        page.tabs.setCurrentWidget(page.storage)
+        page.storage_editor.setPlainText(MONGO_STORAGE_TEXT)
+        if page.draft().options.get("storageEngine") != mongo_storage_options()["storageEngine"]:
+            raise RuntimeError("The generated collection storage editor did not parse its actual object literal.")
+        phase("mongodb_collection_storage_engine")
+        hold(1.8, mongo_index_defaults)
+
+    def mongo_index_defaults():
+        page = state["mongo_storage_page"]
+        page.tabs.setCurrentWidget(page.index_options)
+        page.index_options_editor.setPlainText(MONGO_INDEX_DEFAULTS_TEXT)
+        if page.draft().options != mongo_storage_options():
+            raise RuntimeError("The generated collection index defaults do not match the demo draft.")
+        phase("mongodb_collection_index_defaults")
+        hold(1.8, open_mongo_storage_sheet)
+
+    def open_mongo_storage_sheet():
+        page = state["mongo_storage_page"]
+        page.request_save()
+        dialog = page._save_dialog
+        if dialog is None or dialog.name_edit.text() or dialog.save_button.isEnabled():
+            raise RuntimeError("The new collection did not open its unnamed save sheet.")
+        dialog.name_edit.setText(MONGO_STORAGE_COLLECTION)
+        wait_for(lambda: page._save_dialog is dialog and dialog.save_button.isEnabled() and idle(),
+                 mongo_storage_preview_ready, "planning the generated collection's actual save sheet")
+
+    def mongo_storage_preview_ready():
+        page = state["mongo_storage_page"]
+        dialog = page._save_dialog
+        if (dialog.plan is None or dialog.definition.name != MONGO_STORAGE_COLLECTION
+                or dialog.plan.definition.options != mongo_storage_options()
+                or dialog.plan.commands[0].get("create") != MONGO_STORAGE_COLLECTION
+                or "block_compressor=zlib" not in dialog.preview.toPlainText()
+                or "prefix_compression=false" not in dialog.preview.toPlainText()):
+            raise RuntimeError("The collection save sheet did not render its confirmed generated options.")
+        state["capture_target"] = dialog
+        phase("mongodb_collection_storage_save_sheet")
+        hold(2.2, save_mongo_storage)
+
+    def save_mongo_storage():
+        page = state["mongo_storage_page"]
+        dialog = page._save_dialog
+        if dialog is None or dialog.definition.name != MONGO_STORAGE_COLLECTION or not dialog.save_button.isEnabled():
+            raise RuntimeError("The generated collection save sheet changed before saving.")
+        capture()
+        capture_timer.stop()
+        state["capture_target"] = window
+        dialog.save_button.click()
+        wait_for(lambda: page.snapshot.exists and not page.dirty and not page.loading and idle(),
+                 verify_mongo_storage, "saving the new generated collection through the application")
+
+    def verify_mongo_storage():
+        page = state["mongo_storage_page"]
+        if page.snapshot.name != MONGO_STORAGE_COLLECTION or page.snapshot.definition.options != mongo_storage_options():
+            raise RuntimeError("The application saved unexpected generated collection options.")
+        window.submit(mongo.verify_storage_collection, mongo_storage_verified, fail,
+                      label="独立核验生成集合的存储设置")
+
+    def mongo_storage_verified(verification):
+        state["mongo_storage_verification"] = verification
+        # MainWindow refuses to close a tab while the callback's submitting
+        # task is still registered. Let that exact task finish before reopening.
+        wait_for(idle, reopen_mongo_storage, "finishing independent collection verification")
+
+    def reopen_mongo_storage():
+        page = state["mongo_storage_page"]
+        window.close_tab(window.tabs.indexOf(page))
+        reopened = window.open_mongo_collection_designer(MONGO_CONNECTION_ID, MONGO_DATABASE, MONGO_STORAGE_COLLECTION)
+        if reopened is page:
+            raise RuntimeError("The generated collection designer did not actually reopen.")
+        state["mongo_storage_page"] = reopened
+        wait_for(lambda: reopened.snapshot is not None and not reopened.loading and idle(),
+                 mongo_storage_reopened, "reopening the saved generated collection")
+
+    def mongo_storage_reopened():
+        page = state["mongo_storage_page"]
+        if (page.snapshot.definition.options != mongo_storage_options() or page.dirty
+                or not page.storage_editor.isReadOnly() or not page.index_options_editor.isReadOnly()):
+            raise RuntimeError("The reopened collection did not preserve its read-only storage settings.")
+        page.tabs.setCurrentWidget(page.storage)
+        phase("mongodb_collection_storage_reopened")
+        capture()
+        capture_timer.start()
+        hold(2.2, finish)
 
     def finish():
         capture()
@@ -776,6 +972,8 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
                 actual = entry.index_information().get("demo_stock_sku", {})
                 if actual.get("sparse") or list(actual.get("key", ())) != [("stock", -1), ("sku", 1)]:
                     raise RuntimeError("The index preview unexpectedly changed the generated database.")
+                if not state["mongo_storage_verification"]:
+                    raise RuntimeError("The generated collection's actual storage save was not verified.")
         window.submit(verify_preview, lambda _result: shutdown(), label="验证生成的演示数据")
 
     def shutdown():
@@ -805,6 +1003,19 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
                         page = state.get("mongo_index_page")
                         if page is not None and page.snapshot is not None:
                             page.load_snapshot(page.snapshot)
+                        page = state.get("mongo_storage_page")
+                        if page is not None and page.snapshot is not None:
+                            if page._save_dialog is not None:
+                                page._save_dialog.reject()
+                            if page.snapshot.exists:
+                                page.load_snapshot(page.snapshot)
+                            else:
+                                # Explicitly discard only this recorder-owned,
+                                # unnamed failed draft before closing its app.
+                                index = window.tabs.indexOf(page)
+                                if index >= 0:
+                                    window.tabs.removeTab(index)
+                                    page.deleteLater()
                         discarded = True
                     elif CONNECTION_ID in window.sessions:
                         session = window.sessions[CONNECTION_ID]
@@ -849,14 +1060,17 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
         raise RuntimeError(state["error"] or "Demo application failed.")
     if not window._closed or not idle():
         raise RuntimeError("The demo exited before its native sessions and window had closed.")
-    if state["count"] < 2 or len(state["phases"]) != (13 if mongo is not None else 6):
+    if state["count"] < 2 or len(state["phases"]) != (17 if mongo is not None else 6):
         raise RuntimeError("The demo did not capture all required workflows.")
     for index, item in enumerate(state["phases"]):
         stop = state["phases"][index + 1]["first_frame"] if index + 1 < len(state["phases"]) else state["count"]
         item["frames"] = stop - item["first_frame"]
+        if item["frames"] <= 0:
+            raise RuntimeError("A required demo phase did not contain a privacy-checked frame.")
+        item["privacy_checked_frames"] = item["frames"]
     return frames, {
         "application": "OpenNavicat", "version": __version__, "theme": args.theme,
-        "capture": "Actual live Qt QWidget.grab frames; no reference screenshots, composited UI or image generation service",
+        "capture": "Actual live Qt QWidget.grab frames; save-sheet phase keeps the actual modal's aspect ratio on a centered neutral letterbox canvas; no reference screenshots, synthetic controls or image generation service",
         "qt_platform": app.platformName(), "qt_version": QLibraryInfo.version().toString(),
         "size": [args.width, args.height], "fps": args.fps, "frames": state["count"],
         "duration_seconds": round(state["count"] / args.fps, 3), "loop": "infinite",
@@ -872,6 +1086,8 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
         "mongodb_gridfs_image_previewed": state["gridfs_page"] is not None,
         "mongodb_javascript_read_completed": state["mongo_query"] is not None,
         "mongodb_index_preview_applied": False,
+        "mongodb_collection_storage_save": state["mongo_storage_verification"],
+        "mongodb_collection_storage_reopened_readonly": state["mongo_storage_verification"] is not None,
         "visible_text_privacy_guard": "labels, editors, titles, actions, combos, tree/table display fields; paths/endpoints/credentials rejected before frame save",
         "sqlite_closed_in_worker": state["sqlite_closed_in_worker"],
         "native_window_closed_before_quit": bool(window._closed),

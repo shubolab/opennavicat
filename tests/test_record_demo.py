@@ -14,6 +14,8 @@ from copy import deepcopy
 import pytest
 from PySide6.QtWidgets import QPushButton, QToolButton, QVBoxLayout, QWidget
 
+from test_mongodb_session import mongodb_service, session
+
 
 @pytest.fixture
 def recorder():
@@ -49,6 +51,110 @@ def test_generated_javascript_demo_requires_exact_bson_and_actual_display(record
     else:
         with pytest.raises(RuntimeError, match="exact generated BSON"):
             recorder.verify_mongo_query_values(tree, rows)
+
+
+@pytest.mark.parametrize('corruption', [None, 'name', 'options', 'option_type', 'non_bson_value', 'not_empty', 'engine', 'index'])
+def test_demo_storage_requires_exact_independent_catalog_and_actual_engine_settings(recorder, corruption):
+    from bson import Int64
+    catalog = {'name': recorder.MONGO_STORAGE_COLLECTION, 'type': 'collection', 'options': recorder.mongo_storage_options()}
+    stats = {'wiredTiger': {'creationString': 'allocation_size=4KB,block_compressor=zlib'},
+             'indexDetails': {'_id_': {'creationString': 'prefix_compression=false,internal_page_max=16KB'}}}
+    count = 0
+    if corruption == 'name': catalog['name'] = 'not_the_generated_collection'
+    elif corruption == 'options': catalog['options'].pop('indexOptionDefaults')
+    elif corruption == 'option_type': catalog['options']['storageEngine']['wiredTiger']['configString'] = Int64(1)
+    elif corruption == 'non_bson_value': catalog['options']['storageEngine']['wiredTiger']['configString'] = object()
+    elif corruption == 'not_empty': count = 1
+    elif corruption == 'engine': stats['wiredTiger']['creationString'] = 'block_compressor=snappy'
+    elif corruption == 'index': stats['indexDetails']['_id_']['creationString'] = 'prefix_compression=true'
+    if corruption is None:
+        receipt = recorder.verify_mongo_storage_values(catalog, stats, count)
+        assert receipt['options_verified'] and receipt['collection_storage_verified'] and receipt['default_index_storage_verified']
+        assert receipt['collection'] == recorder.MONGO_STORAGE_COLLECTION
+    else:
+        with pytest.raises(RuntimeError, match='independently verified'):
+            recorder.verify_mongo_storage_values(catalog, stats, count)
+
+
+def test_real_demo_storage_verifier_reads_owned_collection_and_default_id_index(recorder, session):
+    database = session.connection[session.config.database]
+    database.create_collection(recorder.MONGO_STORAGE_COLLECTION, **recorder.mongo_storage_options())
+    with database.list_collections(filter={'name': recorder.MONGO_STORAGE_COLLECTION}) as cursor:
+        catalog = list(cursor)
+    assert len(catalog) == 1
+    stats = database.command({'collStats': recorder.MONGO_STORAGE_COLLECTION})
+    receipt = recorder.verify_mongo_storage_values(catalog[0], stats,
+        database[recorder.MONGO_STORAGE_COLLECTION].count_documents({}, limit=1))
+    assert receipt['empty_collection_verified'] and receipt['default_index_storage_verified']
+
+
+def test_demo_storage_independent_client_never_runs_on_gui_thread(recorder, monkeypatch):
+    service = recorder.OwnedMongoDemo()
+    monkeypatch.setattr(service, 'inspect', lambda: pytest.fail('No Docker access belongs on the GUI thread'))
+    with pytest.raises(RuntimeError, match='background owner'):
+        service.verify_storage_collection()
+
+
+def test_demo_storage_native_client_failure_does_not_expose_endpoint_or_password(recorder, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    import pymongo
+    service = recorder.OwnedMongoDemo()
+    service.port = 54321
+    monkeypatch.setattr(service, 'inspect', lambda: None)
+    def unavailable(**kwargs):
+        raise OSError(service.password + ' ' + service.host + ':' + str(service.port))
+    monkeypatch.setattr(pymongo, 'MongoClient', unavailable)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        with pytest.raises(RuntimeError) as captured:
+            pool.submit(service.verify_storage_collection).result()
+    rendered = ''.join(traceback.format_exception(captured.value))
+    assert service.password not in rendered and service.host not in rendered and str(service.port) not in rendered
+    assert captured.value.__suppress_context__ is True
+
+
+def test_actual_save_sheet_privacy_rejects_modal_title_and_name_before_capture(qtbot, recorder, tmp_path):
+    from opennavicat.mongodb_collections import CollectionDefinition, CollectionPlan, CollectionSnapshot
+    from opennavicat.ui.mongo_collection_designer import MongoCollectionSaveDialog
+    service = recorder.OwnedMongoDemo()
+    service.port = 54321
+    definition = CollectionDefinition(recorder.MONGO_STORAGE_COLLECTION, recorder.mongo_storage_options())
+    snapshot = CollectionSnapshot(recorder.MONGO_DATABASE, '', CollectionDefinition(), exists=False)
+    dialog = MongoCollectionSaveDialog(definition, True)
+    qtbot.addWidget(dialog)
+    dialog.show_plan(CollectionPlan(snapshot, definition,
+        [{'create': recorder.MONGO_STORAGE_COLLECTION, **recorder.mongo_storage_options()}], True))
+    dialog.show()
+    qtbot.waitExposed(dialog)
+    recorder.assert_visible_privacy(dialog, tmp_path, service)
+    dialog.setWindowTitle(service.password)
+    with pytest.raises(RuntimeError, match='endpoint or credential'):
+        recorder.assert_visible_privacy(dialog, tmp_path, service)
+    dialog.setWindowTitle('保存集合')
+    dialog.name_edit.setText(str(tmp_path / 'private-generated-path'))
+    with pytest.raises(RuntimeError, match='filesystem path'):
+        recorder.assert_visible_privacy(dialog, tmp_path, service)
+
+
+def test_modal_capture_preserves_actual_aspect_ratio_on_plain_neutral_canvas(recorder):
+    from PySide6.QtGui import QColor, QImage
+    source = QImage(40, 20, QImage.Format.Format_RGB32)
+    source.fill(QColor('#ffffff'))
+    source.setDevicePixelRatio(2)
+    fitted = recorder.fit_capture_image(source, 160, 100, save_sheet=True)
+    assert fitted.width() == 160 and fitted.height() == 100 and fitted.devicePixelRatio() == 1
+    assert fitted.pixelColor(0, 0) == QColor('#202124')
+    assert fitted.pixelColor(80, 9) == QColor('#202124')
+    assert fitted.pixelColor(0, 10) == QColor('#ffffff')
+    assert fitted.pixelColor(159, 89) == QColor('#ffffff')
+    assert fitted.pixelColor(80, 90) == QColor('#202124')
+    main = recorder.fit_capture_image(source, 160, 100)
+    assert main.pixelColor(0, 0) == QColor('#ffffff') and main.pixelColor(159, 99) == QColor('#ffffff')
+
+
+def test_null_modal_capture_is_rejected_instead_of_encoding_blank_success(recorder):
+    from PySide6.QtGui import QImage
+    with pytest.raises(RuntimeError, match='did not produce a capture'):
+        recorder.fit_capture_image(QImage(), 160, 100, save_sheet=True)
 
 
 @pytest.mark.parametrize("button_class",[QPushButton,QToolButton])

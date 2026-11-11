@@ -21,6 +21,7 @@ from ..mongodb_query import _READ_COMMANDS, _bounded_command, _validate_command
 from ..mongodb_session import BSON_CODEC, RAW_CODEC
 from .codec import decode, encode
 from .records import CommandReceipt
+from .server_errors import server_failure
 
 
 
@@ -144,6 +145,11 @@ class MongoDBBridge:
                     self.open_sessions -= bool(wire_session)
         except Exception as error:
             if not self.receipts or self.receipts[-1].sequence != sequence:
+                failure=server_failure(error) if dispatched else None
+                affected=failure.document.get('n') if failure is not None else None
+                if type(affected)is not int:affected=None
                 self.receipts.append(CommandReceipt(sequence, verb, writes,
-                    "uncertain" if dispatched and writes else "rejected", error=type(error).__name__))
+                    'uncertain' if failure is not None and writes and failure.concern_uncertain else 'acknowledged_error' if failure is not None else "uncertain" if dispatched and writes else "rejected",
+                    affected=affected,error=(failure.code_name or 'MongoServerError')+f' ({failure.code})' if failure is not None else type(error).__name__,
+                    reply=failure.document if failure is not None else None))
             raise

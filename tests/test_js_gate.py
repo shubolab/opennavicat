@@ -1,6 +1,7 @@
 """Qualification cannot turn missing or skipped native cases into acceptance."""
 from __future__ import annotations
 import importlib.util
+import json
 from pathlib import Path
 import os
 import subprocess
@@ -54,3 +55,36 @@ def test_real_collector_overrides_ini_test_filters(tmp_path):
         env=runner().source_environment(),cwd=tmp_path,capture_output=True,text=True,timeout=30)
     assert result.returncode==0,result.stderr
     assert {value.split('::')[-1] for value in json.loads(target.read_text())}=={'test_only_selected','test_other_required'}
+
+
+def test_protocol_explicitly_executes_index_helpers_and_requires_three_owned_modules():
+    module=runner()
+    assert 'tests/test_js_index_helpers.py' in module.PROTOCOL
+    assert module.PROTOCOL_FIXTURES=={'test_js_engine','test_js_host_reference','test_js_index_helpers'}
+    assert module.QT_PROTOCOL_FIXTURES=={'test_mongo_native_query_ui','test_js_window'}
+
+
+@pytest.mark.parametrize('fault',[None,'missing','duplicate','extra','stale','cleanup','readiness','architecture'])
+def test_fixture_gate_rejects_missing_helper_receipt_duplicates_and_incomplete_cleanup(tmp_path,fault):
+    module=runner();run_id='synthetic-current-run'
+    def receipt(name):
+        return dict(run_id=run_id,module=name,cleanup_removed=True,owner_token_verified=True,
+            port_loopback_only=True,native_docker_architecture_matches=True,external_auth_readiness=True)
+    rows=[receipt(name)for name in sorted(module.PROTOCOL_FIXTURES)]
+    if fault=='missing':rows=[row for row in rows if row['module']!='test_js_index_helpers']
+    elif fault=='duplicate':rows.append(dict(rows[0]))
+    elif fault=='extra':rows.append(receipt('unexpected-owned-module'))
+    elif fault=='stale':rows[0]['run_id']='synthetic-older-run'
+    elif fault=='cleanup':rows[0]['cleanup_removed']=False
+    elif fault=='readiness':rows[0]['external_auth_readiness']=False
+    elif fault=='architecture':rows[0]['native_docker_architecture_matches']=False
+    for index,row in enumerate(rows):(tmp_path/f'fixture-{index}.json').write_text(json.dumps(row))
+    if fault:
+        with pytest.raises(RuntimeError,match='readiness/cleanup not proven'):
+            module.check_fixtures(tmp_path,run_id,module.PROTOCOL_FIXTURES)
+    else:
+        # Stale evidence cannot stand in for a required module, but retaining a
+        # previous run's explicitly separate receipt is harmless.
+        old=receipt('ignored-old-module');old['run_id']='synthetic-older-run';old['cleanup_removed']=False
+        (tmp_path/'fixture-old.json').write_text(json.dumps(old))
+        assert len(module.check_fixtures(tmp_path,run_id,module.PROTOCOL_FIXTURES))==3

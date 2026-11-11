@@ -64,3 +64,12 @@ def test_cursor_completion_is_document_rows_and_empty_array_is_honest_empty_resu
     assert json_util.loads(result.result.rows[0][1], json_options=JSON_OPTIONS) == {'_id': Int64(1)}
     empty = present_execution(JavaScriptResult(value_tree=['array', []]), '[]')
     assert empty.result.rows == [] and empty.completion == 'Array: 0 documents'
+
+
+def test_known_server_write_error_with_unknown_effects_is_not_a_claimed_confirmed_write():
+    execution=JavaScriptResult(commands=(CommandReceipt(1,'createindexes',True,'acknowledged_error',None,'DuplicateKey (11000)'),),error='Index build failed')
+    assert not execution.has_confirmed_writes and not execution.uncertain_writes
+    presentation=present_execution(execution,'db.docs.createIndex(...)')
+    assert presentation.summary[0][4]=='unknown'
+    assert 'no rollback is implied' in presentation.messages
+    assert 'remain committed'not in presentation.messages

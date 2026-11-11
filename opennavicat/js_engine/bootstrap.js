@@ -158,7 +158,11 @@
   function command(value) {
     guard();
     const reply=parse(host(stringify({kind:'command',tree:encode(value)})));
-    if(reply.ok!==true)throw new Error(reply.error||'Parent rejected command');
+    if(reply.ok!==true){const error=new Error(reply.error||'Parent rejected command');
+      if(typeof reply.code==='number'&&isSafe(reply.code)){define(error,'code',{value:reply.code});define(error,'name',{value:'MongoServerError'});}
+      if(typeof reply.codeName==='string'&&reply.codeName)define(error,'codeName',{value:reply.codeName});
+      throw error;
+    }
     const decoded=decode(reply.tree);
     if(decoded&&decoded.cursor&&NativeArray.isArray(decoded.cursor.firstBatch))for(let i=0;i<decoded.cursor.firstBatch.length;i++)markRoot(decoded.cursor.firstBatch[i]);
     return decoded;
@@ -179,6 +183,60 @@
     cursorCompletion.set(api,remaining);return api;
   }
   function options(value,allowed){if(!value||typeof value!=='object')throw new TypeError('Options document required');for(const key of keys(value))if(!allowed.includes(key))throw new TypeError('Unsupported prototype option: '+key);return value;}
+  const indexOptions=['name','v','unique','sparse','hidden','background','expireAfterSeconds','partialFilterExpression','collation','wildcardProjection','weights','default_language','language_override','textIndexVersion','2dsphereIndexVersion','bits','min','max','bucketSize','storageEngine'];
+  const indexCommandOptions=['writeConcern','maxTimeMS','comment','commitQuorum'];
+  function dataDocument(value,label) {
+    if(value===null||typeof value!=='object'||NativeArray.isArray(value))throw new TypeError(label+' must be a document');
+    const proto=getProto(value),state=origins.get(value);
+    if(proto!==ObjectProto&&proto!==null&&!(state&&state.root&&proto===HostPrototype))throw new TypeError(label+' has an unsupported prototype');
+    const result=create(null),props=descriptors(value);
+    for(const key of ownKeys(props)){const d=props[key];if(typeof key!=='string'||!d.enumerable||!('value'in d))throw new TypeError(label+' requires enumerable data fields');define(result,key,{value:d.value,enumerable:true,writable:true,configurable:true});}
+    return result;
+  }
+  function dataArray(value,label) {
+    if(!NativeArray.isArray(value))throw new TypeError(label+' must be an array');
+    const props=descriptors(value),length=props.length&&props.length.value,result=[];
+    if(!isSafe(length)||length<0||ownKeys(props).length!==length+1)throw new TypeError(label+' cannot be sparse or decorated');
+    for(let i=0;i<length;i++){const d=props[String(i)];if(!d||!d.enumerable||!('value'in d))throw new TypeError(label+' requires enumerable data fields');result.push(d.value);}
+    return result;
+  }
+  function indexKeys(pattern) {
+    const value=dataDocument(pattern,'Index keys'),names=keys(value),out=create(null),parts=[];
+    if(!names.length)throw new TypeError('Index keys cannot be empty');
+    for(const key of names){let direction=value[key];const brand=brands.get(direction);
+      if(brand&&['int32','int64','double'].includes(brand[0]))direction=brand[1];
+      if(typeof direction==='bigint'&&(direction===1n||direction===-1n))direction=NativeNumber(direction);
+      if(typeof direction==='number'&&(direction===1||direction===-1)){out[key]=Int32(direction);parts.push(key+'_'+String(direction));}
+      else if(typeof direction==='string'&&direction){out[key]=direction;parts.push(key+'_'+direction);}
+      else throw new TypeError('Index directions must be 1, -1, or an index-type string');
+    }
+    return {key:out,name:parts.join('_')};
+  }
+  function indexSettings(value) {
+    const settings=value===null?create(null):dataDocument(value,'Index options');
+    for(const key of keys(settings))if(!indexOptions.includes(key)&&!indexCommandOptions.includes(key))throw new TypeError('Unsupported index option: '+key);
+    if('name'in settings&&(typeof settings.name!=='string'||!settings.name||settings.name.includes('\0')))throw new TypeError('Index name must be nonempty text');
+    return settings;
+  }
+  function createIndices(collectionName,patterns,opts,quorum) {
+    guard();patterns=dataArray(patterns,'Index key patterns');if(!patterns.length)throw new TypeError('createIndexes requires a nonempty array of key patterns');
+    const settings=indexSettings(opts),specs=[],names=[],cmd={createIndexes:collectionName,indexes:specs};
+    for(const pattern of patterns){const parsed=indexKeys(pattern),spec=create(null);
+      for(const key of keys(settings))if(indexOptions.includes(key))spec[key]=settings[key];
+      spec.key=parsed.key;spec.name='name'in settings?settings.name:parsed.name;specs.push(spec);names.push(spec.name);
+    }
+    for(const key of indexCommandOptions)if(key in settings)cmd[key]=settings[key];
+    if(quorum!==undefined)cmd.commitQuorum=quorum;
+    if(typeof cmd.commitQuorum==='number'&&isSafe(cmd.commitQuorum)&&cmd.commitQuorum>=-(2**31)&&cmd.commitQuorum<2**31)cmd.commitQuorum=Int32(cmd.commitQuorum);
+    command(cmd);return names;
+  }
+  function dropIndices(collectionName,indexes) {
+    guard();let value=indexes;
+    if(typeof value==='string'){if(!value||value.includes('\0'))throw new TypeError('Index name must be nonempty text');}
+    else if(NativeArray.isArray(value)){value=dataArray(value,'Index names');if(!value.length||value.some(v=>typeof v!=='string'||!v||v.includes('\0')))throw new TypeError('dropIndexes requires a nonempty array of index names');}
+    else value=indexKeys(value).key;
+    return command({dropIndexes:collectionName,index:value});
+  }
   function collection(name) {if(typeof name!=='string'||!name||name.includes('\0'))throw new TypeError('Collection name');
     function update(filter,value,opts,multi){const settings=options(opts,['upsert','collation','arrayFilters','hint']);const reply=command({update:name,updates:[{q:filter,u:value,multi,...settings}],ordered:true});return {acknowledged:true,matchedCount:reply.n,modifiedCount:reply.nModified,upserted:reply.upserted||[]};}
     function remove(filter,opts,limit){const settings=options(opts,['collation','hint']);const reply=command({delete:name,deletes:[{q:filter,limit,...settings}],ordered:true});return {acknowledged:true,deletedCount:reply.n};}
@@ -190,6 +248,14 @@
       insertMany(documents,opts={}){options(opts,['ordered']);for(const doc of documents)if(!doc||!Object.prototype.hasOwnProperty.call(doc,'_id'))throw new TypeError('Prototype insertMany requires explicit _id values');command({insert:name,documents,ordered:opts.ordered!==false});return {acknowledged:true,insertedIds:documents.map(doc=>doc._id)};},
       updateOne(filter,value,opts={}){return update(filter,value,opts,false);},updateMany(filter,value,opts={}){return update(filter,value,opts,true);},
       deleteOne(filter,opts={}){return remove(filter,opts,1);},deleteMany(filter,opts={}){return remove(filter,opts,0);},
+      createIndex(pattern,opts={},quorum){if(arguments.length>3)throw new TypeError('createIndex accepts keys, options, and commitQuorum');return createIndices(name,[pattern],opts,quorum)[0];},
+      createIndexes(patterns,opts={},quorum){if(arguments.length>3)throw new TypeError('createIndexes accepts key patterns, options, and commitQuorum');return createIndices(name,patterns,opts,quorum);},
+      ensureIndex(pattern,opts={},quorum){if(arguments.length>3)throw new TypeError('ensureIndex accepts keys, options, and commitQuorum');return createIndices(name,[pattern],opts,quorum);},
+      getIndexes(){if(arguments.length)throw new TypeError('getIndexes takes no arguments');return command({listIndexes:name,cursor:{}}).cursor.firstBatch;},
+      getIndexSpecs(){if(arguments.length)throw new TypeError('getIndexSpecs takes no arguments');return command({listIndexes:name,cursor:{}}).cursor.firstBatch;},
+      getIndexKeys(){if(arguments.length)throw new TypeError('getIndexKeys takes no arguments');return command({listIndexes:name,cursor:{}}).cursor.firstBatch.map(spec=>spec.key);},
+      dropIndex(index){if(arguments.length!==1||index==='*'||NativeArray.isArray(index))throw new TypeError('dropIndex requires one index name or key pattern; use dropIndexes for multiple indexes');return dropIndices(name,index);},
+      dropIndexes(indexes='*'){if(arguments.length>1)throw new TypeError('dropIndexes accepts one index selection');return dropIndices(name,indexes);},
       countDocuments(filter={}){return command({count:name,query:filter}).n;},getName(){return name;}
     });
   }

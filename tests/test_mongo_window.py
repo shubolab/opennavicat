@@ -22,6 +22,7 @@ from opennavicat.storage import Store
 from opennavicat.ui.mongo_browser import MongoCollectionPage
 from opennavicat.ui.mongo_gridfs import MongoGridFSPage
 from opennavicat.ui.mongo_collection_designer import MongoCollectionDesignerPage
+from opennavicat.ui.mongo_timeseries_designer import MongoTimeSeriesDesignerPage
 from opennavicat.ui.window import MainWindow, TablePage
 from test_mongodb_session import mongodb_service  # Reuse the owned-container fixture contract.
 
@@ -435,3 +436,54 @@ def test_real_window_rename_collection_preserves_data_indexes_and_uuid(qtbot, mo
     after = database.command("listCollections", filter={"name": "renamed_ui"})["cursor"]["firstBatch"][0]["info"]["uuid"]
     assert after == before
     assert not errors and threads
+
+
+
+def test_real_window_timeseries_designer_creates_and_updates_bucketing_and_expiry(qtbot, mongo_window):
+    window, config, database, schema, errors, threads = mongo_window
+    page = window.open_mongo_timeseries_designer(config.id, config.database)
+    assert isinstance(page, MongoTimeSeriesDesignerPage)
+    qtbot.waitUntil(lambda: page.snapshot is not None and not page.loading, timeout=15000)
+    page.name_edit.setText("ts_ui")
+    page.time_field_edit.setText("time")
+    page.meta_field_edit.setText("sensor")
+    page.granularity_combo.setCurrentIndex(page.granularity_combo.findData("minutes"))
+    page.expire_edit.setText("3600")
+    page.request_save()
+    dialog = page._save_dialog
+    qtbot.waitUntil(dialog.save_button.isEnabled, timeout=15000)
+    qtbot.mouseClick(dialog.save_button, Qt.MouseButton.LeftButton)
+    idle(qtbot, window)
+    assert page.snapshot.exists and page.snapshot.name == "ts_ui"
+    spec = database.command("listCollections", filter={"name": "ts_ui"})["cursor"]["firstBatch"][0]
+    assert spec["type"] == "timeseries"
+    assert spec["options"]["timeseries"]["granularity"] == "minutes"
+    assert spec["options"]["expireAfterSeconds"] == 3600
+    database.ts_ui.insert_one({"time": __import__("datetime").datetime(2026, 1, 1, tzinfo=__import__("datetime").timezone.utc),
+                               "sensor": "a", "value": 1})
+    assert database.ts_ui.count_documents({}) == 1
+
+    page.granularity_combo.setCurrentIndex(page.granularity_combo.findData("hours"))
+    page.expire_edit.setText("7200")
+    page.request_save()
+    dialog = page._save_dialog
+    qtbot.waitUntil(dialog.save_button.isEnabled, timeout=15000)
+    assert len(dialog.plan.commands) == 2 and "collectionUUID" not in dialog.plan.commands[0]
+    qtbot.mouseClick(dialog.save_button, Qt.MouseButton.LeftButton)
+    idle(qtbot, window)
+    spec = database.command("listCollections", filter={"name": "ts_ui"})["cursor"]["firstBatch"][0]
+    assert spec["options"]["timeseries"]["granularity"] == "hours"
+    assert spec["options"]["expireAfterSeconds"] == 7200
+    assert not errors and threads
+
+    window.set_active(config.id, config.database)
+    window.show_objects("table")
+    idle(qtbot, window)
+    browser = window.object_page
+    assert browser.new_timeseries_action.isEnabled()
+    row = next(index for index, entry in enumerate(browser.records) if entry["name"] == "ts_ui")
+    browser.table.setCurrentCell(row, 0)
+    browser.update_actions()
+    assert browser.design_action.isEnabled()
+    ts_entry = dict(browser.selected(), table="ts_ui")
+    assert window.design_object(ts_entry) is page

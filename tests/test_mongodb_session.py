@@ -27,7 +27,7 @@ from pymongo import MongoClient
 from opennavicat.database import ConnectionConfig, DatabaseError
 from opennavicat.mongodb_session import (
     BSON_CODEC, MongoConflictError, MongoDocument, MongoSession,
-    canonical_dumps, canonical_loads,
+    canonical_array_dumps, canonical_array_loads, canonical_dumps, canonical_loads,
 )
 
 
@@ -55,6 +55,18 @@ def test_invalid_or_duplicate_editor_fields_are_rejected_without_echoing_data(te
 def test_dates_cannot_silently_drop_submillisecond_precision():
     with pytest.raises(DatabaseError, match='millisecond'):
         canonical_loads('{"d":{"$date":"2026-01-01T00:00:00.123456Z"}}')
+
+
+def test_canonical_array_editor_preserves_bson_types_and_rejects_duplicate_fields():
+    values = [{'$match': {'long': Int64(9007199254740993), 'at': RICH_VALUES[-4]}},
+              {'$set': {'binary': Binary(b'\0\xff', 128)}}]
+    text = canonical_array_dumps(values)
+    assert text.lstrip().startswith('[')
+    assert BSON.encode({'value': canonical_array_loads(text)}, codec_options=BSON_CODEC) == BSON.encode(
+        {'value': values}, codec_options=BSON_CODEC)
+    for invalid in ('{"a":1,"a":2}', '[{"a":1,"a":2}]', '{}', '[NaN]', '{bad'):
+        with pytest.raises(DatabaseError):
+            canonical_array_loads(invalid)
 
 
 def config_for(port=27017, **values):

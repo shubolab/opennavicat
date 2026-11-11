@@ -64,11 +64,12 @@ other immutable options never invokes drop/recreate.
 
 Collections with unqualified additional options, non-reversible BSON, missing
 UUIDs, views, time-series, internal namespaces and GridFS-managed names remain
-read-only with complete original bytes retained. No-op inspection stays
-available. This is an explicit checkpoint boundary, not a claim those required
-database tools are out of scope permanently. Advanced storage/encryption,
-clustered collections, time-series/view design, rename/drop/copy/maintenance and
-the original UI remain open.
+read-only in the ordinary collection editor with complete original bytes
+retained. Dedicated time-series and ordinary-view designers are separate sealed
+modules below; no-op inspection stays available. This is an explicit checkpoint
+boundary, not a claim those required database tools are out of scope permanently.
+Advanced storage/encryption, clustered collections, broader original UI and the
+remaining MongoDB object families remain open.
 
 The first qualification uses MongoDB **8.0.34**, not the current unversioned
 manual's newer features. `validationLevel=constraint` is not silently enabled.
@@ -117,6 +118,11 @@ UI slice backed only by capabilities in this module:
   race can still create it, and no existing target is intentionally dropped.
   Successful rename preserves documents, indexes, collection options and UUID.
 
+- MongoDB collection and time-series selections now populate the inspector with
+  the same observed metadata family as the object list: document count, capped,
+  total/object-average/storage/index sizes, index count, with unknown values kept
+  explicit. This is a real metadata projection, not a fabricated summary.
+
 - Collection maintenance exposes fast/full `validate` for ordinary and
   time-series collections and `reIndex` for ordinary collections. Every command
   checks the relevant UUID before and after, returns a bounded Canonical Extended
@@ -150,6 +156,35 @@ resources, not a claim that the original runtime order, defaults, enablement or
 save workflow matches Navicat. Fields, index, foreign-key and virtual-relation
 pages from the resource report are not yet implemented because the current sealed
 backend cannot execute those complete workflows.
+
+## Ordinary view designer
+
+`opennavicat.mongodb_views` is the sealed backend for ordinary MongoDB views:
+
+```python
+new_view(session, database, name="") -> ViewSnapshot
+load_view(session, database, name) -> ViewSnapshot
+plan_view(session, snapshot, definition) -> ViewPlan
+apply_plan(session, plan, *, cancelled=None) -> ViewApplyResult
+```
+
+`ViewDefinition(name, viewOn, pipeline)` keeps the source namespace and ordered
+Canonical EJSON pipeline stages. New views use `create`; existing views use
+`collMod` and reject rename before dispatch. The exact source namespace must
+exist at planning time, target names must be free for create, and the complete
+raw view catalog is checked again at apply time. A complete catalog comparison
+before and after the command is retained as evidence, but MongoDB ordinary views
+do not expose a collection UUID; the implementation explicitly warns that this
+is **not an atomic compare-and-swap**. No acknowledgment is reported as success
+unless the final view catalog matches the reviewed definition.
+
+The embedded `ui/mongo_view_designer.py` page edits name, source namespace and a
+Canonical Extended JSON document-array pipeline. It exposes an execution script
+or raw BSON command in the reviewed save sheet, keeps the server catalog BSON
+read-only, and sends load/plan/apply through MainWindow's serial worker queue.
+Array parsing uses the same duplicate-key, finite-number, BSON-type and date
+precision safeguards as document editing. Missing source, existing target and
+stale catalog paths are surfaced without retrying or dropping a peer namespace.
 
 ## Identity, concurrency and create idempotency
 
@@ -215,26 +250,29 @@ PYTHONPATH=. python scripts/test-mongodb-collections.py \
   --evidence artifacts/mongo-collections/a-new-run
 ```
 
-The runner dynamically collects every case in
-`tests/test_mongodb_collections.py` plus the real MainWindow collection-designer
-test, requires the exact complete set with zero skips/errors/failures, creates
-two new authenticated loopback-only MongoDB containers (one per test module) and
-verifies native image/daemon architecture, readiness and exact identity/cleanup.
+The runner dynamically collects the ordinary/time-series/copy/maintenance/view
+backend tests, the offline collection/view/maintenance/inspector UI tests, and
+the declared real MainWindow paths. It requires the exact complete set with zero
+skips/errors/failures, creates six new authenticated loopback-only MongoDB
+containers (one per database-backed test module) and verifies native
+image/daemon architecture, readiness and exact identity/cleanup.
 It reuses the receipt-backed, run-label-specific emergency cleanup for
 timeout/interrupt. It never accepts a reference endpoint. Logs/receipts exclude
 Docker environment dumps and private certificate/key/URI files.
 
-The current Linux WSL amd64 proof passed **98 cases with zero skips** and five
-independently cleaned MongoDB 8.0.34 fixtures. The shared database-security CI job
-executes this runner. The earlier macOS ARM64 backend-only proof remains
-historical and does not cover this UI.
+The current Linux WSL amd64 proof passed **134 cases with zero skips** and six
+independently cleaned MongoDB 8.0.34 fixtures. The exact run identity and source
+hashes are retained under `artifacts/mongo-collections/view-20261111b/`. The shared
+database-security CI job executes this runner. The earlier macOS ARM64
+backend-only proof remains historical and does not cover this UI.
 
 Shared CI [43018223144](https://github.com/shubolab/opennavicat/actions/runs/43018223144)
 on main commit `6a2bac5e00ef8b332bfe6dea74fc0bbde2bafb99` completed all **7 jobs
 successfully**: six native desktop targets and the database-security job. The
 collection/time-series/copy/maintenance runner passed inside that job with
 create/design, drop/clear/rename, time-series, staged-copy, validation, reIndex and
-compact scope, and each desktop job completed source tests, helper qualification,
+compact scope; the current branch adds the ordinary-view and metadata-inspector
+scope described above. Each desktop job completed source tests, helper qualification,
 packaging, installation, launch and uninstall for its target. This is a
 main-branch preflight, not a tag, public Release or six-installer download
 acceptance. macOS amd64 runs exposed existing JS output/null tests racing helper
@@ -249,15 +287,16 @@ user workspaces and Navicat configuration are not used.
 Additional Linux WSL amd64 checks in this checkpoint:
 
 - `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q -W error`:
-  **1486 passed, 508 conditionally skipped, 0 failed/error**. Default-service
+  **1492 passed, 521 conditionally skipped, 0 failed/error**. Default-service
   skips are not counted as real database execution; the owned runner above
   covers this feature's Mongo scope without skips.
 - `.venv/bin/python -m opennavicat --smoke-test`: **passed**, 6 rows / 4 columns,
   Qt 6.12.0, PyMongo adapter/BSON/TLS construction and the pinned native
   JavaScript helper probes all succeeded.
-- The new five offline designer tests cover option parsing, 256-byte size gate,
-  invalid JSON isolation, preview/save confirmation, unsupported raw read-only
-  state and typed error projection.
+- The offline collection/time-series/view designer and inspector tests cover
+  option parsing, the 256-byte size gate, document/array JSON isolation,
+  preview/save confirmation, unsupported raw read-only state and typed error
+  projection.
 
 These source checks do not replace the six native installers, Windows/macOS GUI
 acceptance, or the original Navicat runtime comparison.

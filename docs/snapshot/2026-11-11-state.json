@@ -6,9 +6,11 @@
   "goal": {
     "complete": false,
     "handoff_requested_by_user": true,
-    "pause_after_committed_handoff": true,
+    "pause_after_committed_handoff": false,
     "scope": "Independent native Qt; complete Navicat database tools and 1:1 UI on Windows/Linux/macOS",
-    "excluded": "Product account/login/registration/activation/subscription/cloud-account-team collaboration only"
+    "excluded": "Product account/login/registration/activation/subscription/cloud-account-team collaboration only",
+    "clear_record_after_committed_handoff_requested": true,
+    "last_observed_record_status": "paused"
   },
   "reference": {
     "path": "/Users/wangshubo/Downloads/Navicat Premium.app",
@@ -42,7 +44,7 @@
     "version": "0.9.0",
     "branch": null,
     "source_sha": "92079b928f41d00c2b5ed2deeaabd7c20d200d44",
-    "worktree": "../opennavicat-next-09",
+    "worktree": null,
     "integration_sha": "f9c492362afe750510b3c01057bc794991d35ad1",
     "tag_created": false,
     "formal_run_started": false,
@@ -104,8 +106,10 @@
     },
     "historical_ci_branch": "work/0.9-release",
     "included_in_main": true,
-    "worktree_mode": "detached",
-    "main_merge_sha_is_not_exact_preflight_sha": true
+    "worktree_mode": "removed_after_verified_archive",
+    "main_merge_sha_is_not_exact_preflight_sha": true,
+    "historical_worktree": "../opennavicat-next-09",
+    "local_evidence_archive": "../opennavicat-archive/2026-11-11-worktrees/worktrees/opennavicat-next-09/artifacts"
   },
   "future_checkpoints": [
     {
@@ -113,24 +117,27 @@
       "branch": "work/mongodb-collection-designer",
       "sha": "c9f536aef83e88d3b5092012eaafd43567c62f14",
       "base_sha": "f9c492362afe750510b3c01057bc794991d35ad1",
-      "worktree": "../opennavicat-mongo-collections",
+      "worktree": "../opennavicat-mongodb-next",
       "new_files": 4,
       "qualification_passed": 53,
       "qualification_skipped": 0,
       "fresh_fixtures": 1,
       "fixture_cleanup_verified": true,
-      "receipt": "../opennavicat-mongo-collections/artifacts/mongo-collections/checkpoint-final/summary.json",
+      "receipt": "../opennavicat-archive/2026-11-11-worktrees/worktrees/opennavicat-mongo-collections/artifacts/mongo-collections/checkpoint-final/summary.json",
       "integrated_into_candidate": false,
       "original_branch_deleted": true,
       "current_branch": "work/mongodb-collections-next",
-      "original_worktree_mode": "detached"
+      "original_worktree_mode": "removed_after_verified_archive",
+      "original_worktree": "../opennavicat-mongo-collections",
+      "local_evidence_archive": "../opennavicat-archive/2026-11-11-worktrees/worktrees/opennavicat-mongo-collections/artifacts",
+      "original_receipt": "../opennavicat-mongo-collections/artifacts/mongo-collections/checkpoint-final/summary.json"
     },
     {
       "topic": "Static collection designer reference; not runtime observation",
       "branch": "work/mongodb-collection-reference",
       "sha": "d6ec9ea1c48fba0d3937011e9aa8d01ea83bb291",
       "base_sha": "92079b928f41d00c2b5ed2deeaabd7c20d200d44",
-      "worktree": "../opennavicat-mongo-collection-reference",
+      "worktree": "../opennavicat-mongodb-next",
       "new_files": 1,
       "nib_files": 11,
       "nodes": 1709,
@@ -139,7 +146,9 @@
       "runtime_pages_defaults_save_cancel_verified": false,
       "original_branch_deleted": true,
       "current_branch": "work/mongodb-collections-next",
-      "original_worktree_mode": "detached"
+      "original_worktree_mode": "removed_after_verified_archive",
+      "original_worktree": "../opennavicat-mongo-collection-reference",
+      "local_evidence_archive": "../opennavicat-archive/2026-11-11-worktrees/worktrees/opennavicat-mongo-collection-reference/artifacts"
     }
   ],
   "parity_ledger": {
@@ -157,12 +166,14 @@
     "wsl_without_desktop_gui_deferred": true,
     "do_not_install_wsl_desktop": true,
     "old_primary_dist_application_preserved": true,
-    "unknown_older_worktrees_and_ignored_evidence_preserved": true,
     "raw_evidence_and_local_artifacts_not_in_git": true,
-    "previous_mongodb_and_redis_reference_services_retained": true
+    "previous_mongodb_and_redis_reference_services_retained": true,
+    "six_dirty_original_worktrees_preserved": true,
+    "old_clean_evidence_privately_archived_before_removal": true,
+    "legacy_evidence_preserved_in_private_archive": true
   },
   "next_steps": [
-    "Verify main/next refs, exact historical commits, clean/dirty worktree boundaries and this handoff plus parity ledger",
+    "Read handoff and directory archive record; verify main/next refs, retained dirty boundaries and exact historical source commits",
     "Independently complete formal 0.9 tag CI and public verification if resuming release",
     "Preserve frozen 920 or requalify any new source SHA; do not reset main or retag",
     "Preserve frozen 920 or qualify new source SHA; do not reset main, retag or remerge already-consolidated commits",
@@ -178,9 +189,9 @@
     "next_product_merge_checkpoint": "5701b5405dbb8ceda1293c884cab26c3bf62167f",
     "deleted_local_branches": 26,
     "deleted_remote_branches": 20,
-    "preserved_detached_worktrees": 25,
+    "preserved_detached_worktrees": 6,
     "preserved_dirty_worktrees": 6,
-    "no_worktree_directory_removed": true,
+    "no_worktree_directory_removed": false,
     "archive_tag": "archive/2026-11-11-branch-consolidation",
     "archive_commit": "389497532a46c1754d5f97dfedfb98a4720f8c78",
     "branch_tip_index": "2026-11-11-branches.json",
@@ -192,7 +203,105 @@
       "../opennavicat-object-designers",
       "../opennavicat-redis-adapter",
       "../opennavicat-sqlserver-adapter"
-    ]
+    ],
+    "initial_preserved_detached_worktrees": 25
   },
-  "updated_at": "2026-11-11T10:44:10+08:00"
+  "updated_at": "2026-11-11T11:05:23+08:00",
+  "worktree_cleanup": {
+    "record": "2026-11-11-worktrees.md",
+    "removed_clean_worktrees": 19,
+    "remaining_worktrees": 8,
+    "active_worktrees": 2,
+    "dirty_worktrees_preserved": 6,
+    "dirty_bytes_unchanged": true,
+    "archive_root": "../opennavicat-archive/2026-11-11-worktrees",
+    "archive_permission": "0700",
+    "regular_files": 6882,
+    "symlinks": 480,
+    "file_bytes": 5051429617,
+    "git_bundle_bytes": 6931409,
+    "git_bundle_sha256": "ef3c7ac8ede95d7f31322bfc5520bc22d19041bbf4f3f98f37b5aeda1a903225",
+    "source_and_archive_tree_hash_mode_links_verified": true,
+    "independent_bundle_restore_original_27_heads": true,
+    "post_removal_archive_verification": true,
+    "raw_private_archive_committed_to_git": false,
+    "removed": [
+      {
+        "name": "opennavicat-combo-native",
+        "head": "c038464327905a616b4fbfaa8320f3e2c7bcf109"
+      },
+      {
+        "name": "opennavicat-connection-lifecycle",
+        "head": "918d95328179c3cfc18d2c9b62dba45a923f4ebf"
+      },
+      {
+        "name": "opennavicat-integration",
+        "head": "39598f5e405f9b42bc1dfe474b5107e9105b2743"
+      },
+      {
+        "name": "opennavicat-js-engine",
+        "head": "723b227c786a3ae6022b6fb977fa2d3d5df1f5e8"
+      },
+      {
+        "name": "opennavicat-js-index-helpers",
+        "head": "82831724bb022d2a58b559a3395f2fcbdea3aa7b"
+      },
+      {
+        "name": "opennavicat-js-integration-candidate",
+        "head": "36071bec1fc86973c6e66dd6794117a01c3f225e"
+      },
+      {
+        "name": "opennavicat-linux-discovery",
+        "head": "e5f81b11326ae0bef2a26dedb3a7fadb99a9baf2"
+      },
+      {
+        "name": "opennavicat-linux-integration",
+        "head": "34619a79b2d9ba3c92669245b981754a0ebeead9"
+      },
+      {
+        "name": "opennavicat-mongo-cancel",
+        "head": "6f46795c7a4af073a539b2ada956bb977196afda"
+      },
+      {
+        "name": "opennavicat-mongo-collection-reference",
+        "head": "d6ec9ea1c48fba0d3937011e9aa8d01ea83bb291"
+      },
+      {
+        "name": "opennavicat-mongo-collections",
+        "head": "c9f536aef83e88d3b5092012eaafd43567c62f14"
+      },
+      {
+        "name": "opennavicat-mongo-index-designer",
+        "head": "ec8eb4cf7a3aca1dd866b8e57801fa22306207e0"
+      },
+      {
+        "name": "opennavicat-mongo-selection",
+        "head": "3c0a2c59218962e41d1eb276709a05cadaf7cca0"
+      },
+      {
+        "name": "opennavicat-mongo-tree",
+        "head": "e3e6b19e0a8baca178942398cad84f5ba2e0012f"
+      },
+      {
+        "name": "opennavicat-mongodb",
+        "head": "cd189a01eaaeeabeb219bf03aebc94655f4f3fe1"
+      },
+      {
+        "name": "opennavicat-next",
+        "head": "e7b0e1ac986db32b4c216df78c25146f163b760f"
+      },
+      {
+        "name": "opennavicat-next-09",
+        "head": "92079b928f41d00c2b5ed2deeaabd7c20d200d44"
+      },
+      {
+        "name": "opennavicat-port-native",
+        "head": "5e7f0bd10fbb83fd1aa71fd6e0fdebf6b0759311"
+      },
+      {
+        "name": "opennavicat-windows-discovery",
+        "head": "a0a5dd2f414e85fc64cf470da693ce446117ff27"
+      }
+    ]
+  }
 }

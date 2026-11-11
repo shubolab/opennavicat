@@ -1,6 +1,7 @@
 """Mandatory CI package gates and mirror fallback, without running host apt."""
 import importlib.util
 from pathlib import Path
+import re
 from types import SimpleNamespace
 
 import pytest
@@ -182,6 +183,31 @@ def test_profiles_select_glib_for_the_actual_ubuntu_release():
     assert "libglib2.0-0t64" in helper.packages_for("desktop", "noble")
     assert "fonts-noto-cjk" in helper.packages_for("desktop", "noble")
     assert "redis-server" in helper.packages_for("database-security", "jammy")
+    assert not {"fonts-noto-cjk", "xvfb", "libxcb-xinerama0"} & set(
+        helper.packages_for("database-security", "jammy"))
+
+
+@pytest.mark.parametrize("architecture", ["amd64", "arm64"])
+@pytest.mark.parametrize("codename,libc_version", [("jammy", "2.35"), ("noble", "2.39")])
+def test_desktop_preflight_covers_every_actual_deb_dependency_group(architecture, codename, libc_version):
+    specification = importlib.util.spec_from_file_location("dependency_contract_installer", ROOT / "scripts/package-installer.py")
+    installer = importlib.util.module_from_spec(specification)
+    specification.loader.exec_module(installer)
+    control = installer.debian_control("0.9.0", architecture, 12345, libc_version)
+    dependencies = next(line.removeprefix("Depends: ") for line in control.splitlines()
+                        if line.startswith("Depends: "))
+    preinstalled = set(helper.packages_for("desktop", codename))
+    missing_groups = []
+    for group in dependencies.split(","):
+        alternatives = {re.split(r"\s|\(", alternative.strip(), maxsplit=1)[0]
+                        for alternative in group.split("|")}
+        if not alternatives & preinstalled:
+            missing_groups.append(group.strip())
+    assert not missing_groups, (
+        f"{architecture}/{codename} would resolve missing DEB dependencies against the runner's "
+        f"default sources during installed-package verification: {missing_groups}"
+    )
+    assert len(preinstalled) == len(helper.packages_for("desktop", codename))
 
 
 @pytest.mark.parametrize("sources", [helper.official_sources, helper.tuna_sources])

@@ -42,8 +42,18 @@ def ubuntu_codename(path=Path("/etc/os-release")):
 def packages_for(profile, codename):
     glib = "libglib2.0-0" if codename == "jammy" else "libglib2.0-0t64"
     if profile == "desktop":
-        return COMMON + ("libxcb-icccm4", "libxcb-keysyms1", "libxcb-shape0", glib,
-                         "fonts-noto-cjk", "xvfb", "xauth")
+        # Preinstall every DEB Depends group, including libraries already on
+        # most hosted images. Native installer verification must not discover
+        # a missing library and fetch it through the runner's default mirror.
+        # tests/test_linux_dependencies.py compares this with debian_control.
+        return COMMON + (
+            "libc6", "libstdc++6", "libgcc-s1", "libgl1", glib,
+            "libdbus-1-3", "libxkbcommon0", "libxcb1", "libx11-xcb1",
+            "libxcb-icccm4", "libxcb-keysyms1", "libxcb-image0", "libxcb-render-util0",
+            "libxcb-shape0", "libxcb-randr0", "libxcb-xfixes0", "libxcb-sync1",
+            "libxcb-xinerama0", "libxcb-util1", "libxcb-xkb1", "libxcb-glx0",
+            "libfontconfig1", "libfreetype6", "fonts-noto-cjk", "xvfb", "xauth",
+        )
     if profile == "database-security":
         return COMMON + (glib, "redis-server")
     raise ValueError("Unknown dependency profile")

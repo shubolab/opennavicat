@@ -1,12 +1,13 @@
-# Ordinary MongoDB collection designer backend checkpoint
+# Ordinary MongoDB collection designer checkpoint
 
-This independent branch starts at `f9c492362afe750510b3c01057bc794991d35ad1`.
-It adds a backend and fresh-service qualification, without changing main, the
-shared 0.9 tree, versions, UI, packaging or published installers. **The original
-Navicat collection designer pages and save behavior have not been observed.**
-M18-02/03 in [the existing reference record](ui-reference-18-mongodb.md) establish
-the presence of new ordinary/time-series, design and delete menu entries only.
-MongoDB command documentation is not substituted for that missing UI evidence.
+This branch starts from the released 0.9.0 product tree and adds both the sealed
+backend and an embedded MainWindow collection designer. It does not change the
+published 0.9.0 installers. **The original Navicat collection designer pages and
+save behavior still have not been observed.** M18-02/03 in [the existing reference
+record](ui-reference-18-mongodb.md) establish the ordinary/time-series, design and
+delete menu entries; the focused NIB report supplies control names and hierarchy.
+MongoDB command documentation and those static resources are not substituted for
+missing runtime UI evidence.
 
 ## Contract
 
@@ -74,6 +75,42 @@ manual's newer features. `validationLevel=constraint` is not silently enabled.
 See the [8.0 create command](https://www.mongodb.com/docs/v8.0/reference/command/create/)
 and [8.0 collMod command](https://www.mongodb.com/docs/v8.0/reference/command/collmod/).
 
+## Embedded designer
+
+`opennavicat.ui.mongo_collection_designer` provides the first ordinary-collection
+UI slice backed only by capabilities in this module:
+
+- New and existing ordinary collections open in a dedicated tab with collection
+  options, validation, collation, raw server BSON and script preview.
+- Name, capped/size/max, validator, validation level/action and collation are
+  edited as a detached draft. Capped size is bounded to whole 256-byte units.
+- Canonical Extended JSON parsing retains BSON integer and nested value types.
+  Invalid JSON, non-document values and integer overflow remain dirty input but
+  cannot produce a plan, enable Save or emit a save request.
+- The save sheet requires the exact reviewed plan before dispatch. It can show
+  the UUID-guarded execution script or raw BSON command; a display-only base64
+  BSON envelope is never presented as executable JavaScript.
+- Unsupported existing options, non-UUID ordinary collections, views,
+  time-series and GridFS-managed namespaces display the retained raw catalog BSON
+  read-only. No-op inspection remains available.
+- MainWindow owns every `load_collection`, `new_collection`, `plan_collection`
+  and `apply_plan` call on its serial database worker. A separate cancel pool sets
+  cooperative cancellation and, while a command is active, uses the captured
+  Mongo cancellation marker.
+- Collection design tabs participate in the shared dirty-close/disconnect flow.
+  Saved plans are always revalidated against the current session and snapshot;
+  a confirmed plan is not reused after the draft or connection changes.
+- The object page enables New/Design Collection, the tree right-click exposes
+  Design Collection, and named open designers deduplicate by connection, schema
+  and collection. Named existing designers are restorable; unsaved option values
+  are not persisted across process restart.
+
+The current tabs and labels are an implementation scaffold informed by static
+resources, not a claim that the original runtime order, defaults, enablement or
+save workflow matches Navicat. Fields, index, foreign-key and virtual-relation
+pages from the resource report are not yet implemented because the current sealed
+backend cannot execute those complete workflows.
+
 ## Identity, concurrency and create idempotency
 
 Loading reads only the exact requested catalog row through PyMongo's public
@@ -138,20 +175,40 @@ PYTHONPATH=. python scripts/test-mongodb-collections.py \
   --evidence artifacts/mongo-collections/a-new-run
 ```
 
-This standalone runner dynamically collects every parametrized case in
-`tests/test_mongodb_collections.py`, requires the exact complete set with zero
-skips/errors/failures, creates one new authenticated loopback-only MongoDB
-container and verifies native image/daemon architecture, readiness and exact
-identity/cleanup. It reuses the existing receipt-backed, run-label-specific
-emergency cleanup for timeout/interrupt. It never accepts a reference endpoint.
-Logs/receipts exclude Docker environment dumps and private certificate/key/URI
-files. The existing shared release protocol runner is unchanged; this new scope
-is not claimed to be part of released CI until explicitly integrated.
+The runner dynamically collects every case in
+`tests/test_mongodb_collections.py` plus the real MainWindow collection-designer
+test, requires the exact complete set with zero skips/errors/failures, creates
+two new authenticated loopback-only MongoDB containers (one per test module) and
+verifies native image/daemon architecture, readiness and exact identity/cleanup.
+It reuses the receipt-backed, run-label-specific emergency cleanup for
+timeout/interrupt. It never accepts a reference endpoint. Logs/receipts exclude
+Docker environment dumps and private certificate/key/URI files.
 
-The local proof is native macOS ARM64 Python/PyMongo with an ARM64 MongoDB
-container. It does not qualify Windows/Linux helpers, packaged integration or
-six native installers. Existing fixtures/reference data, user workspaces,
-Navicat configuration and the retained Dell environment are not used.
+The current Linux WSL amd64 proof passed **55 cases with zero skips** and two
+independently cleaned MongoDB 8.0.34 fixtures. The shared database-security CI job
+now declares this runner; a branch run has not yet been claimed as six-target or
+packaged qualification. The earlier macOS ARM64 backend-only proof remains
+historical and does not cover this UI.
+
+The proof does not qualify Windows/macOS UI, packaged integration or six native
+installers. Existing fixtures/reference data, user workspaces, Navicat
+configuration and the retained Dell environment are not used.
+
+Additional Linux WSL amd64 checks in this checkpoint:
+
+- `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q -W error`:
+  **1396 passed, 544 conditionally skipped, 0 failed/error**. Default-service
+  skips are not counted as real database execution; the owned runner above
+  covers this feature's Mongo scope without skips.
+- `.venv/bin/python -m opennavicat --smoke-test`: **passed**, 6 rows / 4 columns,
+  Qt 6.12.0, PyMongo adapter/BSON/TLS construction and the pinned native
+  JavaScript helper probes all succeeded.
+- The new five offline designer tests cover option parsing, 256-byte size gate,
+  invalid JSON isolation, preview/save confirmation, unsupported raw read-only
+  state and typed error projection.
+
+These source checks do not replace the six native installers, Windows/macOS GUI
+acceptance, or the original Navicat runtime comparison.
 
 Before integrating a designer, collect the original page/default/enablement,
 preview/save/cancel/error/reopen evidence on an owned fixture. Then wire a

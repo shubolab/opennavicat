@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Qualify only the ordinary-collection backend with fresh, exact-owned MongoDB.
+"""Qualify ordinary-collection backend and MainWindow UI with fresh MongoDB.
 
 This standalone checkpoint does not widen the released database-security job's
 scope. Missing prerequisites/skips are failures, not protocol acceptance.
@@ -23,13 +23,18 @@ import pymongo
 
 
 ROOT = Path(__file__).resolve().parents[1]
-TARGET = 'tests/test_mongodb_collections.py'
+TARGETS = [
+    'tests/test_mongodb_collections.py',
+    'tests/test_mongo_window.py::test_real_collection_designer_creates_and_collmods_with_worker_owned_io',
+    'tests/test_mongo_window.py::test_real_window_stop_inflight_collection_uses_cancel_pool_and_preserves_draft',
+]
+EXPECTED_FIXTURE_MODULES = {'test_mongodb_collections', 'test_mongo_window'}
 COLLECT = '''import json,sys,pytest
 from pathlib import Path
 class Collect:
  def pytest_collection_finish(self,session):
-  Path(sys.argv[1]).write_text(json.dumps([item.nodeid for item in session.items],indent=2)+'\\n')
-raise SystemExit(pytest.main([sys.argv[2],'--collect-only','-q'],plugins=[Collect()]))
+  Path(sys.argv[1]).write_text(json.dumps([item.nodeid for item in session.items],indent=2)+chr(10))
+raise SystemExit(pytest.main([*sys.argv[2:],'--collect-only','-q'],plugins=[Collect()]))
 '''
 
 
@@ -42,33 +47,38 @@ def main():
     if directory.exists(): raise RuntimeError('Use a new evidence directory for each qualification')
     directory.mkdir(parents=True)
     run_id = uuid.uuid4().hex
-    environment = dict(os.environ, PYTHONPATH=str(ROOT), OPENNAVICAT_TEST_MONGODB='1',
+    environment = dict(os.environ, PYTHONPATH=str(ROOT), OPENNAVICAT_TEST_MONGODB='1', QT_QPA_PLATFORM='offscreen',
         OPENNAVICAT_MONGODB_PROTOCOL_RUN_ID=run_id,
         OPENNAVICAT_MONGODB_PROTOCOL_REPORT_DIR=str(directory / 'fixtures'))
     environment.pop('OPENNAVICAT_TEST_MONGODB_ENDPOINT', None)
     environment.pop('PYTEST_ADDOPTS', None)
     spec = importlib.util.spec_from_file_location('owned_mongodb_fixture_cleanup', ROOT / 'scripts/test-mongodb-protocol.py')
     cleanup = importlib.util.module_from_spec(spec); spec.loader.exec_module(cleanup)
-    summary = {'verified': False, 'scope': [TARGET], 'run_id': run_id,
-        'reference_endpoint_used': False, 'execution_scope': 'ordinary-collection-backend-only', 'emergency_removed': [],
+    summary = {'verified': False, 'scope': TARGETS, 'run_id': run_id,
+        'reference_endpoint_used': False, 'execution_scope': 'ordinary-collection-backend-and-mainwindow', 'emergency_removed': [],
         'runtime': {'system': platform.system(), 'machine': platform.machine(), 'python': platform.python_version(),
             'pymongo': pymongo.version, 'bson_c': bson.has_c()},
         'base_revision': subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=ROOT, check=True, capture_output=True, text=True).stdout.strip(),
         'source_sha256': {path: hashlib.sha256((ROOT / path).read_bytes()).hexdigest() for path in
-            ('opennavicat/mongodb_collections.py', 'opennavicat/mongodb_session.py', 'opennavicat/js_engine/server_errors.py',
-             TARGET, 'tests/test_mongodb_session.py', 'scripts/test-mongodb-collections.py')}}
+            ('opennavicat/mongodb_collections.py', 'opennavicat/mongodb_session.py',
+             'opennavicat/ui/mongo_collection_designer.py', 'opennavicat/ui/window.py',
+             'opennavicat/ui/workspace.py', 'opennavicat/js_engine/server_errors.py',
+             'tests/test_mongodb_collections.py', 'tests/test_mongodb_session.py',
+             'tests/test_mongo_collection_designer_ui.py', 'tests/test_mongo_window.py',
+             '.github/workflows/build.yml', 'scripts/test-mongodb-collections.py')}}
     process = None
     try:
         if summary['runtime']['bson_c'] is not True:
             raise RuntimeError('Native protocol qualification requires the actual BSON C extension')
         with (directory / 'collection.log').open('w') as output:
-            subprocess.run([sys.executable, '-c', COLLECT, str(directory / 'required-cases.json'), TARGET],
+            subprocess.run([sys.executable, '-c', COLLECT, str(directory / 'required-cases.json'), *TARGETS],
                 cwd=ROOT, env=environment, stdout=output, stderr=subprocess.STDOUT, check=True, timeout=60)
         expected = json.loads((directory / 'required-cases.json').read_text())
-        if not expected or any(not node.startswith(TARGET + '::') for node in expected) or len(set(expected)) != len(expected):
+        if (not expected or any(not any(node == target or node.startswith(target + '::') for target in TARGETS) for node in expected)
+                or len(set(expected)) != len(expected)):
             raise RuntimeError('Collection manifest did not identify the exact declared scope')
         with (directory / 'pytest.log').open('w') as output:
-            process = subprocess.Popen([sys.executable, '-m', 'pytest', '-q', '-W', 'error', TARGET,
+            process = subprocess.Popen([sys.executable, '-m', 'pytest', '-q', '-W', 'error', *TARGETS,
                 '--junitxml=' + str(directory / 'results.xml')], cwd=ROOT, env=environment,
                 stdout=output, stderr=subprocess.STDOUT)
             try:
@@ -87,8 +97,11 @@ def main():
             raise RuntimeError('Ordinary-collection qualification did not pass the entire exact scope without skips')
         fixtures = [json.loads(path.read_text()) for path in (directory / 'fixtures').glob('fixture-*.json')]
         fixtures = [value for value in fixtures if value.get('run_id') == run_id]
-        if len(fixtures) != 1 or fixtures[0].get('module') != 'test_mongodb_collections' or any(fixtures[0].get(key) is not True for key in (
-                'cleanup_removed', 'owner_token_verified', 'port_loopback_only', 'native_docker_architecture_matches', 'external_auth_readiness')):
+        if ({fixture.get('module') for fixture in fixtures} != EXPECTED_FIXTURE_MODULES
+                or len(fixtures) != len(EXPECTED_FIXTURE_MODULES)
+                or any(fixture.get(key) is not True for fixture in fixtures for key in (
+                    'cleanup_removed', 'owner_token_verified', 'port_loopback_only',
+                    'native_docker_architecture_matches', 'external_auth_readiness'))):
             raise RuntimeError('Required exact-owned native fixture/cleanup proof is missing')
         summary['fixtures'] = fixtures
         summary['verified'] = True

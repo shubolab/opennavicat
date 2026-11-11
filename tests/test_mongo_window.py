@@ -21,6 +21,7 @@ from opennavicat.mongodb_session import MongoSession, canonical_dumps, canonical
 from opennavicat.storage import Store
 from opennavicat.ui.mongo_browser import MongoCollectionPage
 from opennavicat.ui.mongo_gridfs import MongoGridFSPage
+from opennavicat.ui.mongo_collection_designer import MongoCollectionDesignerPage
 from opennavicat.ui.window import MainWindow, TablePage
 from test_mongodb_session import mongodb_service  # Reuse the owned-container fixture contract.
 
@@ -126,6 +127,51 @@ def test_real_window_mongo_tree_statistics_typed_page_and_sqlite_switch(qtbot, m
     assert window.category_actions["trigger"].isVisible() and not window.mongo_pipeline_action.isVisible()
     assert threads and not errors
 
+
+def test_real_collection_designer_creates_and_collmods_with_worker_owned_io(qtbot, mongo_window):
+    window, config, database, schema, errors, threads = mongo_window
+    page = window.open_mongo_collection_designer(config.id, config.database)
+    assert isinstance(page, MongoCollectionDesignerPage)
+    qtbot.waitUntil(lambda: page.snapshot is not None and not page.loading, timeout=15000)
+    page.name_edit.setText("ui_created")
+    page.validator_editor.setPlainText('{"score": {"$gte": 0}}')
+    page.level_combo.setCurrentIndex(page.level_combo.findData("strict"))
+    page.action_combo.setCurrentIndex(page.action_combo.findData("error"))
+    page.request_save()
+    dialog = page._save_dialog
+    assert dialog is not None
+    qtbot.waitUntil(dialog.save_button.isEnabled, timeout=15000)
+    dialog.save_button.click()
+    idle(qtbot, window)
+    assert page.snapshot.exists and page.snapshot.name == "ui_created"
+    assert {"docs", "owned_view", "ui_created"} <= set(database.list_collection_names())
+    assert database.ui_created.find_one({"score": 1}) is None
+    with pytest.raises(Exception):
+        database.ui_created.insert_one({"score": -1})
+
+    page.validator_editor.setPlainText('{"score": {"$gte": 1}}')
+    page.request_save()
+    dialog = page._save_dialog
+    qtbot.waitUntil(dialog.save_button.isEnabled, timeout=15000)
+    dialog.save_button.click()
+    idle(qtbot, window)
+    database.ui_created.insert_one({"score": 1})
+    with pytest.raises(Exception):
+        database.ui_created.insert_one({"score": 0})
+    assert page.snapshot.exists and page.snapshot.definition.options["validator"] == {"score": {"$gte": 1}}
+
+    window.set_active(config.id, config.database)
+    window.show_objects("table")
+    idle(qtbot, window)
+    browser = window.object_page
+    row = next(index for index, entry in enumerate(browser.records) if entry["name"] == "ui_created")
+    browser.table.setCurrentCell(row, 0)
+    browser.update_actions()
+    assert browser.new_action.isEnabled() and browser.design_action.isEnabled()
+    assert not browser.delete_action.isEnabled()
+    entry = dict(browser.selected(), table="ui_created")
+    assert window.design_object(entry) is page
+    assert not errors and threads
 
 def test_real_mongo_view_uses_typed_readonly_workspace(qtbot, mongo_window):
     window, config, database, schema, errors, threads = mongo_window
@@ -282,3 +328,51 @@ def test_closing_mongo_connection_cannot_queue_new_metadata_or_after_callback(qt
         release.set()
     qtbot.waitUntil(lambda: config.id not in window.sessions, timeout=15000); idle(qtbot, window)
     assert not errors
+
+
+def test_real_window_stop_inflight_collection_uses_cancel_pool_and_preserves_draft(qtbot, mongo_window, monkeypatch):
+    window, config, database, schema, errors, threads = mongo_window
+    page = window.open_mongo_collection_designer(config.id, config.database)
+    qtbot.waitUntil(lambda: page.snapshot is not None and not page.loading, timeout=15000)
+    page.name_edit.setText("blocked_collection")
+    page.validator_editor.setPlainText('{"n": {"$gte": 0}}')
+    page.request_save()
+    dialog = page._save_dialog
+    qtbot.waitUntil(dialog.save_button.isEnabled, timeout=15000)
+    session = window.sessions[config.id]
+    calls = []
+    original = MongoSession.cancel
+    def cancel(self, *args, **kwargs):
+        assert threading.get_ident() != threading.main_thread().ident
+        calls.append(deepcopy(kwargs))
+        return original(self, *args, **kwargs)
+    monkeypatch.setattr(MongoSession, "cancel", cancel)
+    database.client.admin.command({"fsync": 1, "lock": True})
+    try:
+        qtbot.mouseClick(dialog.save_button, Qt.MouseButton.LeftButton)
+        def active_create():
+            marker = session.cancellation_marker()
+            if marker is None:
+                return False
+            rows = database.client.admin.aggregate([
+                {"$currentOp": {"allUsers": False}},
+                {"$match": {"command.comment": marker, "command.create": "blocked_collection"}},
+            ])
+            return any(rows)
+        qtbot.waitUntil(active_create, timeout=15000)
+        marker = session.cancellation_marker()
+        window.stop_action.trigger()
+        qtbot.waitUntil(lambda: not window._mongo_collection_jobs and not window._cancelling, timeout=15000)
+    finally:
+        database.client.admin.command({"fsyncUnlock": 1})
+        idle(qtbot, window)
+    assert calls == [{"expected_comment": marker}]
+    assert page.dirty and not page.loading and "取消" in page.message.text()
+    assert "blocked_collection" not in database.list_collection_names()
+
+    page.request_save()
+    dialog = page._save_dialog
+    qtbot.waitUntil(dialog.save_button.isEnabled, timeout=15000)
+    qtbot.mouseClick(dialog.save_button, Qt.MouseButton.LeftButton)
+    idle(qtbot, window)
+    assert "blocked_collection" in database.list_collection_names() and not page.dirty

@@ -165,6 +165,10 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: python scripts/test-mongodb-security.py --evidence artifacts/security-integration/mongodb-security
+      - name: Verify ordinary MongoDB collection backend and designer
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python scripts/test-mongodb-collections.py --evidence artifacts/security-integration/mongodb-collections
       - name: Verify native JavaScript parent-authoritative reads writes and cancellation
         run: python scripts/test-js-engine.py --mode protocol --evidence artifacts/security-integration/mongodb-js-protocol
       - name: Verify actual Qt and MainWindow JavaScript routes on fresh MongoDB

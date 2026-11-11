@@ -51,6 +51,70 @@ def make_plan(source, definition, sql="CREATE INDEX planned ON items(label)"):
     return objects.ObjectPlan(deepcopy(source), deepcopy(definition), [sql], sql + ";", True)
 
 
+@pytest.mark.parametrize("kind", ["collection", "timeseries", "view"])
+@pytest.mark.parametrize("entry", ["direct", "tab", "timer"])
+def test_invalid_mongo_draft_preview_preserves_input_and_recovers(qtbot, kind, entry):
+    from opennavicat.mongodb_collections import CollectionDefinition, CollectionSnapshot
+    from opennavicat.mongodb_timeseries import TimeSeriesDefinition, TimeSeriesSnapshot
+    from opennavicat.mongodb_views import ViewDefinition, ViewSnapshot
+    from opennavicat.ui.mongo_collection_designer import MongoCollectionDesignerPage
+    from opennavicat.ui.mongo_timeseries_designer import MongoTimeSeriesDesignerPage
+    from opennavicat.ui.mongo_view_designer import MongoViewDesignerPage
+
+    if kind == "collection":
+        page = MongoCollectionDesignerPage("generated", "demo_catalog")
+        snapshot = CollectionSnapshot("demo_catalog", "", CollectionDefinition(), exists=False)
+    elif kind == "timeseries":
+        page = MongoTimeSeriesDesignerPage("generated", "demo_catalog")
+        snapshot = TimeSeriesSnapshot("demo_catalog", "", TimeSeriesDefinition(), exists=False)
+    else:
+        page = MongoViewDesignerPage("generated", "demo_catalog")
+        snapshot = ViewSnapshot("demo_catalog", "", ViewDefinition(), exists=False)
+    qtbot.addWidget(page)
+    page.load_snapshot(snapshot)
+    page.name_edit.setText("generated_object")
+    if kind == "collection":
+        input_widget, invalid, valid = page.validator_editor, "{broken", '{"score": {"$gte": 0}}'
+        read_input, write_input = input_widget.toPlainText, input_widget.setPlainText
+    elif kind == "timeseries":
+        page.time_field_edit.setText("time")
+        input_widget, invalid, valid = page.expire_edit, "not-an-integer", "3600"
+        read_input, write_input = input_widget.text, input_widget.setText
+    else:
+        page.set_sources(["docs"])
+        page.source_combo.setCurrentText("docs")
+        input_widget, invalid, valid = page.pipeline_editor, "{broken", '[{"$match": {"active": true}}]'
+        read_input, write_input = input_widget.toPlainText, input_widget.setPlainText
+    previews, saves = [], []
+    page.previewRequested.connect(previews.append)
+    page.saveRequested.connect(saves.append)
+
+    if entry == "timer":
+        page.tabs.setCurrentIndex(page.tabs.count() - 1)
+        previews.clear()
+        with qtbot.waitSignal(page.preview_timer.timeout, timeout=1000):
+            write_input(invalid)
+    else:
+        write_input(invalid)
+        if entry == "tab":
+            page.tabs.setCurrentIndex(page.tabs.count() - 1)
+        else:
+            page.request_preview()
+    assert not previews and not saves
+    assert page.dirty and page._invalid and not page.save_action.isEnabled()
+    assert read_input() == invalid
+    assert all(error in page.message.text() for error in page._invalid.values())
+    assert page._plan is None and page.confirmed_plan is None
+
+    with qtbot.waitSignal(page.previewRequested, timeout=1000):
+        write_input(valid)
+        if entry == "direct":
+            page.request_preview()
+    assert len(previews) == 1 and previews[0] == page.draft()
+    assert not page._invalid and page.dirty and page.save_action.isEnabled()
+    assert read_input() == valid and not saves
+
+
 def test_index_inline_terms_are_ordered_structured_and_metadata_is_not_an_edit(qtbot, index_page):
     page = index_page
     source = index_snapshot()

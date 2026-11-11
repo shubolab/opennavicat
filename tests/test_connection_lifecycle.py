@@ -278,6 +278,60 @@ def confirm_ddl(qtbot, page):
     qtbot.mouseClick(preview.save_button, Qt.MouseButton.LeftButton)
 
 
+@pytest.mark.parametrize('action', ['close_tab', 'disconnect'])
+@pytest.mark.parametrize('kind', ['collection', 'timeseries', 'view'])
+def test_invalid_mongo_designer_save_cannot_leave_a_stale_close_retry(qtbot, host, monkeypatch, kind, action):
+    from opennavicat.mongodb_collections import CollectionDefinition, CollectionSnapshot
+    from opennavicat.mongodb_timeseries import TimeSeriesDefinition, TimeSeriesSnapshot
+    from opennavicat.mongodb_views import ViewDefinition, ViewSnapshot
+    from opennavicat.ui.mongo_collection_designer import MongoCollectionDesignerPage
+    from opennavicat.ui.mongo_timeseries_designer import MongoTimeSeriesDesignerPage
+    from opennavicat.ui.mongo_view_designer import MongoViewDesignerPage
+
+    w, identifier = host.window, host.config.id
+    w.connect_id(identifier); idle(qtbot, w)
+    session = w.sessions[identifier]
+    # Detached MongoDB drafts exercise the real window's close/disconnect
+    # boundary without opening any MongoDB client or reading a saved profile.
+    if kind == 'collection':
+        page = MongoCollectionDesignerPage(identifier, 'generated')
+        snapshot = CollectionSnapshot('generated', 'generated_object', CollectionDefinition('generated_object'))
+        invalid, corrected = page.validator_editor, '{"score": {"$gte": 0}}'
+    elif kind == 'timeseries':
+        page = MongoTimeSeriesDesignerPage(identifier, 'generated')
+        snapshot = TimeSeriesSnapshot('generated', 'generated_object', TimeSeriesDefinition('generated_object', 'timestamp'))
+        invalid, corrected = page.expire_edit, '3600'
+    else:
+        page = MongoViewDesignerPage(identifier, 'generated')
+        snapshot = ViewSnapshot('generated', 'generated_object', ViewDefinition('generated_object', 'source'))
+        invalid, corrected = page.pipeline_editor, '[{"$match": {"generated": true}}]'
+    page.load_snapshot(snapshot)
+    w.tabs.addTab(page, 'Generated draft')
+    page.name_edit.setText('generated_object')
+    invalid.setText('invalid') if kind == 'timeseries' else invalid.setPlainText('{broken')
+    assert page.dirty and page._invalid
+    monkeypatch.setattr(QMessageBox, 'question', lambda *_a, **_k: QMessageBox.StandardButton.Save)
+
+    if action == 'close_tab':
+        w.close_tab(w.tabs.indexOf(page))
+    else:
+        assert w.disconnect(identifier) is False
+    assert w.tabs.indexOf(page) >= 0 and w.sessions[identifier] is session
+    assert page._save_dialog is None and page.dirty
+    assert getattr(page, '_after_save', None) is None
+    assert page.message.text() and not host.errors
+
+    invalid.setText(corrected) if kind == 'timeseries' else invalid.setPlainText(corrected)
+    assert not page._invalid
+    # A later manual Save must start a fresh sheet, with no old close or
+    # disconnect action waiting to execute after its eventual successful save.
+    page.request_save()
+    assert page._save_dialog is not None
+    assert getattr(page, '_after_save', None) is None
+    page._save_dialog.reject(); idle(qtbot, w)
+    page.load_snapshot(snapshot)
+
+
 def test_cancel_ddl_sheet_cancels_settings_continuation_and_later_manual_save_cannot_revive_it(qtbot, host, monkeypatch):
     w, identifier = host.window, host.config.id
     page = dirty_designer(qtbot, host)

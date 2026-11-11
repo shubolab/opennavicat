@@ -1430,17 +1430,24 @@ class MainWindow(QMainWindow):
             return
         page._index_request += 1
         request = page._index_request
+        schema, name = page.schema, page.table
         page.loading = True; page._update_controls()
+        def current():
+            return (self._collection_page_alive(page) and page._index_request == request
+                    and self._collection_session_current(page.connection_id, session)
+                    and (page.schema, page.table) == (schema, name))
         def work():
-            return session.indexes(page.schema, page.table)
+            return session.indexes(schema, name)
         def done(rows):
-            if (self._collection_page_alive(page) and page._index_request == request
-                    and self._collection_session_current(page.connection_id, session)):
+            if current():
                 page.set_indexes(rows)
+        def failed(error):
+            if current():
+                page.set_index_error(error)
         def finished():
             if self._collection_page_alive(page) and page._index_request == request:
                 page.loading = False; page._update_controls()
-        self.submit(work, done, lambda error: page.set_index_error(error), label="读取集合索引", finished=finished)
+        self.submit(work, done, failed, label="读取集合索引", finished=finished)
 
     def preview_mongo_collection_designer(self, page, definition):
         session = self.sessions.get(page.connection_id)
@@ -2259,17 +2266,27 @@ class MainWindow(QMainWindow):
         answer = QMessageBox.question(self, "是否保存更改？", "如果你不保存更改，你的更改将会丢失。",
             QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel)
         if answer == QMessageBox.StandardButton.Cancel:
+            self._cancel_designer_retry(page)
             return False
         if answer == QMessageBox.StandardButton.Save:
             # Closing and disconnecting resume only after a successful save;
             # cancelling the preview leaves both draft and connection intact.
+            try:
+                page.draft()
+            except DatabaseError as error:
+                self._cancel_designer_retry(page)
+                page.show_error(error)
+                return False
             if getattr(page, "_after_save", None) is not retry:
                 self._cancel_designer_retry(page)
             page._after_save = retry
             page.request_save()
             if page._save_dialog is not None:
                 page._save_dialog.rejected.connect(lambda: self._cancel_designer_retry(page))
+            elif not page.loading and getattr(page, "_after_save", None) is retry:
+                self._cancel_designer_retry(page)
             return False
+        self._cancel_designer_retry(page)
         return True
 
     def drop_object(self, info):

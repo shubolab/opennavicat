@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QTabWidget, QToolBar, QVBoxLayout, QWidget,
 )
 
+from opennavicat.database import DatabaseError
 from opennavicat.schema import IndexTerm
 
 from .editor import SqlEditor
@@ -245,7 +246,14 @@ class _ObjectDesignerPage(QWidget):
 
     def request_preview(self):
         if self.definition is not None and not self.loading:
-            self.previewRequested.emit(self.draft())
+            try:
+                definition = self.draft()
+            except DatabaseError as error:
+                # Draft validation also runs from Qt tab/timer signals. Keep
+                # the invalid input in its editor without dispatching a plan.
+                self.show_error(error)
+                return
+            self.previewRequested.emit(definition)
 
     def request_save(self):
         if not self.definition or not self.dirty or self.loading or self._read_only:

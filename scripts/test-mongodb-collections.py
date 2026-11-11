@@ -35,6 +35,8 @@ TARGETS = [
     'tests/test_mongo_maintenance_ui.py',
     'tests/test_mongo_inspector_ui.py',
     'tests/test_mongo_view_designer_ui.py',
+    'tests/test_schema_object_designer_ui.py',
+    'tests/test_connection_lifecycle.py',
     'tests/test_mongo_window.py::test_real_window_mongo_tree_statistics_typed_page_and_sqlite_switch',
     'tests/test_mongo_window.py::test_real_collection_designer_creates_and_collmods_with_worker_owned_io',
     'tests/test_mongo_window.py::test_real_collection_designer_lists_indexes_and_opens_index_designer',
@@ -86,7 +88,7 @@ def main():
              'opennavicat/mongodb_views.py', 'opennavicat/mongodb_session.py',
              'opennavicat/ui/mongo_collection_designer.py', 'opennavicat/ui/mongo_view_designer.py',
              'opennavicat/ui/mongo_timeseries_designer.py', 'opennavicat/ui/mongo_maintenance.py',
-             'opennavicat/ui/window.py',
+             'opennavicat/ui/window.py', 'opennavicat/ui/schema_object_designer.py',
              'opennavicat/ui/workspace.py', 'opennavicat/js_engine/server_errors.py',
              'tests/test_mongodb_collections.py', 'tests/test_mongodb_timeseries.py',
              'tests/test_mongodb_collection_copy.py', 'tests/test_mongodb_collection_maintenance.py',
@@ -94,7 +96,7 @@ def main():
              'tests/test_mongodb_session.py', 'tests/test_mongo_collection_designer_ui.py',
              'tests/test_mongo_timeseries_designer_ui.py', 'tests/test_mongo_maintenance_ui.py',
              'tests/test_mongo_inspector_ui.py', 'tests/test_mongo_view_designer_ui.py',
-             'tests/test_mongo_window.py',
+             'tests/test_mongo_window.py', 'tests/test_schema_object_designer_ui.py', 'tests/test_connection_lifecycle.py',
              '.github/workflows/build.yml', 'scripts/test-mongodb-collections.py')}}
     process = None
     try:

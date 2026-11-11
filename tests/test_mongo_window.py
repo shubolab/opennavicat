@@ -58,7 +58,7 @@ def mongo_window(qtbot, tmp_path, monkeypatch, mongodb_service):
     monkeypatch.setattr(MainWindow, "error", lambda _self, error: errors.append(str(error)))
     monkeypatch.setattr(QMessageBox, "question", lambda *_args, **_kwargs: QMessageBox.StandardButton.Cancel)
     monkeypatch.setattr(QMessageBox, "information", lambda *_args, **_kwargs: QMessageBox.StandardButton.Ok)
-    for name in ("connect", "schemas", "objects", "fetch_documents", "insert_document", "replace_document", "delete_document", "close"):
+    for name in ("connect", "schemas", "objects", "indexes", "fetch_documents", "insert_document", "replace_document", "delete_document", "close"):
         original = getattr(MongoSession, name)
         def traced(*args, _original=original, **kwargs):
             io_threads.append(threading.get_ident())
@@ -155,6 +155,8 @@ def test_real_collection_designer_creates_and_collmods_with_worker_owned_io(qtbo
     dialog.save_button.click()
     idle(qtbot, window)
     assert page.snapshot.exists and page.snapshot.name == "ui_created"
+    assert '_id_' in database.ui_created.index_information()
+    assert page.index_rows == []
     assert {"docs", "owned_view", "ui_created"} <= set(database.list_collection_names())
     assert database.ui_created.find_one({"score": 1}) is None
     with pytest.raises(Exception):

@@ -11,7 +11,9 @@ from pymongo import timeout
 
 from .database import DatabaseError
 from .js_engine.server_errors import server_failure
-from .mongodb_collections import CollectionApplyError, CollectionOutcome, _catalog, _command_text
+from .mongodb_collections import (
+    CollectionApplyError, CollectionOperationResult, CollectionOutcome, _catalog, _command_text,
+)
 from .mongodb_index_script import protected_command_script
 from .mongodb_session import BSON_CODEC, MongoConflictError, canonical_array_dumps
 
@@ -218,6 +220,23 @@ def plan_view(session, snapshot, definition):
     return _seal_plan(session, ViewPlan(snapshot, definition, [command], True, warnings))
 
 
+def plan_drop(session, snapshot):
+    """Seal a permanent ordinary-view drop without claiming a UUID CAS."""
+    snapshot = deepcopy(snapshot)
+    _verify_snapshot(session, snapshot)
+    if not snapshot.exists or snapshot.kind != 'mongo_view':
+        raise DatabaseError('Only an existing ordinary view can be dropped here')
+    if session.config.read_only or snapshot.read_only:
+        raise DatabaseError('This connection or view is read-only')
+    _current(session, snapshot)
+    command = {'drop': snapshot.name, 'writeConcern': {'w': 1}}
+    warnings = [
+        'Drop is permanent. MongoDB ordinary views have no collection UUID; the complete raw view catalog is checked before dispatch but this is not an atomic compare-and-swap.',
+        'A peer can replace or modify this view in the final race window, and the peer view can then be deleted. No automatic rollback is attempted.',
+    ]
+    return _seal_plan(session, ViewPlan(snapshot, deepcopy(snapshot.definition), [command], True, warnings))
+
+
 def _matches(plan, observed):
     return observed is not None and observed.kind == 'mongo_view' and observed.definition == plan.definition
 
@@ -281,4 +300,56 @@ def apply_plan(session, plan, *, cancelled=None):
         message = str(error) if isinstance(error, MongoConflictError) else (
             'View save did not execute; no view command was sent' if outcome.status == 'not_started'
             else 'View save failed; acknowledged changes are not rolled back')
+        raise CollectionApplyError(message, outcome) from error
+
+
+def apply_drop_plan(session, plan, *, cancelled=None):
+    """Apply one reviewed view drop; never retry or claim rollback."""
+    plan = deepcopy(plan)
+    _verify_plan(session, plan)
+    if not plan.changed or len(plan.commands) != 1 or 'drop' not in plan.commands[0]:
+        raise DatabaseError('A reviewed view drop plan is required')
+    outcome = CollectionOutcome('drop')
+    def stopped(): return bool(cancelled and cancelled()) or session._cancel_requested.is_set()
+    if cancelled and cancelled():
+        outcome.cancelled = True
+        raise CollectionApplyError('View drop cancelled before database access', outcome)
+    if session.config.read_only or plan.snapshot.read_only:
+        raise DatabaseError('This connection or view is read-only')
+    try:
+        with session._operation() as comment:
+            _current(session, plan.snapshot)
+            _verify_plan(session, plan)
+            if stopped():
+                outcome.cancelled = True
+                raise CollectionApplyError('View drop stopped before its command', outcome)
+            outcome.status = 'unknown'
+            try:
+                with timeout(120):
+                    reply = session.connection[plan.snapshot.schema].command({**plan.commands[0], 'comment': comment})
+                outcome.reply = deepcopy(dict(reply))
+                if reply.get('writeConcernError') or reply.get('writeErrors'):
+                    raise DatabaseError('The server did not acknowledge the view drop completely')
+                outcome.status = 'acknowledged'
+            except Exception as error:
+                failure = server_failure(error)
+                if failure is not None:
+                    outcome.reply = failure.document
+                    if not failure.concern_uncertain: outcome.status = 'server_error'
+                raise
+            if stopped():
+                outcome.cancelled = True
+                raise CollectionApplyError('The view drop was acknowledged before cancellation; it is not rolled back', outcome)
+            _verify_plan(session, plan)
+            outcome.collection_absent = not _catalog(session, plan.snapshot.schema, plan.snapshot.name)
+            _verify_plan(session, plan)
+            if outcome.collection_absent is not True:
+                raise CollectionApplyError('The command was acknowledged, but the view namespace still exists', outcome)
+            return CollectionOperationResult(None, outcome)
+    except Exception as error:
+        outcome.cancelled = outcome.cancelled or stopped()
+        if isinstance(error, CollectionApplyError): raise
+        message = str(error) if isinstance(error, MongoConflictError) else (
+            'View drop did not execute; no view command was sent' if outcome.status == 'not_started'
+            else 'View drop failed; acknowledged effects are not rolled back')
         raise CollectionApplyError(message, outcome) from error

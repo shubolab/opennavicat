@@ -318,7 +318,7 @@ class ObjectBrowser(QWidget):
             "table", "view", "index", "trigger", "mongo_index", "mongo_collection", "mongo_timeseries", "mongo_view"})
         self.new_action.setEnabled(writable and self.kind in {"table", "index", "trigger", "mongo_index", "mongo_collection"})
         self.delete_action.setEnabled(writable and selected and self.kind in {
-            "table", "view", "index", "trigger", "mongo_index", "mongo_collection"}
+            "table", "view", "index", "trigger", "mongo_index", "mongo_collection", "mongo_view"}
             and not self.selected().get("automatic") and not (self.kind in {"mongo_index", "mongo_collection"} and self.selected().get("system")))
         self.clear_action.setEnabled(writable and selected and self.kind == "mongo_collection")
         self.rename_action.setEnabled(writable and selected and self.kind == "mongo_collection")
@@ -369,6 +369,8 @@ class ObjectBrowser(QWidget):
         if entry:
             if entry["kind"] == "mongo_collection":
                 self.window.delete_mongo_collection(entry)
+            elif entry["kind"] == "mongo_view":
+                self.window.delete_mongo_view(entry)
             else:
                 self.window.drop_object(entry)
 
@@ -394,7 +396,7 @@ class ObjectBrowser(QWidget):
             actions = (self.design_action, self.new_action, self.new_timeseries_action, self.new_view_action,
                        self.rename_action, self.clear_action, self.delete_action)
         elif self.kind == "mongo_view":
-            actions = (self.design_action, self.new_view_action)
+            actions = (self.design_action, self.new_view_action, self.delete_action)
         else:
             actions = (self.design_action, self.new_action, self.delete_action)
         for action in actions:

@@ -45,6 +45,7 @@ TARGETS = [
     'tests/test_mongo_window.py::test_real_window_collection_maintenance_validate_reindex_and_compact',
     'tests/test_mongo_window.py::test_real_window_mongo_view_designer_creates_updates_and_routes_object_page',
     'tests/test_mongo_window.py::test_real_window_mongo_view_designer_refuses_missing_target_and_stale_definition',
+    'tests/test_mongo_window.py::test_real_window_mongo_view_designer_creates_collated_view_and_preserves_collation',
     'tests/test_mongo_window.py::test_real_window_delete_mongo_view_requires_permanent_confirmation',
 ]
 EXPECTED_FIXTURE_MODULES = {'test_mongodb_collections', 'test_mongodb_timeseries', 'test_mongodb_collection_copy', 'test_mongodb_collection_maintenance', 'test_mongodb_views', 'test_mongo_window'}

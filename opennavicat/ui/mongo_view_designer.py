@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
 
 from opennavicat.database import DatabaseError
 from opennavicat.mongodb_session import (
-    BSON_CODEC, canonical_array_dumps, canonical_array_loads, canonical_dumps,
+    BSON_CODEC, canonical_array_dumps, canonical_array_loads, canonical_dumps, canonical_loads,
 )
 
 from .editor import SqlEditor
@@ -112,6 +112,12 @@ class MongoViewDesignerPage(_ObjectDesignerPage):
         self.pipeline_editor = SqlEditor(); self.pipeline_editor.set_language('text')
         layout.addWidget(self.pipeline_editor, 1)
         self.tabs.addTab(self.general, '常规')
+        self.collation = QWidget(); collation = QVBoxLayout(self.collation)
+        collation.setContentsMargins(12, 12, 12, 12)
+        collation.addWidget(QLabel('排序规则（Canonical Extended JSON 文档；留空表示使用服务器默认）'))
+        self.collation_editor = SqlEditor(); self.collation_editor.set_language('text')
+        collation.addWidget(self.collation_editor, 1)
+        self.tabs.addTab(self.collation, '排序规则')
         self.raw = QWidget(); raw = QVBoxLayout(self.raw); raw.setContentsMargins(12, 12, 12, 12)
         raw.addWidget(QLabel('服务器原始 catalog BSON（只读）'))
         self.raw_editor = QPlainTextEdit(); self.raw_editor.setReadOnly(True); raw.addWidget(self.raw_editor, 1)
@@ -124,6 +130,7 @@ class MongoViewDesignerPage(_ObjectDesignerPage):
         self.name_edit.textChanged.connect(self._name_changed)
         self.source_combo.currentTextChanged.connect(self._source_changed)
         self.pipeline_editor.textChanged.connect(self._pipeline_changed)
+        self.collation_editor.textChanged.connect(self._collation_changed)
 
     @property
     def table(self): return self.definition.name if self.definition is not None else self._initial_name
@@ -168,6 +175,21 @@ class MongoViewDesignerPage(_ObjectDesignerPage):
                 self._invalid['pipeline'] = 'Pipeline 必须是 Canonical Extended JSON 文档数组。'
         self._edited()
 
+    def _collation_changed(self):
+        if self._populating or self.definition is None or self._read_only: return
+        self._invalid.pop('collation', None)
+        text = self.collation_editor.toPlainText()
+        if not text.strip():
+            self.definition.collation = None
+        else:
+            try:
+                value = canonical_loads(text)
+                if not isinstance(value, dict) or not value: raise ValueError()
+                self.definition.collation = value
+            except Exception:
+                self._invalid['collation'] = '排序规则必须是 Canonical Extended JSON 文档。'
+        self._edited()
+
     def _edited(self):
         super()._edited()
         if self._invalid:
@@ -190,6 +212,13 @@ class MongoViewDesignerPage(_ObjectDesignerPage):
         except DatabaseError:
             self._invalid['pipeline'] = 'Pipeline 无法无损转换为 Canonical Extended JSON；请查看原始 catalog BSON。'
             self.pipeline_editor.setPlainText('')
+        if value.collation is None:
+            self.collation_editor.setPlainText('')
+        else:
+            try: self.collation_editor.setPlainText(canonical_dumps(value.collation))
+            except DatabaseError:
+                self._invalid['collation'] = '排序规则无法无损转换为 Canonical Extended JSON；请查看原始 catalog BSON。'
+                self.collation_editor.setPlainText('')
         if self.snapshot.raw_spec:
             try: self.raw_editor.setPlainText(canonical_dumps(BSON(self.snapshot.raw_spec).decode(codec_options=BSON_CODEC)))
             except Exception: self.raw_editor.setPlainText('原始 BSON 无法解码；base64：\n' + base64.b64encode(self.snapshot.raw_spec).decode('ascii'))
@@ -201,6 +230,7 @@ class MongoViewDesignerPage(_ObjectDesignerPage):
         self.name_edit.setReadOnly(bool(self.snapshot and self.snapshot.exists))
         self.source_combo.setEnabled(editable)
         self.pipeline_editor.setReadOnly(not editable)
+        self.collation_editor.setReadOnly(not editable or bool(self.snapshot and self.snapshot.exists))
         if hasattr(self, 'save_action'): self.save_action.setEnabled(editable and self.dirty and not self._invalid)
 
     def _render_plan(self, *_):

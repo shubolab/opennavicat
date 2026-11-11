@@ -54,6 +54,27 @@ def test_real_create_and_modify_view_pipeline(source, session):
     assert [row['_id'] for row in db.view_one.find()] == [4]
 
 
+def test_real_view_collation_is_create_only_and_pipeline_remains_editable(source, session):
+    db = source
+    db.drop_collection('view_collated')
+    snapshot, definition = draft(session, 'view_collated', pipeline=[{'$match': {'n': {'$gte': 1}}}])
+    definition.collation = {'locale': 'en', 'strength': 2}
+    plan = tools.plan_view(session, snapshot, definition)
+    assert plan.commands[0]['collation'] == {'locale': 'en', 'strength': 2}
+    saved = tools.apply_plan(session, plan).snapshot
+    assert saved.definition.collation['locale'] == 'en' and saved.definition.collation['strength'] == 2
+    assert 'version' in saved.definition.collation
+
+    changed = deepcopy(saved.definition); changed.pipeline = [{'$match': {'n': 2}}]
+    changed_plan = tools.plan_view(session, saved, changed)
+    assert 'collation' not in changed_plan.commands[0]
+    tools.apply_plan(session, changed_plan)
+
+    changed.collation = {'locale': 'fr'}
+    with pytest.raises(DatabaseError, match='collation'):
+        tools.plan_view(session, tools.load_view(session, session.config.database, 'view_collated'), changed)
+
+
 def test_real_view_rejects_existing_target_and_stale_definition(source, session):
     db = source
     db.drop_collection('view_target')

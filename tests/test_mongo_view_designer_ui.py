@@ -31,6 +31,11 @@ def test_new_view_requires_name_source_and_document_pipeline(qtbot, page):
     assert not page._invalid and page.save_action.isEnabled()
     assert page.draft() == ViewDefinition('active_docs', 'docs', [{'$match': {'active': True}}])
 
+    page.collation_editor.setPlainText('{"locale": "en", "strength": 2}')
+    assert page.draft().collation == {'locale': 'en', 'strength': 2}
+    page.collation_editor.setPlainText('{bad')
+    assert 'collation' in page._invalid and not page.save_action.isEnabled()
+
 
 def test_view_save_sheet_requires_exact_plan(qtbot, page):
     previews, saves = [], []
@@ -61,6 +66,15 @@ def test_existing_view_name_is_readonly_but_pipeline_is_editable(qtbot):
     assert page.source_combo.isEnabled() and not page.pipeline_editor.isReadOnly()
     page.pipeline_editor.setPlainText('[]')
     assert page.dirty and page.draft().pipeline == []
+
+
+def test_existing_view_collation_is_displayed_but_immutable(qtbot):
+    definition = ViewDefinition('owned_view', 'docs', [], {'locale': 'en', 'version': '57.1'})
+    page = MongoViewDesignerPage('generated', 'demo_catalog', 'owned_view')
+    qtbot.addWidget(page); page.load_snapshot(ViewSnapshot('demo_catalog', 'owned_view', definition, exists=True))
+    assert page.collation_editor.isReadOnly()
+    assert '"locale": "en"' in page.collation_editor.toPlainText()
+    assert page.draft().collation == definition.collation
 
 
 def test_view_drop_dialog_requires_permanent_acknowledgement(qtbot, page):

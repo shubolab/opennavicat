@@ -299,6 +299,34 @@ def test_real_window_mongo_view_designer_refuses_missing_target_and_stale_defini
     assert threads and not errors
 
 
+def test_real_window_mongo_view_designer_creates_collated_view_and_preserves_collation(qtbot, mongo_window):
+    window, config, database, schema, errors, threads = mongo_window
+    page = window.open_mongo_view_designer(config.id, config.database)
+    qtbot.waitUntil(lambda: page.snapshot is not None and not page.loading, timeout=15000)
+    page.name_edit.setText('view_collation_ui')
+    page.source_combo.setCurrentText('docs')
+    page.pipeline_editor.setPlainText('[{"$match": {"_id": {"$gte": 2}}}]')
+    page.collation_editor.setPlainText('{"locale": "en", "strength": 2}')
+    page.request_save()
+    dialog = page._save_dialog
+    qtbot.waitUntil(lambda: dialog is not None and dialog.save_button.isEnabled(), timeout=15000)
+    assert dialog.plan.commands[0]['collation'] == {'locale': 'en', 'strength': 2}
+    dialog.save_button.click(); idle(qtbot, window)
+    assert page.snapshot.definition.collation['locale'] == 'en' and 'version' in page.snapshot.definition.collation
+    assert page.collation_editor.isReadOnly()
+
+    page.pipeline_editor.setPlainText('[{"$match": {"_id": 3}}]')
+    page.request_save()
+    dialog = page._save_dialog
+    qtbot.waitUntil(lambda: dialog is not None and dialog.save_button.isEnabled(), timeout=15000)
+    assert 'collation' not in dialog.plan.commands[0]
+    dialog.save_button.click(); idle(qtbot, window)
+    spec = database.command('listCollections', filter={'name': 'view_collation_ui'})['cursor']['firstBatch'][0]
+    assert spec['options']['collation']['locale'] == 'en'
+    assert [row['_id'] for row in database.view_collation_ui.find()] == [3]
+    assert threads and not errors
+
+
 def test_real_window_delete_mongo_view_requires_permanent_confirmation(qtbot, mongo_window):
     window, config, database, schema, errors, threads = mongo_window
     database.command({'create': 'delete_view_ui', 'viewOn': 'docs', 'pipeline': [{'$match': {'_id': 1}}]})

@@ -1,8 +1,32 @@
-# 0.9 候选验证记录
+# 0.9 验证记录
 
-记录日期：2026-11-11，Asia/Shanghai。**0.9.0 仍是候选，同源完整六平台预检已经通过，尚未创建正式 tag 或公开发布。** 当前公开里程碑为 [v0.8.1](https://github.com/shubolab/opennavicat/releases/tag/v0.8.1)，其正式安装与公开资产结果保留在 [0.8.1 验证记录](validation-0.8.md)，不能替代本候选的新代码验收。
+记录日期：2026-11-11，Asia/Shanghai。**0.9.0 已通过正式六平台 tag 流水线并公开为早期预发行版本。** 当前公开里程碑为 [v0.9.0](https://github.com/shubolab/opennavicat/releases/tag/v0.9.0)；其公开资产已独立匿名下载并核对。0.8.1 的历史结果保留在 [0.8.1 验证记录](validation-0.8.md)，不替代本版本验收。
 
 本轮增加 MongoDB JavaScript 索引 helpers、命令错误与写入结果表达，并修复连接设置在异步保存文档后丢失的问题。完整 Navicat 工具和三平台 1:1 UI 目标保持不变；产品账号、产品登录、激活、订阅及云账号协作仍排除。
+
+## 正式发布与公开资产
+
+正式 tag **`v0.9.0`** 指向源码提交 **`c5f30995a0211d7f5f5c31177543d191a17b001a`**。
+tag 流水线 [42983388008](https://github.com/shubolab/opennavicat/actions/runs/42983388008) 为 push、attempt 1；
+共 **8 个 job 全部成功**：六个原生桌面目标分别完成源码测试、helper 构建/资格、冻结打包、安装、运行与卸载，
+独立数据库安全 job 完成 TLS/SSH、SQL Server/Redis、MongoDB、原生 JavaScript 和 fixture 清理，
+发布 job 在全部依赖成功后核验完整资产并公开 Release。Release 创建时间为北京时间 **2026-11-11 16:11:55**。
+
+公开资产随后从 GitHub 匿名下载到隔离目录，逐项核对 API 声明大小和 digest，并与 `SHA256SUMS` 交叉校验：
+
+| 资产 | 字节 | SHA-256 |
+| --- | ---: | --- |
+| `OpenNavicat-0.9.0-macos-amd64.dmg` | 50,064,148 | `bec60150e6a27f6810285ba0a7739346daf0c7012126c5e2428cc2cf1224f9d7` |
+| `OpenNavicat-0.9.0-macos-arm64.dmg` | 49,406,504 | `42e834f9b6fcac8b0933e22f2e68bf69686c4e59767f0f73961a3a1f4c3cb47b` |
+| `OpenNavicat-0.9.0-windows-amd64-setup.exe` | 43,415,135 | `b0c1f20412e16206198e60e459611a0ae0f7ac746e4058ec7172660f266169a1` |
+| `OpenNavicat-0.9.0-windows-arm64-setup.exe` | 34,357,185 | `b54aa71763906d6b5556a242d701166090959f790cc994752ad40493fbb24de8` |
+| `OpenNavicat-0.9.0-linux-amd64.deb` | 76,084,308 | `6103b120158257cbc196f8f54c055ccf0cfbc55aefc175925e34ff83ab5cdf91` |
+| `OpenNavicat-0.9.0-linux-arm64.deb` | 74,748,636 | `93ec71a19cac64c52e2997c69212852009fe26dd9a5cae25aea5f6fc0587e552` |
+| `SHA256SUMS` | 616 | `2a980ec1e2cafb8de8e4c59b014460c573d1a4cf5a708edc6b7de980753b7026` |
+| `build-manifests.json` | 205,688 | `1191bdbcf77832500088b8e5ce9a19aa0ee296bf8a3eaebf2dcb6b4e1b0b18dc` |
+
+这可关闭正式 tag、八项公开资产、匿名下载和摘要一致性门禁；它不关闭原版 Navicat 1:1 UI、全部数据库工具、
+三个 OS 的逐项人工对照，或产物签名/公证等其它门禁。
 
 ## 完整预检与交接状态
 
@@ -95,10 +119,9 @@ JS 结果树和显示 Canonical EJSON 与三份生成 BSON 做字节检查，包
 部分结果单元格使用省略号，不能把该数据检查说成屏上始终显示所有字符。
 索引预览未执行，GIF不替代新增 helpers 的协议测试。独有示例服务、工作区及帧文件均清理，未访问真实连接、钥匙串或参考应用。
 
-## 尚未完成的候选门禁
+## 仍未完成的完整目标
 
-- 920 已统一冻结版本和演示并完成同源完整预检；仍须后续正式 tag 运行和公开包验证，当前记录不是公开 0.9.0 Release。
-- 六原生目标的完整预检和安全 scope 已由该次独有 artifacts 审计，发布任务正确跳过；不拿它替代尚未启动的正式发布，不拿旧 0.8.1 替代新版本资格。
-- 公开发布仍须六安装器加 SHA256SUMS/build-manifests 共八项精确资产、上传状态/字节/digest/SHA、匿名下载及各平台回执；目前没有公开 0.9.0 安装资产可据此验收。
-- 原版 helper runtime、全局/API、完整 BSON 与代理/原型兼容、全部拓扑/认证、索引选项和并发边界、三平台实际 UI，以及全部数据库工具继续按[总矩阵](parity-matrix.md)推进。mongosh 不是 Navicat。
-- 用户 Dell Windows/RDP 与无桌面 WSL GUI 验收仍延期，现场保持原状；托管 CI 和 Cocoa 组件检查不替代该现场验收。
+- 原版 helper runtime、全局/API、完整 BSON 与代理/原型兼容、全部拓扑/认证、索引选项和并发边界继续按[总矩阵](parity-matrix.md)推进。mongosh 不是 Navicat。
+- 三平台实际 UI、全部数据库工具、对象设计器、向导、模型/BI/备份/自动运行/AI 等适用门禁仍未完成。
+- 用户 Dell Windows/RDP 与无桌面 WSL GUI 验收仍按现场约束另行安排；托管 CI 和 Cocoa 组件检查不替代该现场验收。
+- 安装包仍无发布者签名或 Apple 公证；Windows ARM64 安装引导器使用 x86，应用及原生依赖为 ARM64。

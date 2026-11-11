@@ -10,39 +10,37 @@ Python + Qt Widgets（PySide6），数据库连接、SQL 和结果均在本机�
 下面是一段 OpenNavicat 实际运行演示：浏览示例表、编写并执行查询、查看结果、编辑表结构、
 检查 SQL 预览，再查看 MongoDB 文档网格、精确 BSON 类型树、GridFS 图像预览、JavaScript 查询与索引设计。
 连接名、客户、邮箱、日期、订单、商品、BSON、SQL 和图像均由隔离演示工作区生成，
-不读取本机真实连接或业务数据库。单段 GIF 对应 **0.9.0 候选**的实际 Qt 界面，约 30 秒；
-验证范围见 [0.9 候选记录](docs/validation-0.9.md)。
+不读取本机真实连接或业务数据库。单段 GIF 对应 **0.9.0** 的实际 Qt 界面，约 30 秒；
+验证范围见 [0.9 验证记录](docs/validation-0.9.md)。
 
 ![OpenNavicat 示例数据工作流演示](docs/assets/opennavicat-demo.gif)
 
-0.9.0 候选增加内置 MongoDB JavaScript 的八个索引 helpers，并修复经过未保存设计文档的异步保存后丢失已确认连接设置的问题。
-六平台原生安装预检已通过，正式 tag 发布及公开包验收留待后续；下面保留当前已发布版本的下载入口。
-本轮交接与分支收敛结果见 [当前工作快照](docs/snapshot/2026-11-11-handoff.md)。
+0.9.0 增加内置 MongoDB JavaScript 的八个索引 helpers，并修复经过未保存设计文档的异步保存后丢失已确认连接设置的问题。
+正式 tag 流水线已完成六个原生目标的测试、安装、运行、卸载和独立数据库安全门禁，随后公开发布
+[OpenNavicat v0.9.0](https://github.com/shubolab/opennavicat/releases/tag/v0.9.0)。
+八个公开资产已匿名下载，并分别核对 GitHub 大小/digest 与 `SHA256SUMS`。
 
-最新可用里程碑 **[v0.8.1](https://github.com/shubolab/opennavicat/releases/tag/v0.8.1)**
-已于 2026-11-11（北京时间）发布为早期预发行版本，提供三个操作系统、两种架构的六份安装包。
+最新可用里程碑为 **v0.9.0**，提供三个操作系统、两种架构的六份安装包。
 现有 **SQLite、PostgreSQL、MySQL、MariaDB、SQL Server、Redis、MongoDB** 七种核心驱动，
-使用隔离数据库进行了真实协议、读写及界面集成验证。本版加入 Linux 历史连接及分组发现、
-MongoDB 六页索引设计器和随包提供的原生 JavaScript 查询，修正 Windows 原生大字体选择框裁字。
-既有查询保留原执行语言，Linux 导入候选需要先复核再连接。
-保留 MongoDB BSON 网格/树、GridFS、Windows 连接候选发现、SQLite 独立索引/触发器设计，
-以及 macOS 历史连接自动加载、分组和去重。
+使用隔离数据库进行了真实协议、读写及界面集成验证。本版保留 Linux 历史连接及分组发现、
+MongoDB 六页索引设计器、随包提供的原生 JavaScript 查询，以及 BSON 网格/树、GridFS、
+Windows 连接候选发现、SQLite 独立索引/触发器设计和 macOS 历史连接自动加载。
 完整 Navicat Premium 能力和 1:1 界面仍在持续实现中，
-详细范围见 [功能路线图](docs/roadmap.md) 和 [0.8.1 验证记录](docs/validation-0.8.md)。
+详细范围见 [功能路线图](docs/roadmap.md) 和 [0.9 验证记录](docs/validation-0.9.md)。
 
 | 安装包 | amd64 / Intel、x64 | arm64 / Apple Silicon、Windows ARM |
 | --- | --- | --- |
-| macOS | [DMG](https://github.com/shubolab/opennavicat/releases/download/v0.8.1/OpenNavicat-0.8.1-macos-amd64.dmg) | [DMG](https://github.com/shubolab/opennavicat/releases/download/v0.8.1/OpenNavicat-0.8.1-macos-arm64.dmg) |
-| Windows | [Setup EXE](https://github.com/shubolab/opennavicat/releases/download/v0.8.1/OpenNavicat-0.8.1-windows-amd64-setup.exe) | [Setup EXE](https://github.com/shubolab/opennavicat/releases/download/v0.8.1/OpenNavicat-0.8.1-windows-arm64-setup.exe) |
-| Linux（Debian/Ubuntu） | [DEB](https://github.com/shubolab/opennavicat/releases/download/v0.8.1/OpenNavicat-0.8.1-linux-amd64.deb) | [DEB](https://github.com/shubolab/opennavicat/releases/download/v0.8.1/OpenNavicat-0.8.1-linux-arm64.deb) |
+| macOS | [DMG](https://github.com/shubolab/opennavicat/releases/download/v0.9.0/OpenNavicat-0.9.0-macos-amd64.dmg) | [DMG](https://github.com/shubolab/opennavicat/releases/download/v0.9.0/OpenNavicat-0.9.0-macos-arm64.dmg) |
+| Windows | [Setup EXE](https://github.com/shubolab/opennavicat/releases/download/v0.9.0/OpenNavicat-0.9.0-windows-amd64-setup.exe) | [Setup EXE](https://github.com/shubolab/opennavicat/releases/download/v0.9.0/OpenNavicat-0.9.0-windows-arm64-setup.exe) |
+| Linux（Debian/Ubuntu） | [DEB](https://github.com/shubolab/opennavicat/releases/download/v0.9.0/OpenNavicat-0.9.0-linux-amd64.deb) | [DEB](https://github.com/shubolab/opennavicat/releases/download/v0.9.0/OpenNavicat-0.9.0-linux-arm64.deb) |
 
-[SHA256SUMS](https://github.com/shubolab/opennavicat/releases/download/v0.8.1/SHA256SUMS)
-和 [构建与安装验证清单](https://github.com/shubolab/opennavicat/releases/download/v0.8.1/build-manifests.json)
+[SHA256SUMS](https://github.com/shubolab/opennavicat/releases/download/v0.9.0/SHA256SUMS)
+和 [构建与安装验证清单](https://github.com/shubolab/opennavicat/releases/download/v0.9.0/build-manifests.json)
 随版本发布。当前安装包没有发布者签名或 Apple 公证；Windows ARM64 安装引导器使用 x86，
 安装后的应用、Python、Qt 及原生库为 ARM64。实际系统验证范围和功能边界见
-[0.8.1 验证记录](docs/validation-0.8.md)。本版六个原生 CI 目标均实际完成测试、安装、运行和卸载，
-公开的六份安装包也已匿名下载并核对摘要。Linux DEB 基于 Ubuntu 24.04，要求 glibc 2.39 或更新版本，
-通过包管理器安装声明的 Qt 图形库及 Noto CJK 字体。
+[0.9 验证记录](docs/validation-0.9.md)。本版六个原生 CI 目标均实际完成测试、安装、运行和卸载，
+八个公开资产（六安装器、校验和及合并清单）已匿名下载并核对摘要。Linux DEB 基于 Ubuntu 24.04，
+要求 glibc 2.39 或更新版本，通过包管理器安装声明的 Qt 图形库及 Noto CJK 字体。
 0.5 公开版本另完成 macOS ARM64、干净 Ubuntu ARM64 XCB 及 Windows AMD64 RDP 的 6×4 示例查询，
 并在 Windows 实际打开 SQL Server/Redis 的连接设置；该次远程桌面没有连接真实 SQL Server/Redis 服务。
 0.8.1 公开 macOS ARM64 安装包另完成原生 Cocoa smoke 和两次普通启动，验证历史加载、分组、去重和不自动连接；

@@ -1,0 +1,113 @@
+name: Diagnose Linux DNS
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  diagnose:
+    name: DNS ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - name: Inspect resolver metadata and service state
+        shell: bash
+        run: |
+          set -u
+          printf 'Native architecture: '
+          uname -m
+          printf '\nResolver files (only nameserver/options contents):\n'
+          for resolver_file in /etc/resolv.conf /run/systemd/resolve/stub-resolv.conf /run/systemd/resolve/resolv.conf; do
+            printf '\n::group::%s\n' "$resolver_file"
+            if test -e "$resolver_file" || test -L "$resolver_file"; then
+              stat -c 'entry=%n type=%F mode=%a owner=%U:%G' "$resolver_file" || true
+              stat -Lc 'target=%n type=%F mode=%a owner=%U:%G' "$resolver_file" || true
+              readlink -f "$resolver_file" || true
+              for identity in root _apt; do
+                if sudo -n -u "$identity" timeout --kill-after=2s 5s test -r "$resolver_file"; then
+                  printf 'readable identity=%s status=PASS\n' "$identity"
+                  sudo -n -u "$identity" timeout --kill-after=2s 5s awk '$1 == "nameserver" || $1 == "options" {print}' "$resolver_file" || true
+                else
+                  status=$?
+                  printf 'readable identity=%s status=FAIL exit=%s\n' "$identity" "$status"
+                fi
+              done
+            else
+              printf 'status=MISSING (optional resolver file)\n'
+            fi
+            printf '::endgroup::\n'
+          done
+          printf '\nNSS hosts lookup configuration:\n'
+          if test -r /etc/nsswitch.conf; then
+            awk '/^[[:space:]]*hosts[[:space:]]*:/ {print}' /etc/nsswitch.conf
+          else
+            printf 'status=UNREADABLE\n'
+          fi
+          printf '\n::group::systemd-resolved state\n'
+          if command -v systemctl >/dev/null; then
+            if timeout --kill-after=2s 5s systemctl show systemd-resolved.service \
+                --property=LoadState --property=ActiveState --property=SubState --property=Result; then
+              printf 'systemctl status=PASS\n'
+            else
+              status=$?
+              printf 'systemctl status=FAIL exit=%s\n' "$status"
+            fi
+          else
+            printf 'systemctl status=UNAVAILABLE\n'
+          fi
+          if command -v resolvectl >/dev/null; then
+            if resolver_status=$(timeout --kill-after=2s 5s resolvectl status --no-pager 2>&1); then
+              printf '%s\n' "$resolver_status" | awk '/^[[:space:]]*(Global$|Link [0-9]+|Protocols:|Current DNS Server:|DNS Servers:|DNSSEC|DNSOverTLS)/ {print}'
+              printf 'resolvectl status=PASS\n'
+            else
+              status=$?
+              printf 'resolvectl status=FAIL exit=%s\n' "$status"
+            fi
+          else
+            printf 'resolvectl status=UNAVAILABLE\n'
+          fi
+          printf '::endgroup::\n'
+
+      - name: Compare bounded root and apt DNS lookups
+        shell: bash
+        run: |
+          set -u
+          diagnostic_dir=$(mktemp -d)
+          trap 'rm -rf -- "$diagnostic_dir"' EXIT
+          failed=0
+          total=0
+          printf '## DNS lookup results\n\n| Identity | Host | Status | Exit |\n| --- | --- | --- | --- |\n' >> "$GITHUB_STEP_SUMMARY"
+          for identity in root _apt; do
+            for host in archive.ubuntu.com security.ubuntu.com ports.ubuntu.com github.com api.github.com pypi.org files.pythonhosted.org; do
+              total=$((total + 1))
+              printf '\n::group::getent identity=%s host=%s\n' "$identity" "$host"
+              if sudo -n -u "$identity" timeout --kill-after=2s 8s getent ahosts "$host" > "$diagnostic_dir/lookup.txt" 2>&1; then
+                result=PASS
+                status=0
+              else
+                status=$?
+                failed=$((failed + 1))
+                case "$status" in
+                  124|137) result=TIMEOUT ;;
+                  127) result=UNAVAILABLE ;;
+                  *) result=FAIL ;;
+                esac
+              fi
+              sed -n '1,12p' "$diagnostic_dir/lookup.txt"
+              printf 'identity=%s host=%s status=%s exit=%s\n' "$identity" "$host" "$result" "$status"
+              printf '| %s | %s | %s | %s |\n' "$identity" "$host" "$result" "$status" >> "$GITHUB_STEP_SUMMARY"
+              printf '::endgroup::\n'
+            done
+          done
+          printf '\nDNS probes: total=%s passed=%s failed=%s\n' "$total" "$((total - failed))" "$failed"
+          printf '\nTotal: %s; passed: %s; failed: %s. No packages or DNS settings were changed.\n' \
+            "$total" "$((total - failed))" "$failed" >> "$GITHUB_STEP_SUMMARY"
+          if test "$failed" -ne 0; then
+            printf '::error::One or more bounded DNS probes failed; inspect the per-identity results.\n'
+            exit 1
+          fi

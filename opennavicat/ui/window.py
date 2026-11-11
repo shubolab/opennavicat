@@ -1488,16 +1488,21 @@ class MainWindow(QMainWindow):
     def reindex_mongo_collection(self, info):
         return self.run_mongo_collection_maintenance(info, "reindex")
 
-    def run_mongo_collection_maintenance(self, info, operation, *, full=False):
+    def compact_mongo_collection(self, info, force=False):
+        return self.run_mongo_collection_maintenance(info, "compact", force=force)
+
+    def run_mongo_collection_maintenance(self, info, operation, *, full=False, force=False):
         config = self.configs.get(info.get("id"))
         session = self.sessions.get(info.get("id"))
         schema, name, kind = info.get("schema"), info.get("name", info.get("table")), info.get("kind")
-        if (operation not in {"validate", "reindex"} or config is None or config.driver != "mongodb"
+        if (operation not in {"validate", "reindex", "compact"} or config is None or config.driver != "mongodb"
                 or session is None or not schema or not name or kind not in {"mongo_collection", "mongo_timeseries"}
                 or self._closing_mongo or info.get("id") in self._closing_connections
                 or self._mongo_collection_jobs or self._cancelling):
             return None
         if operation == "reindex" and (kind != "mongo_collection" or config.read_only):
+            return None
+        if operation == "compact" and config.read_only:
             return None
         def run_job():
             token = uuid.uuid4().hex
@@ -1513,6 +1518,8 @@ class MainWindow(QMainWindow):
                     snapshot = mongo_collection_tools.load_collection(session, schema, name)
                 if operation == "validate":
                     return mongo_maintenance_tools.validate_collection(session, snapshot, full=full, cancelled=cancelled.is_set)
+                if operation == "compact":
+                    return mongo_maintenance_tools.compact_collection(session, snapshot, force=force, cancelled=cancelled.is_set)
                 return mongo_maintenance_tools.reindex_collection(session, snapshot, cancelled=cancelled.is_set)
             def done(result):
                 if not self._collection_session_current(info["id"], session):
@@ -1526,16 +1533,24 @@ class MainWindow(QMainWindow):
                 if self._collection_session_current(info["id"], session):
                     self.error(error)
             def finish(): self._mongo_collection_jobs.pop(token, None)
-            label = "完整验证集合" if operation == "validate" and full else "验证集合" if operation == "validate" else "重建集合索引"
+            label = ("完整验证集合" if operation == "validate" and full else "验证集合" if operation == "validate"
+                else "强制压缩集合" if operation == "compact" and force else "压缩集合" if operation == "compact" else "重建集合索引")
             self.submit(work, done, failed, label=label, finished=finish)
-        if operation == "reindex" or full:
-            command = (f'db.runCommand({{validate: {json.dumps(name)}, full: true, checkBSONConformance: true}})'
-                if operation == "validate" else f'db.runCommand({{reIndex: {json.dumps(name)}}})')
-            title = "完整验证集合" if operation == "validate" else "重建集合索引"
-            warning = ("完整验证可能耗时并影响写入性能；报告会绑定当前集合 UUID。"
-                if operation == "validate" else "reIndex 会重建普通集合的索引；MongoDB 不支持对 view/time-series 执行。")
-            dialog = MongoMaintenanceConfirmDialog(title, f"{schema}.{name}", command, warning,
-                "验证" if operation == "validate" else "重建", self)
+        if operation == "reindex" or operation == "compact" or full:
+            if operation == "validate":
+                command = f'db.runCommand({{validate: {json.dumps(name)}, full: true, checkBSONConformance: true}})'
+                title, button = "完整验证集合", "验证"
+                warning = "完整验证可能耗时并影响写入性能；报告会绑定当前集合 UUID。"
+            elif operation == "compact":
+                flag = ", force: true" if force else ""
+                command = f'db.runCommand({{compact: {json.dumps(name)}{flag}}})'
+                title, button = ("强制压缩集合" if force else "压缩集合"), "压缩"
+                warning = "compact 会重写集合存储并阻塞相关操作，可能耗时很长；UUID 会在执行前后核对。"
+            else:
+                command = f'db.runCommand({{reIndex: {json.dumps(name)}}})'
+                title, button = "重建集合索引", "重建"
+                warning = "reIndex 会重建普通集合的索引；MongoDB 不支持对 view/time-series 执行。"
+            dialog = MongoMaintenanceConfirmDialog(title, f"{schema}.{name}", command, warning, button, self)
             self._mongo_maintenance_dialogs.add(dialog)
             dialog.accepted.connect(run_job)
             dialog.finished.connect(lambda *_: (self._mongo_maintenance_dialogs.discard(dialog), dialog.deleteLater()))
@@ -2824,6 +2839,8 @@ class MainWindow(QMainWindow):
                         maintenance = menu.addMenu("维护")
                         maintenance.addAction("验证集合（常规）", lambda: self.validate_mongo_collection(info, False)).setEnabled(connected)
                         maintenance.addAction("验证集合（完整）", lambda: self.validate_mongo_collection(info, True)).setEnabled(connected)
+                        maintenance.addAction("压缩集合（常规）", lambda: self.compact_mongo_collection(info, False)).setEnabled(writable)
+                        maintenance.addAction("压缩集合（强制）", lambda: self.compact_mongo_collection(info, True)).setEnabled(writable)
                         maintenance.addAction("重建集合索引", lambda: self.reindex_mongo_collection(info)).setEnabled(
                             writable and info.get("kind") == "mongo_collection")
                         if info.get("kind") == "mongo_collection":

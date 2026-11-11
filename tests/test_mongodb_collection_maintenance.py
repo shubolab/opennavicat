@@ -98,3 +98,42 @@ def test_real_maintenance_permission_denial_is_explicit(session):
             tools.reindex_collection(restricted, snapshot)
     finally:
         restricted.close(); admin.command({'dropUser': username})
+
+
+@pytest.mark.parametrize('force', [False, True])
+def test_real_compact_ordinary_collection_preserves_identity_data_and_indexes(session, force):
+    snapshot = ordinary(session)
+    db = session.connection[session.config.database]
+    before_indexes = db.maintain_docs.index_information()
+    result = tools.compact_collection(session, snapshot, force=force)
+    assert result.operation == ('compact-force' if force else 'compact')
+    assert result.report['ok'] == 1.0 and 'bytesFreed' in result.report
+    assert db.maintain_docs.count_documents({}) == 5
+    assert db.maintain_docs.index_information() == before_indexes
+    assert collections.load_collection(session, session.config.database, 'maintain_docs').namespace_uuid == snapshot.namespace_uuid
+
+
+def test_real_compact_timeseries_and_reject_cancelled(session):
+    snapshot = ts(session)
+    result = tools.compact_collection(session, snapshot, force=False)
+    assert result.operation == 'compact' and result.source_uuid == snapshot.namespace_uuid
+    cancelled = threading.Event(); cancelled.set()
+    with pytest.raises(DatabaseError, match='cancelled before'):
+        tools.compact_collection(session, snapshot, cancelled=cancelled.is_set)
+
+
+def test_real_compact_permission_denial_is_explicit(session):
+    from opennavicat.mongodb_session import MongoSession
+    ordinary(session)
+    admin = session.connection.admin
+    username = 'compact_reader'
+    admin.command({'createUser': username, 'pwd': 'synthetic-reader-password',
+        'roles': [{'role': 'read', 'db': session.config.database}]})
+    restricted = MongoSession(replace(session.config, username=username, password='synthetic-reader-password'))
+    try:
+        restricted.connect()
+        snapshot = collections.load_collection(restricted, session.config.database, 'maintain_docs')
+        with pytest.raises(DatabaseError, match='code 13'):
+            tools.compact_collection(restricted, snapshot)
+    finally:
+        restricted.close(); admin.command({'dropUser': username})

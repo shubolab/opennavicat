@@ -34,7 +34,7 @@ TARGETS = [
     'tests/test_mongo_window.py::test_real_window_rename_collection_preserves_data_indexes_and_uuid',
     'tests/test_mongo_window.py::test_real_window_timeseries_designer_creates_and_updates_bucketing_and_expiry',
     'tests/test_mongo_window.py::test_real_window_copy_collection_data_and_structure_with_staging',
-    'tests/test_mongo_window.py::test_real_window_collection_maintenance_validate_full_and_reindex',
+    'tests/test_mongo_window.py::test_real_window_collection_maintenance_validate_reindex_and_compact',
 ]
 EXPECTED_FIXTURE_MODULES = {'test_mongodb_collections', 'test_mongodb_timeseries', 'test_mongodb_collection_copy', 'test_mongodb_collection_maintenance', 'test_mongo_window'}
 COLLECT = '''import json,sys,pytest

@@ -37,7 +37,8 @@ class MongoMaintenanceConfirmDialog(QDialog):
 class MongoMaintenanceResultDialog(QDialog):
     def __init__(self, result, parent=None):
         super().__init__(parent)
-        title = '完整集合验证' if result.operation == 'validate-full' else '集合验证' if result.operation == 'validate' else '重建集合索引'
+        title = {'validate-full': '完整集合验证', 'validate': '集合验证', 'reindex': '重建集合索引',
+                 'compact': '压缩集合', 'compact-force': '强制压缩集合'}.get(result.operation, '集合维护')
         self.setWindowTitle(title + '结果')
         self.resize(820, 620)
         layout = QVBoxLayout(self)

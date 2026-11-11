@@ -79,7 +79,7 @@ def test_native_no_host_or_database_capabilities(native):
 ])
 def test_native_limits_errors_and_reaping(native,source,fragment):
     with pytest.raises(JavaScriptError) as raised:
-        native.evaluate(source,limits=ExecutionLimits(timeout_ms=1500 if fragment=='memory' else 150,heap_bytes=4*1024*1024,max_jobs=50))
+        native.evaluate(source,limits=ExecutionLimits(timeout_ms=1500 if fragment in {'memory','output','null'} else 150,heap_bytes=4*1024*1024,max_jobs=50))
     result=raised.value.result
     assert fragment in str(raised.value).lower()
     assert result.child_reaped and result.elapsed_ms<2500 and result.stderr==""

@@ -43,7 +43,7 @@ jobs:
         run: |
           set -euo pipefail
           for attempt in 1 2 3; do
-            if sudo apt-get update && sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y libegl1 libopengl0 libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-shape0 libxkbcommon-x11-0 libglib2.0-0t64 fonts-noto-cjk xvfb xauth; then
+            if sudo timeout 300s apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update && sudo timeout 300s env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y libegl1 libopengl0 libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-shape0 libxkbcommon-x11-0 libglib2.0-0t64 fonts-noto-cjk xvfb xauth; then
               exit 0
             fi
             echo "apt attempt ${attempt} failed; retrying" >&2
@@ -150,7 +150,7 @@ jobs:
         run: |
           set -euo pipefail
           for attempt in 1 2 3; do
-            if sudo apt-get update && sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y libegl1 libopengl0 libxcb-cursor0 libxkbcommon-x11-0 libglib2.0-0 redis-server; then
+            if sudo timeout 300s apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update && sudo timeout 300s env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y libegl1 libopengl0 libxcb-cursor0 libxkbcommon-x11-0 libglib2.0-0 redis-server; then
               exit 0
             fi
             echo "apt attempt ${attempt} failed; retrying" >&2

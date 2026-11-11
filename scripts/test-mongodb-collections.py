@@ -28,6 +28,7 @@ TARGETS = [
     'tests/test_mongo_window.py::test_real_collection_designer_creates_and_collmods_with_worker_owned_io',
     'tests/test_mongo_window.py::test_real_window_stop_inflight_collection_uses_cancel_pool_and_preserves_draft',
     'tests/test_mongo_window.py::test_real_window_clear_and_drop_collection_require_permanent_confirmation',
+    'tests/test_mongo_window.py::test_real_window_rename_collection_preserves_data_indexes_and_uuid',
 ]
 EXPECTED_FIXTURE_MODULES = {'test_mongodb_collections', 'test_mongo_window'}
 COLLECT = '''import json,sys,pytest

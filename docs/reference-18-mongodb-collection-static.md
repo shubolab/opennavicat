@@ -129,9 +129,9 @@ Validation Level/Action 的 combo cell 文本为空；不能填入推测的 `str
 ## 当前实现与静态证据的边界
 
 分支中的首个普通集合设计器 UI 已接入创建、验证器、collation、原始 BSON、精确脚本预览、
-删除/清空永久确认、worker-only 保存和取消路径；实现和测试见
+删除/清空永久确认、重命名、worker-only 保存和取消路径；实现和测试见
 [普通集合设计器 checkpoint](mongodb-collection-designer-backend.md)。Linux WSL 的独立
-owned-Mongo runner 当前 60 项零跳过，但尚未在 Windows/macOS 运行参考应用执行本设计器。
+owned-Mongo runner 当前 63 项零跳过，但尚未在 Windows/macOS 运行参考应用执行本设计器。
 因此它只证明 OpenNavicat 自身行为，不关闭本稿列出的原版 tab 顺序、默认值、字段/索引页、
 保存确认与失败/取消状态门禁。
 

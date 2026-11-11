@@ -112,6 +112,10 @@ UI slice backed only by capabilities in this module:
   preserves the collection, options and indexes, warns that concurrent writes
   after the final check are also deleted, and never claims transactionality or
   rollback.
+- Rename uses the admin `renameCollection` command with `dropTarget: false` and
+  the source `collectionUUID`. The target must be absent during planning; a final
+  race can still create it, and no existing target is intentionally dropped.
+  Successful rename preserves documents, indexes, collection options and UUID.
 - Dirty collection data editors and dirty design drafts block drop/clear before a
   destructive plan is opened. Drop closes matching open collection/designer tabs;
   clear refreshes the open data page and object statistics.
@@ -195,7 +199,7 @@ It reuses the receipt-backed, run-label-specific emergency cleanup for
 timeout/interrupt. It never accepts a reference endpoint. Logs/receipts exclude
 Docker environment dumps and private certificate/key/URI files.
 
-The current Linux WSL amd64 proof passed **60 cases with zero skips** and two
+The current Linux WSL amd64 proof passed **63 cases with zero skips** and two
 independently cleaned MongoDB 8.0.34 fixtures. The shared database-security CI job
 executes this runner. The earlier macOS ARM64 backend-only proof remains
 historical and does not cover this UI.
@@ -218,7 +222,7 @@ user workspaces and Navicat configuration are not used.
 Additional Linux WSL amd64 checks in this checkpoint:
 
 - `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q -W error`:
-  **1466 passed, 481 conditionally skipped, 0 failed/error**. Default-service
+  **1467 passed, 484 conditionally skipped, 0 failed/error**. Default-service
   skips are not counted as real database execution; the owned runner above
   covers this feature's Mongo scope without skips.
 - `.venv/bin/python -m opennavicat --smoke-test`: **passed**, 6 rows / 4 columns,

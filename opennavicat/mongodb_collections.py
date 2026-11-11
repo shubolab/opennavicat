@@ -356,6 +356,29 @@ def plan_clear(session, snapshot):
     return _seal_plan(session, CollectionPlan(snapshot, deepcopy(snapshot.definition), [command], True, warnings))
 
 
+def plan_rename(session, snapshot, new_name):
+    """Seal a UUID-guarded rename that never drops an existing target."""
+    snapshot = deepcopy(snapshot)
+    _verify_snapshot(session, snapshot)
+    if not snapshot.exists or snapshot.kind != 'mongo_collection' or snapshot.collection_type != 'collection':
+        raise DatabaseError('Only an existing ordinary collection can be renamed here')
+    if session.config.read_only or snapshot.read_only:
+        raise DatabaseError('This connection or collection is read-only')
+    if not isinstance(new_name, str) or not new_name or new_name == snapshot.name:
+        raise DatabaseError('Enter a different nonempty collection name')
+    session._validate_namespace(snapshot.schema, new_name)
+    _current(session, snapshot)
+    if _catalog(session, snapshot.schema, new_name):
+        raise MongoConflictError('The target collection name already exists; no collection was renamed')
+    source = snapshot.schema + '.' + snapshot.name
+    target = snapshot.schema + '.' + new_name
+    definition = CollectionDefinition(new_name, deepcopy(snapshot.definition.options))
+    command = {'renameCollection': source, 'to': target, 'dropTarget': False,
+        'collectionUUID': snapshot.namespace_uuid, 'writeConcern': {'w': 1}}
+    warnings = ['Rename checks that the target name is absent before dispatch. A peer can create the target in the final race window; dropTarget is always false, so no existing target is intentionally deleted.']
+    return _seal_plan(session, CollectionPlan(snapshot, definition, [command], True, warnings))
+
+
 def _observe(session, plan, outcome):
     try:
         # A disconnect/reconnect or connection edit after dispatch must not
@@ -449,6 +472,10 @@ def _observe_operation(session, plan, outcome):
             raw = _catalog(session, plan.snapshot.schema, plan.snapshot.name)
             outcome.collection_absent = not raw
             outcome.observed = None
+        elif 'renameCollection' in command:
+            outcome.collection_absent = not _catalog(session, plan.snapshot.schema, plan.snapshot.name)
+            target = command['to'].split('.', 1)[1]
+            outcome.observed = load_collection(session, plan.snapshot.schema, target)
         else:
             observed = load_collection(session, plan.snapshot.schema, plan.snapshot.name)
             outcome.observed = observed
@@ -461,6 +488,9 @@ def _observe_operation(session, plan, outcome):
 def _operation_matches(plan, outcome):
     if 'drop' in plan.commands[0]:
         return outcome.collection_absent is True
+    if 'renameCollection' in plan.commands[0]:
+        return (outcome.collection_absent is True and outcome.observed is not None
+            and outcome.observed.namespace_uuid == plan.snapshot.namespace_uuid)
     observed = outcome.observed
     return (observed is not None and observed.namespace_uuid == plan.snapshot.namespace_uuid
         and outcome.remaining_documents == 0)
@@ -471,9 +501,9 @@ def apply_operation(session, plan, *, cancelled=None):
     plan = deepcopy(plan)
     _verify_plan(session, plan)
     command = plan.commands[0]
-    if not plan.changed or sum(key in command for key in ('drop', 'delete')) != 1:
-        raise DatabaseError('A drop or clear operation plan is required')
-    outcome = CollectionOutcome('drop' if 'drop' in command else 'clear')
+    if not plan.changed or sum(key in command for key in ('drop', 'delete', 'renameCollection')) != 1:
+        raise DatabaseError('A drop, clear or rename operation plan is required')
+    outcome = CollectionOutcome('drop' if 'drop' in command else 'rename' if 'renameCollection' in command else 'clear')
     def stopped():
         return bool(cancelled and cancelled()) or session._cancel_requested.is_set()
     if cancelled and cancelled():
@@ -491,7 +521,8 @@ def apply_operation(session, plan, *, cancelled=None):
             outcome.status = 'unknown'
             try:
                 with timeout(120):
-                    reply = session.connection[plan.snapshot.schema].command({**command, 'comment': comment})
+                    database = session.connection.admin if 'renameCollection' in command else session.connection[plan.snapshot.schema]
+                    reply = database.command({**command, 'comment': comment})
                 outcome.reply = deepcopy(dict(reply))
                 if reply.get('writeConcernError') or reply.get('writeErrors'):
                     raise DatabaseError('The server did not acknowledge this collection operation completely')

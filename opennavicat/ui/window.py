@@ -1399,15 +1399,19 @@ class MainWindow(QMainWindow):
         def work():
             snapshot = (mongo_collection_tools.load_collection(session, schema, name) if name
                         else mongo_collection_tools.new_collection(session, schema))
-            indexes = session.indexes(schema, snapshot.name) if snapshot.exists else []
-            return snapshot, indexes
+            indexes, index_error = [], ''
+            if snapshot.exists:
+                try: indexes = session.indexes(schema, snapshot.name)
+                except DatabaseError as error: index_error = str(error)
+            return snapshot, indexes, index_error
         def done(result):
             if (not self._collection_page_alive(page) or page._collection_request != request
                     or not self._collection_session_current(page.connection_id, session)):
                 return
-            snapshot, indexes = result
+            snapshot, indexes, index_error = result
             page.load_snapshot(snapshot)
             page.set_indexes(indexes)
+            if index_error: page.set_index_error(index_error)
             page._pending_connection = False
             self.update_designer_title(page)
         def failed(error):
@@ -1436,7 +1440,7 @@ class MainWindow(QMainWindow):
         def finished():
             if self._collection_page_alive(page) and page._index_request == request:
                 page.loading = False; page._update_controls()
-        self.submit(work, done, lambda error: page.show_error(error), label="读取集合索引", finished=finished)
+        self.submit(work, done, lambda error: page.set_index_error(error), label="读取集合索引", finished=finished)
 
     def preview_mongo_collection_designer(self, page, definition):
         session = self.sessions.get(page.connection_id)

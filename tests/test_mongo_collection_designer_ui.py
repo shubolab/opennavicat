@@ -159,6 +159,8 @@ def test_existing_collection_index_table_exposes_full_index_designer_routes(qtbo
     page.edit_index_button.click(); page.delete_index_button.click(); page.refresh_index_button.click()
     assert requests['new'] == 1 and requests['edit'] == ['orders_status']
     assert requests['delete'][0]['name'] == 'orders_status' and requests['refresh'] == 1
+    page.set_index_error('permission denied')
+    assert 'permission denied' in page.index_message.text() and not page.index_message.isHidden()
 
 
 def test_apply_error_formatter_keeps_status_reply_and_observation():

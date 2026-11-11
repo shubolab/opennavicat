@@ -59,7 +59,7 @@
   },
   "evidence": "artifacts/resume-20261111/",
   "next_steps": [
-    "Audit six actual installer artifacts and receipts from completed003c486 preflight, then freeze next exact-source candidate",
+    "Completed003c486 artifact audit passed; freeze and independently qualify the next exact-source0.10 candidate",
     "Complete actual original JSON Schema/Query validation observation and lossless editing model/UI integration",
     "Prepare next frozen six-target release and record the single application GIF after version selection",
     "Continue all original full-function and platform UI gates"
@@ -104,7 +104,7 @@
     "dependency_command_stub_tests": 16,
     "all_protocol_source_hashes_match": true
   },
-  "updated_at": "2026-11-11T23:45:10.492946+08:00",
+  "updated_at": "2026-11-12T00:26:33.383457+08:00",
   "ci_after_storage": {
     "id": 43051367511,
     "source_sha": "7c65c70d6822cf7607cceaa06a860b1561893a53",
@@ -143,12 +143,20 @@
     "id": 43053509506,
     "source_sha": "003c4861840aedf0cb989d06d12c5000294ed660",
     "last_observed_status": "completed",
-    "all_targets_qualified": false,
+    "all_targets_qualified": true,
     "conclusion": "success",
     "native_desktop_jobs_successful": 6,
     "security_successful": true,
     "publisher": "skipped",
-    "installer_artifact_audit": "in_progress"
+    "installer_artifact_audit": "passed",
+    "artifact_audit_receipt": "artifacts/ci-003c486/verification.json",
+    "artifact_audit_receipt_location": "original_main_worktree",
+    "artifact_audit_exact_source_sha": "003c4861840aedf0cb989d06d12c5000294ed660",
+    "qualification_scope": "Exact003c486 native CI preflight and installer artifacts only; not 0.10 source, formal release, human or full parity acceptance",
+    "native_installer_bytes_verified": 6,
+    "direct_deb_dmg_helper_bytes_verified": 4,
+    "collections_cases_verified": 226,
+    "owned_fixture_cleanup_verified": 6
   },
   "dependency_contract_tests": {
     "passed": 88,
@@ -161,13 +169,76 @@
     "passed": 27,
     "skipped": 0,
     "new_storage_phases": 4,
-    "full_recording_executed": false,
-    "gif_replaced": false
+    "full_recording_executed": true,
+    "gif_replaced": true
   },
   "validator_foundation": {
     "source_commit": "d6e63cf",
     "pure_tests_passed": 68,
     "ui_integrated": false,
     "full_builder_qualified": false
+  },
+  "candidate_release": {
+    "version": "0.10.0",
+    "status": "preparing_not_published",
+    "workspace": "managed_release-0-10_worktree",
+    "base_sha": "b358c6216177bc896b3c57f1f7412758463a1f9b",
+    "frozen_source_sha": null,
+    "six_target_ci_started": false,
+    "tag_created": false,
+    "public_release_created": false,
+    "local_full_source": {
+      "passed": 1658,
+      "skipped": 545,
+      "failed": 0,
+      "errors": 0,
+      "seconds": 84.93,
+      "receipt": "artifacts/release-010/local-source.xml",
+      "skip_limit": "545 conditional skips; local redis-server missing; not real Redis acceptance",
+      "scope_note": "Before final RGB32 recorder correction; final frozen-source verification still pending"
+    },
+    "single_gif": {
+      "full_recording_completed": true,
+      "privacy_review_completed": true,
+      "observed_blocker": null,
+      "status": "recorded_reviewed_and_readme_replaced",
+      "ffmpeg_and_ffprobe_installed": true,
+      "earlier_attempt_failed_missing_ffprobe": true,
+      "earlier_complete_recording_failed_at_encoding": true,
+      "rgb32_capture_fix_regression_passed": true,
+      "phase_count": 17,
+      "frames": 230,
+      "duration_seconds": 38.34,
+      "sha256": "f9a55bbe0f5d84361c9e5f441d1fd045183d9976002bb220cc5bb27f7fdcf72e"
+    },
+    "validation_document": "../validation-0.10.md",
+    "local_collections": {
+      "passed": 226,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0,
+      "owned_fixtures": 6,
+      "independently_absent_by_exact_id": true,
+      "receipt": "artifacts/release-010/collections/summary.json",
+      "base_sha": "b358c6216177bc896b3c57f1f7412758463a1f9b"
+    },
+    "native_js_vm": {
+      "passed": 101,
+      "skipped": 0,
+      "receipt": "artifacts/release-010/js-vm/summary.json"
+    },
+    "recorder_regression": {
+      "passed": 28,
+      "skipped": 0,
+      "includes_owned_mongodb_and_actual_ffmpeg": true,
+      "receipt": "artifacts/release-010/recorder-owned.xml"
+    },
+    "local_cocoa": {
+      "designer_passed": 51,
+      "skipped": 0,
+      "source_smoke_passed": true,
+      "sample_rows": 6,
+      "sample_columns": 4
+    }
   }
 }

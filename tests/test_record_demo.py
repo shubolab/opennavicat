@@ -157,6 +157,28 @@ def test_null_modal_capture_is_rejected_instead_of_encoding_blank_success(record
         recorder.fit_capture_image(QImage(), 160, 100, save_sheet=True)
 
 
+def test_actual_main_and_modal_frames_share_one_encodable_pixel_format(recorder, tmp_path):
+    import shutil
+    from PySide6.QtGui import QColor, QImage
+
+    if shutil.which('ffmpeg') is None or shutil.which('ffprobe') is None:
+        pytest.skip('Actual GIF encoding requires ffmpeg and ffprobe')
+    frames = tmp_path / 'frames'; frames.mkdir()
+    for number in range(6):
+        modal = number >= 3
+        source = QImage(40, 20, QImage.Format.Format_ARGB32_Premultiplied
+                        if modal else QImage.Format.Format_RGB32)
+        source.fill(QColor('#7bb75e' if number % 2 else '#ffffff'))
+        fitted = recorder.fit_capture_image(source, 160, 100, save_sheet=modal)
+        assert fitted.format() == QImage.Format.Format_RGB32
+        assert fitted.save(str(frames / f'frame-{number:05d}.png'))
+    output = tmp_path / 'actual-surfaces.gif'
+    recorder.encode(shutil.which('ffmpeg'), frames, 6, output)
+    receipt = dict(frames=6, fps=6, size=[160, 100], duration_seconds=1)
+    recorder.verify_gif(output, receipt)
+    assert receipt['gif_probe']['frames'] == 6
+
+
 @pytest.mark.parametrize("button_class",[QPushButton,QToolButton])
 def test_actual_visible_button_endpoint_is_rejected_before_capture(qtbot,recorder,tmp_path,button_class):
     window = QWidget()

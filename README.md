@@ -8,10 +8,12 @@ Python + Qt Widgets（PySide6），数据库连接、SQL 和结果均在本机�
 数据库管理工作流。
 
 下面是一段 OpenNavicat 实际运行演示：浏览示例表、编写并执行查询、查看结果、编辑表结构、
-检查 SQL 预览，再查看 MongoDB 文档网格、精确 BSON 类型树、GridFS 图像预览、JavaScript 查询与索引设计。
+检查 SQL 预览，再查看 MongoDB 文档网格、精确 BSON 类型树、GridFS 图像预览、JavaScript 查询、索引设计，
+以及集合存储配置、保存命名与重新打开。
 连接名、客户、邮箱、日期、订单、商品、BSON、SQL 和图像均由隔离演示工作区生成，
-不读取本机真实连接或业务数据库。单段 GIF 对应 **0.9.0** 的实际 Qt 界面，约 30 秒；
-验证范围见 [0.9 验证记录](docs/validation-0.9.md)。
+不读取本机真实连接或业务数据库。单段 GIF 对应 **0.10.0 候选**的实际 Qt 界面，17 个阶段、约 38 秒；
+SQLite 结构和 MongoDB 索引部分展示预览，集合存储部分实际保存并独立核验服务器配置后重新打开。
+验证范围见 [0.10 候选记录](docs/validation-0.10.md)。
 
 ![OpenNavicat 示例数据工作流演示](docs/assets/opennavicat-demo.gif)
 
@@ -20,9 +22,10 @@ Python + Qt Widgets（PySide6），数据库连接、SQL 和结果均在本机�
 [OpenNavicat v0.9.0](https://github.com/shubolab/opennavicat/releases/tag/v0.9.0)。
 八个公开资产已匿名下载，并分别核对 GitHub 大小/digest 与 `SHA256SUMS`。
 
-main 的后续开发已加入普通/时间序列集合和视图工具，并按原版实测重排普通集合七页、
-接通存储引擎与索引默认配置。它们尚未进入上述 0.9.0 安装器；当前验证和剩余差距见
-[恢复快照](docs/snapshot/2026-11-11-resume.md) 与 [集合存储页记录](docs/mongodb-collection-storage.md)。
+正在准备的 **0.10.0 候选**加入普通/时间序列集合和视图工具，并按原版实测重排普通集合七页、
+接通存储引擎与索引默认配置。它们尚未进入上述 0.9.0 安装器；本版六目标安装器验证与发布仍待完成。
+当前验证和剩余差距见 [持续开发快照](docs/snapshot/2026-11-12-progress.md)、
+[0.10 候选记录](docs/validation-0.10.md)与 [集合存储页记录](docs/mongodb-collection-storage.md)。
 
 最新可用里程碑为 **v0.9.0**，提供三个操作系统、两种架构的六份安装包。
 现有 **SQLite、PostgreSQL、MySQL、MariaDB、SQL Server、Redis、MongoDB** 七种核心驱动，

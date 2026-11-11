@@ -267,23 +267,21 @@ Docker environment dumps and private certificate/key/URI files.
 
 The current Linux WSL amd64 proof passed **139 cases with zero skips** and six
 independently cleaned MongoDB 8.0.34 fixtures. The exact run identity and source
-hashes are retained under `artifacts/mongo-collections/drop-20261111/`. The shared
+hashes are retained under `artifacts/mongo-collections/drop-main-20261111/`. The shared
 database-security CI job executes this runner. The earlier macOS ARM64
 backend-only proof remains historical and does not cover this UI.
 
-Shared CI [43018223144](https://github.com/shubolab/opennavicat/actions/runs/43018223144)
-on main commit `6a2bac5e00ef8b332bfe6dea74fc0bbde2bafb99` completed all **7 jobs
+Shared CI [43026160828](https://github.com/shubolab/opennavicat/actions/runs/43026160828)
+on main commit `a5e1c4411f426289e5c3a4b45508d4d41cff882a` completed all **7 jobs
 successfully**: six native desktop targets and the database-security job. The
-collection/time-series/copy/maintenance runner passed inside that job with
-create/design, drop/clear/rename, time-series, staged-copy, validation, reIndex and
-compact scope; the current branch adds the ordinary-view and metadata-inspector
-scope described above. Each desktop job completed source tests, helper qualification,
-packaging, installation, launch and uninstall for its target. This is a
-main-branch preflight, not a tag, public Release or six-installer download
-acceptance. macOS amd64 runs exposed existing JS output/null tests racing helper
-startup; both now allow enough startup time to reach their real semantic failure,
-while the complete native VM scope passed 101/101 and JS protocol rerun passed
-193/193 without skips.
+collection/time-series/copy/maintenance/view runner passed inside that job with
+create/design, drop/clear/rename, time-series, staged-copy, validation, reIndex,
+compact, ordinary-view create/collMod/drop and metadata-inspector scope described
+above. Each desktop job completed source tests, helper qualification, packaging,
+installation, launch and uninstall for its target. This is a main-branch
+preflight, not a tag, public Release or six-installer download acceptance. The
+native VM and JS protocol checks are recorded in the CI evidence; earlier startup
+races are not being reclassified as a pass.
 
 The proof does not qualify Windows/macOS UI against the reference application,
 public release assets, or the retained Dell environment. Existing fixtures,

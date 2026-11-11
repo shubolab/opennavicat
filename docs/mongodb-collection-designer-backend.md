@@ -123,6 +123,14 @@ UI slice backed only by capabilities in this module:
   total/object-average/storage/index sizes, index count, with unknown values kept
   explicit. This is a real metadata projection, not a fabricated summary.
 
+- Ordinary collection design now has an `索引` tab populated from the live
+  `listIndexes` result. It shows keys, uniqueness, background/sparse flags, TTL,
+  bucket size and version, disables editing of `_id_`, and routes New/Design/
+  Delete to the already-qualified independent Mongo index designer. The index
+  table refreshes through the owner queue after index changes; collection-option
+  saves do not rewrite indexes. The exact original tab order, empty-collection
+  behavior and every embedded control remain to be observed at runtime.
+
 - Collection maintenance exposes fast/full `validate` for ordinary and
   time-series collections and `reIndex` for ordinary collections. Every command
   checks the relevant UUID before and after, returns a bounded Canonical Extended
@@ -276,9 +284,9 @@ It reuses the receipt-backed, run-label-specific emergency cleanup for
 timeout/interrupt. It never accepts a reference endpoint. Logs/receipts exclude
 Docker environment dumps and private certificate/key/URI files.
 
-The current Linux WSL amd64 proof passed **142 cases with zero skips** and six
+The current Linux WSL amd64 proof passed **144 cases with zero skips** and six
 independently cleaned MongoDB 8.0.34 fixtures. The exact run identity and source
-hashes are retained under `artifacts/mongo-collections/collation-main-20261111/`. The shared
+hashes are retained under `artifacts/mongo-collections/collection-indexes-20261111/`. The shared
 database-security CI job executes this runner. The earlier macOS ARM64
 backend-only proof remains historical and does not cover this UI.
 
@@ -301,7 +309,7 @@ user workspaces and Navicat configuration are not used.
 Additional Linux WSL amd64 checks in this checkpoint:
 
 - `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q -W error`:
-  **1494 passed, 527 conditionally skipped, 0 failed/error**. Default-service
+  **1495 passed, 528 conditionally skipped, 0 failed/error**. Default-service
   skips are not counted as real database execution; the owned runner above
   covers this feature's Mongo scope without skips.
 - `.venv/bin/python -m opennavicat --smoke-test`: **passed**, 6 rows / 4 columns,

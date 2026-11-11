@@ -23,6 +23,7 @@ from opennavicat.storage import Store
 from opennavicat.ui.mongo_browser import MongoCollectionPage
 from opennavicat.ui.mongo_gridfs import MongoGridFSPage
 from opennavicat.ui.mongo_collection_designer import MongoCollectionDesignerPage
+from opennavicat.ui.mongo_index_designer import MongoIndexDesignerPage
 from opennavicat.ui.mongo_view_designer import MongoViewDesignerPage
 from opennavicat.ui.mongo_timeseries_designer import MongoTimeSeriesDesignerPage
 from opennavicat.ui.mongo_maintenance import MongoMaintenanceConfirmDialog, MongoMaintenanceResultDialog
@@ -182,6 +183,23 @@ def test_real_collection_designer_creates_and_collmods_with_worker_owned_io(qtbo
     entry = dict(browser.selected(), table="ui_created")
     assert window.design_object(entry) is page
     assert not errors and threads
+
+
+def test_real_collection_designer_lists_indexes_and_opens_index_designer(qtbot, mongo_window):
+    window, config, database, schema, errors, threads = mongo_window
+    database.docs.create_index([('name', 1)], name='docs_name_idx')
+    page = window.open_mongo_collection_designer(config.id, config.database, 'docs')
+    qtbot.waitUntil(lambda: page.snapshot is not None and page.index_table.rowCount() >= 2 and not page.loading, timeout=15000)
+    names = [page.index_table.item(row, 0).text() for row in range(page.index_table.rowCount())]
+    assert names == ['_id_', 'docs_name_idx']
+    page.index_table.selectRow(names.index('docs_name_idx'))
+    assert page.edit_index_button.isEnabled() and page.delete_index_button.isEnabled()
+    page.edit_index_button.click()
+    qtbot.waitUntil(lambda: any(isinstance(widget, MongoIndexDesignerPage)
+        and widget.collection == 'docs' and widget.object_name == 'docs_name_idx'
+        for widget in (window.tabs.widget(i) for i in range(window.tabs.count()))), timeout=15000)
+    idle(qtbot, window)
+    assert threads and not errors
 
 def test_real_mongo_view_uses_typed_readonly_workspace(qtbot, mongo_window):
     window, config, database, schema, errors, threads = mongo_window

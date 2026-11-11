@@ -127,3 +127,30 @@ def reindex_collection(session, snapshot, *, cancelled=None):
         None,
         int(reply['nIndexes']) if isinstance(reply.get('nIndexes'), (int, float)) else len(after_indexes),
     )
+
+
+def compact_collection(session, snapshot, *, force=False, cancelled=None):
+    if not isinstance(snapshot, (CollectionSnapshot, TimeSeriesSnapshot)) or not snapshot.exists:
+        raise DatabaseError('An existing ordinary or time-series collection snapshot is required for compact')
+    if isinstance(snapshot, CollectionSnapshot) and (snapshot.kind != 'mongo_collection' or snapshot.collection_type != 'collection'):
+        raise DatabaseError('compact is supported only for ordinary and time-series collections')
+    if session.config.read_only or snapshot.read_only:
+        raise DatabaseError('This connection or collection is read-only')
+    if cancelled and cancelled():
+        raise DatabaseError('Collection compact cancelled before database access')
+    started = time.monotonic()
+    with session._operation() as comment:
+        before_uuid, _spec = _identity(session, snapshot)
+        command = {'compact': snapshot.name, 'comment': comment}
+        if force:
+            command['force'] = True
+        reply = _checked_command(session, snapshot.schema, command, 86400)
+        after_uuid, _spec = _identity(session, snapshot)
+    if before_uuid != after_uuid:
+        raise MongoConflictError('The collection UUID changed during compact')
+    reply = _bounded_report(reply)
+    return CollectionMaintenanceResult(
+        'compact-force' if force else 'compact', before_uuid, reply,
+        round((time.monotonic() - started) * 1000, 3),
+        None, None,
+    )

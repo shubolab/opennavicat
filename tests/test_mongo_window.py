@@ -519,7 +519,7 @@ def test_real_window_copy_collection_data_and_structure_with_staging(qtbot, mong
     assert not errors and threads
 
 
-def test_real_window_collection_maintenance_validate_full_and_reindex(qtbot, mongo_window):
+def test_real_window_collection_maintenance_validate_reindex_and_compact(qtbot, mongo_window):
     window, config, database, schema, errors, threads = mongo_window
     info = {"id": config.id, "schema": config.database, "name": "docs", "table": "docs", "kind": "mongo_collection"}
     before_count = database.docs.count_documents({})
@@ -554,6 +554,18 @@ def test_real_window_collection_maintenance_validate_full_and_reindex(qtbot, mon
     qtbot.waitUntil(lambda: any(isinstance(dialog, MongoMaintenanceResultDialog) for dialog in window._mongo_maintenance_dialogs), timeout=15000)
     result = next(dialog for dialog in window._mongo_maintenance_dialogs if isinstance(dialog, MongoMaintenanceResultDialog))
     assert result.windowTitle() == '重建集合索引结果'
+    result.reject(); idle(qtbot, window)
+
+    assert window.compact_mongo_collection(info, True) is True
+    qtbot.waitUntil(lambda: any(isinstance(dialog, MongoMaintenanceConfirmDialog) for dialog in window._mongo_maintenance_dialogs), timeout=15000)
+    confirm = next(dialog for dialog in window._mongo_maintenance_dialogs if isinstance(dialog, MongoMaintenanceConfirmDialog))
+    assert 'compact' in confirm.preview.toPlainText() and 'force: true' in confirm.preview.toPlainText()
+    confirm.ack.setChecked(True)
+    qtbot.mouseClick(confirm.confirm, Qt.MouseButton.LeftButton)
+    idle(qtbot, window)
+    qtbot.waitUntil(lambda: any(isinstance(dialog, MongoMaintenanceResultDialog) for dialog in window._mongo_maintenance_dialogs), timeout=15000)
+    result = next(dialog for dialog in window._mongo_maintenance_dialogs if isinstance(dialog, MongoMaintenanceResultDialog))
+    assert result.windowTitle() == '强制压缩集合结果'
     result.reject(); idle(qtbot, window)
     assert database.docs.count_documents({}) == before_count
     assert database.docs.index_information() == before_indexes

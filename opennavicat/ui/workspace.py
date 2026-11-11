@@ -399,6 +399,8 @@ class ObjectBrowser(QWidget):
             maintenance = menu.addMenu("维护")
             maintenance.addAction("验证集合（常规）", lambda: self.window.validate_mongo_collection(entry, False))
             maintenance.addAction("验证集合（完整）", lambda: self.window.validate_mongo_collection(entry, True))
+            maintenance.addAction("压缩集合（常规）", lambda: self.window.compact_mongo_collection(entry, False))
+            maintenance.addAction("压缩集合（强制）", lambda: self.window.compact_mongo_collection(entry, True))
             reindex = maintenance.addAction("重建集合索引", lambda: self.window.reindex_mongo_collection(entry))
             reindex.setEnabled(entry.get("kind") == "mongo_collection")
         groups = menu.addMenu("管理组")

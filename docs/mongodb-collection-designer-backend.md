@@ -224,7 +224,7 @@ It reuses the receipt-backed, run-label-specific emergency cleanup for
 timeout/interrupt. It never accepts a reference endpoint. Logs/receipts exclude
 Docker environment dumps and private certificate/key/URI files.
 
-The current Linux WSL amd64 proof passed **94 cases with zero skips** and five
+The current Linux WSL amd64 proof passed **98 cases with zero skips** and five
 independently cleaned MongoDB 8.0.34 fixtures. The shared database-security CI job
 executes this runner. The earlier macOS ARM64 backend-only proof remains
 historical and does not cover this UI.
@@ -249,7 +249,7 @@ user workspaces and Navicat configuration are not used.
 Additional Linux WSL amd64 checks in this checkpoint:
 
 - `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q -W error`:
-  **1486 passed, 504 conditionally skipped, 0 failed/error**. Default-service
+  **1486 passed, 508 conditionally skipped, 0 failed/error**. Default-service
   skips are not counted as real database execution; the owned runner above
   covers this feature's Mongo scope without skips.
 - `.venv/bin/python -m opennavicat --smoke-test`: **passed**, 6 rows / 4 columns,

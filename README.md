@@ -16,7 +16,8 @@ Python + Qt Widgets（PySide6），数据库连接、SQL 和结果均在本机�
 ![OpenNavicat 示例数据工作流演示](docs/assets/opennavicat-demo.gif)
 
 0.9.0 候选增加内置 MongoDB JavaScript 的八个索引 helpers，并修复经过未保存设计文档的异步保存后丢失已确认连接设置的问题。
-六平台新安装包资格尚待执行；下面保留当前已发布版本的下载入口。
+六平台原生安装预检已通过，正式 tag 发布及公开包验收留待后续；下面保留当前已发布版本的下载入口。
+本轮交接与分支收敛结果见 [当前工作快照](docs/snapshot/2026-11-11-handoff.md)。
 
 最新可用里程碑 **[v0.8.1](https://github.com/shubolab/opennavicat/releases/tag/v0.8.1)**
 已于 2026-11-11（北京时间）发布为早期预发行版本，提供三个操作系统、两种架构的六份安装包。

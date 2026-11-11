@@ -1,0 +1,397 @@
+{
+  "archive_tag": "archive/2026-11-11-branch-consolidation",
+  "archive_commit": "389497532a46c1754d5f97dfedfb98a4720f8c78",
+  "archive_tree_is_main_commit": "d725b228a070c35ea6e4f587ad43b9381e3c64de",
+  "purpose": "Recover exact retired branch tips without retaining active branches or merging temporary workflows into product",
+  "uncommitted_and_ignored_files": "Remain in original local worktrees; not included in archive tag",
+  "refs_before": [
+    {
+      "ref": "refs/heads/main",
+      "sha": "d725b228a070c35ea6e4f587ad43b9381e3c64de"
+    },
+    {
+      "ref": "refs/heads/work/0.7-integration",
+      "sha": "39598f5e405f9b42bc1dfe474b5107e9105b2743"
+    },
+    {
+      "ref": "refs/heads/work/0.8-integration",
+      "sha": "e7b0e1ac986db32b4c216df78c25146f163b760f"
+    },
+    {
+      "ref": "refs/heads/work/0.9-integration",
+      "sha": "f9c492362afe750510b3c01057bc794991d35ad1"
+    },
+    {
+      "ref": "refs/heads/work/0.9-release",
+      "sha": "92079b928f41d00c2b5ed2deeaabd7c20d200d44"
+    },
+    {
+      "ref": "refs/heads/work/connection-edit-lifecycle",
+      "sha": "918d95328179c3cfc18d2c9b62dba45a923f4ebf"
+    },
+    {
+      "ref": "refs/heads/work/connection-manager18",
+      "sha": "6eb1eff36edeee24c4108b13223a712ad3c3dce3"
+    },
+    {
+      "ref": "refs/heads/work/linux-native-discovery",
+      "sha": "e5f81b11326ae0bef2a26dedb3a7fadb99a9baf2"
+    },
+    {
+      "ref": "refs/heads/work/linux-native-integration",
+      "sha": "34619a79b2d9ba3c92669245b981754a0ebeead9"
+    },
+    {
+      "ref": "refs/heads/work/mongo-combo-native",
+      "sha": "c038464327905a616b4fbfaa8320f3e2c7bcf109"
+    },
+    {
+      "ref": "refs/heads/work/mongodb-adapter",
+      "sha": "cd189a01eaaeeabeb219bf03aebc94655f4f3fe1"
+    },
+    {
+      "ref": "refs/heads/work/mongodb-cancel-marker",
+      "sha": "6f46795c7a4af073a539b2ada956bb977196afda"
+    },
+    {
+      "ref": "refs/heads/work/mongodb-collection-designer",
+      "sha": "c9f536aef83e88d3b5092012eaafd43567c62f14"
+    },
+    {
+      "ref": "refs/heads/work/mongodb-collection-reference",
+      "sha": "d6ec9ea1c48fba0d3937011e9aa8d01ea83bb291"
+    },
+    {
+      "ref": "refs/heads/work/mongodb-collections-next",
+      "sha": "5701b5405dbb8ceda1293c884cab26c3bf62167f"
+    },
+    {
+      "ref": "refs/heads/work/mongodb-index-designer",
+      "sha": "ec8eb4cf7a3aca1dd866b8e57801fa22306207e0"
+    },
+    {
+      "ref": "refs/heads/work/mongodb-js-engine",
+      "sha": "723b227c786a3ae6022b6fb977fa2d3d5df1f5e8"
+    },
+    {
+      "ref": "refs/heads/work/mongodb-js-index-helpers",
+      "sha": "82831724bb022d2a58b559a3395f2fcbdea3aa7b"
+    },
+    {
+      "ref": "refs/heads/work/mongodb-js-integration-candidate",
+      "sha": "36071bec1fc86973c6e66dd6794117a01c3f225e"
+    },
+    {
+      "ref": "refs/heads/work/mongodb-selection-consistency",
+      "sha": "3c0a2c59218962e41d1eb276709a05cadaf7cca0"
+    },
+    {
+      "ref": "refs/heads/work/mongodb-ui-parity",
+      "sha": "e3e6b19e0a8baca178942398cad84f5ba2e0012f"
+    },
+    {
+      "ref": "refs/heads/work/navicat-import",
+      "sha": "da9a2eca08f30468886530d49327c7bcdea4fe98"
+    },
+    {
+      "ref": "refs/heads/work/port-layout-native",
+      "sha": "5e7f0bd10fbb83fd1aa71fd6e0fdebf6b0759311"
+    },
+    {
+      "ref": "refs/heads/work/redis-adapter",
+      "sha": "da9a2eca08f30468886530d49327c7bcdea4fe98"
+    },
+    {
+      "ref": "refs/heads/work/sqlite-object-designers",
+      "sha": "6eb1eff36edeee24c4108b13223a712ad3c3dce3"
+    },
+    {
+      "ref": "refs/heads/work/sqlserver-adapter",
+      "sha": "da9a2eca08f30468886530d49327c7bcdea4fe98"
+    },
+    {
+      "ref": "refs/heads/work/sqlserver-redis-dialogs",
+      "sha": "6eb1eff36edeee24c4108b13223a712ad3c3dce3"
+    },
+    {
+      "ref": "refs/heads/work/windows-navicat-discovery",
+      "sha": "a0a5dd2f414e85fc64cf470da693ce446117ff27"
+    },
+    {
+      "ref": "refs/remotes/origin/main",
+      "sha": "a59d1e65db81d31f38ff84c0df0a424490ec828d"
+    },
+    {
+      "ref": "refs/remotes/origin/work/0.7-integration",
+      "sha": "39598f5e405f9b42bc1dfe474b5107e9105b2743"
+    },
+    {
+      "ref": "refs/remotes/origin/work/0.8-integration",
+      "sha": "e7b0e1ac986db32b4c216df78c25146f163b760f"
+    },
+    {
+      "ref": "refs/remotes/origin/work/0.9-integration",
+      "sha": "f9c492362afe750510b3c01057bc794991d35ad1"
+    },
+    {
+      "ref": "refs/remotes/origin/work/0.9-release",
+      "sha": "92079b928f41d00c2b5ed2deeaabd7c20d200d44"
+    },
+    {
+      "ref": "refs/remotes/origin/work/connection-edit-lifecycle",
+      "sha": "918d95328179c3cfc18d2c9b62dba45a923f4ebf"
+    },
+    {
+      "ref": "refs/remotes/origin/work/linux-native-discovery",
+      "sha": "e5f81b11326ae0bef2a26dedb3a7fadb99a9baf2"
+    },
+    {
+      "ref": "refs/remotes/origin/work/linux-native-integration",
+      "sha": "34619a79b2d9ba3c92669245b981754a0ebeead9"
+    },
+    {
+      "ref": "refs/remotes/origin/work/mongo-combo-native",
+      "sha": "c038464327905a616b4fbfaa8320f3e2c7bcf109"
+    },
+    {
+      "ref": "refs/remotes/origin/work/mongodb-adapter",
+      "sha": "b978f16663a94b75d9edbc3b206b47af9728c0e9"
+    },
+    {
+      "ref": "refs/remotes/origin/work/mongodb-cancel-marker",
+      "sha": "6f46795c7a4af073a539b2ada956bb977196afda"
+    },
+    {
+      "ref": "refs/remotes/origin/work/mongodb-collection-designer",
+      "sha": "c9f536aef83e88d3b5092012eaafd43567c62f14"
+    },
+    {
+      "ref": "refs/remotes/origin/work/mongodb-collection-reference",
+      "sha": "d6ec9ea1c48fba0d3937011e9aa8d01ea83bb291"
+    },
+    {
+      "ref": "refs/remotes/origin/work/mongodb-index-designer",
+      "sha": "ec8eb4cf7a3aca1dd866b8e57801fa22306207e0"
+    },
+    {
+      "ref": "refs/remotes/origin/work/mongodb-js-engine",
+      "sha": "723b227c786a3ae6022b6fb977fa2d3d5df1f5e8"
+    },
+    {
+      "ref": "refs/remotes/origin/work/mongodb-js-index-helpers",
+      "sha": "82831724bb022d2a58b559a3395f2fcbdea3aa7b"
+    },
+    {
+      "ref": "refs/remotes/origin/work/mongodb-js-integration-candidate",
+      "sha": "36071bec1fc86973c6e66dd6794117a01c3f225e"
+    },
+    {
+      "ref": "refs/remotes/origin/work/mongodb-selection-consistency",
+      "sha": "3c0a2c59218962e41d1eb276709a05cadaf7cca0"
+    },
+    {
+      "ref": "refs/remotes/origin/work/mongodb-ui-parity",
+      "sha": "e3e6b19e0a8baca178942398cad84f5ba2e0012f"
+    },
+    {
+      "ref": "refs/remotes/origin/work/port-layout-native",
+      "sha": "5e7f0bd10fbb83fd1aa71fd6e0fdebf6b0759311"
+    },
+    {
+      "ref": "refs/remotes/origin/work/windows-navicat-discovery",
+      "sha": "a0a5dd2f414e85fc64cf470da693ce446117ff27"
+    }
+  ],
+  "retired_local_refs": [
+    {
+      "ref": "refs/heads/work/0.7-integration",
+      "sha": "39598f5e405f9b42bc1dfe474b5107e9105b2743"
+    },
+    {
+      "ref": "refs/heads/work/0.8-integration",
+      "sha": "e7b0e1ac986db32b4c216df78c25146f163b760f"
+    },
+    {
+      "ref": "refs/heads/work/0.9-integration",
+      "sha": "f9c492362afe750510b3c01057bc794991d35ad1"
+    },
+    {
+      "ref": "refs/heads/work/0.9-release",
+      "sha": "92079b928f41d00c2b5ed2deeaabd7c20d200d44"
+    },
+    {
+      "ref": "refs/heads/work/connection-edit-lifecycle",
+      "sha": "918d95328179c3cfc18d2c9b62dba45a923f4ebf"
+    },
+    {
+      "ref": "refs/heads/work/connection-manager18",
+      "sha": "6eb1eff36edeee24c4108b13223a712ad3c3dce3"
+    },
+    {
+      "ref": "refs/heads/work/linux-native-discovery",
+      "sha": "e5f81b11326ae0bef2a26dedb3a7fadb99a9baf2"
+    },
+    {
+      "ref": "refs/heads/work/linux-native-integration",
+      "sha": "34619a79b2d9ba3c92669245b981754a0ebeead9"
+    },
+    {
+      "ref": "refs/heads/work/mongo-combo-native",
+      "sha": "c038464327905a616b4fbfaa8320f3e2c7bcf109"
+    },
+    {
+      "ref": "refs/heads/work/mongodb-adapter",
+      "sha": "cd189a01eaaeeabeb219bf03aebc94655f4f3fe1"
+    },
+    {
+      "ref": "refs/heads/work/mongodb-cancel-marker",
+      "sha": "6f46795c7a4af073a539b2ada956bb977196afda"
+    },
+    {
+      "ref": "refs/heads/work/mongodb-collection-designer",
+      "sha": "c9f536aef83e88d3b5092012eaafd43567c62f14"
+    },
+    {
+      "ref": "refs/heads/work/mongodb-collection-reference",
+      "sha": "d6ec9ea1c48fba0d3937011e9aa8d01ea83bb291"
+    },
+    {
+      "ref": "refs/heads/work/mongodb-index-designer",
+      "sha": "ec8eb4cf7a3aca1dd866b8e57801fa22306207e0"
+    },
+    {
+      "ref": "refs/heads/work/mongodb-js-engine",
+      "sha": "723b227c786a3ae6022b6fb977fa2d3d5df1f5e8"
+    },
+    {
+      "ref": "refs/heads/work/mongodb-js-index-helpers",
+      "sha": "82831724bb022d2a58b559a3395f2fcbdea3aa7b"
+    },
+    {
+      "ref": "refs/heads/work/mongodb-js-integration-candidate",
+      "sha": "36071bec1fc86973c6e66dd6794117a01c3f225e"
+    },
+    {
+      "ref": "refs/heads/work/mongodb-selection-consistency",
+      "sha": "3c0a2c59218962e41d1eb276709a05cadaf7cca0"
+    },
+    {
+      "ref": "refs/heads/work/mongodb-ui-parity",
+      "sha": "e3e6b19e0a8baca178942398cad84f5ba2e0012f"
+    },
+    {
+      "ref": "refs/heads/work/navicat-import",
+      "sha": "da9a2eca08f30468886530d49327c7bcdea4fe98"
+    },
+    {
+      "ref": "refs/heads/work/port-layout-native",
+      "sha": "5e7f0bd10fbb83fd1aa71fd6e0fdebf6b0759311"
+    },
+    {
+      "ref": "refs/heads/work/redis-adapter",
+      "sha": "da9a2eca08f30468886530d49327c7bcdea4fe98"
+    },
+    {
+      "ref": "refs/heads/work/sqlite-object-designers",
+      "sha": "6eb1eff36edeee24c4108b13223a712ad3c3dce3"
+    },
+    {
+      "ref": "refs/heads/work/sqlserver-adapter",
+      "sha": "da9a2eca08f30468886530d49327c7bcdea4fe98"
+    },
+    {
+      "ref": "refs/heads/work/sqlserver-redis-dialogs",
+      "sha": "6eb1eff36edeee24c4108b13223a712ad3c3dce3"
+    },
+    {
+      "ref": "refs/heads/work/windows-navicat-discovery",
+      "sha": "a0a5dd2f414e85fc64cf470da693ce446117ff27"
+    }
+  ],
+  "retired_remote_refs": [
+    {
+      "ref": "refs/remotes/origin/work/0.7-integration",
+      "sha": "39598f5e405f9b42bc1dfe474b5107e9105b2743"
+    },
+    {
+      "ref": "refs/remotes/origin/work/0.8-integration",
+      "sha": "e7b0e1ac986db32b4c216df78c25146f163b760f"
+    },
+    {
+      "ref": "refs/remotes/origin/work/0.9-integration",
+      "sha": "f9c492362afe750510b3c01057bc794991d35ad1"
+    },
+    {
+      "ref": "refs/remotes/origin/work/0.9-release",
+      "sha": "92079b928f41d00c2b5ed2deeaabd7c20d200d44"
+    },
+    {
+      "ref": "refs/remotes/origin/work/connection-edit-lifecycle",
+      "sha": "918d95328179c3cfc18d2c9b62dba45a923f4ebf"
+    },
+    {
+      "ref": "refs/remotes/origin/work/linux-native-discovery",
+      "sha": "e5f81b11326ae0bef2a26dedb3a7fadb99a9baf2"
+    },
+    {
+      "ref": "refs/remotes/origin/work/linux-native-integration",
+      "sha": "34619a79b2d9ba3c92669245b981754a0ebeead9"
+    },
+    {
+      "ref": "refs/remotes/origin/work/mongo-combo-native",
+      "sha": "c038464327905a616b4fbfaa8320f3e2c7bcf109"
+    },
+    {
+      "ref": "refs/remotes/origin/work/mongodb-adapter",
+      "sha": "b978f16663a94b75d9edbc3b206b47af9728c0e9"
+    },
+    {
+      "ref": "refs/remotes/origin/work/mongodb-cancel-marker",
+      "sha": "6f46795c7a4af073a539b2ada956bb977196afda"
+    },
+    {
+      "ref": "refs/remotes/origin/work/mongodb-collection-designer",
+      "sha": "c9f536aef83e88d3b5092012eaafd43567c62f14"
+    },
+    {
+      "ref": "refs/remotes/origin/work/mongodb-collection-reference",
+      "sha": "d6ec9ea1c48fba0d3937011e9aa8d01ea83bb291"
+    },
+    {
+      "ref": "refs/remotes/origin/work/mongodb-index-designer",
+      "sha": "ec8eb4cf7a3aca1dd866b8e57801fa22306207e0"
+    },
+    {
+      "ref": "refs/remotes/origin/work/mongodb-js-engine",
+      "sha": "723b227c786a3ae6022b6fb977fa2d3d5df1f5e8"
+    },
+    {
+      "ref": "refs/remotes/origin/work/mongodb-js-index-helpers",
+      "sha": "82831724bb022d2a58b559a3395f2fcbdea3aa7b"
+    },
+    {
+      "ref": "refs/remotes/origin/work/mongodb-js-integration-candidate",
+      "sha": "36071bec1fc86973c6e66dd6794117a01c3f225e"
+    },
+    {
+      "ref": "refs/remotes/origin/work/mongodb-selection-consistency",
+      "sha": "3c0a2c59218962e41d1eb276709a05cadaf7cca0"
+    },
+    {
+      "ref": "refs/remotes/origin/work/mongodb-ui-parity",
+      "sha": "e3e6b19e0a8baca178942398cad84f5ba2e0012f"
+    },
+    {
+      "ref": "refs/remotes/origin/work/port-layout-native",
+      "sha": "5e7f0bd10fbb83fd1aa71fd6e0fdebf6b0759311"
+    },
+    {
+      "ref": "refs/remotes/origin/work/windows-navicat-discovery",
+      "sha": "a0a5dd2f414e85fc64cf470da693ce446117ff27"
+    }
+  ],
+  "retained_branch_names": [
+    "main",
+    "work/mongodb-collections-next"
+  ]
+}

@@ -1,8 +1,21 @@
 # 0.9 候选验证记录
 
-记录日期：2026-11-11，Asia/Shanghai。**0.9.0 仍是候选，尚未执行最终六平台安装资格或公开发布。** 当前公开里程碑为 [v0.8.1](https://github.com/shubolab/opennavicat/releases/tag/v0.8.1)，其正式安装与公开资产结果保留在 [0.8.1 验证记录](validation-0.8.md)，不能替代本候选的新代码验收。
+记录日期：2026-11-11，Asia/Shanghai。**0.9.0 仍是候选，同源完整六平台预检已经通过，尚未创建正式 tag 或公开发布。** 当前公开里程碑为 [v0.8.1](https://github.com/shubolab/opennavicat/releases/tag/v0.8.1)，其正式安装与公开资产结果保留在 [0.8.1 验证记录](validation-0.8.md)，不能替代本候选的新代码验收。
 
 本轮增加 MongoDB JavaScript 索引 helpers、命令错误与写入结果表达，并修复连接设置在异步保存文档后丢失的问题。完整 Navicat 工具和三平台 1:1 UI 目标保持不变；产品账号、产品登录、激活、订阅及云账号协作仍排除。
+
+## 完整预检与交接状态
+
+精确冻结源码 **`92079b928f41d00c2b5ed2deeaabd7c20d200d44`** 的
+[42901942839](https://github.com/shubolab/opennavicat/actions/runs/42901942839) 为 workflow_dispatch、attempt 1；
+六原生安装目标及安全任务全部成功，发布任务按 dispatch 正确跳过。
+各目标源码通过/条件跳过分别为 Linux 1440/440、Windows 1351/565、macOS 1458/440，均零失败/错误；
+每目标 VM 101 与 Qt 4 均零跳过，source/processed/frozen/installed helper、bootstrap、pin、架构与实际安装运行卸载链均已核验。
+安全专项 75/131/Mongo 274/Mongo TLS-SSH 22/JS 193/JS Qt 12 均零跳过，14 个独有 MongoDB fixture 已清理。
+
+用户要求本次收尾后继续交接，未启动正式 tag 流程。920 已正常合入 main，普通集合后端与静态参考收敛为唯一 next 分支，旧分支已清理。
+main 合并提交的 SHA 不等于冻结 920；产品目录字节相同也不把精确源资格换成新 SHA。
+完整提交/分支、证据路径、剩余门禁和恢复顺序见 [2026-11-11 快照](snapshot/2026-11-11-handoff.md)。
 
 ## 源码归属和实际范围
 
@@ -84,9 +97,8 @@ JS 结果树和显示 Canonical EJSON 与三份生成 BSON 做字节检查，包
 
 ## 尚未完成的候选门禁
 
-- 最终候选源码、版本和已录制演示材料尚待统一冻结；当前记录不是公开 0.9.0 Release。
-- Windows/Linux/macOS × amd64/arm64 的源码、零跳过 VM/Qt、冻结、实际安装/运行/卸载、依赖及 helper 字节链仍待本候选的六平台流水线执行。0.8.1 的正式结果不替代新 helpers 和设置修补。
-- 完整数据库安全专项、JS 三模块 fixture 和 Qt 两模块 fixture 的新运行身份、清理、条件跳过和实际 scope 还需最终托管资格独立核对。
+- 920 已统一冻结版本和演示并完成同源完整预检；仍须后续正式 tag 运行和公开包验证，当前记录不是公开 0.9.0 Release。
+- 六原生目标的完整预检和安全 scope 已由该次独有 artifacts 审计，发布任务正确跳过；不拿它替代尚未启动的正式发布，不拿旧 0.8.1 替代新版本资格。
 - 公开发布仍须六安装器加 SHA256SUMS/build-manifests 共八项精确资产、上传状态/字节/digest/SHA、匿名下载及各平台回执；目前没有公开 0.9.0 安装资产可据此验收。
 - 原版 helper runtime、全局/API、完整 BSON 与代理/原型兼容、全部拓扑/认证、索引选项和并发边界、三平台实际 UI，以及全部数据库工具继续按[总矩阵](parity-matrix.md)推进。mongosh 不是 Navicat。
 - 用户 Dell Windows/RDP 与无桌面 WSL GUI 验收仍延期，现场保持原状；托管 CI 和 Cocoa 组件检查不替代该现场验收。

@@ -278,17 +278,17 @@ Docker environment dumps and private certificate/key/URI files.
 
 The current Linux WSL amd64 proof passed **142 cases with zero skips** and six
 independently cleaned MongoDB 8.0.34 fixtures. The exact run identity and source
-hashes are retained under `artifacts/mongo-collections/collation-20261111/`. The shared
+hashes are retained under `artifacts/mongo-collections/collation-main-20261111/`. The shared
 database-security CI job executes this runner. The earlier macOS ARM64
 backend-only proof remains historical and does not cover this UI.
 
-Shared CI [43026160828](https://github.com/shubolab/opennavicat/actions/runs/43026160828)
-on main commit `a5e1c4411f426289e5c3a4b45508d4d41cff882a` completed all **7 jobs
+Shared CI [43029611463](https://github.com/shubolab/opennavicat/actions/runs/43029611463)
+on main commit `37120acfcacdc3f881907810975315da8caa0ae8` completed all **7 jobs
 successfully**: six native desktop targets and the database-security job. The
 collection/time-series/copy/maintenance/view runner passed inside that job with
 create/design, drop/clear/rename, time-series, staged-copy, validation, reIndex,
-compact, ordinary-view create/collMod/drop and metadata-inspector scope described
-above. Each desktop job completed source tests, helper qualification, packaging,
+compact, ordinary-view create/collMod/collation/drop and metadata-inspector scope
+described above. Each desktop job completed source tests, helper qualification, packaging,
 installation, launch and uninstall for its target. This is a main-branch
 preflight, not a tag, public Release or six-installer download acceptance. The
 native VM and JS protocol checks are recorded in the CI evidence; earlier startup

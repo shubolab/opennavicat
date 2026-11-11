@@ -13,7 +13,7 @@ from bson import Binary, Decimal128, Int64
 from pymongo import MongoClient
 import pytest
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QFileDialog, QMessageBox
+from PySide6.QtWidgets import QFileDialog, QInputDialog, QMessageBox
 from shiboken6 import isValid
 
 from opennavicat.database import ConnectionConfig, DatabaseSession
@@ -410,4 +410,28 @@ def test_real_window_clear_and_drop_collection_require_permanent_confirmation(qt
     qtbot.mouseClick(dialog.confirm_button, Qt.MouseButton.LeftButton)
     idle(qtbot, window)
     assert "drop_ui" not in database.list_collection_names()
+    assert not errors and threads
+
+
+def test_real_window_rename_collection_preserves_data_indexes_and_uuid(qtbot, mongo_window, monkeypatch):
+    window, config, database, schema, errors, threads = mongo_window
+    database.rename_ui.insert_many([{"_id": 1, "n": 1}, {"_id": 2, "n": 2}])
+    database.rename_ui.create_index([("n", -1)], name="rename_n_desc")
+    before = database.command("listCollections", filter={"name": "rename_ui"})["cursor"]["firstBatch"][0]["info"]["uuid"]
+    monkeypatch.setattr(QInputDialog, "getText", lambda *_args, **_kwargs: ("renamed_ui", True))
+    info = {"id": config.id, "schema": config.database, "name": "rename_ui", "table": "rename_ui",
+            "kind": "mongo_collection"}
+    assert window.rename_mongo_collection(info) is True
+    qtbot.waitUntil(lambda: len(window._mongo_collection_operation_dialogs) == 1, timeout=15000)
+    dialog = next(iter(window._mongo_collection_operation_dialogs))
+    assert not dialog.confirm_button.isEnabled()
+    assert '"renameCollection"' in dialog.plan.command_text and '"dropTarget": false' in dialog.plan.command_text
+    dialog.permanent_check.setChecked(True)
+    qtbot.mouseClick(dialog.confirm_button, Qt.MouseButton.LeftButton)
+    idle(qtbot, window)
+    assert "rename_ui" not in database.list_collection_names()
+    assert database.renamed_ui.count_documents({}) == 2
+    assert "rename_n_desc" in database.renamed_ui.index_information()
+    after = database.command("listCollections", filter={"name": "renamed_ui"})["cursor"]["firstBatch"][0]["info"]["uuid"]
+    assert after == before
     assert not errors and threads

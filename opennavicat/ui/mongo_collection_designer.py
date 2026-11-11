@@ -60,12 +60,18 @@ class MongoCollectionOperationDialog(QDialog):
         self.plan = deepcopy(plan)
         self.operation = operation
         drop = operation == 'drop'
-        self.setWindowTitle('删除集合' if drop else '清空集合')
+        clear = operation == 'clear'
+        rename = operation == 'rename'
+        self.setWindowTitle('删除集合' if drop else '清空集合' if clear else '重命名集合')
         self.setWindowModality(Qt.WindowModality.WindowModal)
         self.resize(720, 500)
         layout = QVBoxLayout(self)
         subject = plan.snapshot.schema + '.' + plan.snapshot.name
-        label = QLabel(('永久删除集合 ' if drop else '永久清空集合 ') + subject + '？')
+        if rename:
+            label_text = '将 ' + subject + ' 重命名为 ' + plan.snapshot.schema + '.' + plan.definition.name + '？'
+        else:
+            label_text = ('永久删除集合 ' if drop else '永久清空集合 ') + subject + '？'
+        label = QLabel(label_text)
         label.setWordWrap(True)
         layout.addWidget(label)
         warnings = QLabel('\n'.join(plan.warnings))
@@ -82,12 +88,14 @@ class MongoCollectionOperationDialog(QDialog):
         self.permanent_check = QCheckBox(
             '我了解此操作是永久性的、不会自动回滚，并且不会删除操作后由其他客户端重新创建的同名集合'
             if drop else
-            '我了解此操作会永久删除集合中的所有文档，并可能删除最终检查后由其他客户端写入的文档；不会自动回滚')
+            '我了解此操作会永久删除集合中的所有文档，并可能删除最终检查后由其他客户端写入的文档；不会自动回滚'
+            if clear else
+            '我确认目标名称当前不存在；重命名后旧名称不再可用，dropTarget 始终为 false')
         layout.addWidget(self.permanent_check)
         self.buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         self.confirm_button = self.buttons.button(QDialogButtonBox.StandardButton.Ok)
-        self.confirm_button.setText('删除' if drop else '清空')
+        self.confirm_button.setText('删除' if drop else '清空' if clear else '重命名')
         self.confirm_button.setEnabled(False)
         self.buttons.button(QDialogButtonBox.StandardButton.Cancel).setText('取消')
         self.permanent_check.toggled.connect(self.confirm_button.setEnabled)

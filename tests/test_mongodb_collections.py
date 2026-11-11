@@ -504,3 +504,50 @@ def test_real_drop_and_clear_permission_denial_preserves_collection(session, pla
         assert database.docs.find_one({'_id': 'permission-probe'}) == {'_id': 'permission-probe', 'preserved': True}
     finally:
         restricted.close(); admin.command({'dropUser': username})
+
+
+def test_real_rename_preserves_uuid_documents_options_and_indexes_without_drop_target(session):
+    db = session.connection[session.config.database]
+    for name in ('rename_source', 'rename_target'):
+        db.drop_collection(name)
+    db.create_collection('rename_source', validator={'n': {'$gte': 0}})
+    db.rename_source.insert_many([{'_id': 1, 'n': 1}, {'_id': 2, 'n': 2}])
+    db.rename_source.create_index([('n', -1)], name='n_desc')
+    snapshot = tools.load_collection(session, session.config.database, 'rename_source')
+    plan = tools.plan_rename(session, snapshot, 'rename_target')
+    assert plan.commands[0] == {
+        'renameCollection': snapshot.schema + '.rename_source',
+        'to': snapshot.schema + '.rename_target',
+        'dropTarget': False,
+        'collectionUUID': snapshot.namespace_uuid,
+        'writeConcern': {'w': 1},
+    }
+    result = tools.apply_operation(session, plan)
+    assert result.outcome.status == 'acknowledged' and result.outcome.collection_absent is True
+    assert result.snapshot.name == 'rename_target' and result.snapshot.namespace_uuid == snapshot.namespace_uuid
+    assert 'rename_source' not in db.list_collection_names()
+    assert db.rename_target.count_documents({}) == 2
+    assert 'n_desc' in db.rename_target.index_information()
+    assert result.snapshot.definition.options == snapshot.definition.options
+
+
+def test_real_rename_rejects_existing_target_and_stale_source_replacement(session):
+    db = session.connection[session.config.database]
+    for name in ('rename_source', 'rename_target'):
+        db.drop_collection(name)
+    db.rename_source.insert_one({'n': 1})
+    db.rename_target.insert_one({'target': True})
+    snapshot = tools.load_collection(session, session.config.database, 'rename_source')
+    with pytest.raises(MongoConflictError, match='target collection name already exists'):
+        tools.plan_rename(session, snapshot, 'rename_target')
+    db.drop_collection('rename_target')
+
+    plan = tools.plan_rename(session, snapshot, 'rename_target')
+    db.drop_collection('rename_source')
+    db.rename_source.insert_one({'replacement': True})
+    with pytest.raises(tools.CollectionApplyError) as error:
+        tools.apply_operation(session, plan)
+    assert error.value.outcome.status == 'not_started'
+    assert 'rename_target' not in db.list_collection_names()
+    assert db.rename_source.find_one({'replacement': True}) == {
+        '_id': db.rename_source.find_one({'replacement': True})['_id'], 'replacement': True}

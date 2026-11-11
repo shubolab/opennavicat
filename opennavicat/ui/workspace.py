@@ -65,6 +65,7 @@ class ObjectBrowser(QWidget):
         self.new_action = self.add_action("新建表", "add", window.new_browser_object)
         self.delete_action = self.add_action("删除表", "delete", self.drop_selected)
         self.clear_action = self.add_action("清空集合", "delete", self.clear_selected)
+        self.rename_action = self.add_action("重命名集合", "design", self.rename_selected)
         self.toolbar.addSeparator()
         self.import_action = self.add_action("导入向导", "import", self.import_selected)
         self.export_action = self.add_action("导出向导", "export", self.export_selected)
@@ -129,6 +130,7 @@ class ObjectBrowser(QWidget):
         self.new_action.setText("新建" + label)
         self.delete_action.setText("删除" + label)
         self.clear_action.setVisible(kind == "mongo_collection")
+        self.rename_action.setVisible(kind == "mongo_collection")
         headers = {"index": ["名称", "唯一键", "自动索引", "表名称", "根页面"],
                    "trigger": ["名称", "类型", "表名称", "触发", ""]}.get(kind,
                    ["名称", "根页面", "有索引", "有触发器", ""])
@@ -314,6 +316,7 @@ class ObjectBrowser(QWidget):
             "table", "view", "index", "trigger", "mongo_index", "mongo_collection"}
             and not self.selected().get("automatic") and not (self.kind in {"mongo_index", "mongo_collection"} and self.selected().get("system")))
         self.clear_action.setEnabled(writable and selected and self.kind == "mongo_collection")
+        self.rename_action.setEnabled(writable and selected and self.kind == "mongo_collection")
         for shortcut in getattr(self, "_delete_shortcuts", ()):
             shortcut.setEnabled(self.kind == "mongo_index" and self.delete_action.isEnabled())
         self.import_action.setEnabled(writable and selected and self.kind == "table")
@@ -367,6 +370,11 @@ class ObjectBrowser(QWidget):
         if entry and entry["kind"] == "mongo_collection":
             self.window.clear_mongo_collection(entry)
 
+    def rename_selected(self):
+        entry = self.selected()
+        if entry and entry["kind"] == "mongo_collection":
+            self.window.rename_mongo_collection(entry)
+
     def context_menu(self, pos):
         if self.kind not in {"mongo_index", "mongo_collection"}:
             return
@@ -377,7 +385,7 @@ class ObjectBrowser(QWidget):
         self.update_actions()
         actions = (self.design_action, self.new_action, self.delete_action)
         if self.kind == "mongo_collection":
-            actions += (self.clear_action,)
+            actions += (self.rename_action, self.clear_action)
         for action in actions:
             menu.addAction(action)
         groups = menu.addMenu("管理组")

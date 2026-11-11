@@ -1469,11 +1469,22 @@ class MainWindow(QMainWindow):
     def clear_mongo_collection(self, info):
         return self.open_mongo_collection_operation(info, "clear")
 
-    def open_mongo_collection_operation(self, info, operation):
+    def rename_mongo_collection(self, info):
+        old_name = info.get("name", info.get("table"))
+        if not old_name:
+            return None
+        new_name, accepted = QInputDialog.getText(
+            self, "重命名集合", "新集合名称：", QLineEdit.EchoMode.Normal, old_name)
+        if not accepted or not new_name.strip() or new_name == old_name:
+            return None
+        return self.open_mongo_collection_operation(info, "rename", new_name=new_name)
+
+    def open_mongo_collection_operation(self, info, operation, *, new_name=None):
         config = self.configs.get(info.get("id"))
         session = self.sessions.get(info.get("id"))
         schema, name = info.get("schema"), info.get("name", info.get("table"))
-        if (operation not in {"drop", "clear"} or config is None or config.driver != "mongodb"
+        if (operation not in {"drop", "clear", "rename"} or config is None or config.driver != "mongodb"
+                or (operation == "rename" and (not new_name or new_name == name))
                 or session is None or config.read_only or not schema or not name
                 or self._closing_mongo or info.get("id") in self._closing_connections
                 or self._mongo_collection_jobs or self._cancelling):
@@ -1494,8 +1505,13 @@ class MainWindow(QMainWindow):
             return self._collection_session_current(identity[0], session)
         def work():
             snapshot = mongo_collection_tools.load_collection(session, schema, name)
-            planner = mongo_collection_tools.plan_drop if operation == "drop" else mongo_collection_tools.plan_clear
-            return snapshot, planner(session, snapshot)
+            if operation == "drop":
+                plan = mongo_collection_tools.plan_drop(session, snapshot)
+            elif operation == "clear":
+                plan = mongo_collection_tools.plan_clear(session, snapshot)
+            else:
+                plan = mongo_collection_tools.plan_rename(session, snapshot, new_name)
+            return snapshot, plan
         def ready(result):
             if not current():
                 return
@@ -1520,7 +1536,7 @@ class MainWindow(QMainWindow):
 
     def _mongo_collection_operation_succeeded(self, identity, operation, result):
         connection_id, schema, name = identity
-        if operation == "drop":
+        if operation in {"drop", "rename"}:
             for index in reversed(range(self.tabs.count())):
                 page = self.tabs.widget(index)
                 matches = ((isinstance(page, MongoCollectionDesignerPage)
@@ -1530,7 +1546,11 @@ class MainWindow(QMainWindow):
                 if matches:
                     self.tabs.removeTab(index)
                     page.deleteLater()
-            self.statusBar().showMessage(f"集合 {schema}.{name} 已删除。", 7000)
+            if operation == "drop":
+                self.statusBar().showMessage(f"集合 {schema}.{name} 已删除。", 7000)
+            else:
+                target = result.snapshot.name if result is not None and result.snapshot is not None else ""
+                self.statusBar().showMessage(f"集合 {schema}.{name} 已重命名为 {target}。", 7000)
         else:
             for index in range(self.tabs.count()):
                 page = self.tabs.widget(index)
@@ -1561,7 +1581,9 @@ class MainWindow(QMainWindow):
                 self._refresh_mongo_collection_context(connection_id, session, plan.snapshot.schema)
         def finish():
             self._mongo_collection_jobs.pop(token, None)
-        self.submit(work, done, failed, label="删除集合" if "drop" in plan.commands[0] else "清空集合", finished=finish)
+        label = ("删除集合" if "drop" in plan.commands[0] else
+            "重命名集合" if "renameCollection" in plan.commands[0] else "清空集合")
+        self.submit(work, done, failed, label=label, finished=finish)
 
     def set_schema_preview_suppressed(self, value):
         previous = self.store.state.get("suppress_schema_save_preview", False)
@@ -2482,6 +2504,7 @@ class MainWindow(QMainWindow):
                         writable = connected and not self.configs[info["id"]].read_only
                         menu.addAction("设计集合", lambda: self.design_object(info)).setEnabled(connected)
                         if info.get("kind") == "mongo_collection":
+                            menu.addAction("重命名集合", lambda: self.rename_mongo_collection(info)).setEnabled(writable)
                             menu.addAction("清空集合", lambda: self.clear_mongo_collection(info)).setEnabled(writable)
                             menu.addAction("删除集合", lambda: self.delete_mongo_collection(info)).setEnabled(writable)
                     def mongo_query():

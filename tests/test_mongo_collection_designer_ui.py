@@ -154,12 +154,16 @@ def test_apply_error_formatter_keeps_status_reply_and_observation():
     "operation,command,button_text",
     [("drop", {"drop": "locked", "collectionUUID": Binary(b"\0" * 16, 4), "writeConcern": {"w": 1}}, "删除"),
      ("clear", {"delete": "locked", "deletes": [{"q": {}, "limit": 0}],
-                "collectionUUID": Binary(b"\0" * 16, 4), "writeConcern": {"w": 1}}, "清空")],
+                "collectionUUID": Binary(b"\0" * 16, 4), "writeConcern": {"w": 1}}, "清空"),
+     ("rename", {"renameCollection": "demo_catalog.locked", "to": "demo_catalog.renamed",
+                 "dropTarget": False, "collectionUUID": Binary(b"\0" * 16, 4),
+                 "writeConcern": {"w": 1}}, "重命名")],
 )
 def test_permanent_collection_operation_requires_explicit_checkbox(qtbot, operation, command, button_text):
     snapshot = CollectionSnapshot(
         "demo_catalog", "locked", CollectionDefinition("locked"), exists=True)
-    plan = CollectionPlan(snapshot, snapshot.definition, [command], True, ["permanent warning"])
+    definition = CollectionDefinition("renamed") if operation == "rename" else snapshot.definition
+    plan = CollectionPlan(snapshot, definition, [command], True, ["permanent warning"])
     dialog = MongoCollectionOperationDialog(plan, operation)
     qtbot.addWidget(dialog)
     accepted = []

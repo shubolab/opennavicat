@@ -1,4 +1,4 @@
-# Ordinary MongoDB collection designer checkpoint
+# MongoDB ordinary and time-series collection designer checkpoint
 
 This branch starts from the released 0.9.0 product tree and adds both the sealed
 backend and an embedded MainWindow collection designer. It does not change the
@@ -116,6 +116,16 @@ UI slice backed only by capabilities in this module:
   the source `collectionUUID`. The target must be absent during planning; a final
   race can still create it, and no existing target is intentionally dropped.
   Successful rename preserves documents, indexes, collection options and UUID.
+
+- Time-series creation and design are implemented separately in
+  `opennavicat.mongodb_timeseries` and `ui/mongo_timeseries_designer.py`. Supported
+  controls are `timeField`, optional `metaField`, granularity or equal custom
+  `bucketRoundingSeconds`/`bucketMaxSpanSeconds`, and `expireAfterSeconds`.
+  Bucketing and expiry changes use separate non-transactional `collMod` commands.
+  The public time-series namespace is a view without a UUID and MongoDB rejects
+  `collectionUUID` on its `collMod`; the designer binds the underlying
+  `system.buckets.<name>` UUID, checks it before and after, and explicitly does
+  not claim atomic CAS.
 - Dirty collection data editors and dirty design drafts block drop/clear before a
   destructive plan is opened. Drop closes matching open collection/designer tabs;
   clear refreshes the open data page and object statistics.
@@ -199,7 +209,7 @@ It reuses the receipt-backed, run-label-specific emergency cleanup for
 timeout/interrupt. It never accepts a reference endpoint. Logs/receipts exclude
 Docker environment dumps and private certificate/key/URI files.
 
-The current Linux WSL amd64 proof passed **63 cases with zero skips** and two
+The current Linux WSL amd64 proof passed **80 cases with zero skips** and three
 independently cleaned MongoDB 8.0.34 fixtures. The shared database-security CI job
 executes this runner. The earlier macOS ARM64 backend-only proof remains
 historical and does not cover this UI.
@@ -222,7 +232,7 @@ user workspaces and Navicat configuration are not used.
 Additional Linux WSL amd64 checks in this checkpoint:
 
 - `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q -W error`:
-  **1467 passed, 484 conditionally skipped, 0 failed/error**. Default-service
+  **1482 passed, 490 conditionally skipped, 0 failed/error**. Default-service
   skips are not counted as real database execution; the owned runner above
   covers this feature's Mongo scope without skips.
 - `.venv/bin/python -m opennavicat --smoke-test`: **passed**, 6 rows / 4 columns,

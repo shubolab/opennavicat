@@ -19,7 +19,12 @@ from .mongodb_session import BSON_CODEC, MongoConflictError, canonical_array_dum
 
 
 _MAX_VIEW_BYTES = 1024 * 1024
-_ALLOWED_OPTIONS = {'viewOn', 'pipeline'}
+_ALLOWED_OPTIONS = {'viewOn', 'pipeline', 'collation'}
+_COLLATION_DEFAULTS = {
+    'caseLevel': False, 'caseFirst': 'off', 'strength': 3, 'numericOrdering': False,
+    'alternate': 'non-ignorable', 'maxVariable': 'punct', 'normalization': False,
+    'backwards': False,
+}
 
 
 @dataclass(eq=False)
@@ -27,10 +32,14 @@ class ViewDefinition:
     name: str = ''
     view_on: str = ''
     pipeline: list = field(default_factory=list)
+    collation: dict | None = None
 
     def __eq__(self, other):
         try:
-            return isinstance(other, ViewDefinition) and _encoded(_definition(self)) == _encoded(_definition(other))
+            return (isinstance(other, ViewDefinition)
+                and _encoded({'name': self.name, 'view_on': self.view_on, 'pipeline': self.pipeline})
+                    == _encoded({'name': other.name, 'view_on': other.view_on, 'pipeline': other.pipeline})
+                and _collation_equal(self.collation, other.collation))
         except Exception:
             return False
 
@@ -77,8 +86,23 @@ def _encoded(value):
     return BSON.encode(value, codec_options=BSON_CODEC)
 
 
+def _collation_equal(expected, observed):
+    if expected is None or observed is None:
+        return expected is None and observed is None
+    if not isinstance(expected, dict) or not isinstance(observed, dict):
+        return False
+    expected, observed = deepcopy(expected), deepcopy(observed)
+    expected.pop('version', None); observed.pop('version', None)
+    for key, value in _COLLATION_DEFAULTS.items():
+        expected.setdefault(key, value)
+        observed.setdefault(key, value)
+    return (set(expected) == set(observed)
+        and all(_encoded({'value': expected[key]}) == _encoded({'value': observed[key]}) for key in expected))
+
+
 def _definition(value):
-    return {'name': value.name, 'view_on': value.view_on, 'pipeline': value.pipeline}
+    return {'name': value.name, 'view_on': value.view_on, 'pipeline': value.pipeline,
+            'collation': value.collation}
 
 
 def _snapshot_payload(value):
@@ -143,7 +167,8 @@ def _snapshot(session, schema, name, raw):
             issues.append('Raw view BSON does not roundtrip exactly.')
     except Exception:
         issues.append('Raw view BSON cannot be decoded and re-encoded exactly.')
-    definition = ViewDefinition(name, options.get('viewOn', ''), deepcopy(options.get('pipeline', [])))
+    definition = ViewDefinition(name, options.get('viewOn', ''), deepcopy(options.get('pipeline', [])),
+        deepcopy(options.get('collation')))
     try:
         canonical_array_dumps(definition.pipeline)
     except Exception:
@@ -176,6 +201,9 @@ def validate_definition(session, definition):
         raise DatabaseError('The source namespace requires its dedicated tool')
     if not isinstance(pipeline, list) or any(not isinstance(stage, dict) for stage in pipeline):
         raise DatabaseError('A view pipeline must be an array of BSON documents')
+    collation = definition.collation
+    if collation is not None and (not isinstance(collation, dict) or not collation):
+        raise DatabaseError('View collation must be a nonempty BSON document or absent')
     if len(pipeline) > 200:
         raise DatabaseError('The view pipeline exceeds the bounded designer limit')
     try:
@@ -205,6 +233,8 @@ def plan_view(session, snapshot, definition):
     validate_definition(session, definition)
     if snapshot.exists and definition.name != snapshot.name:
         raise DatabaseError('View rename requires its own reviewed workflow')
+    if snapshot.exists and not _collation_equal(definition.collation, snapshot.definition.collation):
+        raise DatabaseError('View collation is immutable in this checkpoint; create a reviewed replacement instead')
     _current(session, snapshot, definition.name)
     if snapshot.exists and definition == snapshot.definition:
         return _seal_plan(session, ViewPlan(snapshot, definition))
@@ -212,10 +242,14 @@ def plan_view(session, snapshot, definition):
         source_raw = _catalog(session, snapshot.schema, definition.view_on)
         if not source_raw:
             raise MongoConflictError('The view source namespace does not exist')
-    command = ({'create': definition.name, 'viewOn': definition.view_on, 'pipeline': deepcopy(definition.pipeline),
-        'writeConcern': {'w': 1}} if not snapshot.exists else
-        {'collMod': definition.name, 'viewOn': definition.view_on, 'pipeline': deepcopy(definition.pipeline),
-         'writeConcern': {'w': 1}})
+    if not snapshot.exists:
+        command = {'create': definition.name, 'viewOn': definition.view_on, 'pipeline': deepcopy(definition.pipeline)}
+        if definition.collation is not None:
+            command['collation'] = deepcopy(definition.collation)
+        command['writeConcern'] = {'w': 1}
+    else:
+        command = {'collMod': definition.name, 'viewOn': definition.view_on, 'pipeline': deepcopy(definition.pipeline),
+                   'writeConcern': {'w': 1}}
     warnings = ['MongoDB views have no collection UUID; the designer compares the complete raw view catalog before and after, but this is not an atomic compare-and-swap.']
     return _seal_plan(session, ViewPlan(snapshot, definition, [command], True, warnings))
 

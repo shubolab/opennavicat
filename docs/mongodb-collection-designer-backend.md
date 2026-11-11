@@ -168,7 +168,7 @@ plan_view(session, snapshot, definition) -> ViewPlan
 apply_plan(session, plan, *, cancelled=None) -> ViewApplyResult
 ```
 
-`ViewDefinition(name, viewOn, pipeline)` keeps the source namespace and ordered
+`ViewDefinition(name, viewOn, pipeline, collation=None)` keeps the source namespace and ordered
 Canonical EJSON pipeline stages. New views use `create`; existing views use
 `collMod` and reject rename before dispatch. The exact source namespace must
 exist at planning time, target names must be free for create, and the complete
@@ -177,6 +177,17 @@ before and after the command is retained as evidence, but MongoDB ordinary views
 do not expose a collection UUID; the implementation explicitly warns that this
 is **not an atomic compare-and-swap**. No acknowledgment is reported as success
 unless the final view catalog matches the reviewed definition.
+
+Create also accepts an optional collation document. MongoDB expands collation
+defaults and adds a server version to the catalog, so equality applies the
+documented defaults before comparing typed values. View collation is immutable
+in MongoDB 8.0's `collMod` surface; the designer displays it read-only on an
+existing view and rejects a collation change instead of silently rebuilding the
+view. Pipeline/source edits remain available while the collation is preserved.
+`renameCollection` is rejected by MongoDB with `CommandNotSupportedOnView` in the
+[8.0.34 server path](https://github.com/mongodb/mongo/blob/r8.0.34/src/mongo/db/catalog/rename_collection.cpp#L151-L153),
+so the designer keeps the existing view name read-only rather than inventing a
+destructive create/drop rename.
 
 The embedded `ui/mongo_view_designer.py` page edits name, source namespace and a
 Canonical Extended JSON document-array pipeline. It exposes an execution script
@@ -265,9 +276,9 @@ It reuses the receipt-backed, run-label-specific emergency cleanup for
 timeout/interrupt. It never accepts a reference endpoint. Logs/receipts exclude
 Docker environment dumps and private certificate/key/URI files.
 
-The current Linux WSL amd64 proof passed **139 cases with zero skips** and six
+The current Linux WSL amd64 proof passed **142 cases with zero skips** and six
 independently cleaned MongoDB 8.0.34 fixtures. The exact run identity and source
-hashes are retained under `artifacts/mongo-collections/drop-main-20261111/`. The shared
+hashes are retained under `artifacts/mongo-collections/collation-20261111/`. The shared
 database-security CI job executes this runner. The earlier macOS ARM64
 backend-only proof remains historical and does not cover this UI.
 
@@ -290,7 +301,7 @@ user workspaces and Navicat configuration are not used.
 Additional Linux WSL amd64 checks in this checkpoint:
 
 - `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q -W error`:
-  **1493 passed, 525 conditionally skipped, 0 failed/error**. Default-service
+  **1494 passed, 527 conditionally skipped, 0 failed/error**. Default-service
   skips are not counted as real database execution; the owned runner above
   covers this feature's Mongo scope without skips.
 - `.venv/bin/python -m opennavicat --smoke-test`: **passed**, 6 rows / 4 columns,

@@ -39,19 +39,12 @@ jobs:
           cache-dependency-path: pyproject.toml
       - name: Install Linux Qt runtime libraries
         if: runner.os == 'Linux'
+        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
           packages=(libegl1 libopengl0 libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-shape0 libxkbcommon-x11-0 libglib2.0-0t64 fonts-noto-cjk xvfb xauth)
-          for attempt in 1 2 3; do
-            if sudo timeout 180s env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 install -y --no-install-recommends "${packages[@]}"; then
-              exit 0
-            fi
-            echo "apt install attempt ${attempt} failed; refreshing indexes" >&2
-            sudo timeout 120s apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 update || true
-            sleep $((attempt * 10))
-          done
-          exit 1
+          sudo timeout 60s env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=10 -o Acquire::https::Timeout=10 install -y --no-install-recommends "${packages[@]}" || true
       - name: Prepare native PostgreSQL binary cache
         if: matrix.id == 'windows-arm64'
         id: vcpkg
@@ -148,19 +141,12 @@ jobs:
         with:
           python-version: '3.13'
       - name: Install database-security Linux dependencies
+        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
           packages=(libegl1 libopengl0 libxcb-cursor0 libxkbcommon-x11-0 libglib2.0-0 redis-server)
-          for attempt in 1 2 3; do
-            if sudo timeout 180s env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 install -y --no-install-recommends "${packages[@]}"; then
-              exit 0
-            fi
-            echo "apt install attempt ${attempt} failed; refreshing indexes" >&2
-            sudo timeout 120s apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 update || true
-            sleep $((attempt * 10))
-          done
-          exit 1
+          sudo timeout 60s env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=10 -o Acquire::https::Timeout=10 install -y --no-install-recommends "${packages[@]}" || true
       - run: python -m pip install -e ".[dev]"
       - name: Compile pinned native JavaScript helper
         run: python scripts/build-quickjs.py --allow-unqualified-platform

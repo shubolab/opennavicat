@@ -190,9 +190,20 @@ now declares this runner; a branch run has not yet been claimed as six-target or
 packaged qualification. The earlier macOS ARM64 backend-only proof remains
 historical and does not cover this UI.
 
-The proof does not qualify Windows/macOS UI, packaged integration or six native
-installers. Existing fixtures/reference data, user workspaces, Navicat
-configuration and the retained Dell environment are not used.
+Shared CI [42998282507](https://github.com/shubolab/opennavicat/actions/runs/42998282507)
+on main commit `0cd5ae7ac31fbdfd4b61a5f7befe2fbb7ee88d24` completed all **7 jobs
+successfully**: six native desktop targets and the database-security job. The new
+ordinary-collection runner step passed inside that job, and each desktop job
+completed source tests, helper qualification, packaging, installation, launch and
+uninstall for its target. This is a main-branch preflight, not a tag, public
+Release or six-installer download acceptance. A first macOS amd64 run exposed the
+existing JS output-limit test racing helper startup; the test now allows enough
+startup time to reach the real output limit, and the complete JS protocol rerun
+passed 193/193 without skips.
+
+The proof does not qualify Windows/macOS UI against the reference application,
+public release assets, or the retained Dell environment. Existing fixtures,
+user workspaces and Navicat configuration are not used.
 
 Additional Linux WSL amd64 checks in this checkpoint:
 

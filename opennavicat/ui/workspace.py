@@ -396,6 +396,11 @@ class ObjectBrowser(QWidget):
             copy_menu = menu.addMenu("复制集合")
             copy_menu.addAction("结构和数据", lambda: self.window.copy_mongo_collection(entry, "data"))
             copy_menu.addAction("仅结构", lambda: self.window.copy_mongo_collection(entry, "structure"))
+            maintenance = menu.addMenu("维护")
+            maintenance.addAction("验证集合（常规）", lambda: self.window.validate_mongo_collection(entry, False))
+            maintenance.addAction("验证集合（完整）", lambda: self.window.validate_mongo_collection(entry, True))
+            reindex = maintenance.addAction("重建集合索引", lambda: self.window.reindex_mongo_collection(entry))
+            reindex.setEnabled(entry.get("kind") == "mongo_collection")
         groups = menu.addMenu("管理组")
         for label in ("新建组", "添加到组", "从组中排除"):
             groups.addAction(label).setEnabled(False)

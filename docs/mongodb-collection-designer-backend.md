@@ -117,6 +117,13 @@ UI slice backed only by capabilities in this module:
   race can still create it, and no existing target is intentionally dropped.
   Successful rename preserves documents, indexes, collection options and UUID.
 
+- Collection maintenance exposes fast/full `validate` for ordinary and
+  time-series collections and `reIndex` for ordinary collections. Every command
+  checks the relevant UUID before and after, returns a bounded Canonical Extended
+  JSON report, and uses the owner queue/cancel marker. Full validation and
+  re-index require explicit confirmation; time-series `reIndex` is rejected by
+  the server and remains unavailable in the UI.
+
 - Structure+data and structure-only copy use a random staging collection with
   source options and indexes. Data mode copies with `$out` into staging, then all
   modes use `renameCollection` with `dropTarget: false` and the staging UUID.
@@ -217,7 +224,7 @@ It reuses the receipt-backed, run-label-specific emergency cleanup for
 timeout/interrupt. It never accepts a reference endpoint. Logs/receipts exclude
 Docker environment dumps and private certificate/key/URI files.
 
-The current Linux WSL amd64 proof passed **86 cases with zero skips** and four
+The current Linux WSL amd64 proof passed **94 cases with zero skips** and five
 independently cleaned MongoDB 8.0.34 fixtures. The shared database-security CI job
 executes this runner. The earlier macOS ARM64 backend-only proof remains
 historical and does not cover this UI.
@@ -241,7 +248,7 @@ user workspaces and Navicat configuration are not used.
 Additional Linux WSL amd64 checks in this checkpoint:
 
 - `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q -W error`:
-  **1484 passed, 496 conditionally skipped, 0 failed/error**. Default-service
+  **1486 passed, 504 conditionally skipped, 0 failed/error**. Default-service
   skips are not counted as real database execution; the owned runner above
   covers this feature's Mongo scope without skips.
 - `.venv/bin/python -m opennavicat --smoke-test`: **passed**, 6 rows / 4 columns,

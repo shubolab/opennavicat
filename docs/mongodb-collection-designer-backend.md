@@ -229,11 +229,12 @@ independently cleaned MongoDB 8.0.34 fixtures. The shared database-security CI j
 executes this runner. The earlier macOS ARM64 backend-only proof remains
 historical and does not cover this UI.
 
-Shared CI [43012789248](https://github.com/shubolab/opennavicat/actions/runs/43012789248)
-on main commit `4d4f3312a9908fb615cc551ce9e20116b7cec936` completed all **7 jobs
+Shared CI [43015444743](https://github.com/shubolab/opennavicat/actions/runs/43015444743)
+on main commit `3d71e0445901bd68d374eb43c452feae02e8d904` completed all **7 jobs
 successfully**: six native desktop targets and the database-security job. The
-collection/time-series/copy runner passed inside that job with create/design,
-drop/clear/rename, time-series and staged-copy scope, and each desktop job completed source tests, helper qualification,
+collection/time-series/copy/maintenance runner passed inside that job with
+create/design, drop/clear/rename, time-series, staged-copy, validation and reIndex
+scope, and each desktop job completed source tests, helper qualification,
 packaging, installation, launch and uninstall for its target. This is a
 main-branch preflight, not a tag, public Release or six-installer download
 acceptance. macOS amd64 runs exposed existing JS output/null tests racing helper

@@ -204,11 +204,11 @@ independently cleaned MongoDB 8.0.34 fixtures. The shared database-security CI j
 executes this runner. The earlier macOS ARM64 backend-only proof remains
 historical and does not cover this UI.
 
-Shared CI [43001726401](https://github.com/shubolab/opennavicat/actions/runs/43001726401)
-on main commit `7e9f92e5bbd5b2c09f6bab4ec5f39b40fb903622` completed all **7 jobs
+Shared CI [43004258975](https://github.com/shubolab/opennavicat/actions/runs/43004258975)
+on main commit `0c2191a85ce180a57a30e6a1a0593f093ea03edc` completed all **7 jobs
 successfully**: six native desktop targets and the database-security job. The
-ordinary-collection runner step passed inside that job with the drop/clear UI
-scope, and each desktop job completed source tests, helper qualification,
+ordinary-collection runner step passed inside that job with the drop/clear/rename
+UI scope, and each desktop job completed source tests, helper qualification,
 packaging, installation, launch and uninstall for its target. This is a
 main-branch preflight, not a tag, public Release or six-installer download
 acceptance. An earlier macOS amd64 run exposed the existing JS output-limit test

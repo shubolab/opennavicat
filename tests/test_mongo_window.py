@@ -187,13 +187,105 @@ def test_real_collection_designer_creates_and_collmods_with_worker_owned_io(qtbo
     assert not errors and threads
 
 
+def test_real_window_collection_storage_creates_reopens_and_sheet_cancel_preserves_draft(qtbot, mongo_window, monkeypatch):
+    window, config, database, schema, errors, threads = mongo_window
+    catalog_threads = []
+    original = window_module.mongo_collection_tools._catalog
+    def catalog(*args, **kwargs):
+        catalog_threads.append(threading.get_ident())
+        assert threading.get_ident() != threading.main_thread().ident
+        return original(*args, **kwargs)
+    monkeypatch.setattr(window_module.mongo_collection_tools, '_catalog', catalog)
+    page = window.open_mongo_collection_designer(config.id, config.database)
+    qtbot.waitUntil(lambda: page.snapshot is not None and not page.loading, timeout=15000)
+    assert page.name_edit.isHidden() and page.tabs.currentIndex() == 0
+    storage_text = "{ wiredTiger: { configString: 'block_compressor=zlib' } }"
+    defaults_text = '{storageEngine: {wiredTiger: {configString: "prefix_compression=false"}}}'
+    page.storage_editor.setPlainText(storage_text)
+    page.index_options_editor.setPlainText(defaults_text)
+    expected = deepcopy(page.draft().options)
+    page.tabs.setCurrentIndex(page.tabs.count() - 1)
+    idle(qtbot, window)
+    assert 'Untitled' in page.sql_preview.toPlainText() and 'block_compressor=zlib' in page.sql_preview.toPlainText()
+    assert not errors and not page.snapshot.exists and page.confirmed_plan is None
+    page.request_save()
+    cancelled = page._save_dialog
+    assert not cancelled.save_button.isEnabled()
+    cancelled.name_edit.setText('cancelled_storage')
+    qtbot.waitUntil(cancelled.save_button.isEnabled, timeout=15000)
+    assert cancelled.plan.commands[0]['storageEngine'] == expected['storageEngine']
+    assert 'block_compressor=zlib' in cancelled.preview.toPlainText()
+    cancelled.reject()
+    qtbot.waitUntil(lambda: page._save_dialog is None)
+    idle(qtbot, window)
+    assert 'cancelled_storage' not in database.list_collection_names()
+    assert page.draft().name == '' and page.draft().options == expected
+    assert page.storage_editor.toPlainText() == storage_text and page.dirty
+
+    page.request_save()
+    dialog = page._save_dialog
+    dialog.name_edit.setText('storage_ui')
+    qtbot.waitUntil(dialog.save_button.isEnabled, timeout=15000)
+    assert dialog.plan.commands[0]['create'] == 'storage_ui'
+    assert dialog.plan.commands[0]['indexOptionDefaults'] == expected['indexOptionDefaults']
+    dialog.save_button.click()
+    idle(qtbot, window)
+    assert page.snapshot.exists and page.snapshot.name == 'storage_ui'
+    assert page.snapshot.definition.options == expected and not page.dirty
+    assert page.storage_editor.isReadOnly() and page.index_options_editor.isReadOnly()
+    database.storage_ui.create_index('n', name='storage_default')
+    stats = database.command({'collStats': 'storage_ui'})
+    assert 'block_compressor=zlib' in stats['wiredTiger']['creationString']
+    assert 'prefix_compression=false' in stats['indexDetails']['storage_default']['creationString']
+    namespace_uuid = page.snapshot.namespace_uuid
+    window.close_tab(window.tabs.indexOf(page))
+    idle(qtbot, window)
+    reopened = window.open_mongo_collection_designer(config.id, config.database, 'storage_ui')
+    qtbot.waitUntil(lambda: reopened.snapshot is not None and not reopened.loading, timeout=15000)
+    idle(qtbot, window)
+    assert reopened is not page and reopened.snapshot.namespace_uuid == namespace_uuid
+    assert reopened.snapshot.definition.options == expected and reopened.tabs.currentIndex() == 0
+    assert reopened.storage_editor.isReadOnly() and reopened.index_options_editor.isReadOnly()
+    assert 'block_compressor=zlib' in reopened.storage_editor.toPlainText()
+    assert 'prefix_compression=false' in reopened.index_options_editor.toPlainText()
+    assert catalog_threads and threads and not errors
+
+
+def test_real_window_collection_storage_server_error_keeps_text_and_can_retry(qtbot, mongo_window):
+    window, config, database, schema, errors, threads = mongo_window
+    page = window.open_mongo_collection_designer(config.id, config.database)
+    qtbot.waitUntil(lambda: page.snapshot is not None and not page.loading, timeout=15000)
+    bad_text = '{wiredTiger:{configString:"not_a_wiredtiger_option=true"}}'
+    page.storage_editor.setPlainText(bad_text)
+    page.request_save()
+    dialog = page._save_dialog
+    dialog.name_edit.setText('storage_error_ui')
+    qtbot.waitUntil(dialog.save_button.isEnabled, timeout=15000)
+    dialog.save_button.click()
+    idle(qtbot, window)
+    assert not page.snapshot.exists and page.dirty and not page.loading
+    assert '服务器报错' in page.message.text() and '"code"' in page.message.text()
+    assert 'storage_error_ui' not in database.list_collection_names()
+    assert page.storage_editor.toPlainText() == bad_text
+    page.storage_editor.setPlainText('{wiredTiger:{configString:"block_compressor=zlib"}}')
+    page.request_save()
+    dialog = page._save_dialog
+    qtbot.waitUntil(dialog.save_button.isEnabled, timeout=15000)
+    dialog.save_button.click()
+    idle(qtbot, window)
+    assert page.snapshot.exists and not page.dirty
+    assert 'block_compressor=zlib' in database.command({'collStats': 'storage_error_ui'})['wiredTiger']['creationString']
+    assert threads and not errors
+
+
 def test_real_collection_designer_lists_indexes_and_opens_index_designer(qtbot, mongo_window):
     window, config, database, schema, errors, threads = mongo_window
     database.docs.create_index([('name', 1)], name='docs_name_idx')
     page = window.open_mongo_collection_designer(config.id, config.database, 'docs')
-    qtbot.waitUntil(lambda: page.snapshot is not None and page.index_table.rowCount() >= 2 and not page.loading, timeout=15000)
+    qtbot.waitUntil(lambda: page.snapshot is not None and page.index_table.rowCount() >= 1 and not page.loading, timeout=15000)
     names = [page.index_table.item(row, 0).text() for row in range(page.index_table.rowCount())]
-    assert names == ['_id_', 'docs_name_idx']
+    assert names == ['docs_name_idx']
+    assert set(database.docs.index_information()) == {'_id_', 'docs_name_idx'}
     page.index_table.selectRow(names.index('docs_name_idx'))
     assert page.edit_index_button.isEnabled() and page.delete_index_button.isEnabled()
     page.edit_index_button.click()

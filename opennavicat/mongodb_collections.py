@@ -24,7 +24,8 @@ from .mongodb_index_script import protected_command_script
 from .js_engine.server_errors import server_failure
 
 
-_CREATE = frozenset({'capped', 'size', 'max', 'validator', 'validationLevel', 'validationAction', 'collation'})
+_CREATE = frozenset({'capped', 'size', 'max', 'validator', 'validationLevel', 'validationAction', 'collation',
+                     'storageEngine', 'indexOptionDefaults'})
 _MUTABLE = frozenset({'validator', 'validationLevel', 'validationAction'})
 _DEFAULT = {'validator': {}, 'validationLevel': 'strict', 'validationAction': 'error'}
 _MAX_CATALOG_BYTES = 1024 * 1024
@@ -213,6 +214,10 @@ def _snapshot(session, schema, name, raw):
         issues.append('Only UUID-bearing ordinary collections can be edited in this checkpoint.')
     if set(options) - _CREATE:
         issues.append('Additional collection options have not completed designer qualification; original options are retained.')
+    try:
+        _validate_storage_options(options)
+    except DatabaseError:
+        issues.append('Storage engine options have an unqualified shape; original options are retained read-only.')
     if name.startswith('system.') or name.endswith(('.files', '.chunks')) or schema in {'admin', 'config', 'local'}:
         issues.append('Internal namespaces and GridFS-managed collections cannot be modified here.')
     result = CollectionSnapshot(schema, name, CollectionDefinition(name, options), raw,
@@ -234,6 +239,29 @@ def load_collection(session, database, name):
     return _snapshot(session, database, name, raw)
 
 
+def _validate_storage_options(options):
+    """Qualify WiredTiger configString envelopes without rewriting their text.
+
+    The server owns the engine's config-string grammar and version-dependent
+    options. Other engines or nested BSON fields remain visible but read-only.
+    Collection storage and index defaults are create-only in this designer.
+    """
+    def storage(value, label):
+        if not isinstance(value, dict) or set(value) != {'wiredTiger'}:
+            raise DatabaseError(label + ' must contain only a wiredTiger configuration document')
+        engine = value['wiredTiger']
+        if (not isinstance(engine, dict) or set(engine) != {'configString'}
+                or type(engine['configString']) is not str):
+            raise DatabaseError(label + '.wiredTiger must contain only a string configString')
+    if 'storageEngine' in options:
+        storage(options['storageEngine'], 'storageEngine')
+    if 'indexOptionDefaults' in options:
+        defaults = options['indexOptionDefaults']
+        if not isinstance(defaults, dict) or set(defaults) != {'storageEngine'}:
+            raise DatabaseError('indexOptionDefaults must contain only a storageEngine document')
+        storage(defaults['storageEngine'], 'indexOptionDefaults.storageEngine')
+
+
 def validate_definition(definition):
     if not isinstance(definition, CollectionDefinition):
         raise DatabaseError('An ordinary-collection definition is required')
@@ -242,6 +270,7 @@ def validate_definition(definition):
         raise DatabaseError('Enter a nonempty, non-system ordinary-collection name')
     if not isinstance(options, dict) or set(options) - _CREATE:
         raise DatabaseError('Unsupported collection options cannot be edited lossily')
+    _validate_storage_options(options)
     if 'capped' in options and type(options['capped']) is not bool:
         raise DatabaseError('capped must be a boolean')
     for key in {'size', 'max'} & options.keys():

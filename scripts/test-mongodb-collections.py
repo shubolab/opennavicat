@@ -40,6 +40,8 @@ TARGETS = [
     'tests/test_mongo_window.py::test_real_window_mongo_tree_statistics_typed_page_and_sqlite_switch',
     'tests/test_mongo_window.py::test_real_collection_designer_creates_and_collmods_with_worker_owned_io',
     'tests/test_mongo_window.py::test_real_collection_designer_lists_indexes_and_opens_index_designer',
+    'tests/test_mongo_window.py::test_real_window_collection_storage_creates_reopens_and_sheet_cancel_preserves_draft',
+    'tests/test_mongo_window.py::test_real_window_collection_storage_server_error_keeps_text_and_can_retry',
     'tests/test_mongo_window.py::test_real_window_stop_inflight_collection_uses_cancel_pool_and_preserves_draft',
     'tests/test_mongo_window.py::test_real_window_clear_and_drop_collection_require_permanent_confirmation',
     'tests/test_mongo_window.py::test_real_window_rename_collection_preserves_data_indexes_and_uuid',
@@ -85,7 +87,7 @@ def main():
         'source_sha256': {path: hashlib.sha256((ROOT / path).read_bytes()).hexdigest() for path in
             ('opennavicat/mongodb_collections.py', 'opennavicat/mongodb_timeseries.py',
              'opennavicat/mongodb_collection_copy.py', 'opennavicat/mongodb_collection_maintenance.py',
-             'opennavicat/mongodb_views.py', 'opennavicat/mongodb_session.py',
+             'opennavicat/mongodb_views.py', 'opennavicat/mongodb_session.py', 'opennavicat/mongodb_collection_literals.py',
              'opennavicat/ui/mongo_collection_designer.py', 'opennavicat/ui/mongo_view_designer.py',
              'opennavicat/ui/mongo_timeseries_designer.py', 'opennavicat/ui/mongo_maintenance.py',
              'opennavicat/ui/window.py', 'opennavicat/ui/schema_object_designer.py',

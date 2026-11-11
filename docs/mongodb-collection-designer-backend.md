@@ -2,8 +2,10 @@
 
 This branch starts from the released 0.9.0 product tree and adds both the sealed
 backend and an embedded MainWindow collection designer. It does not change the
-published 0.9.0 installers. **The original Navicat collection designer pages and
-save behavior still have not been observed.** M18-02/03 in [the existing reference
+published 0.9.0 installers. The subsequent [ordinary-collection runtime observation](ui-reference-18-mongodb-collections.md)
+records the actual seven tabs, defaults and one create/cancel/save/reopen path on
+macOS / MongoDB 8. It does not establish complete designer or three-platform parity.
+M18-02/03 in [the existing reference
 record](ui-reference-18-mongodb.md) establish the ordinary/time-series, design and
 delete menu entries; the focused NIB report supplies control names and hierarchy.
 MongoDB command documentation and those static resources are not substituted for
@@ -49,7 +51,10 @@ this module does not add a second connection owner or perform any GUI I/O.
 ## Supported first scope
 
 New **ordinary** collections accept `capped`, `size`, `max`, `collation`,
-`validator`, `validationLevel` and `validationAction`. Capped size is currently
+`validator`, `validationLevel` and `validationAction`. The subsequent
+[storage checkpoint](mongodb-collection-storage.md) adds qualified WiredTiger
+`storageEngine` / `indexOptionDefaults` envelopes and the two actual script pages;
+unknown engine/configuration shapes remain read-only. Capped size is currently
 restricted to whole 256-byte units; the API does not pretend a server-rounded
 value is the exact original input. BSON integer controls reject bools and
 overflow. Definitions are limited to 1 MiB, reject unsupported values and
@@ -284,7 +289,7 @@ It reuses the receipt-backed, run-label-specific emergency cleanup for
 timeout/interrupt. It never accepts a reference endpoint. Logs/receipts exclude
 Docker environment dumps and private certificate/key/URI files.
 
-The current Linux WSL amd64 proof passed **144 cases with zero skips** and six
+The earlier collection-index checkpoint on Linux WSL amd64 passed **144 cases with zero skips** and six
 independently cleaned MongoDB 8.0.34 fixtures. The exact run identity and source
 hashes are retained under `artifacts/mongo-collections/collection-indexes-20261111/`. The shared
 database-security CI job executes this runner. The earlier macOS ARM64
@@ -323,9 +328,11 @@ Additional Linux WSL amd64 checks in this checkpoint:
 These source checks do not replace the six native installers, Windows/macOS GUI
 acceptance, or the original Navicat runtime comparison.
 
-Before integrating a designer, collect the original page/default/enablement,
-preview/save/cancel/error/reopen evidence on an owned fixture. Then wire a
-worker-only page, explicit preview confirmation, dirty-close/disconnect,
-captured cancellation and namespace-bound restoration. History-profile review
+The integrated designer retains worker-only catalog access, explicit preview
+confirmation, dirty-close/disconnect, captured cancellation and namespace-bound
+restoration. Continue comparing the actual original JSON Schema subpages,
+inline index drafts and key modal, advanced collection options, collation controls,
+error/permission states and other object/server/platform variants. The original
+ordinary-create observation does not close those remaining gates. History-profile review
 must remain in force; no imported source or unsupported auth/topology is
 automatically unblocked by this backend.

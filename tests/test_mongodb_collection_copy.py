@@ -5,6 +5,7 @@ from copy import deepcopy
 from dataclasses import replace
 
 import pytest
+from bson import BSON
 from pymongo.database import Database
 from pymongo.errors import OperationFailure
 
@@ -55,6 +56,37 @@ def test_real_copy_data_preserves_documents_options_indexes_and_validator(sessio
     assert set(db.copy_data.index_information()) == {'_id_', 'n_desc', 'n_id'}
     with pytest.raises(OperationFailure):
         db.copy_data.insert_one({'n': -1})
+
+
+@pytest.mark.parametrize('mode,count', [('structure', 0), ('data', 2)])
+def test_real_copy_preserves_collection_storage_index_defaults_and_override(session, mode, count):
+    db = session.connection[session.config.database]
+    options = {
+        'storageEngine': {'wiredTiger': {'configString': 'block_compressor=zlib'}},
+        'indexOptionDefaults': {'storageEngine': {'wiredTiger': {'configString': 'prefix_compression=false'}}},
+    }
+    db.create_collection('storage_source', **options)
+    db.storage_source.insert_many([{'_id': 1, 'n': 1, 'm': 1}, {'_id': 2, 'n': 2, 'm': 2}])
+    db.storage_source.create_index('n', name='default_storage')
+    db.storage_source.create_index('m', name='override_storage',
+        storageEngine={'wiredTiger': {'configString': 'prefix_compression=true'}})
+    snapshot = collections.load_collection(session, session.config.database, 'storage_source')
+    plan = tools.plan_copy(session, snapshot, 'storage_copy', mode)
+    result = tools.apply_copy(session, plan)
+    assert result.outcome.status == 'acknowledged' and result.outcome.staging_name is None
+    assert result.snapshot.namespace_uuid != snapshot.namespace_uuid
+    assert result.snapshot.definition.options == options
+    assert db.storage_copy.count_documents({}) == count
+    assert db.storage_source.count_documents({}) == 2
+    stats = db.command({'collStats': 'storage_copy'})
+    assert 'block_compressor=zlib' in stats['wiredTiger']['creationString']
+    assert 'prefix_compression=false' in stats['indexDetails']['default_storage']['creationString']
+    assert 'prefix_compression=true' in stats['indexDetails']['override_storage']['creationString']
+    db.storage_copy.create_index('_id_new', name='subsequent_default')
+    assert 'prefix_compression=false' in db.command({'collStats': 'storage_copy'})['indexDetails']['subsequent_default']['creationString']
+    if mode == 'data':
+        assert [BSON.encode(value) for value in db.storage_copy.find().sort('_id')] == [
+            BSON.encode(value) for value in db.storage_source.find().sort('_id')]
 
 
 def test_real_copy_rejects_existing_target_and_stale_source(session, monkeypatch):

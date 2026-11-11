@@ -34,6 +34,7 @@
 | L18-03 | root同轮实际查询和Tools菜单 | 已观察消息/摘要/多结果/数据分析，以及Tools新增脱敏/字典入口；其余工具完整执行、错误/取消仍开放。 |
 | L18-04 | root同轮实际新建连接窗口 | 已打开全新窗口，观察供应商过滤栏、九驱动、图标/列表切换、搜索、URI新建，并展开14供应商节点；完整别名及截图由root另档归档，未执行这些网络数据库连接。 |
 | M18-01–M18-08 | [18 MongoDB实际运行观察](ui-reference-18-mongodb.md) | 自有样例的分类/集合统计/原生查询/BSON视图、GridFS上传预览下载与清理、临时索引保存删除；所有未执行菜单、完整JS和三平台对齐仍开放。 |
+| MC18-01–MC18-07 | [18 普通集合设计器运行观察](ui-reference-18-mongodb-collections.md) | macOS/MongoDB 8 自有 fixture 的七页顺序/默认状态、内嵌索引与隐藏 `_id_`、两个集合级存储脚本页、普通创建/取消/保存/重开；未执行的 JSON Schema、内嵌索引写入、时序及其它平台继续开放。 |
 | S-W | [window.py](../opennavicat/ui/window.py)、[workspace.py](../opennavicat/ui/workspace.py)、[query.py](../opennavicat/ui/query.py)、[theme.py](../opennavicat/ui/theme.py) | 0.2 按实际参考重建的部分工作台、对象/信息区、表和查询页；尚未完成完整对照。 |
 | S-D | [dialogs.py](../opennavicat/ui/dialogs.py)、[editor.py](../opennavicat/ui/editor.py)、[grid.py](../opennavicat/ui/grid.py) | 现有连接/新表/记录对话框、SQL 和网格组件。 |
 | S-E | [database.py](../opennavicat/database.py) | SQLite/PostgreSQL/MySQL/MariaDB四驱动、基础metadata/SQL/行修改；其余五个数据库族和完整对象管理仍有缺口。 |
@@ -80,7 +81,7 @@
 | U20 | 数据分析、脱敏、数据字典和AI各页/向导 | ✗ | R18-H/F；L18-03只核实部分实际入口 | 按扫描/结果/部署/版面/聊天等真实页顺序留图，完整选项、依赖、预览、返回/取消、错误和持久化一致。 |
 | U21 | Redis/Snowflake专属连接、对象、数据/权限窗口 | ✗ | R18-H/F；不能套用关系型通用网格或普通密码页 | 专有字段/模式/类型/属性、Sentinel/TTL/ACL/warehouse/role/MFA等适用状态与UI分别对照。 |
 | U22 | MongoDB独立聚合管线设计器 | ✗ | R18-H/IB，专用阶段档案与.nagg声明 | source/stage图/阶段编辑/输入输出预览/脚本/选项/解释/结果、拖动与启用禁用完整对照。 |
-| U23 | MongoDB普通/时间序列集合设计器 | ◐ | main已有普通集合新建/设计基础：集合选项、验证、collation、原始只读BSON、脚本预览、删除/清空永久确认、重命名、时间序列创建/设计、staged集合复制、验证/重建索引、worker保存/取消及真实Mongo主窗测试；本轮macOS/MongoDB 8普通集合新建实际观察为索引→验证→存储引擎→索引选项→集合选项→排序规则→脚本预览；当前应用页签/控件仍不同，完整保存/错误、其它类型与版本及三平台布局继续开放 | 对照新建常规/时间序列入口及全部页、默认/启用条件、名称Sheet、脚本预览、保存/取消/错误/权限/重开；独立核验真实DDL和只读回退。 |
+| U23 | MongoDB普通/时间序列集合设计器 | ◐ | main已有普通集合新建/设计基础：集合选项、验证、collation、原始只读BSON、脚本预览、删除/清空永久确认、重命名、时间序列创建/设计、staged集合复制、验证/重建索引、worker保存/取消及真实Mongo主窗测试；本轮macOS/MongoDB 8普通集合新建实际观察为索引→验证→存储引擎→索引选项→集合选项→排序规则→脚本预览；本轮开发按MC18重排七页、内嵌表隐藏_id_，接通WiredTiger存储引擎/索引默认配置的创建/取消/错误重试/重开；内嵌索引完整编辑、JSON Schema子页、集群/旧存储选项、结构化collation及其它类型/版本/三平台布局继续开放 | 对照新建常规/时间序列入口及全部页、默认/启用条件、名称Sheet、脚本预览、保存/取消/错误/权限/重开；独立核验真实DDL和只读回退。 |
 
 ## B. 连接、数据库认证和配置
 
@@ -123,7 +124,7 @@
 | O11 | Oracle包/物化视图及日志/DB链接/其他/回收站 | ✗ | E13/R16 | 逐项设计/编译/使用/回收或清理，角色限制、依赖、错误真实验证。 |
 | O12 | SQL Server专属对象和管理 | ✗ | R16/E13；完整清单待运行枚举 | 封闭“其它”等所有类别和设计器，属性、依赖、执行、删除逐项验收，不只通用表/视图。 |
 | O13 | SQLite附加库、视图/触发器、维护和其它 | ◐ | 基础表/视图/列/索引/FK/DDL | 所有参考类别/维护命令，附加路径/别名、完整性及优化等实际行为独立验证。 |
-| O14 | MongoDB库/集合/视图/索引/函数/MapReduce/GridFS | ◐ | 0.6.1已有元数据及GridFS真实字节往返；已发布0.7.1按M18-09集成单当前文档树、实际短页边界导航、JSON专属工具条和GridFS底部预览/进度。0.8.1已发布六页索引设计及原生JS。main现接入普通集合设计器的新建/读取、选项/验证/collation、索引表/独立索引设计器路由、原始BSON只读、精确预览、删除/清空永久确认、重命名、时间序列创建/设计、普通视图create/collMod/pipeline设计、create-only collation与catalog绑定drop、集合/时间序列metadata信息区、staged集合复制、验证/重建索引、worker保存/取消和对象页/树入口；历史共享CI run 43029611463 在37120ac上7/7成功（尚非tag/公开Release）；恢复时929a027的run 43043705231因Linux必需库缺失而失败，不沿用旧资格。本轮macOS/MongoDB 8普通集合新建七页已实际观察，保留工具的布局/控件/完整行为及三平台验收仍开放，静态资源不等于原版运行证据 | 集合选项和类型保持，单文档树行内编辑/类型/导航与各视图工具条对齐，索引/视图/函数/MapReduce按版本执行；GridFS往返字节一致并对齐底部预览/进度与单位呈现。 |
+| O14 | MongoDB库/集合/视图/索引/函数/MapReduce/GridFS | ◐ | 0.6.1已有元数据及GridFS真实字节往返；已发布0.7.1按M18-09集成单当前文档树、实际短页边界导航、JSON专属工具条和GridFS底部预览/进度。0.8.1已发布六页索引设计及原生JS。main现接入普通集合设计器的新建/读取、选项/验证/collation、索引表/独立索引设计器路由、原始BSON只读、精确预览、删除/清空永久确认、重命名、时间序列创建/设计、普通视图create/collMod/pipeline设计、create-only collation与catalog绑定drop、集合/时间序列metadata信息区、staged集合复制、验证/重建索引、worker保存/取消和对象页/树入口；历史共享CI run 43029611463 在37120ac上7/7成功（尚非tag/公开Release）；恢复时929a027的run 43043705231因Linux必需库缺失而失败，不沿用旧资格。本轮macOS/MongoDB 8普通集合七页已实际观察；开发片段新增有界对象字面量存储脚本、精确create-only配置与两种复制模式真库核验，本机集合runner226项零跳过；保留工具的完整布局/行为及三平台验收仍开放，静态资源不等于原版运行证据 | 集合选项和类型保持，单文档树行内编辑/类型/导航与各视图工具条对齐，索引/视图/函数/MapReduce按版本执行；GridFS往返字节一致并对齐底部预览/进度与单位呈现。 |
 | O15 | DB用户/登录/组/角色/成员/授权/权限管理器 | ✗ | L1“用户”是DB角色；E13/R16 | 全部适用principal增改删及服务器/对象权限，低权限用户真实验证允许/拒绝行为。 |
 | O16 | 完整metadata/DDL/对象SQL及依赖动作 | ◐ | PG重建DDL有明确遗漏 | 所有者/授权/存储/索引/注释等参考输出完整；部署后catalog和行为一致，版本差异有证据。 |
 | O17 | Snowflake对象设计、维护和角色体系 | ✗ | R18-H/F：database/schema、Standard/Hybrid/Dynamic表、视图/物化视图、函数过程/sequence、user/account role/database role | 逐项实际设计/修改/刷新/删除，仓库/namespace/角色层级与权限真实核验；表类型/版本专有选项及依赖单列。 |

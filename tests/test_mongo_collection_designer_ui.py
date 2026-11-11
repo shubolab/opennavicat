@@ -12,6 +12,7 @@ from opennavicat.mongodb_collections import (
     CollectionApplyError, CollectionDefinition, CollectionOutcome, CollectionPlan, CollectionSnapshot,
 )
 from opennavicat.mongodb_collection_copy import CollectionCopyPlan
+from opennavicat.mongodb_collection_literals import MAX_STORAGE_TEXT_BYTES, parse_storage_option
 from opennavicat.ui.mongo_collection_designer import (
     MongoCollectionCopyDialog, MongoCollectionDesignerPage, MongoCollectionOperationDialog,
     MongoCollectionSaveDialog, collection_error_text,
@@ -52,7 +53,10 @@ def test_collection_page_edits_exact_supported_options_and_caps_size_units(qtbot
         'validationAction': 'error',
         'collation': {'locale': 'en', 'strength': 2},
     }
-    assert page.tabs.count() == 6
+    assert [page.tabs.tabText(index) for index in range(page.tabs.count())] == [
+        '索引', '验证', '存储引擎', '索引选项', '集合选项', '排序规则', '脚本预览']
+    assert page.tabs.currentIndex() == 0
+    assert page.name_edit.isHidden()
     assert page.raw_editor.isReadOnly()
     assert page.sql_preview.isReadOnly()
 
@@ -130,6 +134,126 @@ def test_existing_unknown_options_remain_raw_readonly(qtbot):
     assert 'Additional collection options' in page.message.text()
     assert page.raw_editor.toPlainText()
     assert not page.validation.isEnabled() and not page.collation.isEnabled()
+    assert page.raw_action.isVisible() and page.raw not in [page.tabs.widget(i) for i in range(page.tabs.count())]
+    page.raw_action.trigger()
+    assert page.raw.isVisible() and page.raw_editor.isReadOnly()
+    page.raw.close()
+
+
+def test_storage_object_literals_project_exact_options_and_blank_omits_them(qtbot, page):
+    storage = "{ wiredTiger: { configString: 'block_compressor=zlib' } }"
+    defaults = '{storageEngine: {wiredTiger: {configString: "prefix_compression=false"}}}'
+    page.storage_editor.setPlainText(storage)
+    page.index_options_editor.setPlainText(defaults)
+    assert page.storage_editor.toPlainText() == storage
+    assert page.draft().options == {
+        'storageEngine': {'wiredTiger': {'configString': 'block_compressor=zlib'}},
+        'indexOptionDefaults': {'storageEngine': {'wiredTiger': {'configString': 'prefix_compression=false'}}},
+    }
+    assert not page.storage_editor.isReadOnly() and not page.index_options_editor.isReadOnly()
+    assert not page.raw_action.isVisible()
+    page.storage_editor.clear()
+    assert 'storageEngine' not in page.draft().options
+    page.index_options_editor.setPlainText('  \n  ')
+    assert page.draft().options == {}
+
+
+def test_unnamed_storage_preview_uses_placeholder_without_emitting_database_request(qtbot, page):
+    previews, saves = [], []
+    page.previewRequested.connect(previews.append)
+    page.saveRequested.connect(saves.append)
+    page.storage_editor.setPlainText('{wiredTiger:{configString:"block_compressor=zlib"}}')
+    page.tabs.setCurrentIndex(page.tabs.count() - 1)
+    assert page.sql_preview.toPlainText().startswith('db.createCollection("Untitled",')
+    assert 'block_compressor=zlib' in page.sql_preview.toPlainText()
+    assert not previews and not saves and page.definition.name == ''
+    assert page._plan is None and page.confirmed_plan is None
+    page.request_save()
+    dialog = page._save_dialog
+    assert dialog.name_edit.text() == '' and not dialog.save_button.isEnabled()
+    dialog.reject()
+
+
+def test_storage_invalid_literal_blocks_save_and_recovers_without_losing_text(qtbot, page):
+    page.storage_editor.setPlainText('{wiredTiger: {configString: "block_compressor=zlib"}}')
+    page.storage_editor.setPlainText('{wiredTiger: {configString: "safe"}}; db.dropDatabase()')
+    assert page.dirty and not page.save_action.isEnabled()
+    page.request_save()
+    assert page._save_dialog is None
+    assert 'db.dropDatabase()' in page.storage_editor.toPlainText()
+    with pytest.raises(DatabaseError): page.draft()
+    page.storage_editor.setPlainText('{wiredTiger: {configString: "block_compressor=zlib"}}')
+    assert page.save_action.isEnabled() and not page._invalid
+
+
+def test_existing_storage_editors_remain_selectable_readonly_without_dirty_mutation(qtbot):
+    options = {
+        'storageEngine': {'wiredTiger': {'configString': 'block_compressor=zlib'}},
+        'indexOptionDefaults': {'storageEngine': {'wiredTiger': {'configString': 'prefix_compression=false'}}},
+    }
+    page = MongoCollectionDesignerPage('generated', 'demo_catalog', 'stored')
+    qtbot.addWidget(page)
+    page.load_snapshot(CollectionSnapshot('demo_catalog', 'stored', CollectionDefinition('stored', options), exists=True))
+    assert page.storage_editor.isReadOnly() and page.index_options_editor.isReadOnly()
+    assert 'block_compressor=zlib' in page.storage_editor.toPlainText()
+    assert 'prefix_compression=false' in page.index_options_editor.toPlainText()
+    assert not page.dirty and not page.save_action.isEnabled()
+    page.storage_editor.setPlainText('{wiredTiger: {configString: "block_compressor=snappy"}}')
+    assert page.draft().options == options and not page.dirty
+    assert not page.capped_check.isEnabled()
+
+
+def test_storage_name_sheet_uses_observed_label_and_cancel_preserves_unnamed_draft(qtbot, page):
+    from PySide6.QtWidgets import QFormLayout
+    page.storage_editor.setPlainText('{wiredTiger: {configString: "block_compressor=zlib"}}')
+    saved = []
+    page.saveRequested.connect(saved.append)
+    before = page.draft()
+    page.request_save()
+    dialog = page._save_dialog
+    assert dialog.name_edit.text() == '' and not dialog.save_button.isEnabled()
+    form = next(form for form in dialog.findChildren(QFormLayout) if form.labelForField(dialog.name_edit))
+    assert form.labelForField(dialog.name_edit).text() == '表名称:'
+    assert not dialog.suppress_preview_check.isChecked()
+    dialog.name_edit.setText('cancelled_storage')
+    dialog.reject()
+    qtbot.waitUntil(lambda: page._save_dialog is None)
+    assert page.draft() == before and page.draft().name == '' and not saved
+    assert page.dirty and 'block_compressor=zlib' in page.storage_editor.toPlainText()
+
+
+@pytest.mark.parametrize('source', [
+    '{wiredTiger:{configString:"block_compressor=zlib"}}',
+    "/* generated */ { wiredTiger: { configString: 'block_compressor=zlib', }, } // end",
+])
+def test_storage_literal_parser_accepts_observed_object_grammar_without_evaluation(source):
+    assert parse_storage_option(source, 'storageEngine') == {'wiredTiger': {'configString': 'block_compressor=zlib'}}
+
+
+@pytest.mark.parametrize('source', [
+    'db.runCommand({dropDatabase:1})',
+    '({wiredTiger:{configString:"block_compressor=zlib"}})',
+    '{wiredTiger:{configString:"x"}}; db.dropDatabase()',
+    '{wiredTiger:{configString:(function(){return "x"})()}}',
+    '{wiredTiger:{configString:"x",configString:"y"}}',
+    '{wiredTiger:{configString:Code("not executable")}}',
+    '{wiredTiger:{configString:123}}',
+    '{wiredTiger:{configString:"x",future:true}}',
+    '{futureEngine:{configString:"x"}}',
+    '[{wiredTiger:{configString:"x"}}]',
+    '{' + 'a:{' * 90 + 'x:1' + '}' * 91,
+])
+def test_storage_literal_parser_rejects_expressions_extra_statements_and_unqualified_shapes(source):
+    with pytest.raises(DatabaseError): parse_storage_option(source, 'storageEngine')
+
+
+def test_storage_literal_parser_bounds_utf8_and_preserves_string_escapes():
+    assert parse_storage_option(' \n ', 'storageEngine') is None
+    assert parse_storage_option(r'{wiredTiger:{configString:"block_compressor=\u007alib"}}', 'storageEngine') == {
+        'wiredTiger': {'configString': 'block_compressor=zlib'}}
+    with pytest.raises(DatabaseError, match='1 MiB'):
+        parse_storage_option(' ' * (MAX_STORAGE_TEXT_BYTES + 1), 'storageEngine')
+    with pytest.raises(DatabaseError): parse_storage_option('{wiredTiger:{configString:"\ud800"}}', 'storageEngine')
 
 
 def test_existing_collection_index_table_exposes_full_index_designer_routes(qtbot):
@@ -147,15 +271,13 @@ def test_existing_collection_index_table_exposes_full_index_designer_routes(qtbo
         {'name': 'orders_status', 'keys': [('status', 1)], 'unique': False,
          'options': {'background': True, 'sparse': True, 'expireAfterSeconds': 60, 'v': 2}},
     ])
-    assert page.index_table.rowCount() == 2
-    assert page.index_table.item(1, 0).text() == 'orders_status'
-    assert page.index_table.item(1, 1).text() == 'status: 1'
-    assert page.index_table.item(1, 5).text() == '60'
+    assert page.index_table.rowCount() == 1
+    assert page.index_table.item(0, 0).text() == 'orders_status'
+    assert page.index_table.item(0, 1).text() == 'status: 1'
+    assert page.index_table.item(0, 5).text() == '60'
     assert page.new_index_button.isEnabled()
     page.new_index_button.click()
     page.index_table.selectRow(0)
-    assert not page.edit_index_button.isEnabled() and not page.delete_index_button.isEnabled()
-    page.index_table.selectRow(1)
     page.edit_index_button.click(); page.delete_index_button.click(); page.refresh_index_button.click()
     assert requests['new'] == 1 and requests['edit'] == ['orders_status']
     assert requests['delete'][0]['name'] == 'orders_status' and requests['refresh'] == 1

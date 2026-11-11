@@ -8,7 +8,7 @@ import struct
 import threading
 import time
 
-from bson import BSON, Binary, Int64
+from bson import BSON, Binary, Code, Int64
 from pymongo.database import Database
 from pymongo.errors import AutoReconnect, OperationFailure
 import pytest
@@ -44,6 +44,16 @@ def validation(session, value=1):
     tools.CollectionDefinition('ok', {'validationLevel': 'constraint'}),
     tools.CollectionDefinition('ok', {'validationAction': 'ignore'}),
     tools.CollectionDefinition('ok', {'collation': 'simple'}),
+    tools.CollectionDefinition('ok', {'storageEngine': {'wiredTiger': {'configString': Code('generated()')}}}),
+    tools.CollectionDefinition('ok', {'storageEngine': []}),
+    tools.CollectionDefinition('ok', {'storageEngine': {'futureEngine': {}}}),
+    tools.CollectionDefinition('ok', {'storageEngine': {'wiredTiger': {'configString': 1}}}),
+    tools.CollectionDefinition('ok', {'storageEngine': {'wiredTiger': {'configString': '', 'future': True}}}),
+    tools.CollectionDefinition('ok', {'indexOptionDefaults': []}),
+    tools.CollectionDefinition('ok', {'indexOptionDefaults': {'unique': True}}),
+    tools.CollectionDefinition('ok', {'indexOptionDefaults': {'storageEngine': {'futureEngine': {}}}}),
+    tools.CollectionDefinition('ok', {'indexOptionDefaults': {'storageEngine': {'wiredTiger': {'configString': []}}}}),
+    tools.CollectionDefinition('ok', {'indexOptionDefaults': {'storageEngine': {'wiredTiger': {'configString': ''}}, 'future': True}}),
     tools.CollectionDefinition('ok', {'validator': {'d': datetime(2026, 1, 1, microsecond=1, tzinfo=timezone.utc)}}),
     tools.CollectionDefinition('ok', {'validator': {'invalid': object()}}),
 ])
@@ -79,6 +89,107 @@ def test_real_create_options_and_validator_enforce_actual_writes(session):
     assert error.value.code == 121
     assert collection.count_documents({}) == 1
     assert not tools.plan_collection(session, result.snapshot, result.snapshot.definition).changed
+
+
+def test_real_create_storage_and_index_defaults_reopen_and_control_actual_engine_settings(session):
+    options = {
+        'storageEngine': {'wiredTiger': {'configString': 'block_compressor=zlib'}},
+        'indexOptionDefaults': {'storageEngine': {'wiredTiger': {'configString': 'prefix_compression=false'}}},
+    }
+    snapshot, definition = draft(session, 'stored', **options)
+    plan = tools.plan_collection(session, snapshot, definition)
+    assert {key: plan.commands[0][key] for key in options} == options
+    assert 'block_compressor=zlib' in plan.command_script
+    result = tools.apply_plan(session, plan)
+    assert result.outcome.status == 'acknowledged' and not result.snapshot.read_only
+    db = session.connection[result.snapshot.schema]
+    # This connection's native reads independently inspect the actual storage
+    # implementation, beyond listCollections merely echoing the requested options.
+    db.stored.insert_one({'n': 1, 'm': 2})
+    db.stored.create_index('n', name='default_storage')
+    db.stored.create_index('m', name='override_storage',
+        storageEngine={'wiredTiger': {'configString': 'prefix_compression=true'}})
+    stats = db.command({'collStats': 'stored'})
+    assert 'block_compressor=zlib' in stats['wiredTiger']['creationString']
+    assert 'prefix_compression=false' in stats['indexDetails']['default_storage']['creationString']
+    assert 'prefix_compression=true' in stats['indexDetails']['override_storage']['creationString']
+    reopened = tools.load_collection(session, result.snapshot.schema, 'stored')
+    assert reopened.namespace_uuid == result.snapshot.namespace_uuid
+    assert BSON.encode(reopened.definition.options, codec_options=BSON_CODEC) == BSON.encode(options, codec_options=BSON_CODEC)
+    assert not tools.plan_collection(session, reopened, reopened.definition).changed
+
+
+def test_real_validation_collmod_preserves_create_only_storage_and_index_defaults(session):
+    options = {
+        'storageEngine': {'wiredTiger': {'configString': 'block_compressor=zlib'}},
+        'indexOptionDefaults': {'storageEngine': {'wiredTiger': {'configString': 'prefix_compression=false'}}},
+    }
+    snapshot, definition = draft(session, 'stored', **options)
+    saved = tools.apply_plan(session, tools.plan_collection(session, snapshot, definition)).snapshot
+    db = session.connection[saved.schema]
+    db.stored.insert_one({'n': 3}); db.stored.create_index('n', name='keep')
+    changed = deepcopy(saved.definition); changed.options['validator'] = {'n': {'$gte': Int64(2)}}
+    plan = tools.plan_collection(session, saved, changed)
+    assert set(plan.commands[0]) == {'collMod', 'collectionUUID', 'validator', 'writeConcern'}
+    updated = tools.apply_plan(session, plan).snapshot
+    assert updated.namespace_uuid == saved.namespace_uuid
+    assert {key: updated.definition.options[key] for key in options} == options
+    assert db.stored.find_one({'n': 3})['n'] == 3
+    assert set(db.stored.index_information()) == {'_id_', 'keep'}
+    with pytest.raises(OperationFailure): db.stored.insert_one({'n': 1})
+    for key in options:
+        changed = deepcopy(updated.definition)
+        if key == 'storageEngine':
+            changed.options[key]['wiredTiger']['configString'] = 'block_compressor=snappy'
+        else:
+            changed.options[key]['storageEngine']['wiredTiger']['configString'] = 'prefix_compression=true'
+        with pytest.raises(DatabaseError, match='immutable'):
+            tools.plan_collection(session, updated, changed)
+    assert tools.load_collection(session, saved.schema, 'stored').namespace_uuid == saved.namespace_uuid
+
+
+@pytest.mark.parametrize('key', ['storageEngine', 'indexOptionDefaults'])
+def test_real_server_rejects_bad_storage_config_without_claiming_saved_or_retrying(session, key):
+    storage = {'wiredTiger': {'configString': 'not_a_wiredtiger_option=true'}}
+    value = storage if key == 'storageEngine' else {'storageEngine': storage}
+    snapshot, definition = draft(session, 'bad_storage', **{key: value})
+    plan = tools.plan_collection(session, snapshot, definition)
+    with pytest.raises(tools.CollectionApplyError) as error:
+        tools.apply_plan(session, plan)
+    assert error.value.outcome.status == 'server_error'
+    assert isinstance(error.value.outcome.reply['code'], int)
+    assert error.value.outcome.observed is None
+    assert 'bad_storage' not in session.connection[snapshot.schema].list_collection_names()
+
+
+@pytest.mark.parametrize('options', [
+    {'storageEngine': {'wiredTiger': {'configString': ''}}},
+    {'indexOptionDefaults': {'storageEngine': {'wiredTiger': {'configString': ''}}}},
+])
+def test_real_explicit_empty_storage_config_string_is_preserved(session, options):
+    snapshot, definition = draft(session, 'empty_config', **options)
+    saved = tools.apply_plan(session, tools.plan_collection(session, snapshot, definition)).snapshot
+    assert saved.definition.options == options and not saved.read_only
+
+
+@pytest.mark.parametrize('options', [
+    {'storageEngine': {'futureEngine': {'configString': 'keep'}}},
+    {'storageEngine': {'wiredTiger': {'configString': 'keep', 'future': Int64(1)}}},
+    {'storageEngine': {'wiredTiger': {'configString': 1}}},
+    {'indexOptionDefaults': {'unique': True}},
+    {'indexOptionDefaults': {'storageEngine': {'futureEngine': {'configString': 'keep'}}}},
+    {'indexOptionDefaults': {'storageEngine': {'wiredTiger': {'configString': 'keep'}}, 'future': Int64(1)}},
+])
+def test_synthetic_unqualified_storage_catalog_keeps_exact_raw_readonly(session, options):
+    spec = BSON(tools._catalog(session, session.config.database, 'docs')).decode(codec_options=BSON_CODEC)
+    raw = BSON.encode({**spec, 'options': options}, codec_options=BSON_CODEC)
+    snapshot = tools._snapshot(session, session.config.database, 'docs', raw)
+    assert snapshot.read_only and snapshot.raw_spec == raw
+    assert BSON.encode(snapshot.definition.options) == BSON.encode(options)
+    assert any('Storage engine' in issue for issue in snapshot.issues)
+    changed = deepcopy(snapshot.definition); changed.options['validator'] = {}
+    with pytest.raises(DatabaseError, match='read-only'):
+        tools.plan_collection(session, snapshot, changed)
 
 
 def test_real_existing_validation_change_preserves_uuid_documents_indexes_and_collation(session):

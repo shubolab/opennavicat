@@ -14,7 +14,9 @@ from PySide6.QtWidgets import (
 from bson import BSON
 
 from opennavicat.database import DatabaseError
-from opennavicat.mongodb_collections import CollectionApplyError
+from opennavicat.mongodb_collections import CollectionApplyError, CollectionPlan, validate_definition
+from opennavicat.mongodb_collection_literals import parse_storage_option
+from opennavicat.mongodb_index_script import bson_literal
 from opennavicat.mongodb_session import BSON_CODEC, canonical_dumps, canonical_loads
 
 from .editor import SqlEditor
@@ -154,7 +156,7 @@ class MongoCollectionSaveDialog(TableSaveDialog):
         for form in self.findChildren(QFormLayout):
             label = form.labelForField(self.name_edit)
             if label is not None:
-                label.setText('集合名称')
+                label.setText('表名称:')
         for label in self.findChildren(QLabel):
             if label.text() == 'SQL 预览':
                 label.setText('脚本预览')
@@ -217,7 +219,8 @@ class MongoCollectionDesignerPage(_ObjectDesignerPage):
         general = QVBoxLayout(self.general)
         general.setContentsMargins(12, 12, 12, 12)
         form = self._form()
-        self.name_edit = QLineEdit()
+        self.name_edit = QLineEdit(self)
+        self.name_edit.hide()  # New names are entered in the observed save sheet.
         self.name_edit.setMaximumWidth(360)
         self.name_edit.textChanged.connect(self._name_changed)
         self.capped_check = QCheckBox('固定大小集合（Capped）')
@@ -229,7 +232,6 @@ class MongoCollectionDesignerPage(_ObjectDesignerPage):
         self.max_edit = QLineEdit()
         self.max_edit.setMaximumWidth(260)
         self.max_edit.textChanged.connect(lambda value: self._integer_changed('max', value))
-        form.addRow('集合名称', self.name_edit)
         form.addRow('', self.capped_check)
         form.addRow('最大大小（字节）', self.size_edit)
         form.addRow('最大文档数', self.max_edit)
@@ -245,10 +247,9 @@ class MongoCollectionDesignerPage(_ObjectDesignerPage):
         validation.setContentsMargins(12, 12, 12, 12)
         form = self._form()
         self.level_combo = self._choice(
-            form, '验证级别', [('服务器默认', None), ('关闭（off）', 'off'),
-                           ('严格（strict）', 'strict'), ('适度（moderate）', 'moderate')])
+            form, '验证级别', [('', None), ('off', 'off'), ('strict', 'strict'), ('moderate', 'moderate')])
         self.action_combo = self._choice(
-            form, '验证动作', [('服务器默认', None), ('警告（warn）', 'warn'), ('错误（error）', 'error')])
+            form, '验证动作', [('', None), ('error', 'error'), ('warn', 'warn')])
         validation.addLayout(form)
         validation.addWidget(QLabel('验证器（Canonical Extended JSON 文档）'))
         self.validator_editor = self._document_editor()
@@ -256,6 +257,24 @@ class MongoCollectionDesignerPage(_ObjectDesignerPage):
             lambda: self._document_changed('validator', self.validator_editor))
         validation.addWidget(self.validator_editor, 1)
         self.tabs.addTab(self.validation, '验证')
+
+        self.storage = QWidget()
+        storage = QVBoxLayout(self.storage)
+        storage.setContentsMargins(0, 0, 0, 0)
+        self.storage_editor = self._document_editor()
+        self.storage_editor.setObjectName('collectionStorageEngineEditor')
+        self.storage_editor.textChanged.connect(
+            lambda: self._storage_changed('storageEngine', self.storage_editor))
+        storage.addWidget(self.storage_editor, 1)
+
+        self.index_options = QWidget()
+        index_options = QVBoxLayout(self.index_options)
+        index_options.setContentsMargins(0, 0, 0, 0)
+        self.index_options_editor = self._document_editor()
+        self.index_options_editor.setObjectName('collectionIndexOptionDefaultsEditor')
+        self.index_options_editor.textChanged.connect(
+            lambda: self._storage_changed('indexOptionDefaults', self.index_options_editor))
+        index_options.addWidget(self.index_options_editor, 1)
 
         self.collation = QWidget()
         collation = QVBoxLayout(self.collation)
@@ -298,17 +317,33 @@ class MongoCollectionDesignerPage(_ObjectDesignerPage):
         self.index_table.itemSelectionChanged.connect(self._update_index_buttons)
         self.tabs.addTab(self.indexes, '索引')
 
-        self.raw = QWidget()
+        self.raw = QDialog(self)
+        self.raw.setWindowTitle('原始 BSON（只读）')
+        self.raw.resize(760, 540)
         raw = QVBoxLayout(self.raw)
         raw.setContentsMargins(12, 12, 12, 12)
         raw.addWidget(QLabel('服务器原始 catalog BSON（只读，仅用于保留未支持选项）'))
         self.raw_editor = QPlainTextEdit()
         self.raw_editor.setReadOnly(True)
         raw.addWidget(self.raw_editor, 1)
-        self.tabs.addTab(self.raw, '原始定义')
+        raw_buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        raw_buttons.button(QDialogButtonBox.StandardButton.Close).setText('关闭')
+        raw_buttons.rejected.connect(self.raw.reject)
+        raw.addWidget(raw_buttons)
+        self.raw_action = self._action('查看原始 BSON', 'query', self._show_raw)
+        self.raw_action.setVisible(False)
 
         self._finish_ui()
-        self.tabs.setTabText(self.tabs.count() - 1, '脚本预览')
+        preview = self.tabs.widget(self.tabs.count() - 1)
+        while self.tabs.count():
+            self.tabs.removeTab(0)
+        for widget, label in (
+            (self.indexes, '索引'), (self.validation, '验证'), (self.storage, '存储引擎'),
+            (self.index_options, '索引选项'), (self.general, '集合选项'),
+            (self.collation, '排序规则'), (preview, '脚本预览'),
+        ):
+            self.tabs.addTab(widget, label)
+        self.tabs.setCurrentIndex(0)
         self.sql_preview.set_language('text')
         self.preview_mode.clear()
         self.preview_mode.addItems(['执行脚本（集合 UUID）', 'BSON 命令'])
@@ -349,7 +384,9 @@ class MongoCollectionDesignerPage(_ObjectDesignerPage):
 
     def set_indexes(self, rows):
         self.index_message.clear(); self.index_message.hide()
-        self.index_rows = [deepcopy(row) for row in rows]
+        # The observed Navicat ordinary-collection editor omits the built-in
+        # _id_ row; metadata and standalone index tools still retain it.
+        self.index_rows = [deepcopy(row) for row in rows if row.get('name') != '_id_']
         self.index_table.setRowCount(0)
         for row in self.index_rows:
             values = [row.get('name', '')]
@@ -463,6 +500,26 @@ class MongoCollectionDesignerPage(_ObjectDesignerPage):
                 self._invalid[key] = '请输入有效的 Canonical Extended JSON 文档：' + key
         self._edited()
 
+    def _storage_changed(self, key, editor):
+        if (self._populating or self.definition is None or self._read_only
+                or self.snapshot is None or self.snapshot.exists):
+            return
+        self._invalid.pop(key, None)
+        try:
+            value = parse_storage_option(editor.toPlainText(), key)
+            if value is None:
+                self.definition.options.pop(key, None)
+            else:
+                self.definition.options[key] = value
+        except DatabaseError as error:
+            self._invalid[key] = str(error)
+        self._edited()
+
+    def _show_raw(self):
+        if self.raw_action.isVisible():
+            self.raw.show()
+            self.raw.raise_()
+
     def _set_option(self, key, value):
         if value is None:
             self.definition.options.pop(key, None)
@@ -502,6 +559,11 @@ class MongoCollectionDesignerPage(_ObjectDesignerPage):
             self.validator_editor.setPlainText(canonical_dumps(options['validator']) if 'validator' in options else '')
         except Exception:
             self.validator_editor.setPlainText('')
+        for key, editor in (('storageEngine', self.storage_editor), ('indexOptionDefaults', self.index_options_editor)):
+            try:
+                editor.setPlainText(canonical_dumps(options[key]) if key in options else '')
+            except Exception:
+                editor.setPlainText('')
         for combo, key in ((self.level_combo, 'validationLevel'), (self.action_combo, 'validationAction')):
             index = combo.findData(options.get(key))
             combo.setCurrentIndex(index if index >= 0 else 0)
@@ -523,8 +585,14 @@ class MongoCollectionDesignerPage(_ObjectDesignerPage):
         for widget in (self.validation, self.collation):
             widget.setEnabled(editable)
         self.name_edit.setReadOnly(bool(self.snapshot and self.snapshot.exists))
-        self.size_edit.setEnabled(editable and self.capped_check.isChecked())
-        self.max_edit.setEnabled(editable and self.capped_check.isChecked())
+        new = bool(self.snapshot and not self.snapshot.exists)
+        self.capped_check.setEnabled(editable and new)
+        self.size_edit.setEnabled(editable and new and self.capped_check.isChecked())
+        self.max_edit.setEnabled(editable and new and self.capped_check.isChecked())
+        for editor in (self.storage_editor, self.index_options_editor):
+            editor.setReadOnly(not editable or not new)
+        self.raw_action.setVisible(bool(self.snapshot and self.snapshot.raw_spec and
+                                       (self.snapshot.read_only or self.snapshot.issues)))
         if hasattr(self, 'save_action'):
             self.save_action.setEnabled(editable and self.dirty and not self._invalid)
         self._update_index_buttons()
@@ -533,13 +601,34 @@ class MongoCollectionDesignerPage(_ObjectDesignerPage):
         if not hasattr(self, 'sql_preview'):
             return
         try:
+            plan = self._plan
+            unnamed_script = None
+            if self.definition is not None and self.snapshot is not None and not self.snapshot.exists and not self.definition.name:
+                # The reference previews an unnamed draft as Untitled. This is
+                # a text-only projection: it is never sealed, emitted to the
+                # database queue, assigned to _plan or accepted for saving.
+                definition = self.draft()
+                definition.name = 'Untitled'
+                validate_definition(definition)
+                plan = CollectionPlan(self.snapshot, definition,
+                    [{'create': definition.name, **deepcopy(definition.options)}], True)
+                unnamed_script = 'db.createCollection(' + bson_literal(definition.name)
+                if definition.options:
+                    unnamed_script += ', ' + bson_literal(definition.options)
+                unnamed_script += ')'
             if self.preview_mode.currentIndex() == 0:
-                text = self._plan.command_script if self._plan is not None and self._plan.changed else '无更改' if not self.dirty else '正在生成集合命令…'
+                text = unnamed_script if unnamed_script is not None else plan.command_script if plan is not None and plan.changed else '无更改' if not self.dirty else '正在生成集合命令…'
             else:
-                text = self._plan.command_text if self._plan is not None and self._plan.changed else '无更改' if not self.dirty else '正在生成集合命令…'
+                text = plan.command_text if plan is not None and plan.changed else '无更改' if not self.dirty else '正在生成集合命令…'
         except DatabaseError as error:
             text = '无法安全生成执行脚本：\n' + str(error)
         self.sql_preview.setPlainText(text)
+
+    def request_preview(self):
+        if self.definition is not None and self.snapshot is not None and not self.snapshot.exists and not self.definition.name:
+            self._render_plan()
+            return
+        super().request_preview()
 
     def request_save(self):
         if self.definition is None or not self.dirty or self.loading or self._read_only:

@@ -126,7 +126,11 @@ Validation Level/Action 的 combo cell 文本为空；不能填入推测的 `str
 `awakeFromNib`、模型装载、服务器能力、用户偏好和动态布局均可能改变它们。
 因此不能将归档空值说成新建集合的产品默认值，也不能将 enabled 值说成用户一定可操作。
 
-## 当前实现与静态证据的边界
+## 静态快照时的实现与证据边界
+
+以下描述限于本报告写作时的静态 checkpoint；之后的 macOS 运行观察与开发验证见
+[普通集合运行记录](ui-reference-18-mongodb-collections.md) 和
+[存储页整合记录](mongodb-collection-storage.md)，不能把本节历史状态当作当前进展。
 
 分支中的首个普通集合设计器 UI 已接入创建、验证器、collation、原始 BSON、精确脚本预览、
 删除/清空永久确认、重命名、时间序列创建/设计、集合复制、验证/重建索引、worker-only 保存和取消路径；实现和测试见
@@ -154,6 +158,10 @@ owned-Mongo runner 当前 144 项零跳过，但尚未在 Windows/macOS 运行�
 的行为。独立索引已实测的保存偏好不自动扩展为普通集合证据。
 
 ## 下一次动态核验范围
+
+本静态报告之后已完成一轮 [普通集合实际运行观察](ui-reference-18-mongodb-collections.md)。
+其中七页顺序、JSON Schema 子页、内嵌索引及普通创建/重开来自运行事实；本节保留
+静态报告当时的调查计划，未执行的选项、对象/版本及平台仍继续调查。
 
 恢复可靠原版应用句柄后，应仅在新建自有 marker 集合中依次观察：入口打开后的实际主
 tab 与页签；空集合与已有集合的所有字段和初始状态；验证 type/level/action 的真实选项

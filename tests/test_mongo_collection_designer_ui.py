@@ -52,7 +52,7 @@ def test_collection_page_edits_exact_supported_options_and_caps_size_units(qtbot
         'validationAction': 'error',
         'collation': {'locale': 'en', 'strength': 2},
     }
-    assert page.tabs.count() == 5
+    assert page.tabs.count() == 6
     assert page.raw_editor.isReadOnly()
     assert page.sql_preview.isReadOnly()
 
@@ -130,6 +130,35 @@ def test_existing_unknown_options_remain_raw_readonly(qtbot):
     assert 'Additional collection options' in page.message.text()
     assert page.raw_editor.toPlainText()
     assert not page.validation.isEnabled() and not page.collation.isEnabled()
+
+
+def test_existing_collection_index_table_exposes_full_index_designer_routes(qtbot):
+    definition = CollectionDefinition('orders', {})
+    page = MongoCollectionDesignerPage('generated', 'demo_catalog', 'orders')
+    qtbot.addWidget(page)
+    page.load_snapshot(CollectionSnapshot('demo_catalog', 'orders', definition, exists=True))
+    requests = {'new': 0, 'edit': [], 'delete': [], 'refresh': 0}
+    page.newIndexRequested.connect(lambda: requests.__setitem__('new', requests['new'] + 1))
+    page.editIndexRequested.connect(requests['edit'].append)
+    page.deleteIndexRequested.connect(requests['delete'].append)
+    page.indexesRequested.connect(lambda: requests.__setitem__('refresh', requests['refresh'] + 1))
+    page.set_indexes([
+        {'name': '_id_', 'keys': [('_id', 1)], 'unique': True, 'system': True, 'options': {'v': 2}},
+        {'name': 'orders_status', 'keys': [('status', 1)], 'unique': False,
+         'options': {'background': True, 'sparse': True, 'expireAfterSeconds': 60, 'v': 2}},
+    ])
+    assert page.index_table.rowCount() == 2
+    assert page.index_table.item(1, 0).text() == 'orders_status'
+    assert page.index_table.item(1, 1).text() == 'status: 1'
+    assert page.index_table.item(1, 5).text() == '60'
+    assert page.new_index_button.isEnabled()
+    page.new_index_button.click()
+    page.index_table.selectRow(0)
+    assert not page.edit_index_button.isEnabled() and not page.delete_index_button.isEnabled()
+    page.index_table.selectRow(1)
+    page.edit_index_button.click(); page.delete_index_button.click(); page.refresh_index_button.click()
+    assert requests['new'] == 1 and requests['edit'] == ['orders_status']
+    assert requests['delete'][0]['name'] == 'orders_status' and requests['refresh'] == 1
 
 
 def test_apply_error_formatter_keeps_status_reply_and_observation():

@@ -1354,7 +1354,15 @@ class MainWindow(QMainWindow):
         page.titleChanged.connect(lambda _title: self.update_designer_title(page))
         page.focusRequested.connect(lambda enabled: self.focus_workspace(page, enabled))
         page.savePreviewPreferenceChanged.connect(self.set_schema_preview_suppressed)
+        page.indexesRequested.connect(lambda: self.refresh_mongo_collection_designer_indexes(page))
+        page.newIndexRequested.connect(lambda: self.open_mongo_index_designer(
+            page.connection_id, page.schema, page.table))
+        page.editIndexRequested.connect(lambda name: self.open_mongo_index_designer(
+            page.connection_id, page.schema, page.table, name))
+        page.deleteIndexRequested.connect(lambda row: self.drop_mongo_index(dict(
+            row, id=page.connection_id, schema=page.schema, collection=page.table)))
         page._collection_request = 0
+        page._index_request = 0
         page._pending_connection = session is None
         self.tabs.addTab(page, workbench_icon("table", 20), name or "无标题")
         self.tabs.setCurrentWidget(page)
@@ -1389,13 +1397,17 @@ class MainWindow(QMainWindow):
         request = page._collection_request
         page.set_busy(True, "正在读取集合定义…")
         def work():
-            return (mongo_collection_tools.load_collection(session, schema, name) if name
-                    else mongo_collection_tools.new_collection(session, schema))
-        def done(snapshot):
+            snapshot = (mongo_collection_tools.load_collection(session, schema, name) if name
+                        else mongo_collection_tools.new_collection(session, schema))
+            indexes = session.indexes(schema, snapshot.name) if snapshot.exists else []
+            return snapshot, indexes
+        def done(result):
             if (not self._collection_page_alive(page) or page._collection_request != request
                     or not self._collection_session_current(page.connection_id, session)):
                 return
+            snapshot, indexes = result
             page.load_snapshot(snapshot)
+            page.set_indexes(indexes)
             page._pending_connection = False
             self.update_designer_title(page)
         def failed(error):
@@ -1405,6 +1417,26 @@ class MainWindow(QMainWindow):
             if self._collection_page_alive(page) and page._collection_request == request:
                 page.set_busy(False)
         self.submit(work, done, failed, label="读取集合设计", finished=finish)
+
+    def refresh_mongo_collection_designer_indexes(self, page):
+        session = self.sessions.get(page.connection_id)
+        if (not self._collection_page_alive(page) or session is None or page.snapshot is None
+                or not page.snapshot.exists or page.loading
+                or not self._collection_session_current(page.connection_id, session)):
+            return
+        page._index_request += 1
+        request = page._index_request
+        page.loading = True; page._update_controls()
+        def work():
+            return session.indexes(page.schema, page.table)
+        def done(rows):
+            if (self._collection_page_alive(page) and page._index_request == request
+                    and self._collection_session_current(page.connection_id, session)):
+                page.set_indexes(rows)
+        def finished():
+            if self._collection_page_alive(page) and page._index_request == request:
+                page.loading = False; page._update_controls()
+        self.submit(work, done, lambda error: page.show_error(error), label="读取集合索引", finished=finished)
 
     def preview_mongo_collection_designer(self, page, definition):
         session = self.sessions.get(page.connection_id)
@@ -2157,6 +2189,11 @@ class MainWindow(QMainWindow):
                 self.load_schemas(connection_id)
                 if (self.object_page.connection_id, self.object_page.schema) == (connection_id, schema):
                     self.object_page.refresh()
+                for index in range(self.tabs.count()):
+                    page = self.tabs.widget(index)
+                    if (isinstance(page, MongoCollectionDesignerPage)
+                            and (page.connection_id, page.schema) == (connection_id, schema)):
+                        self.refresh_mongo_collection_designer_indexes(page)
         self.when_idle(refresh)
 
     def drop_mongo_index(self, info):

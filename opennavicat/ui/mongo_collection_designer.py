@@ -4,10 +4,11 @@ from __future__ import annotations
 from copy import deepcopy
 import base64
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout,
-    QLabel, QLineEdit, QPlainTextEdit, QVBoxLayout, QWidget,
+    QAbstractItemView, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFormLayout,
+    QHBoxLayout, QLabel, QLineEdit, QPlainTextEdit, QPushButton, QTableWidget,
+    QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
 from bson import BSON
@@ -200,11 +201,16 @@ class MongoCollectionDesignerPage(_ObjectDesignerPage):
     """Detached ordinary-collection draft bound to a MainWindow owner queue."""
 
     kind = 'mongo_collection'
+    indexesRequested = Signal()
+    newIndexRequested = Signal()
+    editIndexRequested = Signal(str)
+    deleteIndexRequested = Signal(object)
 
     def __init__(self, connection_id, schema='', name='', parent=None):
         super().__init__(connection_id, schema, name, parent)
         self._initial_name = name
         self._invalid = {}
+        self.index_rows = []
         self.toolbar.addSeparator()
 
         self.general = QWidget()
@@ -261,6 +267,35 @@ class MongoCollectionDesignerPage(_ObjectDesignerPage):
         collation.addWidget(self.collation_editor, 1)
         self.tabs.addTab(self.collation, '排序规则')
 
+        self.indexes = QWidget()
+        indexes = QVBoxLayout(self.indexes)
+        indexes.setContentsMargins(12, 12, 12, 12)
+        index_bar = QHBoxLayout()
+        self.new_index_button = QPushButton('新建索引')
+        self.edit_index_button = QPushButton('设计索引')
+        self.delete_index_button = QPushButton('删除索引')
+        self.refresh_index_button = QPushButton('刷新')
+        index_bar.addWidget(self.new_index_button); index_bar.addWidget(self.edit_index_button)
+        index_bar.addWidget(self.delete_index_button); index_bar.addWidget(self.refresh_index_button)
+        index_bar.addStretch(); indexes.addLayout(index_bar)
+        self.index_table = QTableWidget(0, 8)
+        self.index_table.setObjectName('mongoCollectionIndexes')
+        self.index_table.setHorizontalHeaderLabels(
+            ['名称', '字段', '唯一键', '背景', '稀疏', 'TTL', 'Bucket Size', '版本'])
+        self.index_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.index_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.index_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.index_table.verticalHeader().hide()
+        self.index_table.horizontalHeader().setStretchLastSection(True)
+        indexes.addWidget(self.index_table, 1)
+        indexes.addWidget(QLabel('索引通过独立索引设计器保存；集合选项保存不会修改索引。'))
+        self.new_index_button.clicked.connect(lambda: self.newIndexRequested.emit())
+        self.edit_index_button.clicked.connect(self._edit_index)
+        self.delete_index_button.clicked.connect(self._delete_index)
+        self.refresh_index_button.clicked.connect(lambda: self.indexesRequested.emit())
+        self.index_table.itemSelectionChanged.connect(self._update_index_buttons)
+        self.tabs.addTab(self.indexes, '索引')
+
         self.raw = QWidget()
         raw = QVBoxLayout(self.raw)
         raw.setContentsMargins(12, 12, 12, 12)
@@ -309,6 +344,52 @@ class MongoCollectionDesignerPage(_ObjectDesignerPage):
     @property
     def collection(self):
         return self.table
+
+    def set_indexes(self, rows):
+        self.index_rows = [deepcopy(row) for row in rows]
+        self.index_table.setRowCount(0)
+        for row in self.index_rows:
+            values = [row.get('name', '')]
+            keys = row.get('keys') or [(key, None) for key in row.get('columns', [])]
+            values.append(', '.join(f'{key}: {direction}' for key, direction in keys))
+            options = row.get('options') or {}
+            values.extend([
+                '是' if row.get('unique') else '否',
+                '是' if options.get('background') else '否',
+                '是' if options.get('sparse') else '否',
+                options.get('expireAfterSeconds', ''),
+                options.get('bucketSize', ''),
+                options.get('v', ''),
+            ])
+            table_row = self.index_table.rowCount()
+            self.index_table.insertRow(table_row)
+            for column, value in enumerate(values):
+                self.index_table.setItem(table_row, column, QTableWidgetItem(str(value)))
+            self.index_table.item(table_row, 0).setData(Qt.ItemDataRole.UserRole, deepcopy(row))
+        self._update_index_buttons()
+
+    def _selected_index(self):
+        row = self.index_table.currentRow()
+        item = self.index_table.item(row, 0) if row >= 0 else None
+        return item.data(Qt.ItemDataRole.UserRole) if item is not None else None
+
+    def _edit_index(self):
+        row = self._selected_index()
+        if row is not None and not self._read_only and not row.get('system'):
+            self.editIndexRequested.emit(row.get('name', ''))
+
+    def _delete_index(self):
+        row = self._selected_index()
+        if row is not None and not self._read_only and not row.get('system'):
+            self.deleteIndexRequested.emit(deepcopy(row))
+
+    def _update_index_buttons(self):
+        selected = self._selected_index()
+        editable = bool(self.snapshot and self.snapshot.exists and not self._read_only and not self.loading)
+        self.new_index_button.setEnabled(editable)
+        self.edit_index_button.setEnabled(bool(editable and selected and not selected.get('system')))
+        self.delete_index_button.setEnabled(bool(editable and selected and not selected.get('system')))
+        self.refresh_index_button.setEnabled(bool(self.snapshot and self.snapshot.exists and not self.loading))
 
     def _choice_changed(self, combo):
         if self._populating or self.definition is None or self._read_only:
@@ -438,6 +519,7 @@ class MongoCollectionDesignerPage(_ObjectDesignerPage):
         self.max_edit.setEnabled(editable and self.capped_check.isChecked())
         if hasattr(self, 'save_action'):
             self.save_action.setEnabled(editable and self.dirty and not self._invalid)
+        self._update_index_buttons()
 
     def _render_plan(self, *_):
         if not hasattr(self, 'sql_preview'):

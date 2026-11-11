@@ -305,8 +305,9 @@ class ObjectBrowser(QWidget):
         connected = self.connection_id in self.window.sessions and self.connection_id not in getattr(self.window, "_closing_connections", ()) and not getattr(self.window, "_closing_mongo", False)
         writable = connected and not self.window.configs[self.connection_id].read_only
         self.open_action.setEnabled(selected and self.kind != "mongo_index")
-        self.design_action.setEnabled(connected and selected and self.kind in {"table", "view", "index", "trigger", "mongo_index"})
-        self.new_action.setEnabled(writable and self.kind in {"table", "index", "trigger", "mongo_index"})
+        self.design_action.setEnabled(connected and selected and self.kind in {
+            "table", "view", "index", "trigger", "mongo_index", "mongo_collection", "mongo_timeseries"})
+        self.new_action.setEnabled(writable and self.kind in {"table", "index", "trigger", "mongo_index", "mongo_collection"})
         self.delete_action.setEnabled(writable and selected and self.kind in {"table", "view", "index", "trigger", "mongo_index"}
             and not self.selected().get("automatic") and not (self.kind == "mongo_index" and self.selected().get("system")))
         for shortcut in getattr(self, "_delete_shortcuts", ()):

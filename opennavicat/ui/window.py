@@ -32,6 +32,7 @@ from ..transport import SSHAuthenticationError, SSHHostKeyError, TLSKeyPasswordE
 from .. import schema as schema_tools
 from .. import schema_objects as object_schema_tools
 from .. import mongodb_indexes as mongo_index_tools
+from .. import mongodb_collections as mongo_collection_tools
 from .connection_manager import ConnectionManagerDialog
 from .dialogs import ConnectionDialog, RowDialog, TableDesignerDialog, confirm_ssh_host_key
 from .editor import SqlEditor, pretty_sql
@@ -48,8 +49,9 @@ from .redis_browser import RedisBrowserPage, RedisKeyPage
 from .mongo_browser import MongoCollectionPage
 from .mongo_gridfs import MongoGridFSPage
 from .mongo_index_designer import MongoIndexDesignerPage, MongoIndexDeleteDialog, index_error_text
+from .mongo_collection_designer import MongoCollectionDesignerPage, collection_error_text
 
-DESIGNER_PAGES = (TableDesignerPage, IndexDesignerPage, TriggerDesignerPage, MongoIndexDesignerPage)
+DESIGNER_PAGES = (TableDesignerPage, IndexDesignerPage, TriggerDesignerPage, MongoIndexDesignerPage, MongoCollectionDesignerPage)
 MONGO_PAGES = (MongoCollectionPage, MongoGridFSPage)
 
 
@@ -481,6 +483,7 @@ class MainWindow(QMainWindow):
         self._connection_edit_tokens = {}
         self._connection_edit_failure_handler = None
         self._mongo_index_jobs = {}
+        self._mongo_collection_jobs = {}
         self._mongo_index_delete_dialogs = {}
         self._closed = False
         self._navicat_discovering = False
@@ -498,6 +501,7 @@ class MainWindow(QMainWindow):
         self.populate_connections()
         self.restore_drafts()
         self.restore_mongo_index_designers()
+        self.restore_mongo_collection_designers()
         self.info_action.setChecked(bool(self.store.state.get("info_visible", False)))
         self.inspector.setVisible(self.info_action.isChecked())
         self.navigation_action.setChecked(bool(self.store.state.get("navigation_visible", True)))
@@ -894,7 +898,10 @@ class MainWindow(QMainWindow):
             if info["kind"] == "mongo_index":
                 return self.open_mongo_index_designer(info["id"], info["schema"],
                     info.get("collection", ""), info.get("name", ""))
-            self.statusBar().showMessage("MongoDB 的集合专用设计器仍待实现。", 5000)
+            if info["kind"] in {"mongo_collection", "mongo_timeseries"}:
+                return self.open_mongo_collection_designer(
+                    info["id"], info["schema"], info.get("name", info.get("table", "")))
+            self.statusBar().showMessage("此 MongoDB 对象仍使用只读结构视图；专用设计器仍待实现。", 5000)
             return None
         if config and config.driver == "sqlite":
             if info["kind"] in {"index", "trigger"}:
@@ -999,6 +1006,8 @@ class MainWindow(QMainWindow):
     def new_browser_object(self):
         if self.object_page.kind == "mongo_index":
             return self.open_mongo_index_designer(self.object_page.connection_id, self.object_page.schema)
+        if self.object_page.kind == "mongo_collection":
+            return self.open_mongo_collection_designer(self.object_page.connection_id, self.object_page.schema)
         if self.object_page.kind in {"index", "trigger"}:
             return self.open_object_designer(self.active_id, self.active_schema, self.object_page.kind)
         return self.new_table()
@@ -1008,7 +1017,8 @@ class MainWindow(QMainWindow):
         if index < 0:
             return
         config = self.configs.get(page.connection_id)
-        name = page.definition.name if page.definition else page.object_name if isinstance(page, MongoIndexDesignerPage) else page.table
+        name = (page.definition.name if page.definition else
+            page.object_name if isinstance(page, (MongoIndexDesignerPage, MongoCollectionDesignerPage)) else page.table)
         title = f"{name or '无标题'}@{page.schema} ({config.name if config else ''})"
         if page.dirty:
             title += " — 已编辑"
@@ -1017,18 +1027,24 @@ class MainWindow(QMainWindow):
         if self.tabs.currentWidget() is page:
             self.setWindowTitle(title)
             info = {"name": name or "无标题", "schema": page.schema,
-                "kind": page.kind if isinstance(page, (IndexDesignerPage, TriggerDesignerPage, MongoIndexDesignerPage)) else "table"}
+                "kind": page.kind if isinstance(page, (IndexDesignerPage, TriggerDesignerPage, MongoIndexDesignerPage, MongoCollectionDesignerPage)) else "table"}
             if isinstance(page, MongoIndexDesignerPage):
                 definition = page.definition
                 info.update(collection=page.collection,
                     keys=[(key.field, key.order) for key in definition.keys] if definition else [],
                     options=deepcopy(definition.options) if definition else {},
                     unique=bool(definition and definition.options.get("unique")))
-            self.inspector.show_object(info, config, page.snapshot.ddl if page.snapshot else "")
+            if isinstance(page, MongoCollectionDesignerPage):
+                preview = page._plan.command_text if page._plan is not None and page._plan.changed else page.raw_editor.toPlainText()
+            else:
+                preview = page.snapshot.ddl if page.snapshot else ""
+            self.inspector.show_object(info, config, preview)
 
     def load_designer(self, page):
         if isinstance(page, MongoIndexDesignerPage):
             return self.load_mongo_index_designer(page)
+        if isinstance(page, MongoCollectionDesignerPage):
+            return self.load_mongo_collection_designer(page)
         session = self.sessions.get(page.connection_id)
         if self._closed or session is None or page.loading or self.tabs.indexOf(page) < 0:
             return
@@ -1045,6 +1061,8 @@ class MainWindow(QMainWindow):
     def preview_designer(self, page, definition):
         if isinstance(page, MongoIndexDesignerPage):
             return self.preview_mongo_index_designer(page, definition)
+        if isinstance(page, MongoCollectionDesignerPage):
+            return self.preview_mongo_collection_designer(page, definition)
         session = self.sessions.get(page.connection_id)
         if self._closed or session is None or page.snapshot is None or page.loading or self.tabs.indexOf(page) < 0:
             return
@@ -1063,6 +1081,8 @@ class MainWindow(QMainWindow):
     def save_designer(self, page, definition):
         if isinstance(page, MongoIndexDesignerPage):
             return self.save_mongo_index_designer(page, definition)
+        if isinstance(page, MongoCollectionDesignerPage):
+            return self.save_mongo_collection_designer(page, definition)
         session = self.sessions.get(page.connection_id)
         if self._closed or session is None or page.snapshot is None or page.loading or self.tabs.indexOf(page) < 0:
             return
@@ -1270,6 +1290,175 @@ class MainWindow(QMainWindow):
                 page.running = False
                 page.set_busy(False)
         self.submit(work, done, failed, label="删除索引" if deleting else "保存索引设计", finished=finish)
+
+    def open_mongo_collection_designer(self, connection_id, schema, name="", *, restore=False):
+        config = self.configs.get(connection_id)
+        if (self._closed or not config or config.driver != "mongodb" or self._closing_mongo
+                or connection_id in self._closing_connections):
+            return None
+        session = self.sessions.get(connection_id)
+        if session is None and not restore:
+            return None
+        if name:
+            for index in range(self.tabs.count()):
+                existing = self.tabs.widget(index)
+                if (isinstance(existing, MongoCollectionDesignerPage)
+                        and self._mongo_collection_identity(existing) == (connection_id, schema, name)):
+                    self.tabs.setCurrentWidget(existing)
+                    return existing
+        page = MongoCollectionDesignerPage(connection_id, schema, name)
+        page.save_action.setShortcut(QKeySequence())
+        page.set_read_only(config.read_only)
+        page.suppress_save_preview = self.store.state.get("suppress_schema_save_preview") is True
+        page.loadRequested.connect(lambda: self.load_designer(page))
+        page.previewRequested.connect(lambda definition: self.preview_designer(page, definition))
+        page.saveRequested.connect(lambda definition: self.save_designer(page, definition))
+        page.titleChanged.connect(lambda _title: self.update_designer_title(page))
+        page.focusRequested.connect(lambda enabled: self.focus_workspace(page, enabled))
+        page.savePreviewPreferenceChanged.connect(self.set_schema_preview_suppressed)
+        page._collection_request = 0
+        page._pending_connection = session is None
+        self.tabs.addTab(page, workbench_icon("table", 20), name or "无标题")
+        self.tabs.setCurrentWidget(page)
+        self.update_designer_title(page)
+        if session is not None:
+            self.load_mongo_collection_designer(page)
+        else:
+            page.show_message("连接后重新读取集合定义。")
+        return page
+
+    def _collection_page_alive(self, page):
+        return not self._closed and isValid(page) and self.tabs.indexOf(page) >= 0
+
+    @staticmethod
+    def _mongo_collection_identity(page):
+        snapshot = page.snapshot
+        name = snapshot.name if snapshot is not None and snapshot.exists else page._initial_name
+        return page.connection_id, page.schema, name
+
+    def _collection_session_current(self, connection_id, session):
+        return (not self._closed and not self._closing_mongo
+                and connection_id not in self._closing_connections
+                and self.sessions.get(connection_id) is session)
+
+    def load_mongo_collection_designer(self, page):
+        session = self.sessions.get(page.connection_id)
+        if (not self._collection_page_alive(page) or page.loading or session is None
+                or not self._collection_session_current(page.connection_id, session)):
+            return
+        _, schema, name = self._mongo_collection_identity(page)
+        page._collection_request += 1
+        request = page._collection_request
+        page.set_busy(True, "正在读取集合定义…")
+        def work():
+            return (mongo_collection_tools.load_collection(session, schema, name) if name
+                    else mongo_collection_tools.new_collection(session, schema))
+        def done(snapshot):
+            if (not self._collection_page_alive(page) or page._collection_request != request
+                    or not self._collection_session_current(page.connection_id, session)):
+                return
+            page.load_snapshot(snapshot)
+            page._pending_connection = False
+            self.update_designer_title(page)
+        def failed(error):
+            if self._collection_page_alive(page) and page._collection_request == request:
+                page.show_error(error)
+        def finish():
+            if self._collection_page_alive(page) and page._collection_request == request:
+                page.set_busy(False)
+        self.submit(work, done, failed, label="读取集合设计", finished=finish)
+
+    def preview_mongo_collection_designer(self, page, definition):
+        session = self.sessions.get(page.connection_id)
+        if (not self._collection_page_alive(page) or session is None or page.loading or page.snapshot is None
+                or not self._collection_session_current(page.connection_id, session)):
+            return
+        snapshot, draft, revision = deepcopy(page.snapshot), deepcopy(definition), page.revision
+        def current():
+            return (self._collection_page_alive(page) and not page.loading
+                and self._collection_session_current(page.connection_id, session)
+                and page.revision == revision and page.snapshot.fingerprint == snapshot.fingerprint
+                and (page._save_dialog.definition if page._save_dialog is not None else page.definition) == draft)
+        self.submit(lambda: mongo_collection_tools.plan_collection(session, snapshot, draft),
+            lambda plan: page.show_plan(plan) if current() else None,
+            lambda error: page.show_error(error) if current() else None,
+            label="生成集合变更预览")
+
+    def save_mongo_collection_designer(self, page, definition):
+        session = self.sessions.get(page.connection_id)
+        if (not self._collection_page_alive(page) or session is None or page.loading or page.snapshot is None
+                or not self._collection_session_current(page.connection_id, session)):
+            return
+        snapshot, draft = deepcopy(page.snapshot), deepcopy(definition)
+        plan = deepcopy(page.confirmed_plan)
+        if page.suppress_save_preview and snapshot.exists and plan is None:
+            plan = lambda: mongo_collection_tools.plan_collection(session, snapshot, draft)
+        elif plan is None or plan.definition != definition or plan.snapshot.fingerprint != page.snapshot.fingerprint:
+            self._cancel_designer_retry(page)
+            page.show_error(DatabaseError("请先确认当前集合的最终脚本预览。"))
+            return
+        def done(updated):
+            if not self._collection_page_alive(page):
+                return
+            page.save_succeeded(updated.snapshot)
+            if updated.outcome.created_by_this_plan is None and not snapshot.exists:
+                page.show_message("服务器已确认集合创建；无法证明该集合是否由本次操作独占创建。")
+            elif updated.outcome.status == "acknowledged":
+                page.show_message("集合命令已由服务器确认。")
+            elif updated.outcome.status == "no_change":
+                page.show_message("没有集合定义变更。")
+            self.update_designer_title(page)
+            retry, page._after_save = getattr(page, "_after_save", None), None
+            if retry is not None:
+                self.when_idle(retry)
+        def failed(error):
+            if self._collection_page_alive(page):
+                self._cancel_designer_retry(page)
+                page.show_error(error)
+        return self._apply_mongo_collection_plan(page.connection_id, session, plan, done, failed, page)
+
+    def _apply_mongo_collection_plan(self, connection_id, session, plan, success, failure, page=None):
+        if not self._collection_session_current(connection_id, session) or self._cancelling:
+            return
+        token = uuid.uuid4().hex
+        cancelled, started = threading.Event(), threading.Event()
+        applied = {}
+        schema = page.schema if page is not None else plan.snapshot.schema
+        self._mongo_collection_jobs[token] = (session, cancelled, started)
+        if page is not None:
+            page.running = True
+            page.set_busy(True, "正在保存集合…")
+        def work():
+            started.set()
+            if cancelled.is_set():
+                raise DatabaseError("集合操作已在执行命令前取消。")
+            chosen = plan() if callable(plan) else plan
+            applied["plan"] = chosen
+            if cancelled.is_set():
+                raise DatabaseError("集合操作已在执行命令前取消。")
+            return mongo_collection_tools.apply_plan(session, chosen, cancelled=cancelled.is_set)
+        def done(updated):
+            if self._collection_session_current(connection_id, session):
+                success(updated)
+                self._refresh_mongo_collection_context(connection_id, session, applied["plan"].snapshot.schema)
+        def failed(error):
+            if self._collection_session_current(connection_id, session):
+                failure(error)
+                self._refresh_mongo_collection_context(connection_id, session, schema)
+        def finish():
+            self._mongo_collection_jobs.pop(token, None)
+            if page is not None and self._collection_page_alive(page):
+                page.running = False
+                page.set_busy(False)
+        self.submit(work, done, failed, label="保存集合设计", finished=finish)
+
+    def _refresh_mongo_collection_context(self, connection_id, session, schema):
+        def refresh():
+            if self._collection_session_current(connection_id, session):
+                self.load_schemas(connection_id)
+                if (self.object_page.connection_id, self.object_page.schema) == (connection_id, schema):
+                    self.object_page.refresh()
+        self.when_idle(refresh)
 
     def set_schema_preview_suppressed(self, value):
         previous = self.store.state.get("suppress_schema_save_preview", False)
@@ -1856,6 +2045,9 @@ class MainWindow(QMainWindow):
                 if (isinstance(page, MongoIndexDesignerPage) and page.connection_id == connection_id
                         and getattr(page, "_pending_connection", False)):
                     self.load_mongo_index_designer(page)
+                elif (isinstance(page, MongoCollectionDesignerPage) and page.connection_id == connection_id
+                        and getattr(page, "_pending_connection", False)):
+                    self.load_mongo_collection_designer(page)
             if after:
                 self.when_idle(after)
         def failed(error):
@@ -2119,7 +2311,7 @@ class MainWindow(QMainWindow):
             page.refresh()
         elif isinstance(page, DESIGNER_PAGES):
             if page.dirty:
-                self.statusBar().showMessage("表设计中有未保存的更改，请先保存或关闭此草稿。", 5000)
+                self.statusBar().showMessage("对象设计中有未保存的更改，请先保存或关闭此草稿。", 5000)
             elif page.snapshot and page.snapshot.exists:
                 self.load_designer(page)
 
@@ -2170,6 +2362,9 @@ class MainWindow(QMainWindow):
                 menu.addAction("删除连接", lambda: self.remove_connection(info["id"]))
             if info["id"] in self.sessions:
                 menu.addAction("新建查询", self.new_query)
+                if (self.configs.get(info["id"]) and self.configs[info["id"]].driver == "mongodb"
+                        and info.get("type") == "schema" and not self.configs[info["id"]].read_only):
+                    menu.addAction("新建集合…", lambda: self.open_mongo_collection_designer(info["id"], info["schema"]))
                 menu.addAction("刷新", self.refresh_tree)
             if info["type"] == "object":
                 redis = self.configs[info["id"]].driver == "redis"
@@ -2178,6 +2373,10 @@ class MainWindow(QMainWindow):
                 if redis:
                     menu.addAction("新建 Redis 命令", lambda: self.new_query(connection_id=info["id"]))
                 elif mongo:
+                    if info.get("kind") in {"mongo_collection", "mongo_timeseries"}:
+                        connected = (info["id"] in self.sessions and info["id"] not in self._closing_connections
+                            and not self._closing_mongo)
+                        menu.addAction("设计集合", lambda: self.design_object(info)).setEnabled(connected)
                     def mongo_query():
                         name = json.dumps(info["table"], ensure_ascii=True)
                         page = self.new_query(sql=f"db.getCollection({name}).find({{}}).limit(1000)", connection_id=info["id"])
@@ -2293,12 +2492,13 @@ class MainWindow(QMainWindow):
                             targets[id(session)] = (session, marker)
                     else:
                         targets[id(session)] = (session, dynamic)
-        for session, cancelled, started in tuple(self._mongo_index_jobs.values()):
-            cancelled.set()
-            if started.is_set() and id(session) not in targets:
-                marker = getattr(session, "cancellation_marker", lambda: None)()
-                if marker is not None:
-                    targets[id(session)] = (session, marker)
+        for jobs in (self._mongo_index_jobs, self._mongo_collection_jobs):
+            for session, cancelled, started in tuple(jobs.values()):
+                cancelled.set()
+                if started.is_set() and id(session) not in targets:
+                    marker = getattr(session, "cancellation_marker", lambda: None)()
+                    if marker is not None:
+                        targets[id(session)] = (session, marker)
         if targets:
             self._cancelling = True
             remaining = [len(targets)]
@@ -2386,7 +2586,7 @@ class MainWindow(QMainWindow):
         if hasattr(self, "object_page"):
             self.object_page.update_actions()
         self.run_action.setEnabled(isinstance(page, QueryPage) and not page.running)
-        self.stop_action.setEnabled(not self._cancelling and (bool(self._mongo_index_jobs) or
+        self.stop_action.setEnabled(not self._cancelling and (bool(self._mongo_index_jobs) or bool(self._mongo_collection_jobs) or
             any(isinstance(self.tabs.widget(i), QueryPage) and self.tabs.widget(i).running for i in range(self.tabs.count()))))
         self.import_action.setEnabled(isinstance(page, TablePage) and page.kind == "table" and not self.configs[page.connection_id].read_only)
         self.export_action.setEnabled(isinstance(page, (QueryPage, TablePage)) and page.current_result() is not None)
@@ -2401,8 +2601,11 @@ class MainWindow(QMainWindow):
             unit = "文件" if isinstance(page, MongoGridFSPage) else "文档"
             self.status.setText(f"本页 {len(page.page.documents)} 个{unit}" + (" · 已编辑" if page.dirty else ""))
         elif isinstance(page, DESIGNER_PAGES) and page.definition is not None and not page.loading:
-            label = (f"索引字段数: {len(page.definition.keys)}" if isinstance(page, MongoIndexDesignerPage)
-                else f"字段数: {len(page.definition.columns)}" if hasattr(page.definition, "columns") else "触发器")
+            if isinstance(page, MongoCollectionDesignerPage):
+                label = f"集合选项: {len(page.definition.options)}"
+            else:
+                label = (f"索引字段数: {len(page.definition.keys)}" if isinstance(page, MongoIndexDesignerPage)
+                    else f"字段数: {len(page.definition.columns)}" if hasattr(page.definition, "columns") else "触发器")
             self.status.setText(label + (" · 已编辑" if page.dirty else ""))
         elif page is self.object_page and not self.tasks:
             self.status.setText(self.object_page.status_text())
@@ -2809,6 +3012,33 @@ class MainWindow(QMainWindow):
                 seen.add(identity)
         return records
 
+    def restore_mongo_collection_designers(self):
+        records = self.store.state.get("mongo_collection_designers", [])
+        if not isinstance(records, list):
+            return
+        for record in records:
+            if not isinstance(record, dict):
+                continue
+            fields = [record.get(key) for key in ("connection_id", "schema", "name")]
+            if all(isinstance(value, str) and value and "\0" not in value for value in fields):
+                self.open_mongo_collection_designer(*fields, restore=True)
+
+    def mongo_collection_references(self):
+        records, seen = [], set()
+        for index in range(self.tabs.count()):
+            page = self.tabs.widget(index)
+            if not isinstance(page, MongoCollectionDesignerPage) or page.snapshot is None:
+                continue
+            if page.snapshot.exists:
+                name = page.snapshot.name
+            else:
+                name = page.definition.name if page.definition is not None else page._initial_name
+            identity = page.connection_id, page.schema, name
+            if all(identity) and identity not in seen:
+                records.append(dict(zip(("connection_id", "schema", "name"), identity)))
+                seen.add(identity)
+        return records
+
     def shortcuts(self):
         QMessageBox.information(self, "Keyboard shortcuts", "Use Command on macOS and Control on Windows/Linux.\n\nNew connection: Ctrl+Shift+N\nNew query: Ctrl+N\nOpen SQL: Ctrl+O\nSave SQL: Ctrl+S\nRun selection / script: Ctrl+Enter\nFind in SQL: Ctrl+F\nFormat SQL: Ctrl+Shift+F\nQuery history: Ctrl+H\nRefresh: F5\nCopy grid selection: Ctrl+C")
 
@@ -2873,6 +3103,7 @@ class MainWindow(QMainWindow):
                 drafts.append({"connection_id": page.connection_id, "schema": page.schema, "sql": page.editor.toPlainText(), "filename": page.filename, "modified": page.modified, 'query_language': getattr(page, 'query_language', LEGACY)})
         self.store.state["drafts"] = drafts
         self.store.state["mongo_index_designers"] = self.mongo_index_references()
+        self.store.state["mongo_collection_designers"] = self.mongo_collection_references()
         self.store.state["ui_revision"] = 2
         self.store.state["info_visible"] = self.info_action.isChecked()
         self.store.state["navigation_visible"] = self.navigation_action.isChecked()

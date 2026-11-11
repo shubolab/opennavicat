@@ -6,8 +6,8 @@ import base64
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QFormLayout, QHBoxLayout, QLabel, QLineEdit,
-    QPlainTextEdit, QVBoxLayout, QWidget,
+    QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout,
+    QLabel, QLineEdit, QPlainTextEdit, QVBoxLayout, QWidget,
 )
 
 from bson import BSON
@@ -40,12 +40,64 @@ def collection_error_text(error):
             lines.append('服务器回执无法安全显示为 Canonical Extended JSON。')
     if outcome.observation_error:
         lines.append('重新读取集合状态失败：' + outcome.observation_error)
+    if outcome.collection_absent is not None:
+        lines.append('集合已不存在：' + ('是' if outcome.collection_absent else '否'))
+    if outcome.remaining_documents is not None:
+        lines.append(f'重新读取的估算文档数：{outcome.remaining_documents}')
     observed = outcome.observed
     if observed is not None:
         lines.append(f"观察到的集合：{observed.schema}.{observed.name}")
         if observed.issues:
             lines.append('只读原因：' + '；'.join(observed.issues))
     return '\n\n'.join(lines)
+
+
+class MongoCollectionOperationDialog(QDialog):
+    """Permanent drop/clear confirmation with the exact sealed command."""
+
+    def __init__(self, plan, operation, parent=None):
+        super().__init__(parent)
+        self.plan = deepcopy(plan)
+        self.operation = operation
+        drop = operation == 'drop'
+        self.setWindowTitle('删除集合' if drop else '清空集合')
+        self.setWindowModality(Qt.WindowModality.WindowModal)
+        self.resize(720, 500)
+        layout = QVBoxLayout(self)
+        subject = plan.snapshot.schema + '.' + plan.snapshot.name
+        label = QLabel(('永久删除集合 ' if drop else '永久清空集合 ') + subject + '？')
+        label.setWordWrap(True)
+        layout.addWidget(label)
+        warnings = QLabel('\n'.join(plan.warnings))
+        warnings.setWordWrap(True)
+        layout.addWidget(warnings)
+        self.preview = SqlEditor()
+        self.preview.set_language('text')
+        self.preview.setReadOnly(True)
+        try:
+            self.preview.setPlainText(plan.command_script)
+        except DatabaseError as error:
+            self.preview.setPlainText('无法生成执行脚本：\n' + str(error) + '\n\n' + plan.command_text)
+        layout.addWidget(self.preview, 1)
+        self.permanent_check = QCheckBox(
+            '我了解此操作是永久性的、不会自动回滚，并且不会删除操作后由其他客户端重新创建的同名集合'
+            if drop else
+            '我了解此操作会永久删除集合中的所有文档，并可能删除最终检查后由其他客户端写入的文档；不会自动回滚')
+        layout.addWidget(self.permanent_check)
+        self.buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        self.confirm_button = self.buttons.button(QDialogButtonBox.StandardButton.Ok)
+        self.confirm_button.setText('删除' if drop else '清空')
+        self.confirm_button.setEnabled(False)
+        self.buttons.button(QDialogButtonBox.StandardButton.Cancel).setText('取消')
+        self.permanent_check.toggled.connect(self.confirm_button.setEnabled)
+        self.buttons.accepted.connect(self.accept)
+        self.buttons.rejected.connect(self.reject)
+        layout.addWidget(self.buttons)
+
+    def accept(self):
+        if self.plan is not None and self.permanent_check.isChecked():
+            super().accept()
 
 
 class MongoCollectionSaveDialog(TableSaveDialog):

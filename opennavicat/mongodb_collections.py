@@ -87,11 +87,19 @@ class CollectionOutcome:
     # MongoDB create may return success for an identical existing collection.
     # This remains unknown even after a successful absent->create->readback.
     created_by_this_plan: bool | None = None
+    remaining_documents: int | None = None
+    collection_absent: bool | None = None
 
 
 @dataclass
 class CollectionApplyResult:
     snapshot: CollectionSnapshot
+    outcome: CollectionOutcome
+
+
+@dataclass
+class CollectionOperationResult:
+    snapshot: CollectionSnapshot | None
     outcome: CollectionOutcome
 
 
@@ -312,6 +320,42 @@ def _uuid_guard(session, schema, name, comment):
     raise DatabaseError('The server ignored the required collection UUID guard; nothing was saved')
 
 
+def plan_drop(session, snapshot):
+    """Seal a UUID-guarded drop without claiming that deletion is reversible."""
+    snapshot = deepcopy(snapshot)
+    _verify_snapshot(session, snapshot)
+    if not snapshot.exists or snapshot.kind != 'mongo_collection' or snapshot.collection_type != 'collection':
+        raise DatabaseError('Only an existing ordinary collection can be dropped here')
+    if session.config.read_only or snapshot.read_only:
+        raise DatabaseError('This connection or collection is read-only')
+    _current(session, snapshot)
+    command = {'drop': snapshot.name, 'collectionUUID': snapshot.namespace_uuid,
+        'writeConcern': {'w': 1}}
+    warnings = ['Drop is permanent. MongoDB protects the namespace UUID, but a peer that recreates the same name after the command is not deleted.']
+    return _seal_plan(session, CollectionPlan(snapshot, deepcopy(snapshot.definition), [command], True, warnings))
+
+
+def plan_clear(session, snapshot):
+    """Seal deleteMany({}) while retaining collections, indexes and options."""
+    snapshot = deepcopy(snapshot)
+    _verify_snapshot(session, snapshot)
+    if not snapshot.exists or snapshot.kind != 'mongo_collection' or snapshot.collection_type != 'collection':
+        raise DatabaseError('Only an existing ordinary collection can be cleared here')
+    if session.config.read_only or snapshot.read_only:
+        raise DatabaseError('This connection or collection is read-only')
+    _current(session, snapshot)
+    estimated = session.connection[snapshot.schema][snapshot.name].estimated_document_count()
+    command = {'delete': snapshot.name, 'deletes': [{'q': {}, 'limit': 0,
+        'collation': {'locale': 'simple'}}], 'ordered': True,
+        'collectionUUID': snapshot.namespace_uuid, 'writeConcern': {'w': 1}}
+    warnings = [
+        f'Clear permanently deletes all documents in {snapshot.schema}.{snapshot.name}. The estimated count before planning is {estimated}; indexes and collection options are retained.',
+        'The UUID protects collection identity, not a data snapshot. Documents written by another client after the final check are also deleted.',
+        'Clear is not transactional and is not automatically rolled back.',
+    ]
+    return _seal_plan(session, CollectionPlan(snapshot, deepcopy(snapshot.definition), [command], True, warnings))
+
+
 def _observe(session, plan, outcome):
     try:
         # A disconnect/reconnect or connection edit after dispatch must not
@@ -395,3 +439,79 @@ def apply_plan(session, plan, *, cancelled=None):
             _observe(session, plan, outcome)
         if isinstance(error, CollectionApplyError): raise
         raise CollectionApplyError('Collection save failed; acknowledged changes are not rolled back and no retry/delete was attempted', outcome) from error
+
+
+def _observe_operation(session, plan, outcome):
+    try:
+        _verify_plan(session, plan)
+        command = plan.commands[0]
+        if 'drop' in command:
+            raw = _catalog(session, plan.snapshot.schema, plan.snapshot.name)
+            outcome.collection_absent = not raw
+            outcome.observed = None
+        else:
+            observed = load_collection(session, plan.snapshot.schema, plan.snapshot.name)
+            outcome.observed = observed
+            outcome.remaining_documents = session.connection[plan.snapshot.schema][plan.snapshot.name].estimated_document_count()
+        _verify_plan(session, plan)
+    except Exception as error:
+        outcome.observation_error = type(error).__name__
+
+
+def _operation_matches(plan, outcome):
+    if 'drop' in plan.commands[0]:
+        return outcome.collection_absent is True
+    observed = outcome.observed
+    return (observed is not None and observed.namespace_uuid == plan.snapshot.namespace_uuid
+        and outcome.remaining_documents == 0)
+
+
+def apply_operation(session, plan, *, cancelled=None):
+    """Apply a sealed drop or clear; never retry or claim a rollback."""
+    plan = deepcopy(plan)
+    _verify_plan(session, plan)
+    command = plan.commands[0]
+    if not plan.changed or sum(key in command for key in ('drop', 'delete')) != 1:
+        raise DatabaseError('A drop or clear operation plan is required')
+    outcome = CollectionOutcome('drop' if 'drop' in command else 'clear')
+    def stopped():
+        return bool(cancelled and cancelled()) or session._cancel_requested.is_set()
+    if cancelled and cancelled():
+        outcome.cancelled = True
+        raise CollectionApplyError('Collection operation cancelled before database access', outcome)
+    if session.config.read_only or plan.snapshot.read_only:
+        raise DatabaseError('This connection or collection is read-only')
+    try:
+        with session._operation() as comment:
+            _current(session, plan.snapshot)
+            _verify_plan(session, plan)
+            if stopped():
+                outcome.cancelled = True
+                raise CollectionApplyError('Collection operation stopped before its command', outcome)
+            outcome.status = 'unknown'
+            try:
+                with timeout(120):
+                    reply = session.connection[plan.snapshot.schema].command({**command, 'comment': comment})
+                outcome.reply = deepcopy(dict(reply))
+                if reply.get('writeConcernError') or reply.get('writeErrors'):
+                    raise DatabaseError('The server did not acknowledge this collection operation completely')
+                outcome.status = 'acknowledged'
+            except Exception as error:
+                failure = server_failure(error)
+                if failure is not None:
+                    outcome.reply = failure.document
+                    if not failure.concern_uncertain: outcome.status = 'server_error'
+                raise
+            if stopped():
+                outcome.cancelled = True
+                raise CollectionApplyError('The command was acknowledged before cancellation; it is not rolled back', outcome)
+            _observe_operation(session, plan, outcome)
+            if not _operation_matches(plan, outcome):
+                raise CollectionApplyError('The command was acknowledged, but its final collection state could not be verified', outcome)
+            return CollectionOperationResult(outcome.observed, outcome)
+    except Exception as error:
+        outcome.cancelled = outcome.cancelled or stopped()
+        if outcome.status != 'not_started' and outcome.observed is None and outcome.collection_absent is None:
+            _observe_operation(session, plan, outcome)
+        if isinstance(error, CollectionApplyError): raise
+        raise CollectionApplyError('Collection operation failed; acknowledged effects are not rolled back', outcome) from error

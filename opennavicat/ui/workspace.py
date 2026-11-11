@@ -64,6 +64,7 @@ class ObjectBrowser(QWidget):
         self.design_action = self.add_action("设计表", "design", self.design_selected)
         self.new_action = self.add_action("新建表", "add", window.new_browser_object)
         self.delete_action = self.add_action("删除表", "delete", self.drop_selected)
+        self.clear_action = self.add_action("清空集合", "delete", self.clear_selected)
         self.toolbar.addSeparator()
         self.import_action = self.add_action("导入向导", "import", self.import_selected)
         self.export_action = self.add_action("导出向导", "export", self.export_selected)
@@ -127,6 +128,7 @@ class ObjectBrowser(QWidget):
         self.design_action.setText("设计" + label)
         self.new_action.setText("新建" + label)
         self.delete_action.setText("删除" + label)
+        self.clear_action.setVisible(kind == "mongo_collection")
         headers = {"index": ["名称", "唯一键", "自动索引", "表名称", "根页面"],
                    "trigger": ["名称", "类型", "表名称", "触发", ""]}.get(kind,
                    ["名称", "根页面", "有索引", "有触发器", ""])
@@ -308,8 +310,10 @@ class ObjectBrowser(QWidget):
         self.design_action.setEnabled(connected and selected and self.kind in {
             "table", "view", "index", "trigger", "mongo_index", "mongo_collection", "mongo_timeseries"})
         self.new_action.setEnabled(writable and self.kind in {"table", "index", "trigger", "mongo_index", "mongo_collection"})
-        self.delete_action.setEnabled(writable and selected and self.kind in {"table", "view", "index", "trigger", "mongo_index"}
-            and not self.selected().get("automatic") and not (self.kind == "mongo_index" and self.selected().get("system")))
+        self.delete_action.setEnabled(writable and selected and self.kind in {
+            "table", "view", "index", "trigger", "mongo_index", "mongo_collection"}
+            and not self.selected().get("automatic") and not (self.kind in {"mongo_index", "mongo_collection"} and self.selected().get("system")))
+        self.clear_action.setEnabled(writable and selected and self.kind == "mongo_collection")
         for shortcut in getattr(self, "_delete_shortcuts", ()):
             shortcut.setEnabled(self.kind == "mongo_index" and self.delete_action.isEnabled())
         self.import_action.setEnabled(writable and selected and self.kind == "table")
@@ -353,16 +357,28 @@ class ObjectBrowser(QWidget):
     def drop_selected(self):
         entry = self.selected()
         if entry:
-            self.window.drop_object(entry)
+            if entry["kind"] == "mongo_collection":
+                self.window.delete_mongo_collection(entry)
+            else:
+                self.window.drop_object(entry)
+
+    def clear_selected(self):
+        entry = self.selected()
+        if entry and entry["kind"] == "mongo_collection":
+            self.window.clear_mongo_collection(entry)
 
     def context_menu(self, pos):
-        if self.kind != "mongo_index":
+        if self.kind not in {"mongo_index", "mongo_collection"}:
             return
         item = self.table.itemAt(pos)
         if item is not None:
             self.table.setCurrentCell(item.row(), 0)
         menu = QMenu(self)
-        for action in (self.design_action, self.new_action, self.delete_action):
+        self.update_actions()
+        actions = (self.design_action, self.new_action, self.delete_action)
+        if self.kind == "mongo_collection":
+            actions += (self.clear_action,)
+        for action in actions:
             menu.addAction(action)
         groups = menu.addMenu("管理组")
         for label in ("新建组", "添加到组", "从组中排除"):

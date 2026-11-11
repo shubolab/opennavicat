@@ -49,7 +49,9 @@ from .redis_browser import RedisBrowserPage, RedisKeyPage
 from .mongo_browser import MongoCollectionPage
 from .mongo_gridfs import MongoGridFSPage
 from .mongo_index_designer import MongoIndexDesignerPage, MongoIndexDeleteDialog, index_error_text
-from .mongo_collection_designer import MongoCollectionDesignerPage, collection_error_text
+from .mongo_collection_designer import (
+    MongoCollectionDesignerPage, MongoCollectionOperationDialog, collection_error_text,
+)
 
 DESIGNER_PAGES = (TableDesignerPage, IndexDesignerPage, TriggerDesignerPage, MongoIndexDesignerPage, MongoCollectionDesignerPage)
 MONGO_PAGES = (MongoCollectionPage, MongoGridFSPage)
@@ -485,6 +487,7 @@ class MainWindow(QMainWindow):
         self._mongo_index_jobs = {}
         self._mongo_collection_jobs = {}
         self._mongo_index_delete_dialogs = {}
+        self._mongo_collection_operation_dialogs = {}
         self._closed = False
         self._navicat_discovering = False
         self._navicat_pending_configs = set()
@@ -1460,6 +1463,106 @@ class MainWindow(QMainWindow):
                     self.object_page.refresh()
         self.when_idle(refresh)
 
+    def delete_mongo_collection(self, info):
+        return self.open_mongo_collection_operation(info, "drop")
+
+    def clear_mongo_collection(self, info):
+        return self.open_mongo_collection_operation(info, "clear")
+
+    def open_mongo_collection_operation(self, info, operation):
+        config = self.configs.get(info.get("id"))
+        session = self.sessions.get(info.get("id"))
+        schema, name = info.get("schema"), info.get("name", info.get("table"))
+        if (operation not in {"drop", "clear"} or config is None or config.driver != "mongodb"
+                or session is None or config.read_only or not schema or not name
+                or self._closing_mongo or info.get("id") in self._closing_connections
+                or self._mongo_collection_jobs or self._cancelling):
+            return None
+        identity = info["id"], schema, name
+        for index in range(self.tabs.count()):
+            page = self.tabs.widget(index)
+            if (isinstance(page, MongoCollectionDesignerPage)
+                    and self._mongo_collection_identity(page) == identity and page.dirty):
+                self.statusBar().showMessage("请先保存或关闭该集合的未保存设计草稿。", 5000)
+                return None
+            if (isinstance(page, MongoCollectionPage)
+                    and (page.connection_id, page.schema, page.collection) == identity
+                    and (page.loading or page.dirty or page._dialog is not None)):
+                self.statusBar().showMessage("请先保存或取消该集合的数据编辑，再执行永久集合操作。", 5000)
+                return None
+        def current():
+            return self._collection_session_current(identity[0], session)
+        def work():
+            snapshot = mongo_collection_tools.load_collection(session, schema, name)
+            planner = mongo_collection_tools.plan_drop if operation == "drop" else mongo_collection_tools.plan_clear
+            return snapshot, planner(session, snapshot)
+        def ready(result):
+            if not current():
+                return
+            _snapshot, plan = result
+            dialog = MongoCollectionOperationDialog(plan, operation, self)
+            self._mongo_collection_operation_dialogs[dialog] = identity[0]
+            def accepted():
+                self._apply_mongo_collection_operation(
+                    identity[0], session, deepcopy(dialog.plan),
+                    lambda result: self._mongo_collection_operation_succeeded(identity, operation, result),
+                    lambda error: self.error(DatabaseError(collection_error_text(error))),
+                )
+            dialog.accepted.connect(accepted)
+            def finished(_result):
+                self._mongo_collection_operation_dialogs.pop(dialog, None)
+                dialog.deleteLater()
+            dialog.finished.connect(finished)
+            dialog.open()
+        self.submit(work, ready, lambda error: self.error(DatabaseError(collection_error_text(error))),
+            label="读取永久集合操作预览")
+        return True
+
+    def _mongo_collection_operation_succeeded(self, identity, operation, result):
+        connection_id, schema, name = identity
+        if operation == "drop":
+            for index in reversed(range(self.tabs.count())):
+                page = self.tabs.widget(index)
+                matches = ((isinstance(page, MongoCollectionDesignerPage)
+                            and self._mongo_collection_identity(page) == identity)
+                    or (isinstance(page, MongoCollectionPage)
+                        and (page.connection_id, page.schema, page.collection) == identity))
+                if matches:
+                    self.tabs.removeTab(index)
+                    page.deleteLater()
+            self.statusBar().showMessage(f"集合 {schema}.{name} 已删除。", 7000)
+        else:
+            for index in range(self.tabs.count()):
+                page = self.tabs.widget(index)
+                if (isinstance(page, MongoCollectionPage)
+                        and (page.connection_id, page.schema, page.collection) == identity
+                        and not page.loading and not page._closed):
+                    page.refresh(check=False)
+            self.statusBar().showMessage(f"集合 {schema}.{name} 已清空。", 7000)
+
+    def _apply_mongo_collection_operation(self, connection_id, session, plan, success, failure):
+        if not self._collection_session_current(connection_id, session) or self._cancelling:
+            return
+        token = uuid.uuid4().hex
+        cancelled, started = threading.Event(), threading.Event()
+        self._mongo_collection_jobs[token] = (session, cancelled, started)
+        def work():
+            started.set()
+            if cancelled.is_set():
+                raise DatabaseError("集合操作已在执行命令前取消。")
+            return mongo_collection_tools.apply_operation(session, plan, cancelled=cancelled.is_set)
+        def done(result):
+            if self._collection_session_current(connection_id, session):
+                success(result)
+                self._refresh_mongo_collection_context(connection_id, session, plan.snapshot.schema)
+        def failed(error):
+            if self._collection_session_current(connection_id, session):
+                failure(error)
+                self._refresh_mongo_collection_context(connection_id, session, plan.snapshot.schema)
+        def finish():
+            self._mongo_collection_jobs.pop(token, None)
+        self.submit(work, done, failed, label="删除集合" if "drop" in plan.commands[0] else "清空集合", finished=finish)
+
     def set_schema_preview_suppressed(self, value):
         previous = self.store.state.get("suppress_schema_save_preview", False)
         self.store.state["suppress_schema_save_preview"] = bool(value)
@@ -2376,7 +2479,11 @@ class MainWindow(QMainWindow):
                     if info.get("kind") in {"mongo_collection", "mongo_timeseries"}:
                         connected = (info["id"] in self.sessions and info["id"] not in self._closing_connections
                             and not self._closing_mongo)
+                        writable = connected and not self.configs[info["id"]].read_only
                         menu.addAction("设计集合", lambda: self.design_object(info)).setEnabled(connected)
+                        if info.get("kind") == "mongo_collection":
+                            menu.addAction("清空集合", lambda: self.clear_mongo_collection(info)).setEnabled(writable)
+                            menu.addAction("删除集合", lambda: self.delete_mongo_collection(info)).setEnabled(writable)
                     def mongo_query():
                         name = json.dumps(info["table"], ensure_ascii=True)
                         page = self.new_query(sql=f"db.getCollection({name}).find({{}}).limit(1000)", connection_id=info["id"])
@@ -2631,9 +2738,10 @@ class MainWindow(QMainWindow):
                 return False
             if isinstance(page, DESIGNER_PAGES) and not self.can_leave_designer(page, retry):
                 return False
-        for dialog, owner in tuple(self._mongo_index_delete_dialogs.items()):
-            if owner == connection_id:
-                dialog.reject()
+        for dialogs in (self._mongo_index_delete_dialogs, self._mongo_collection_operation_dialogs):
+            for dialog, owner in tuple(dialogs.items()):
+                if owner == connection_id:
+                    dialog.reject()
         session = self.sessions.get(connection_id)
         def completed(_value=None):
             result = self._finish_disconnect(connection_id, session, pages)
@@ -3065,8 +3173,9 @@ class MainWindow(QMainWindow):
             if isinstance(page, (RedisBrowserPage, *MONGO_PAGES)) and not page.can_discard(self.close):
                 event.ignore()
                 return
-        for dialog in tuple(self._mongo_index_delete_dialogs):
-            dialog.reject()
+        for dialogs in (self._mongo_index_delete_dialogs, self._mongo_collection_operation_dialogs):
+            for dialog in tuple(dialogs):
+                dialog.reject()
         mongo_sessions = [(identifier, session) for identifier, session in self.sessions.items()
                           if session.config.driver == "mongodb"]
         if mongo_sessions:

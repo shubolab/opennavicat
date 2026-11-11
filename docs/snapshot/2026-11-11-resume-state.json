@@ -1,0 +1,97 @@
+{
+  "schema_version": 2,
+  "captured_at": "2026-11-11T23:22:06.321309+08:00",
+  "handoff": "2026-11-11-resume.md",
+  "previous_handoff": "2026-11-11-handoff.md",
+  "historical_snapshot_superseded": [
+    "unpublished 0.9 candidate",
+    "backend-only next branch"
+  ],
+  "goal": {
+    "status": "active",
+    "complete": false,
+    "scope": "Independent native Qt, complete Navicat database tools and 1:1 retained UI on Windows/Linux/macOS"
+  },
+  "reference": {
+    "path": "/Users/wangshubo/Downloads/Navicat Premium.app",
+    "version": "18.0.5",
+    "build": "321",
+    "plist_reverified": true
+  },
+  "main_at_resume": "929a0277de826ecb5bc465d1ce92f203f650d74f",
+  "published": {
+    "tag": "v0.9.0",
+    "source_sha": "c5f30995a0211d7f5f5c31177543d191a17b001a",
+    "formal_run_id": 42983388008,
+    "public_metadata_rechecked": true,
+    "asset_count": 8,
+    "native_installers": 6,
+    "all_asset_bytes_redownloaded_this_resume": false
+  },
+  "ci_at_resume": {
+    "id": 43043705231,
+    "source_sha": "929a0277de826ecb5bc465d1ce92f203f650d74f",
+    "conclusion": "failure",
+    "successful_targets": [
+      "windows-amd64",
+      "windows-arm64",
+      "macos-amd64",
+      "macos-arm64"
+    ],
+    "failed_jobs": [
+      "linux-amd64",
+      "linux-arm64",
+      "Real database TLS and SSH"
+    ],
+    "observed_error": "libEGL.so.1 missing after required apt step timed out and ignored failure"
+  },
+  "local_runtime": {
+    "system": "Darwin",
+    "architecture": "arm64",
+    "python": "3.13.11",
+    "qt": "6.12.0",
+    "native_js_build_verified": true
+  },
+  "evidence": "artifacts/resume-20261111/",
+  "next_steps": [
+    "Track exact 51f5e0f six-target CI after the tested and pushed preview/close/worker fixes",
+    "Fix and rerun mandatory Linux dependency setup on six-target CI",
+    "Observe actual reference collection designer with an isolated owned fixture",
+    "Continue all open full-function and three-platform UI gates"
+  ],
+  "full_parity_verified": false,
+  "reference_runtime_correction": "Original saved new-collection draft also retains an empty index list; automatic post-create refresh was withdrawn",
+  "implementation_commits": [
+    "c25e2a4",
+    "51f5e0f478b65c6254bf975c802b54de198f76bb"
+  ],
+  "ci_after_fixes": {
+    "id": 43048278680,
+    "source_sha": "51f5e0f478b65c6254bf975c802b54de198f76bb",
+    "last_observed_status": "queued",
+    "all_targets_qualified": false
+  },
+  "local_validation": {
+    "full_source": {
+      "passed": 1538,
+      "skipped": 528,
+      "failed": 0,
+      "errors": 0
+    },
+    "collections_runner": {
+      "passed": 181,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0,
+      "owned_fixtures": 6,
+      "independently_cleaned": true
+    },
+    "source_smoke_passed": true,
+    "preview_offscreen_and_cocoa": {
+      "passed_each": 9,
+      "skipped_each": 0
+    },
+    "new_dependency_command_stub_tests": 10,
+    "all_protocol_source_hashes_match": true
+  }
+}

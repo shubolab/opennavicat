@@ -33,6 +33,7 @@ from .. import schema as schema_tools
 from .. import schema_objects as object_schema_tools
 from .. import mongodb_indexes as mongo_index_tools
 from .. import mongodb_collections as mongo_collection_tools
+from .. import mongodb_collection_copy as mongo_collection_copy_tools
 from .. import mongodb_timeseries as mongo_timeseries_tools
 from .connection_manager import ConnectionManagerDialog
 from .dialogs import ConnectionDialog, RowDialog, TableDesignerDialog, confirm_ssh_host_key
@@ -51,7 +52,8 @@ from .mongo_browser import MongoCollectionPage
 from .mongo_gridfs import MongoGridFSPage
 from .mongo_index_designer import MongoIndexDesignerPage, MongoIndexDeleteDialog, index_error_text
 from .mongo_collection_designer import (
-    MongoCollectionDesignerPage, MongoCollectionOperationDialog, collection_error_text,
+    MongoCollectionCopyDialog, MongoCollectionDesignerPage, MongoCollectionOperationDialog,
+    collection_error_text,
 )
 from .mongo_timeseries_designer import MongoTimeSeriesDesignerPage
 
@@ -491,6 +493,7 @@ class MainWindow(QMainWindow):
         self._mongo_timeseries_jobs = {}
         self._mongo_index_delete_dialogs = {}
         self._mongo_collection_operation_dialogs = {}
+        self._mongo_collection_copy_dialogs = {}
         self._closed = False
         self._navicat_discovering = False
         self._navicat_pending_configs = set()
@@ -1475,6 +1478,80 @@ class MainWindow(QMainWindow):
                 if (self.object_page.connection_id, self.object_page.schema) == (connection_id, schema):
                     self.object_page.refresh()
         self.when_idle(refresh)
+
+    def copy_mongo_collection(self, info, mode):
+        config = self.configs.get(info.get("id"))
+        session = self.sessions.get(info.get("id"))
+        schema, name = info.get("schema"), info.get("name", info.get("table"))
+        if (mode not in {"data", "structure"} or config is None or config.driver != "mongodb"
+                or session is None or config.read_only or not schema or not name
+                or self._closing_mongo or info.get("id") in self._closing_connections
+                or self._mongo_collection_jobs or self._cancelling):
+            return None
+        identity = info["id"], schema, name
+        for index in range(self.tabs.count()):
+            page = self.tabs.widget(index)
+            if (isinstance(page, MongoCollectionDesignerPage)
+                    and self._mongo_collection_identity(page) == identity and page.dirty):
+                self.statusBar().showMessage("请先保存或关闭源集合的未保存设计草稿。", 5000)
+                return None
+            if (isinstance(page, MongoCollectionPage)
+                    and (page.connection_id, page.schema, page.collection) == identity
+                    and (page.loading or page.dirty or page._dialog is not None)):
+                self.statusBar().showMessage("请先保存或取消源集合的数据编辑，再复制集合。", 5000)
+                return None
+        target_name, accepted = QInputDialog.getText(self, "复制集合", "目标集合名称：", QLineEdit.EchoMode.Normal, name + "_copy")
+        if not accepted or not target_name.strip() or target_name == name:
+            return None
+        def current():
+            return self._collection_session_current(identity[0], session)
+        def work():
+            snapshot = mongo_collection_tools.load_collection(session, schema, name)
+            return mongo_collection_copy_tools.plan_copy(session, snapshot, target_name, mode)
+        def ready(plan):
+            if not current():
+                return
+            dialog = MongoCollectionCopyDialog(plan, self)
+            self._mongo_collection_copy_dialogs[dialog] = identity[0]
+            def accepted():
+                self._apply_mongo_collection_copy(identity[0], session, deepcopy(dialog.plan),
+                    lambda result: self._mongo_collection_copy_succeeded(identity, plan, result),
+                    lambda error: self.error(DatabaseError(collection_error_text(error))))
+            dialog.accepted.connect(accepted)
+            def finished(_result):
+                self._mongo_collection_copy_dialogs.pop(dialog, None); dialog.deleteLater()
+            dialog.finished.connect(finished)
+            dialog.open()
+        self.submit(work, ready, lambda error: self.error(DatabaseError(collection_error_text(error))),
+            label="读取集合复制预览")
+        return True
+
+    def _mongo_collection_copy_succeeded(self, identity, plan, result):
+        connection_id, schema, source = identity
+        detail = f"，估算复制 {result.outcome.copied_documents} 个文档" if result.outcome.copied_documents is not None else ""
+        self.statusBar().showMessage(f"集合 {schema}.{source} 已复制到 {plan.target_name}{detail}。", 8000)
+
+    def _apply_mongo_collection_copy(self, connection_id, session, plan, success, failure):
+        if not self._collection_session_current(connection_id, session) or self._cancelling:
+            return
+        token = uuid.uuid4().hex
+        cancelled, started = threading.Event(), threading.Event()
+        self._mongo_collection_jobs[token] = (session, cancelled, started)
+        def work():
+            started.set()
+            if cancelled.is_set():
+                raise DatabaseError("集合复制已在执行前取消。")
+            return mongo_collection_copy_tools.apply_copy(session, plan, cancelled=cancelled.is_set)
+        def done(result):
+            if self._collection_session_current(connection_id, session):
+                success(result)
+                self._refresh_mongo_collection_context(connection_id, session, plan.snapshot.schema)
+        def failed(error):
+            if self._collection_session_current(connection_id, session):
+                failure(error)
+                self._refresh_mongo_collection_context(connection_id, session, plan.snapshot.schema)
+        def finish(): self._mongo_collection_jobs.pop(token, None)
+        self.submit(work, done, failed, label="复制集合", finished=finish)
 
     def delete_mongo_collection(self, info):
         return self.open_mongo_collection_operation(info, "drop")
@@ -2683,6 +2760,9 @@ class MainWindow(QMainWindow):
                             menu.addAction("新建时间序列集合…", lambda: self.open_mongo_timeseries_designer(
                                 info["id"], info["schema"])).setEnabled(writable)
                             menu.addAction("重命名集合", lambda: self.rename_mongo_collection(info)).setEnabled(writable)
+                            copy_menu = menu.addMenu("复制集合"); copy_menu.setEnabled(writable)
+                            copy_menu.addAction("结构和数据", lambda: self.copy_mongo_collection(info, "data"))
+                            copy_menu.addAction("仅结构", lambda: self.copy_mongo_collection(info, "structure"))
                             menu.addAction("清空集合", lambda: self.clear_mongo_collection(info)).setEnabled(writable)
                             menu.addAction("删除集合", lambda: self.delete_mongo_collection(info)).setEnabled(writable)
                     def mongo_query():
@@ -2941,7 +3021,8 @@ class MainWindow(QMainWindow):
                 return False
             if isinstance(page, DESIGNER_PAGES) and not self.can_leave_designer(page, retry):
                 return False
-        for dialogs in (self._mongo_index_delete_dialogs, self._mongo_collection_operation_dialogs):
+        for dialogs in (self._mongo_index_delete_dialogs, self._mongo_collection_operation_dialogs,
+                        self._mongo_collection_copy_dialogs):
             for dialog, owner in tuple(dialogs.items()):
                 if owner == connection_id:
                     dialog.reject()
@@ -3400,7 +3481,8 @@ class MainWindow(QMainWindow):
             if isinstance(page, (RedisBrowserPage, *MONGO_PAGES)) and not page.can_discard(self.close):
                 event.ignore()
                 return
-        for dialogs in (self._mongo_index_delete_dialogs, self._mongo_collection_operation_dialogs):
+        for dialogs in (self._mongo_index_delete_dialogs, self._mongo_collection_operation_dialogs,
+                        self._mongo_collection_copy_dialogs):
             for dialog in tuple(dialogs):
                 dialog.reject()
         mongo_sessions = [(identifier, session) for identifier, session in self.sessions.items()

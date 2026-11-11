@@ -26,13 +26,15 @@ ROOT = Path(__file__).resolve().parents[1]
 TARGETS = [
     'tests/test_mongodb_collections.py',
     'tests/test_mongodb_timeseries.py',
+    'tests/test_mongodb_collection_copy.py',
     'tests/test_mongo_window.py::test_real_collection_designer_creates_and_collmods_with_worker_owned_io',
     'tests/test_mongo_window.py::test_real_window_stop_inflight_collection_uses_cancel_pool_and_preserves_draft',
     'tests/test_mongo_window.py::test_real_window_clear_and_drop_collection_require_permanent_confirmation',
     'tests/test_mongo_window.py::test_real_window_rename_collection_preserves_data_indexes_and_uuid',
     'tests/test_mongo_window.py::test_real_window_timeseries_designer_creates_and_updates_bucketing_and_expiry',
+    'tests/test_mongo_window.py::test_real_window_copy_collection_data_and_structure_with_staging',
 ]
-EXPECTED_FIXTURE_MODULES = {'test_mongodb_collections', 'test_mongodb_timeseries', 'test_mongo_window'}
+EXPECTED_FIXTURE_MODULES = {'test_mongodb_collections', 'test_mongodb_timeseries', 'test_mongodb_collection_copy', 'test_mongo_window'}
 COLLECT = '''import json,sys,pytest
 from pathlib import Path
 class Collect:
@@ -59,16 +61,18 @@ def main():
     spec = importlib.util.spec_from_file_location('owned_mongodb_fixture_cleanup', ROOT / 'scripts/test-mongodb-protocol.py')
     cleanup = importlib.util.module_from_spec(spec); spec.loader.exec_module(cleanup)
     summary = {'verified': False, 'scope': TARGETS, 'run_id': run_id,
-        'reference_endpoint_used': False, 'execution_scope': 'mongodb-collection-and-timeseries-backend-and-mainwindow', 'emergency_removed': [],
+        'reference_endpoint_used': False, 'execution_scope': 'mongodb-collection-timeseries-copy-backend-and-mainwindow', 'emergency_removed': [],
         'runtime': {'system': platform.system(), 'machine': platform.machine(), 'python': platform.python_version(),
             'pymongo': pymongo.version, 'bson_c': bson.has_c()},
         'base_revision': subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=ROOT, check=True, capture_output=True, text=True).stdout.strip(),
         'source_sha256': {path: hashlib.sha256((ROOT / path).read_bytes()).hexdigest() for path in
             ('opennavicat/mongodb_collections.py', 'opennavicat/mongodb_timeseries.py',
+             'opennavicat/mongodb_collection_copy.py',
              'opennavicat/mongodb_session.py', 'opennavicat/ui/mongo_collection_designer.py',
              'opennavicat/ui/mongo_timeseries_designer.py', 'opennavicat/ui/window.py',
              'opennavicat/ui/workspace.py', 'opennavicat/js_engine/server_errors.py',
              'tests/test_mongodb_collections.py', 'tests/test_mongodb_timeseries.py',
+             'tests/test_mongodb_collection_copy.py',
              'tests/test_mongodb_session.py', 'tests/test_mongo_collection_designer_ui.py',
              'tests/test_mongo_timeseries_designer_ui.py', 'tests/test_mongo_window.py',
              '.github/workflows/build.yml', 'scripts/test-mongodb-collections.py')}}

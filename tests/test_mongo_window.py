@@ -487,3 +487,32 @@ def test_real_window_timeseries_designer_creates_and_updates_bucketing_and_expir
     assert browser.design_action.isEnabled()
     ts_entry = dict(browser.selected(), table="ts_ui")
     assert window.design_object(ts_entry) is page
+
+
+def test_real_window_copy_collection_data_and_structure_with_staging(qtbot, mongo_window, monkeypatch):
+    window, config, database, schema, errors, threads = mongo_window
+    database.docs.create_index([("name", 1)], name="copy_name_idx")
+    info = {"id": config.id, "schema": config.database, "name": "docs", "table": "docs", "kind": "mongo_collection"}
+    monkeypatch.setattr(QInputDialog, "getText", lambda *_args, **_kwargs: ("docs_copy_data", True))
+    assert window.copy_mongo_collection(info, "data") is True
+    qtbot.waitUntil(lambda: len(window._mongo_collection_copy_dialogs) == 1, timeout=15000)
+    dialog = next(iter(window._mongo_collection_copy_dialogs))
+    assert not dialog.copy_button.isEnabled()
+    assert dialog.plan.staging_name.startswith("__opennavicat_copy_")
+    dialog.ack_check.setChecked(True)
+    qtbot.mouseClick(dialog.copy_button, Qt.MouseButton.LeftButton)
+    idle(qtbot, window)
+    assert database.docs_copy_data.count_documents({}) == database.docs.count_documents({})
+    assert "copy_name_idx" in database.docs_copy_data.index_information()
+    assert dialog.plan.staging_name not in database.list_collection_names()
+
+    monkeypatch.setattr(QInputDialog, "getText", lambda *_args, **_kwargs: ("docs_copy_structure", True))
+    assert window.copy_mongo_collection(info, "structure") is True
+    qtbot.waitUntil(lambda: len(window._mongo_collection_copy_dialogs) == 1, timeout=15000)
+    dialog = next(iter(window._mongo_collection_copy_dialogs))
+    dialog.ack_check.setChecked(True)
+    qtbot.mouseClick(dialog.copy_button, Qt.MouseButton.LeftButton)
+    idle(qtbot, window)
+    assert database.docs_copy_structure.count_documents({}) == 0
+    assert "copy_name_idx" in database.docs_copy_structure.index_information()
+    assert not errors and threads

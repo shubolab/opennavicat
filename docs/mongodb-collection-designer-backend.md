@@ -117,6 +117,14 @@ UI slice backed only by capabilities in this module:
   race can still create it, and no existing target is intentionally dropped.
   Successful rename preserves documents, indexes, collection options and UUID.
 
+- Structure+data and structure-only copy use a random staging collection with
+  source options and indexes. Data mode copies with `$out` into staging, then all
+  modes use `renameCollection` with `dropTarget: false` and the staging UUID.
+  Existing targets are never intentionally overwritten. Copy is not a snapshot
+  or transaction, and a failure after staging creation leaves staging for manual
+  inspection instead of automatically dropping a collection whose ownership is
+  not server-proven.
+
 - Time-series creation and design are implemented separately in
   `opennavicat.mongodb_timeseries` and `ui/mongo_timeseries_designer.py`. Supported
   controls are `timeField`, optional `metaField`, granularity or equal custom
@@ -209,7 +217,7 @@ It reuses the receipt-backed, run-label-specific emergency cleanup for
 timeout/interrupt. It never accepts a reference endpoint. Logs/receipts exclude
 Docker environment dumps and private certificate/key/URI files.
 
-The current Linux WSL amd64 proof passed **80 cases with zero skips** and three
+The current Linux WSL amd64 proof passed **86 cases with zero skips** and four
 independently cleaned MongoDB 8.0.34 fixtures. The shared database-security CI job
 executes this runner. The earlier macOS ARM64 backend-only proof remains
 historical and does not cover this UI.
@@ -233,7 +241,7 @@ user workspaces and Navicat configuration are not used.
 Additional Linux WSL amd64 checks in this checkpoint:
 
 - `QT_QPA_PLATFORM=offscreen .venv/bin/python -m pytest -q -W error`:
-  **1482 passed, 490 conditionally skipped, 0 failed/error**. Default-service
+  **1484 passed, 496 conditionally skipped, 0 failed/error**. Default-service
   skips are not counted as real database execution; the owned runner above
   covers this feature's Mongo scope without skips.
 - `.venv/bin/python -m opennavicat --smoke-test`: **passed**, 6 rows / 4 columns,

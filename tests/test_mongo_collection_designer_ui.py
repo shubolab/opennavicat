@@ -11,9 +11,10 @@ from bson import Binary
 from opennavicat.mongodb_collections import (
     CollectionApplyError, CollectionDefinition, CollectionOutcome, CollectionPlan, CollectionSnapshot,
 )
+from opennavicat.mongodb_collection_copy import CollectionCopyPlan
 from opennavicat.ui.mongo_collection_designer import (
-    MongoCollectionDesignerPage, MongoCollectionOperationDialog, MongoCollectionSaveDialog,
-    collection_error_text,
+    MongoCollectionCopyDialog, MongoCollectionDesignerPage, MongoCollectionOperationDialog,
+    MongoCollectionSaveDialog, collection_error_text,
 )
 
 
@@ -173,5 +174,27 @@ def test_permanent_collection_operation_requires_explicit_checkbox(qtbot, operat
     assert "db.runCommand" in dialog.preview.toPlainText()
     dialog.permanent_check.setChecked(True)
     assert dialog.confirm_button.isEnabled()
+    dialog.accept()
+    assert accepted == [True]
+
+
+
+@pytest.mark.parametrize("mode", ["data", "structure"])
+def test_copy_dialog_requires_staging_acknowledgement(qtbot, mode):
+    snapshot = CollectionSnapshot("demo_catalog", "source", CollectionDefinition("source"), exists=True)
+    plan = CollectionCopyPlan(
+        snapshot, "target", mode, "__opennavicat_copy_test", [],
+        [{"create": "__opennavicat_copy_test"}, {"renameCollection": "demo_catalog.__opennavicat_copy_test",
+          "to": "demo_catalog.target", "dropTarget": False, "collectionUUID": "<resolved staging UUID>"}],
+        ["staging may remain", "not a transaction"],
+    )
+    dialog = MongoCollectionCopyDialog(plan)
+    qtbot.addWidget(dialog)
+    accepted = []
+    dialog.accepted.connect(lambda: accepted.append(True))
+    assert not dialog.copy_button.isEnabled()
+    assert "staging" in dialog.preview.toPlainText().lower()
+    dialog.ack_check.setChecked(True)
+    assert dialog.copy_button.isEnabled()
     dialog.accept()
     assert accepted == [True]

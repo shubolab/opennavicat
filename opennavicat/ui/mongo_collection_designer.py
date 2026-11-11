@@ -44,12 +44,48 @@ def collection_error_text(error):
         lines.append('集合已不存在：' + ('是' if outcome.collection_absent else '否'))
     if outcome.remaining_documents is not None:
         lines.append(f'重新读取的估算文档数：{outcome.remaining_documents}')
+    if outcome.copied_documents is not None:
+        lines.append(f'复制后的估算文档数：{outcome.copied_documents}')
+    if outcome.staging_name:
+        lines.append('可能保留的 staging 集合：' + outcome.staging_name)
     observed = outcome.observed
     if observed is not None:
         lines.append(f"观察到的集合：{observed.schema}.{observed.name}")
         if observed.issues:
             lines.append('只读原因：' + '；'.join(observed.issues))
     return '\n\n'.join(lines)
+
+
+class MongoCollectionCopyDialog(QDialog):
+    """Staged copy confirmation with explicit non-atomic and staging warnings."""
+
+    def __init__(self, plan, parent=None):
+        super().__init__(parent)
+        self.plan = deepcopy(plan)
+        self.setWindowTitle('复制集合')
+        self.setWindowModality(Qt.WindowModality.WindowModal)
+        self.resize(760, 560)
+        layout = QVBoxLayout(self)
+        mode = '结构和数据' if plan.mode == 'data' else '仅结构'
+        label = QLabel(f"复制集合 {plan.snapshot.schema}.{plan.snapshot.name} 到 {plan.snapshot.schema}.{plan.target_name}（{mode}）？")
+        label.setWordWrap(True); layout.addWidget(label)
+        warnings = QLabel('\n'.join(plan.warnings)); warnings.setWordWrap(True); layout.addWidget(warnings)
+        self.preview = SqlEditor(); self.preview.set_language('text'); self.preview.setReadOnly(True)
+        try: self.preview.setPlainText(plan.command_script)
+        except DatabaseError as error: self.preview.setPlainText('无法安全生成执行脚本：\n' + str(error) + '\n\n' + plan.command_text)
+        layout.addWidget(self.preview, 1)
+        self.ack_check = QCheckBox('我了解复制不是快照或事务；失败后可能保留 staging 集合，且不会覆盖已存在的目标')
+        layout.addWidget(self.ack_check)
+        self.buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        self.copy_button = self.buttons.button(QDialogButtonBox.StandardButton.Ok)
+        self.copy_button.setText('复制'); self.copy_button.setEnabled(False)
+        self.buttons.button(QDialogButtonBox.StandardButton.Cancel).setText('取消')
+        self.ack_check.toggled.connect(self.copy_button.setEnabled)
+        self.buttons.accepted.connect(self.accept); self.buttons.rejected.connect(self.reject)
+        layout.addWidget(self.buttons)
+
+    def accept(self):
+        if self.ack_check.isChecked(): super().accept()
 
 
 class MongoCollectionOperationDialog(QDialog):

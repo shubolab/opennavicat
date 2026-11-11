@@ -391,6 +391,11 @@ class ObjectBrowser(QWidget):
             actions += (self.new_timeseries_action, self.rename_action, self.clear_action)
         for action in actions:
             menu.addAction(action)
+        if self.kind == "mongo_collection":
+            entry = self.selected()
+            copy_menu = menu.addMenu("复制集合")
+            copy_menu.addAction("结构和数据", lambda: self.window.copy_mongo_collection(entry, "data"))
+            copy_menu.addAction("仅结构", lambda: self.window.copy_mongo_collection(entry, "structure"))
         groups = menu.addMenu("管理组")
         for label in ("新建组", "添加到组", "从组中排除"):
             groups.addAction(label).setEnabled(False)

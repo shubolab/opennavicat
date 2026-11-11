@@ -89,6 +89,8 @@ class CollectionOutcome:
     created_by_this_plan: bool | None = None
     remaining_documents: int | None = None
     collection_absent: bool | None = None
+    staging_name: str | None = None
+    copied_documents: int | None = None
 
 
 @dataclass

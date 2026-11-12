@@ -68,25 +68,40 @@ def mongo_storage_options():
     }
 
 
+def mongo_demo_collation():
+    return {
+        "locale": "en_US", "caseLevel": True, "caseFirst": "upper", "strength": 2,
+        "numericOrdering": True, "alternate": "shifted", "maxVariable": "space",
+        "backwards": True, "normalization": True,
+    }
+
+
 def verify_mongo_storage_values(catalog, statistics, document_count):
     """Check independent native-server facts, never a UI snapshot or echo."""
     from bson import BSON
     from opennavicat.mongodb_session import BSON_CODEC
 
     expected = mongo_storage_options()
+    selected_collation = mongo_demo_collation()
     try:
+        actual_options = catalog["options"]
+        actual_storage = {key: actual_options[key] for key in expected}
+        actual_collation = actual_options["collation"]
         matches = (catalog["name"] == MONGO_STORAGE_COLLECTION and catalog["type"] == "collection"
-            and BSON.encode(catalog["options"], codec_options=BSON_CODEC) == BSON.encode(expected, codec_options=BSON_CODEC)
+            and BSON.encode(actual_storage, codec_options=BSON_CODEC) == BSON.encode(expected, codec_options=BSON_CODEC)
+            and all(actual_collation.get(key) == value for key, value in selected_collation.items())
+            and isinstance(actual_collation.get("version"), str) and bool(actual_collation["version"])
             and type(document_count) is int and document_count == 0
             and "block_compressor=zlib" in statistics["wiredTiger"]["creationString"]
             and "prefix_compression=false" in statistics["indexDetails"]["_id_"]["creationString"])
     except Exception:
         matches = False
     if not matches:
-        raise RuntimeError("The generated collection storage was not independently verified.")
+        raise RuntimeError("The generated collection storage or collation was not independently verified.")
     return {"collection": MONGO_STORAGE_COLLECTION, "options_verified": True,
         "empty_collection_verified": True, "collection_storage_verified": True,
-        "default_index_storage_verified": True}
+        "default_index_storage_verified": True, "collation_verified": True,
+        "collation_selected": selected_collation}
 
 
 def verify_mongo_query_values(tree, rows):
@@ -915,10 +930,25 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
         page = state["mongo_storage_page"]
         page.tabs.setCurrentWidget(page.index_options)
         page.index_options_editor.setPlainText(MONGO_INDEX_DEFAULTS_TEXT)
-        if page.draft().options != mongo_storage_options():
+        if {key: page.draft().options[key] for key in mongo_storage_options()} != mongo_storage_options():
             raise RuntimeError("The generated collection index defaults do not match the demo draft.")
         phase("mongodb_collection_index_defaults")
-        hold(1.8, open_mongo_storage_sheet)
+        hold(1.8, mongo_collection_collation)
+
+    def mongo_collection_collation():
+        page = state["mongo_storage_page"]
+        page.tabs.setCurrentWidget(page.collation)
+        editor = page.collation_editor
+        editor.locale_combo.setCurrentText("en_US")
+        for key, value in mongo_demo_collation().items():
+            if key == "locale":
+                continue
+            combo = editor.combos[key]
+            combo.setCurrentIndex(combo.findData(value))
+        if editor.collation() != mongo_demo_collation():
+            raise RuntimeError("The structured collation controls did not produce the generated draft.")
+        phase("mongodb_collection_collation")
+        hold(2.0, open_mongo_storage_sheet)
 
     def open_mongo_storage_sheet():
         page = state["mongo_storage_page"]
@@ -933,11 +963,14 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
     def mongo_storage_preview_ready():
         page = state["mongo_storage_page"]
         dialog = page._save_dialog
+        actual = dialog.plan.definition.options if dialog.plan is not None else {}
         if (dialog.plan is None or dialog.definition.name != MONGO_STORAGE_COLLECTION
-                or dialog.plan.definition.options != mongo_storage_options()
+                or {key: actual[key] for key in mongo_storage_options()} != mongo_storage_options()
+                or actual.get("collation") != mongo_demo_collation()
                 or dialog.plan.commands[0].get("create") != MONGO_STORAGE_COLLECTION
                 or "block_compressor=zlib" not in dialog.preview.toPlainText()
-                or "prefix_compression=false" not in dialog.preview.toPlainText()):
+                or "prefix_compression=false" not in dialog.preview.toPlainText()
+                or "en_US" not in dialog.preview.toPlainText()):
             raise RuntimeError("The collection save sheet did not render its confirmed generated options.")
         state["capture_target"] = dialog
         phase("mongodb_collection_storage_save_sheet")
@@ -957,7 +990,9 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
 
     def verify_mongo_storage():
         page = state["mongo_storage_page"]
-        if page.snapshot.name != MONGO_STORAGE_COLLECTION or page.snapshot.definition.options != mongo_storage_options():
+        actual = page.snapshot.definition.options
+        if (page.snapshot.name != MONGO_STORAGE_COLLECTION
+                or {key: actual[key] for key in mongo_storage_options()} != mongo_storage_options()):
             raise RuntimeError("The application saved unexpected generated collection options.")
         window.submit(mongo.verify_storage_collection, mongo_storage_verified, fail,
                       label="独立核验生成集合的存储设置")
@@ -980,9 +1015,15 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
 
     def mongo_storage_reopened():
         page = state["mongo_storage_page"]
-        if (page.snapshot.definition.options != mongo_storage_options() or page.dirty
-                or not page.storage_editor.isReadOnly() or not page.index_options_editor.isReadOnly()):
-            raise RuntimeError("The reopened collection did not preserve its read-only storage settings.")
+        actual = page.snapshot.definition.options
+        if ({key: actual[key] for key in mongo_storage_options()} != mongo_storage_options()
+                or not all(actual.get("collation", {}).get(key) == value
+                           for key, value in mongo_demo_collation().items())
+                or "version" not in actual.get("collation", {})
+                or page.dirty or not page.storage_editor.isReadOnly()
+                or not page.index_options_editor.isReadOnly()
+                or page.collation_editor.locale_combo.isEnabled()):
+            raise RuntimeError("The reopened collection did not preserve its read-only storage or collation settings.")
         page.tabs.setCurrentWidget(page.storage)
         phase("mongodb_collection_storage_reopened")
         capture()
@@ -1093,7 +1134,7 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
         raise RuntimeError(state["error"] or "Demo application failed.")
     if not window._closed or not idle():
         raise RuntimeError("The demo exited before its native sessions and window had closed.")
-    if state["count"] < 2 or len(state["phases"]) != (17 if mongo is not None else 6):
+    if state["count"] < 2 or len(state["phases"]) != (18 if mongo is not None else 6):
         raise RuntimeError("The demo did not capture all required workflows.")
     for index, item in enumerate(state["phases"]):
         stop = state["phases"][index + 1]["first_frame"] if index + 1 < len(state["phases"]) else state["count"]
@@ -1121,6 +1162,7 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
         "mongodb_inline_index_preview_applied": False,
         "mongodb_inline_key_editor_opened": state["inline_key_editor_opened"],
         "mongodb_collection_storage_save": state["mongo_storage_verification"],
+        "mongodb_collection_collation_save": bool(state["mongo_storage_verification"]),
         "mongodb_collection_storage_reopened_readonly": state["mongo_storage_verification"] is not None,
         "visible_text_privacy_guard": "labels, editors, titles, actions, combos, tree/table display fields; paths/endpoints/credentials rejected before frame save",
         "sqlite_closed_in_worker": state["sqlite_closed_in_worker"],

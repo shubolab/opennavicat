@@ -27,6 +27,7 @@ from .icons import tool_icon
 from .schema_object_designer import _ObjectDesignerPage
 from .table_designer import TableSaveDialog
 from .mongo_validator import MongoValidatorEditor
+from .mongo_collation import MongoCollationEditor
 from .mongo_inline_index import (
     InlineIndexKeyDialog, MongoInlineIndexSaveDialog, key_summary,
 )
@@ -293,14 +294,9 @@ class MongoCollectionDesignerPage(_ObjectDesignerPage):
             lambda: self._storage_changed('indexOptionDefaults', self.index_options_editor))
         index_options.addWidget(self.index_options_editor, 1)
 
-        self.collation = QWidget()
-        collation = QVBoxLayout(self.collation)
-        collation.setContentsMargins(12, 12, 12, 12)
-        collation.addWidget(QLabel('排序规则（Canonical Extended JSON 文档）'))
-        self.collation_editor = self._document_editor()
-        self.collation_editor.textChanged.connect(
-            lambda: self._document_changed('collation', self.collation_editor))
-        collation.addWidget(self.collation_editor, 1)
+        self.collation = MongoCollationEditor()
+        self.collation_editor = self.collation
+        self.collation.changed.connect(self._collation_changed)
         self.tabs.addTab(self.collation, '排序规则')
 
         self.indexes = QWidget()
@@ -778,6 +774,20 @@ class MongoCollectionDesignerPage(_ObjectDesignerPage):
                 self._invalid[key] = '请输入有效的 Canonical Extended JSON 文档：' + key
         self._edited()
 
+    def _collation_changed(self):
+        if self._populating or self.definition is None or self._read_only:
+            return
+        self._invalid.pop('collation', None)
+        try:
+            value = self.collation_editor.collation()
+            if value is None:
+                self.definition.options.pop('collation', None)
+            else:
+                self.definition.options['collation'] = value
+        except DatabaseError as error:
+            self._invalid['collation'] = str(error)
+        self._edited()
+
     def _storage_changed(self, key, editor):
         if (self._populating or self.definition is None or self._read_only
                 or self.snapshot is None or self.snapshot.exists):
@@ -861,10 +871,7 @@ class MongoCollectionDesignerPage(_ObjectDesignerPage):
         self.capped_check.setChecked(bool(options.get('capped')))
         self.size_edit.setText(str(options.get('size', '')))
         self.max_edit.setText(str(options.get('max', '')))
-        try:
-            self.collation_editor.setPlainText(canonical_dumps(options['collation']) if 'collation' in options else '')
-        except Exception:
-            self.collation_editor.setPlainText('')
+        self.collation_editor.load(options.get('collation'))
         self.validator_widget.load_validator(options.get('validator'))
         for key, editor in (('storageEngine', self.storage_editor), ('indexOptionDefaults', self.index_options_editor)):
             try:
@@ -889,8 +896,9 @@ class MongoCollectionDesignerPage(_ObjectDesignerPage):
         pass
 
     def _update_specific_controls(self, editable):
-        for widget in (self.validation, self.collation):
-            widget.setEnabled(editable)
+        self.validation.setEnabled(editable)
+        self.collation.setEnabled(editable)
+        self.collation_editor.set_read_only(not editable or bool(self.snapshot and self.snapshot.exists))
         self.validator_widget.set_read_only(not editable)
         self.name_edit.setReadOnly(bool(self.snapshot and self.snapshot.exists))
         new = bool(self.snapshot and not self.snapshot.exists)

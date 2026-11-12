@@ -109,7 +109,7 @@
     "dependency_command_stub_tests": 16,
     "all_protocol_source_hashes_match": true
   },
-  "updated_at": "2026-11-12T11:44:12.232248+08:00",
+  "updated_at": "2026-11-12T15:07:03.109244+08:00",
   "ci_after_storage": {
     "id": 43051367511,
     "source_sha": "7c65c70d6822cf7607cceaa06a860b1561893a53",
@@ -321,12 +321,34 @@
     "source_smoke_passed": true
   },
   "latest_main_demo": {
-    "frames": 229,
-    "duration_seconds": 38.17,
-    "sha256": "ab71968e92028b8801361c66f4ed4d28a278244138deda87e3d8b6cea2c8dff1",
-    "phases": 17,
+    "frames": 245,
+    "duration_seconds": 40.84,
+    "sha256": "08ed34026360052625dd9e88ae461923b90066436c9534793d8eb9f28b4f3a80",
+    "phases": 18,
     "inline_index_key_editor": true,
     "visual_privacy_reviewed": true,
-    "latest_public_installer": "v0.10.0"
+    "latest_public_installer": "v0.10.0",
+    "structured_collation_editor": true,
+    "structured_collation_save_and_readonly_readback": true
+  },
+  "collation_ui": {
+    "document": "../mongodb-collation-ui.md",
+    "structured_controls": 9,
+    "locale_choices_observed": 100,
+    "existing_collection_readonly": true,
+    "version_and_unknown_preserved": true,
+    "collection_runner_passed": 239,
+    "collection_runner_skipped": 0,
+    "native_cocoa_passed": 5,
+    "full_source_passed": 1775,
+    "full_source_skipped": 552,
+    "source_smoke_passed": true,
+    "complete_locale_catalog_open": true,
+    "windows_linux_reference_open": true,
+    "recorded_demo_phases": 18,
+    "recorded_demo_frames": 245,
+    "recorded_demo_duration_seconds": 40.84,
+    "recorded_demo_sha256": "08ed34026360052625dd9e88ae461923b90066436c9534793d8eb9f28b4f3a80",
+    "visual_privacy_reviewed": true
   }
 }

@@ -944,3 +944,37 @@ def test_real_window_embedded_index_create_rename_options_and_delete(qtbot, mong
     assert {'_id_', 'inline_existing_v2', 'inline_new'} == set(database.docs.index_information())
     assert database.docs.count_documents({}) == 6
     assert not errors and threads
+
+
+def test_real_window_structured_collation_create_and_readback(qtbot, mongo_window):
+    window, config, database, schema, errors, threads = mongo_window
+    page = window.open_mongo_collection_designer(config.id, config.database)
+    qtbot.waitUntil(lambda: page.snapshot is not None and not page.loading, timeout=15000)
+    page.name_edit.setText('collation_control_ui')
+    editor = page.collation_editor
+    page.tabs.setCurrentWidget(page.collation)
+    editor.locale_combo.setCurrentText('en_US')
+    choices = {
+        'caseLevel': True, 'caseFirst': 'upper', 'strength': 2,
+        'numericOrdering': True, 'alternate': 'shifted',
+        'maxVariable': 'space', 'backwards': True, 'normalization': True,
+    }
+    for key, value in choices.items():
+        combo = editor.combos[key]
+        combo.setCurrentIndex(combo.findData(value))
+    page.request_save()
+    dialog = page._save_dialog
+    qtbot.waitUntil(dialog.save_button.isEnabled, timeout=15000)
+    expected = {'locale': 'en_US', **choices}
+    assert dialog.plan.commands[0]['collation'] == expected
+    dialog.save_button.click()
+    idle(qtbot, window)
+    assert page.snapshot.exists and page.snapshot.name == 'collation_control_ui'
+    with database.list_collections(filter={'name': 'collation_control_ui'}) as cursor:
+        row = next(cursor)
+    actual = row['options']['collation']
+    assert {key: actual[key] for key in expected} == expected
+    assert actual['version'] and 'version' in page.snapshot.definition.options['collation']
+    assert not page.collation_editor.locale_combo.isEnabled()
+    assert all(not combo.isEnabled() for combo in page.collation_editor.combos.values())
+    assert threads and not errors

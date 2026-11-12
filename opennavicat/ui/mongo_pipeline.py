@@ -946,8 +946,10 @@ class MongoPipelinePage(QWidget):
         source_controls.addWidget(self.source_combo, 1)
         source_controls.addWidget(QLabel("预览样本:"))
         self.sample_mode = QComboBox()
+        self.sample_mode.addItem("全部", "all")
+        self.sample_mode.addItem("最初", "first")
         self.sample_mode.addItem("随机", "random")
-        self.sample_mode.addItem("前 N 条", "first")
+        self.sample_mode.setCurrentIndex(self.sample_mode.findData("random"))
         source_controls.addWidget(self.sample_mode)
         self.sample_size = QSpinBox()
         self.sample_size.setRange(1, 100000)
@@ -1152,8 +1154,11 @@ class MongoPipelinePage(QWidget):
         self.dirtyChanged.emit(False)
         self.titleChanged.emit(self.title)
 
-    def load_nagg(self, text, *, pipeline_id=None):
-        self.load_definition(from_nagg(text), pipeline_id=pipeline_id)
+    def load_nagg(self, text, *, pipeline_id=None, name=None):
+        definition = from_nagg(text)
+        if isinstance(name, str) and name:
+            definition.name = name
+        self.load_definition(definition, pipeline_id=pipeline_id)
 
     def refresh(self):
         self._render_all()
@@ -1197,6 +1202,7 @@ class MongoPipelinePage(QWidget):
         self.source_combo.blockSignals(True)
         self.source_combo.setCurrentText(self.definition.source)
         self.source_combo.blockSignals(False)
+        self.sample_size.setEnabled(self.definition.sample_mode != "all")
 
     def _render_graph(self):
         while self.graph_row.count():
@@ -1366,6 +1372,7 @@ class MongoPipelinePage(QWidget):
         if self.definition.sample_mode == mode and self.definition.sample_size == size:
             return
         self.definition.sample_mode, self.definition.sample_size = mode, size
+        self.sample_size.setEnabled(mode != "all")
         self._edited()
 
     def add_stage(self):

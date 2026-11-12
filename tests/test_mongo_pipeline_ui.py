@@ -54,6 +54,22 @@ def test_match_create_tool_builds_structured_conditions(qtbot):
     assert page.draft().stages[0].body["created_at"] == datetime(2026, 1, 1, tzinfo=timezone.utc)
 
 
+def test_reference_preview_sample_controls_include_all_first_random(qtbot):
+    page = MongoPipelinePage("generated", "demo_catalog")
+    qtbot.addWidget(page)
+    page.set_sources(["docs"])
+    page.source_combo.setCurrentText("docs")
+    assert [page.sample_mode.itemText(i) for i in range(page.sample_mode.count())] == [
+        "全部", "最初", "随机"]
+    assert page.sample_mode.currentData() == "random"
+    page.sample_mode.setCurrentIndex(page.sample_mode.findData("all"))
+    assert page.draft().sample_mode == "all"
+    assert not page.sample_size.isEnabled()
+    page.sample_mode.setCurrentIndex(page.sample_mode.findData("first"))
+    assert page.draft().sample_mode == "first"
+    assert page.sample_size.isEnabled()
+
+
 def test_common_stage_create_tools_generate_exact_documents(qtbot):
     page = MongoPipelinePage("generated", "demo_catalog")
     qtbot.addWidget(page)

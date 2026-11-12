@@ -7,11 +7,14 @@ import json
 from typing import Any
 import uuid
 
-from bson import BSON
+from bson import BSON, json_util
 from pymongo import timeout
 
 from .database import DatabaseError
-from .mongodb_session import BSON_CODEC, RAW_CODEC, _MAX_PAGE_BYTES, canonical_dumps, canonical_loads
+from .mongodb_session import (
+    BSON_CODEC, JSON_OPTIONS, RAW_CODEC, _MAX_PAGE_BYTES,
+    canonical_dumps, canonical_loads,
+)
 
 
 STAGE_NAMES = (
@@ -32,6 +35,32 @@ MAX_PREVIEW_ROWS = 200
 MAX_EXECUTION_ROWS = 1000
 MAX_EXPLAIN_NODES = 512
 MAX_EXPLAIN_DEPTH = 32
+REFERENCE_NAGG_VERSION = "0.0"
+REFERENCE_SAMPLE_MODES = {"all": 0, "first": 1, "random": 2}
+REFERENCE_SAMPLE_NAMES = {value: key for key, value in REFERENCE_SAMPLE_MODES.items()}
+REFERENCE_OPTION_DEFAULTS = {
+    "allowDiskUse": 0,
+    "cursorBatchSize": -1,
+    "maxTimeMS": -1,
+    "bypassDocumentValidation": 0,
+    "readConcernLevel": 0,
+    "locale": "",
+    "caseLevel": 0,
+    "caseFirst": 0,
+    "strength": 0,
+    "numericOrdering": 0,
+    "alternate": 0,
+    "maxVariable": 0,
+    "backwards": 0,
+    "normalization": 0,
+    "hint": "",
+    "comment": "",
+    "enableWriteConcern": False,
+    "w": "",
+    "j": 0,
+    "wtimeout": 0,
+    "let": "",
+}
 
 
 @dataclass(eq=False)
@@ -40,11 +69,13 @@ class PipelineStage:
     body: object = field(default_factory=dict, repr=False)
     enabled: bool = True
     stage_id: str = field(default_factory=lambda: uuid.uuid4().hex)
+    reference_extra: dict[str, Any] = field(default_factory=dict, repr=False)
 
     def __eq__(self, other):
         return (isinstance(other, PipelineStage) and self.operator == other.operator
                 and self.enabled == other.enabled
-                and _encoded(self.body) == _encoded(other.body))
+                and _encoded(self.body) == _encoded(other.body)
+                and _encoded(self.reference_extra) == _encoded(other.reference_extra))
 
 
 @dataclass(eq=False)
@@ -55,11 +86,17 @@ class PipelineDefinition:
     sample_mode: str = "random"
     sample_size: int = 1000
     selected_stage: int | None = 0
+    reference_version: str = REFERENCE_NAGG_VERSION
+    reference_options: dict[str, Any] = field(default_factory=dict, repr=False)
+    reference_extra: dict[str, Any] = field(default_factory=dict, repr=False)
 
     def __eq__(self, other):
         return (isinstance(other, PipelineDefinition) and self.name == other.name
                 and self.source == other.source and self.sample_mode == other.sample_mode
-                and self.sample_size == other.sample_size and self.stages == other.stages)
+                and self.sample_size == other.sample_size and self.stages == other.stages
+                and self.reference_version == other.reference_version
+                and _encoded(self.reference_options) == _encoded(other.reference_options)
+                and _encoded(self.reference_extra) == _encoded(other.reference_extra))
 
 
 @dataclass
@@ -267,19 +304,35 @@ def validate_pipeline(definition):
             and (isinstance(definition.selected_stage, bool) or not isinstance(definition.selected_stage, int)
                  or not 0 <= definition.selected_stage < len(definition.stages))):
         raise DatabaseError("Selected pipeline stage is invalid")
-    if definition.sample_mode not in {"random", "first"}:
-        raise DatabaseError("Preview sample mode must be random or first")
+    if definition.sample_mode not in REFERENCE_SAMPLE_MODES:
+        raise DatabaseError("Preview sample mode must be all, first or random")
     if (isinstance(definition.sample_size, bool) or not isinstance(definition.sample_size, int)
             or not 1 <= definition.sample_size <= 100000):
         raise DatabaseError("Preview sample size must be between 1 and 100000")
+    if not isinstance(definition.reference_version, str) or not definition.reference_version:
+        raise DatabaseError("Reference .nagg version must be nonempty text")
+    for label, value in (("options", definition.reference_options), ("top-level fields", definition.reference_extra)):
+        if not isinstance(value, dict):
+            raise DatabaseError(f"Reference .nagg {label} must be a document")
+        try:
+            encoded = _encoded(value)
+        except Exception:
+            raise DatabaseError(f"Reference .nagg {label} cannot be encoded as exact BSON") from None
+        if len(encoded) > _MAX_PAGE_BYTES:
+            raise DatabaseError(f"Reference .nagg {label} exceed the bounded metadata size")
     for stage in definition.stages:
         if not isinstance(stage, PipelineStage) or stage.operator not in STAGE_NAMES:
             raise DatabaseError("Unsupported aggregation stage")
+        if not isinstance(stage.reference_extra, dict):
+            raise DatabaseError("Reference .nagg stage extensions must be a document")
         try:
             raw = BSON.encode({"body": stage.body}, codec_options=BSON_CODEC)
             decoded = BSON(raw).decode(codec_options=BSON_CODEC)
             if (len(raw) > _MAX_PAGE_BYTES
                     or BSON.encode(decoded, codec_options=BSON_CODEC) != raw):
+                raise ValueError()
+            extra = _encoded(stage.reference_extra)
+            if len(extra) > 64 * 1024:
                 raise ValueError()
         except Exception:
             raise DatabaseError("Stage body cannot be encoded as exact bounded BSON") from None
@@ -310,31 +363,61 @@ def pipeline_script(definition):
     return "\n".join(lines)
 
 
-def to_nagg(definition):
-    validate_pipeline(definition)
-    document = {
-        "format": "opennavicat-nagg-v1",
-        "name": definition.name,
-        "source": definition.source,
-        "sampleMode": definition.sample_mode,
-        "sampleSize": definition.sample_size,
-        "selectedStage": definition.selected_stage,
-        "stages": [{"operator": stage.operator, "body": deepcopy(stage.body),
-                    "enabled": stage.enabled, "stageId": stage.stage_id}
-                   for stage in definition.stages],
-    }
-    return canonical_dumps(document) + "\n"
-
-
-def from_nagg(text):
-    if not isinstance(text, str) or not text.strip():
-        raise DatabaseError("The .nagg document is empty")
+def _stage_value_dumps(value):
     try:
-        document = canonical_loads(text)
+        raw = _encoded(value)
+        text = json_util.dumps(
+            value, json_options=JSON_OPTIONS, ensure_ascii=True, separators=(",", ":"))
+        decoded = json_util.loads(text, json_options=JSON_OPTIONS)
+        if _encoded(decoded) != raw:
+            raise ValueError()
+        return text
     except Exception:
-        raise DatabaseError("The .nagg document is not valid Canonical Extended JSON") from None
-    if not isinstance(document, dict) or document.get("format") != "opennavicat-nagg-v1":
-        raise DatabaseError("This file is not an OpenNavicat aggregation pipeline")
+        raise DatabaseError("Stage body cannot be represented as exact compact Canonical EJSON") from None
+
+
+def _stage_value_loads(text):
+    if not isinstance(text, str):
+        raise DatabaseError("Reference .nagg MQL must be text")
+    try:
+        return canonical_loads('{"value":' + text + '}')["value"]
+    except Exception:
+        raise DatabaseError("Reference .nagg MQL is not valid Canonical Extended JSON") from None
+
+
+def to_nagg(definition):
+    """Write the Navicat 18.0.5 Version 0.0 .nagg contract."""
+    validate_pipeline(definition)
+    options = deepcopy(REFERENCE_OPTION_DEFAULTS)
+    options.update(deepcopy(definition.reference_options))
+    document = {
+        "Version": definition.reference_version,
+        "Collection": definition.source,
+        "PreviewSourceOption": {
+            "SampleMode": REFERENCE_SAMPLE_MODES[definition.sample_mode],
+            "SampleSize": definition.sample_size,
+        },
+        "Stages": [],
+        "Option": options,
+    }
+    for stage in definition.stages:
+        item = {
+            "Op": stage.operator,
+            "MQL": _stage_value_dumps(stage.body),
+            "Enabled": bool(stage.enabled),
+        }
+        item.update({key: deepcopy(value) for key, value in stage.reference_extra.items()
+                     if key not in {"Op", "MQL", "Enabled"}})
+        document["Stages"].append(item)
+    document.update({key: deepcopy(value) for key, value in definition.reference_extra.items()
+                     if key not in {"Version", "Collection", "PreviewSourceOption", "Stages", "Option"}})
+    try:
+        return json.dumps(document, ensure_ascii=True, separators=(",", ":"))
+    except (TypeError, ValueError):
+        raise DatabaseError("Reference .nagg metadata cannot be represented as plain JSON") from None
+
+
+def _from_legacy_nagg(document):
     raw_stages = document.get("stages")
     if not isinstance(raw_stages, list):
         raise DatabaseError("The .nagg stages must be an array")
@@ -356,6 +439,68 @@ def from_nagg(text):
     return validate_pipeline(definition)
 
 
+def _from_reference_nagg(document):
+    version = document.get("Version")
+    source = document.get("Collection")
+    preview = document.get("PreviewSourceOption")
+    options = document.get("Option", {})
+    raw_stages = document.get("Stages")
+    if not isinstance(version, str) or not version:
+        raise DatabaseError("Reference .nagg Version must be nonempty text")
+    if not isinstance(source, str) or not source:
+        raise DatabaseError("Reference .nagg Collection must be nonempty text")
+    if not isinstance(preview, dict) or not isinstance(options, dict) or not isinstance(raw_stages, list):
+        raise DatabaseError("Reference .nagg preview, options or stages have an invalid shape")
+    mode_value = preview.get("SampleMode")
+    sample_size = preview.get("SampleSize")
+    if isinstance(mode_value, bool) or not isinstance(mode_value, int) or mode_value not in REFERENCE_SAMPLE_NAMES:
+        raise DatabaseError("Reference .nagg SampleMode must be 0, 1 or 2")
+    stages = []
+    for item in raw_stages:
+        if not isinstance(item, dict):
+            raise DatabaseError("Each reference .nagg stage must be a document")
+        operator, mql, enabled = item.get("Op"), item.get("MQL"), item.get("Enabled")
+        if not isinstance(enabled, bool):
+            raise DatabaseError("Reference .nagg Enabled must be boolean")
+        stages.append(PipelineStage(
+            operator=operator,
+            body=_stage_value_loads(mql),
+            enabled=enabled,
+            reference_extra={key: deepcopy(value) for key, value in item.items()
+                             if key not in {"Op", "MQL", "Enabled"}},
+        ))
+    return validate_pipeline(PipelineDefinition(
+        source=source,
+        stages=stages,
+        sample_mode=REFERENCE_SAMPLE_NAMES[mode_value],
+        sample_size=sample_size,
+        selected_stage=0 if stages else None,
+        reference_version=version,
+        reference_options={
+            key: deepcopy(value) for key, value in options.items()
+            if key not in REFERENCE_OPTION_DEFAULTS or value != REFERENCE_OPTION_DEFAULTS[key]
+        },
+        reference_extra={key: deepcopy(value) for key, value in document.items()
+                         if key not in {"Version", "Collection", "PreviewSourceOption", "Stages", "Option"}},
+    ))
+
+
+def from_nagg(text):
+    if not isinstance(text, str) or not text.strip():
+        raise DatabaseError("The .nagg document is empty")
+    try:
+        document = canonical_loads(text)
+    except Exception:
+        raise DatabaseError("The .nagg document is not valid Canonical Extended JSON") from None
+    if not isinstance(document, dict):
+        raise DatabaseError("This file is not an aggregation pipeline")
+    if document.get("format") == "opennavicat-nagg-v1":
+        return _from_legacy_nagg(document)
+    if "Version" in document and "Stages" in document:
+        return _from_reference_nagg(document)
+    raise DatabaseError("This file is not an OpenNavicat or Navicat Version 0.0 aggregation pipeline")
+
+
 def parse_query_pipeline(source, text):
     """Parse a JSON/Canonical-EJSON stage array imported into a pipeline draft."""
     try:
@@ -372,7 +517,9 @@ def parse_query_pipeline(source, text):
 def _sample_prefix(definition):
     if definition.sample_mode == "random":
         return [{"$sample": {"size": definition.sample_size}}]
-    return [{"$limit": definition.sample_size}]
+    if definition.sample_mode == "first":
+        return [{"$limit": definition.sample_size}]
+    return []
 
 
 def _aggregate_rows(session, database, definition, pipeline, limit, *, allow_write=False):

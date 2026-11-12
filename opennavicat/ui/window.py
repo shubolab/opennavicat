@@ -2077,7 +2077,7 @@ class MainWindow(QMainWindow):
             if entry is None:
                 page.show_error(DatabaseError("The saved aggregation pipeline no longer exists"))
             else:
-                page.load_nagg(entry["nagg"], pipeline_id=pipeline_id)
+                page.load_nagg(entry["nagg"], pipeline_id=pipeline_id, name=entry["name"])
                 self.store.touch_mongo_pipeline(pipeline_id)
         else:
             page.load_definition(mongo_pipeline_tools.PipelineDefinition())
@@ -2221,6 +2221,8 @@ class MainWindow(QMainWindow):
             except DatabaseError:
                 source = page.definition.source or page.source_combo.currentText().strip()
                 definition = mongo_pipeline_tools.parse_query_pipeline(source, text)
+            if not definition.name:
+                definition.name = path.stem
             page.load_definition(definition)
             self.update_mongo_pipeline_title(page)
         except Exception as error:

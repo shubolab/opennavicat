@@ -20,6 +20,8 @@ sample size and local persistence.
   expressions. Complex expressions automatically fall back to the exact EJSON
   editor instead of being flattened lossily.
 - A graph represents `source → ordered stages → output`.
+- The source preview popup now matches the observed `全部`, `最初`, `随机` order.
+  `全部` disables the sample-size field; saved mode ids are `0`, `1` and `2`.
 - `预览全部` runs each enabled prefix against an isolated source sample and shows
   the selected stage's input/output plus the final result.
 - `运行` executes the unsaved pipeline without applying preview sample options.
@@ -38,18 +40,29 @@ sample size and local persistence.
   reference metadata family: name, file size, creator, created, modifier,
   modified and access time.
 - The workspace stores pipeline definitions in its existing protected local
-  state file. `导入查询` accepts OpenNavicat `.nagg` documents or a JSON/Canonical
-  EJSON stage array.
+  state file. `导入查询` accepts Navicat `Version 0.0` `.nagg` files, legacy
+  OpenNavicat `.nagg` files, or a JSON/Canonical EJSON stage array.
 - The README GIF now includes pipeline stage preview, script preview and real
   execution results from the generated MongoDB fixture.
 
 ## `.nagg` format boundary
 
-OpenNavicat uses a versioned, Canonical-EJSON-backed document with
-`format: "opennavicat-nagg-v1"` and preserves exact BSON values, stage ordering,
-enabled state and stable in-workspace stage IDs. The reference's actual `.nagg`
-serialization has not been reconciled byte-for-byte or semantically, so no
-reference-file compatibility is claimed.
+The reference format was observed directly from Navicat 18.0.5. It is compact
+JSON with top-level `Version`, `Collection`, `PreviewSourceOption`, `Stages` and
+`Option`. Each stage carries `Op`, an escaped `MQL` Canonical-EJSON string and
+boolean `Enabled`. OpenNavicat now writes this `Version 0.0` contract, preserves
+unknown top-level, option and stage fields, and imports both the reference
+format and the earlier `opennavicat-nagg-v1` format. A generated 588-byte
+`$lookup` fixture is byte-identical, including SHA-256
+`bde5e0bc931dcdab5d922fa5cf0f19f4da148639d23001c52fb414838900dd0a`.
+
+The reference file does not store the pipeline name or selected editor stage;
+the name remains external object-list metadata, and reopening selects the first
+stage. OpenNavicat preserves the reference `Option` document, including unknown
+fields, but the reference option editor and execution semantics for every
+collation, read/write concern, hint, `let`, timeout and batch option remain open.
+The observed reference format is not claimed to cover every later `.nagg`
+version or every complex BSON value.
 
 ## Visual Explain boundary
 
@@ -81,15 +94,17 @@ stage import, persistence, UI graph operations, preview rendering, save-sheet
 naming, nested visual plan projection, unknown-field retention and visual-view
 search. Owned MongoDB tests cover per-stage preview, final aggregation,
 `executionStats` Explain, `$out` confirmation boundaries and a full MainWindow
-save/reopen path. The expanded collection runner passed **274 cases with zero
+save/reopen path. The expanded collection runner passed **279 cases with zero
 skips/failures/errors across eight exact-owned fixtures**; focused Cocoa pipeline
-checks passed **9/9**, the full source suite passed **1807 cases with 561
+checks passed **10/10**, the full source suite passed **1812 cases with 561
 conditionally skipped**, and source smoke returned 6 rows × 4 columns. The README
 GIF is 23 phases, 306 encoded frames and 51.00 seconds. Runtime reference observations are recorded in
 [the Navicat observation](ui-reference-18-mongodb-pipeline.md).
 
-Specialized visual create tools for the remaining
-complex/lookup/search/bucket/stream stages, exact visual Explain canvas and all
-operator shapes, automatic-task references, reference `.nagg` compatibility,
-change-stream UI, all MongoDB versions/topologies and Windows/Linux visual
-acceptance remain open.
+The checked `$lookup`, `$bucket`, `$bucketAuto`, `$facet`, `$graphLookup`,
+`$unionWith`, `$sortByCount`, `$redact`, `$replaceRoot`, `$replaceWith`,
+`$geoNear`, `$fill` and `$densify` stages use the reference editor rather than a
+structured create tool. Operator-specific editor templates, the complete
+reference option editor/execution semantics, exact visual Explain canvas and all
+operator shapes, automatic-task references, change-stream UI, all MongoDB
+versions/topologies and Windows/Linux visual acceptance remain open.

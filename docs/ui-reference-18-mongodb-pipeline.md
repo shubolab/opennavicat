@@ -109,10 +109,63 @@ OpenNavicat consumes this observed contract while retaining the complete raw
 reply. This observation does not claim that every MongoDB operator, shard tree,
 profiler response or visual cost rule has already matched the reference.
 
+## AP18-05 Saved `.nagg` and preview sample modes
+
+AP18-05 used a new exact-owned MongoDB 8.0.34 fixture with synthetic `sales`
+and `customers` collections. A `$lookup` joined `sales.customer` to
+`customers.customer` and produced `customer_docs`. Saving it through the normal
+Name sheet created a **588-byte JSON** file with a `.nagg` extension. Its
+compact top-level order was:
+
+```text
+Version
+Collection
+PreviewSourceOption
+Stages
+Option
+```
+
+`Version` was `"0.0"`. `Collection` stored the source name. Each stage stored:
+
+```json
+{"Op":"$lookup","MQL":"{\"from\":\"customers\",\"localField\":\"customer\",\"foreignField\":\"customer\",\"as\":\"customer_docs\"}","Enabled":true}
+```
+
+Thus `MQL` is an escaped Canonical-EJSON-capable string rather than a nested
+object. `Option` contained the observed plain-JSON defaults:
+`allowDiskUse=0`, `cursorBatchSize=-1`, `maxTimeMS=-1`,
+`bypassDocumentValidation=0`, the collation/read/write fields, and empty
+`hint`, `comment`, `w`, and `let` values.
+
+The source-stage popup offered `全部`, `最初` and `随机` in that order. With the
+sample size disabled for `全部`, saving each mode established the exact mapping
+`全部=0`, `最初=1`, `随机=2`; the saved size remained `1000`.
+
+Selecting `$lookup` did not expose a `创建工具` radio control. It opened the
+stage editor with a detailed `$lookup` help template instead. The same result
+was observed for the checked `$bucket`, `$bucketAuto`, `$facet`,
+`$graphLookup`, `$unionWith`, `$sortByCount`, `$redact`, `$replaceRoot`,
+`$replaceWith`, `$geoNear`, `$fill` and `$densify` stages. This corrects the
+earlier assumption that each complex stage required a separate structured
+create tool.
+
+The generated saved object was removed after recording its structure. The
+container and its anonymous volumes were also removed after checking the exact
+ID, owner label and loopback port.
+
+For the reverse direction, OpenNavicat generated the same 588-byte contract for
+a new synthetic `$lookup` draft. Navicat 18.0.5 discovered it in the generated
+aggregation-pipeline object list and opened it as a normal pipeline: the graph
+showed `源 → 阶段 1 $lookup → 输出`, the source was `sales`, and the preview mode
+was `全部` with the sample-size input disabled. This proves bidirectional
+semantic import for the observed Version 0.0 shape, in addition to exact bytes
+for the generated fixture. The transferred file, generated profile subfolder,
+container and anonymous volumes were removed after verification.
+
 ## Boundaries
 
 This round did not complete an automated reference drag operation, every
-stage's specialized create tool, every visual Explain operator/shape,
+stage's editor template and option execution, every visual Explain operator/shape,
 automatic-task references, export of every result type, saved-pipeline
 reopening, concurrent peer changes, all server/topology variants, or
 Windows/Linux reference layouts. OpenNavicat's

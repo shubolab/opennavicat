@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 from bson import Decimal128, Int64
+import hashlib
+import json
 import pytest
 
 from opennavicat.database import DatabaseError
@@ -32,15 +34,128 @@ def test_nagg_roundtrip_preserves_bson_and_disabled_stages():
         ], selected_stage=1)
     text = to_nagg(definition)
     restored = from_nagg(text)
-    assert restored == definition
+    assert restored.source == definition.source
+    assert restored.stages == definition.stages
+    assert restored.sample_mode == definition.sample_mode
+    assert restored.sample_size == definition.sample_size
+    assert restored.name == "" and restored.selected_stage == 0
     assert restored.stages[0].body["_id"] == Int64(5)
     assert restored.stages[1].body["amount"] == Decimal128("1.25")
     assert restored.stages[1].enabled is False
+    document = json.loads(text)
+    assert list(document) == [
+        "Version", "Collection", "PreviewSourceOption", "Stages", "Option"]
+    assert document["Version"] == "0.0"
+    assert document["Collection"] == "docs"
+    assert document["PreviewSourceOption"] == {"SampleMode": 1, "SampleSize": 25}
+    assert document["Stages"][0]["MQL"].startswith('{"_id":{"$numberLong":"5"}}')
     assert '"$numberLong": "5"' in pipeline_script(definition)
 
 
+def test_reference_version_0_nagg_imports_observed_lookup_and_sample_modes():
+    document = {
+        "Version": "0.0",
+        "Collection": "sales",
+        "PreviewSourceOption": {"SampleMode": 0, "SampleSize": 1000},
+        "Stages": [
+            {
+                "Op": "$lookup",
+                "MQL": '{"from":"customers","localField":"customer","foreignField":"customer","as":"customer_docs"}',
+                "Enabled": True,
+            },
+            {"Op": "$limit", "MQL": "2", "Enabled": True},
+        ],
+        "Option": {
+            "allowDiskUse": 0,
+            "cursorBatchSize": -1,
+            "maxTimeMS": 1200,
+            "bypassDocumentValidation": 0,
+            "readConcernLevel": 0,
+            "locale": "zh",
+            "caseLevel": 0,
+            "caseFirst": 0,
+            "strength": 3,
+            "numericOrdering": 0,
+            "alternate": 0,
+            "maxVariable": 0,
+            "backwards": 0,
+            "normalization": 0,
+            "hint": "",
+            "comment": "generated reference",
+            "enableWriteConcern": False,
+            "w": "",
+            "j": 0,
+            "wtimeout": 0,
+            "let": "",
+        },
+        "GeneratedExtension": {"preserved": True},
+    }
+    definition = from_nagg(json.dumps(document, separators=(",", ":")))
+    assert definition.source == "sales"
+    assert definition.sample_mode == "all" and definition.sample_size == 1000
+    assert definition.stages[0].operator == "$lookup"
+    assert definition.stages[0].body == {
+        "from": "customers", "localField": "customer",
+        "foreignField": "customer", "as": "customer_docs"}
+    assert definition.stages[1].body == 2
+    assert definition.reference_options == {
+        "maxTimeMS": 1200, "locale": "zh", "strength": 3, "comment": "generated reference"}
+    assert definition.reference_extra == {"GeneratedExtension": {"preserved": True}}
+    exported = json.loads(to_nagg(definition))
+    assert exported["PreviewSourceOption"]["SampleMode"] == 0
+    assert exported["Option"]["maxTimeMS"] == 1200
+    assert exported["Option"]["comment"] == "generated reference"
+    assert exported["GeneratedExtension"] == {"preserved": True}
+
+
+def test_reference_nagg_export_matches_observed_lookup_bytes():
+    definition = PipelineDefinition(
+        source="sales", sample_mode="all", sample_size=1000,
+        stages=[PipelineStage("$lookup", {
+            "from": "customers", "localField": "customer",
+            "foreignField": "customer", "as": "customer_docs"})])
+    encoded = to_nagg(definition).encode("utf-8")
+    assert len(encoded) == 588
+    assert hashlib.sha256(encoded).hexdigest() == (
+        "bde5e0bc931dcdab5d922fa5cf0f19f4da148639d23001c52fb414838900dd0a")
+
+
+def test_reference_nagg_preserves_stage_extensions_and_exact_bson():
+    definition = PipelineDefinition(
+        source="sales", sample_mode="random", sample_size=50,
+        stages=[PipelineStage(
+            "$match", {"_id": {"$gt": Int64(7)}, "amount": Decimal128("1.25")},
+            reference_extra={"StageExtension": {"future": True}})])
+    restored = from_nagg(to_nagg(definition))
+    assert restored == definition
+    assert restored.stages[0].reference_extra == {"StageExtension": {"future": True}}
+    assert restored.stages[0].body["_id"]["$gt"] == Int64(7)
+    assert restored.stages[0].body["amount"] == Decimal128("1.25")
+
+
+def test_legacy_opennavicat_nagg_remains_importable():
+    legacy = json.dumps({
+        "format": "opennavicat-nagg-v1",
+        "name": "legacy_pipeline",
+        "source": "sales",
+        "sampleMode": "first",
+        "sampleSize": 12,
+        "selectedStage": 0,
+        "stages": [{
+            "operator": "$limit",
+            "body": 12,
+            "enabled": True,
+            "stageId": "legacy-stage",
+        }],
+    })
+    restored = from_nagg(legacy)
+    assert restored.name == "legacy_pipeline"
+    assert restored.sample_mode == "first" and restored.sample_size == 12
+    assert restored.stages[0].body == 12
+
+
 def test_nagg_and_query_import_reject_partial_or_ambiguous_stages():
-    with pytest.raises(DatabaseError, match="OpenNavicat"):
+    with pytest.raises(DatabaseError, match="aggregation pipeline"):
         from_nagg('{"format":"other","stages":[]}')
     with pytest.raises(DatabaseError, match="one-field"):
         parse_query_pipeline("docs", '[{"$match":{},"$limit":1}]')
@@ -103,6 +218,11 @@ def test_real_pipeline_preview_execute_and_explain(session):
     assert len(preview.final_rows) == 1
     rows, truncated = execute_pipeline(session, session.config.database, definition)
     assert rows == preview.final_rows and not truncated
+    all_preview = preview_pipeline(session, session.config.database, PipelineDefinition(
+        source="pipeline_source", sample_mode="all", sample_size=1,
+        stages=[PipelineStage("$match", {"group": "north"})]), limit=20)
+    assert len(all_preview.source_rows) == 3
+    assert all_preview.stages[-1]["rows"] == preview.stages[0]["rows"]
     plan = explain_pipeline(session, session.config.database, definition)
     assert plan.root is not None
     assert "executionStats" in plan.raw
@@ -141,6 +261,6 @@ def test_store_persists_pipeline_per_connection_and_schema(tmp_path):
     restarted = Store(tmp_path / "workspace")
     restored = restarted.mongo_pipeline(entry["id"])
     assert restored["name"] == "renamed_pipeline"
-    assert from_nagg(restored["nagg"]).name == "renamed_pipeline"
+    assert from_nagg(restored["nagg"]).source == "docs"
     restarted.delete_mongo_pipeline(entry["id"])
     assert Store(tmp_path / "workspace").mongo_pipeline(entry["id"]) is None

@@ -37,6 +37,7 @@ from .. import mongodb_collection_copy as mongo_collection_copy_tools
 from .. import mongodb_collection_maintenance as mongo_maintenance_tools
 from .. import mongodb_timeseries as mongo_timeseries_tools
 from .. import mongodb_views as mongo_view_tools
+from .. import mongodb_pipeline as mongo_pipeline_tools
 from ..mongodb_session import MongoConflictError
 from .connection_manager import ConnectionManagerDialog
 from .dialogs import ConnectionDialog, RowDialog, TableDesignerDialog, confirm_ssh_host_key
@@ -61,9 +62,10 @@ from .mongo_collection_designer import (
 from .mongo_timeseries_designer import MongoTimeSeriesDesignerPage
 from .mongo_view_designer import MongoViewDesignerPage, MongoViewDropDialog
 from .mongo_maintenance import MongoMaintenanceConfirmDialog, MongoMaintenanceResultDialog
+from .mongo_pipeline import MongoPipelinePage
 
 DESIGNER_PAGES = (TableDesignerPage, IndexDesignerPage, TriggerDesignerPage, MongoIndexDesignerPage, MongoCollectionDesignerPage, MongoTimeSeriesDesignerPage, MongoViewDesignerPage)
-MONGO_PAGES = (MongoCollectionPage, MongoGridFSPage)
+MONGO_PAGES = (MongoCollectionPage, MongoGridFSPage, MongoPipelinePage)
 
 
 @dataclass(frozen=True)
@@ -497,6 +499,7 @@ class MainWindow(QMainWindow):
         self._mongo_collection_jobs = {}
         self._mongo_timeseries_jobs = {}
         self._mongo_view_jobs = {}
+        self._mongo_pipeline_jobs = {}
         self._mongo_index_delete_dialogs = {}
         self._mongo_collection_operation_dialogs = {}
         self._mongo_view_drop_dialogs = {}
@@ -580,9 +583,10 @@ class MainWindow(QMainWindow):
             toolbar.addAction(action)
             self.category_actions[kind] = action
         self.category_actions["table"].setChecked(True)
-        self.mongo_pipeline_action = self.action("管道", lambda: self.show_objects("mongo_pipeline"), icon="query")
+        self.mongo_pipeline_action = self.action("管道", self.new_mongo_pipeline, icon="query")
+        self.mongo_pipeline_action.setCheckable(True)
         self.mongo_pipeline_action.setEnabled(False)
-        self.mongo_pipeline_action.setToolTip("MongoDB 可视化聚合管道设计器尚未实现")
+        self.mongo_pipeline_action.setToolTip("新建 MongoDB 可视化聚合管道")
         self.mongo_pipeline_action.setVisible(False)
         toolbar.insertAction(self.category_actions["query"], self.mongo_pipeline_action)
         spacer = QWidget()
@@ -781,6 +785,7 @@ class MainWindow(QMainWindow):
             if action.isCheckable():
                 action.setChecked(key == kind or {"table": "mongo_collection", "view": "mongo_view",
                     "index": "mongo_index"}.get(key) == kind)
+        self.mongo_pipeline_action.setChecked(kind == "mongo_pipeline")
         self.tabs.setCurrentWidget(self.object_page)
         self.object_page.set_context(self.active_id, self.active_schema, kind)
 
@@ -926,6 +931,9 @@ class MainWindow(QMainWindow):
             if info["kind"] == "mongo_view":
                 return self.open_mongo_view_designer(
                     info["id"], info["schema"], info.get("name", info.get("table", "")))
+            if info["kind"] == "mongo_pipeline":
+                return self.open_mongo_pipeline(
+                    info["id"], info["schema"], pipeline_id=info.get("pipeline_id"))
             self.statusBar().showMessage("此 MongoDB 对象仍使用只读结构视图；专用设计器仍待实现。", 5000)
             return None
         if config and config.driver == "sqlite":
@@ -1035,6 +1043,8 @@ class MainWindow(QMainWindow):
             return self.open_mongo_collection_designer(self.object_page.connection_id, self.object_page.schema)
         if self.object_page.kind == "mongo_view":
             return self.new_mongo_view()
+        if self.object_page.kind == "mongo_pipeline":
+            return self.new_mongo_pipeline()
         if self.object_page.kind in {"index", "trigger"}:
             return self.open_object_designer(self.active_id, self.active_schema, self.object_page.kind)
         return self.new_table()
@@ -2028,6 +2038,224 @@ class MainWindow(QMainWindow):
                 if (self.object_page.connection_id, self.object_page.schema) == (connection_id, schema):
                     self.object_page.refresh()
         self.when_idle(refresh)
+
+    def new_mongo_pipeline(self):
+        connection_id = self.object_page.connection_id or self.active_id
+        schema = self.object_page.schema or self.active_schema
+        return self.open_mongo_pipeline(connection_id, schema)
+
+    def open_mongo_pipeline(self, connection_id, schema, pipeline_id=None, *, restore=False):
+        config = self.configs.get(connection_id)
+        if (self._closed or not config or config.driver != "mongodb" or self._closing_mongo
+                or connection_id in self._closing_connections):
+            return None
+        session = self.sessions.get(connection_id)
+        if session is None and not restore:
+            return None
+        if pipeline_id:
+            for index in range(self.tabs.count()):
+                existing = self.tabs.widget(index)
+                if isinstance(existing, MongoPipelinePage) and existing.pipeline_id == pipeline_id:
+                    self.tabs.setCurrentWidget(existing)
+                    return existing
+        page = MongoPipelinePage(connection_id, schema)
+        page.suppress_save_preview = self.store.state.get("suppress_pipeline_save_preview") is True
+        page.previewRequested.connect(lambda definition: self.preview_mongo_pipeline(page, definition))
+        page.runRequested.connect(lambda definition: self.run_mongo_pipeline(page, definition))
+        page.explainRequested.connect(lambda definition: self.explain_mongo_pipeline(page, definition))
+        page.saveRequested.connect(lambda definition: self.save_mongo_pipeline(page, definition))
+        page.importRequested.connect(lambda: self.import_mongo_pipeline(page))
+        page.exportRequested.connect(lambda: self.export_mongo_pipeline(page))
+        page.focusRequested.connect(lambda enabled: self.focus_workspace(page, enabled))
+        page.titleChanged.connect(lambda _title: self.update_mongo_pipeline_title(page))
+        page.dirtyChanged.connect(lambda _dirty: self.refresh_actions())
+        self.tabs.addTab(page, workbench_icon("query", 20), "无标题")
+        self.tabs.setCurrentWidget(page)
+        if pipeline_id:
+            entry = self.store.mongo_pipeline(pipeline_id)
+            if entry is None:
+                page.show_error(DatabaseError("The saved aggregation pipeline no longer exists"))
+            else:
+                page.load_nagg(entry["nagg"], pipeline_id=pipeline_id)
+                self.store.touch_mongo_pipeline(pipeline_id)
+        else:
+            page.load_definition(mongo_pipeline_tools.PipelineDefinition())
+        self.update_mongo_pipeline_title(page)
+        if session is not None:
+            self.load_mongo_pipeline_sources(page)
+        return page
+
+    def update_mongo_pipeline_title(self, page):
+        index = self.tabs.indexOf(page)
+        if index < 0:
+            return
+        config = self.configs.get(page.connection_id)
+        title = f"{page.title}@{page.schema} ({config.name if config else ''})"
+        self.tabs.setTabText(index, title)
+        self.tabs.setTabToolTip(index, title)
+        if self.tabs.currentWidget() is page:
+            self.setWindowTitle(title)
+            self.inspector.show_object({
+                "name": page.definition.name or "无标题", "schema": page.schema,
+                "kind": "mongo_pipeline", "source": page.definition.source,
+                "stages": len(page.definition.stages)}, config)
+
+    def _pipeline_page_alive(self, page):
+        return isValid(page) and self.tabs.indexOf(page) >= 0 and not self._closed
+
+    def _pipeline_session_current(self, connection_id, session):
+        return (not self._closed and not self._closing_mongo
+                and connection_id not in self._closing_connections
+                and self.sessions.get(connection_id) is session)
+
+    def load_mongo_pipeline_sources(self, page):
+        session = self.sessions.get(page.connection_id)
+        if (not self._pipeline_page_alive(page) or session is None
+                or not self._pipeline_session_current(page.connection_id, session)):
+            return
+        page.loading = True; page._update_controls()
+        def work():
+            return [obj["name"] for obj in session.objects(page.schema)
+                    if obj["kind"] in {"mongo_collection", "mongo_timeseries", "mongo_view"}
+                    and not obj.get("system")]
+        def done(sources):
+            if self._pipeline_page_alive(page) and self._pipeline_session_current(page.connection_id, session):
+                page.loading = False; page.set_sources(sources); page._update_controls()
+                if not page.definition.source and sources:
+                    page.source_combo.setCurrentText(sources[0])
+        def failed(error):
+            if self._pipeline_page_alive(page):
+                page.loading = False; page._update_controls(); page.show_error(error)
+        self.submit(work, done, failed, label="读取聚合管线源集合")
+
+    def _run_mongo_pipeline_job(self, page, label, work, done, failed):
+        session = self.sessions.get(page.connection_id)
+        if (not self._pipeline_page_alive(page) or session is None or page.running
+                or not self._pipeline_session_current(page.connection_id, session)
+                or self._cancelling):
+            return False
+        token = uuid.uuid4().hex
+        cancelled, started = threading.Event(), threading.Event()
+        self._mongo_pipeline_jobs[token] = (session, cancelled, started)
+        page.set_running(True)
+        self.refresh_actions()
+        def execute():
+            started.set()
+            if cancelled.is_set():
+                raise DatabaseError("The aggregation-pipeline request was cancelled before dispatch")
+            return work()
+        def success(value):
+            if self._pipeline_page_alive(page) and self._pipeline_session_current(page.connection_id, session):
+                done(value)
+        def failure(error):
+            if self._pipeline_page_alive(page):
+                failed(error)
+        def finished():
+            self._mongo_pipeline_jobs.pop(token, None)
+            if self._pipeline_page_alive(page):
+                page.set_running(False)
+            self.refresh_actions()
+        self.submit(execute, success, failure, label=label, finished=finished)
+        return True
+
+    def preview_mongo_pipeline(self, page, definition):
+        database = page.schema
+        return self._run_mongo_pipeline_job(
+            page, "预览聚合管线",
+            lambda: mongo_pipeline_tools.preview_pipeline(self.sessions[page.connection_id], database, definition),
+            page.show_preview, page.show_error)
+
+    def run_mongo_pipeline(self, page, definition):
+        if any(stage.operator in mongo_pipeline_tools.WRITE_STAGES
+               for stage in definition.stages if stage.enabled):
+            if QMessageBox.question(
+                    self, "运行写入阶段",
+                    "此管线包含 $out 或 $merge，会写入数据库。是否继续？") != QMessageBox.StandardButton.Yes:
+                return False
+        database = page.schema
+        return self._run_mongo_pipeline_job(
+            page, "运行聚合管线",
+            lambda: mongo_pipeline_tools.execute_pipeline(
+                self.sessions[page.connection_id], database, definition),
+            lambda result: page.show_execution(*result), page.show_error)
+
+    def explain_mongo_pipeline(self, page, definition):
+        database = page.schema
+        return self._run_mongo_pipeline_job(
+            page, "解释聚合管线",
+            lambda: mongo_pipeline_tools.explain_pipeline(
+                self.sessions[page.connection_id], database, definition),
+            page.show_explain, page.show_error)
+
+    def save_mongo_pipeline(self, page, definition):
+        try:
+            text = mongo_pipeline_tools.to_nagg(definition)
+            entry = self.store.save_mongo_pipeline(
+                page.connection_id, page.schema, definition.name, text, pipeline_id=page.pipeline_id)
+            saved = mongo_pipeline_tools.from_nagg(entry["nagg"])
+        except Exception as error:
+            page.show_error(error)
+            return None
+        page.mark_saved(saved, entry["id"])
+        self.store.state["suppress_pipeline_save_preview"] = page.suppress_save_preview
+        self.store.flush()
+        self.update_mongo_pipeline_title(page)
+        if (self.object_page.connection_id, self.object_page.schema, self.object_page.kind) == (
+                page.connection_id, page.schema, "mongo_pipeline"):
+            self.object_page.refresh()
+        return entry
+
+    def import_mongo_pipeline(self, page):
+        filename, _ = QFileDialog.getOpenFileName(
+            self, "导入聚合管线", "", "Aggregation pipelines (*.nagg *.json *.js);;All files (*)")
+        if not filename:
+            return
+        try:
+            path = Path(filename)
+            if path.stat().st_size > 4 * 1024 * 1024:
+                raise DatabaseError("The imported aggregation pipeline exceeds 4 MiB")
+            text = path.read_text("utf-8")
+            try:
+                definition = mongo_pipeline_tools.from_nagg(text)
+            except DatabaseError:
+                source = page.definition.source or page.source_combo.currentText().strip()
+                definition = mongo_pipeline_tools.parse_query_pipeline(source, text)
+            page.load_definition(definition)
+            self.update_mongo_pipeline_title(page)
+        except Exception as error:
+            page.show_error(error)
+
+    def export_mongo_pipeline(self, page):
+        if not page.last_rows:
+            return
+        filename, _ = QFileDialog.getSaveFileName(
+            self, "导出聚合结果", "pipeline-results.json", "JSON files (*.json)")
+        if not filename:
+            return
+        try:
+            rows = json.loads("[" + ",".join(page.last_rows) + "]")
+            Path(filename).write_text(
+                json.dumps(rows, ensure_ascii=False, indent=2) + "\n", "utf-8")
+        except Exception as error:
+            page.show_error(error)
+
+    def delete_mongo_pipeline(self, info):
+        pipeline_id = info.get("pipeline_id")
+        if not pipeline_id:
+            return
+        if QMessageBox.question(
+                self, "删除聚合管道", f"永久删除聚合管道“{info.get('name', '')}”？") != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            self.store.delete_mongo_pipeline(pipeline_id)
+        except Exception as error:
+            self.error(error)
+            return
+        for index in range(self.tabs.count() - 1, -1, -1):
+            page = self.tabs.widget(index)
+            if isinstance(page, MongoPipelinePage) and page.pipeline_id == pipeline_id:
+                self.tabs.removeTab(index)
+        self.object_page.refresh()
 
     def new_mongo_view(self):
         return self.open_mongo_view_designer(self.object_page.connection_id, self.object_page.schema)
@@ -3078,6 +3306,9 @@ class MainWindow(QMainWindow):
             self.show_objects(info.get("kind", "table"))
 
     def open_table(self, info):
+        if info["kind"] == "mongo_pipeline":
+            return self.open_mongo_pipeline(
+                info["id"], info["schema"], pipeline_id=info.get("pipeline_id"))
         if info["kind"] == "mongo_index":
             return self.design_object(info)
         if info["kind"] == "redis_data":
@@ -3317,7 +3548,8 @@ class MainWindow(QMainWindow):
                             targets[id(session)] = (session, marker)
                     else:
                         targets[id(session)] = (session, dynamic)
-        for jobs in (self._mongo_index_jobs, self._mongo_collection_jobs, self._mongo_timeseries_jobs, self._mongo_view_jobs):
+        for jobs in (self._mongo_index_jobs, self._mongo_collection_jobs,
+                     self._mongo_timeseries_jobs, self._mongo_view_jobs, self._mongo_pipeline_jobs):
             for session, cancelled, started in tuple(jobs.values()):
                 cancelled.set()
                 if started.is_set() and id(session) not in targets:
@@ -3351,10 +3583,13 @@ class MainWindow(QMainWindow):
         if isinstance(page, DESIGNER_PAGES):
             self.set_active(page.connection_id, page.schema)
             self.update_designer_title(page)
+        if isinstance(page, MongoPipelinePage):
+            self.set_active(page.connection_id, page.schema)
+            self.update_mongo_pipeline_title(page)
         if isinstance(page, RedisBrowserPage):
             self.set_active(page.connection_id, page.schema)
             self.update_redis_title(page)
-        if isinstance(page, MONGO_PAGES):
+        if isinstance(page, (MongoCollectionPage, MongoGridFSPage)):
             self.set_active(page.connection_id, page.database)
             self.update_mongo_title(page)
         if isinstance(page, (QueryPage, TablePage)):
@@ -3390,6 +3625,9 @@ class MainWindow(QMainWindow):
             self.category_actions["trigger"].setVisible(sqlite)
             self.category_actions["backup"].setVisible(not mongo)
             self.mongo_pipeline_action.setVisible(mongo)
+            self.mongo_pipeline_action.setEnabled(connected)
+            if not mongo:
+                self.mongo_pipeline_action.setChecked(False)
             for key in ("table", "view", "index", "trigger", "query", "backup", "model", "other"):
                 self.category_actions[key].setEnabled(connected)
             other = self.category_actions["other"]
@@ -3411,7 +3649,7 @@ class MainWindow(QMainWindow):
         if hasattr(self, "object_page"):
             self.object_page.update_actions()
         self.run_action.setEnabled(isinstance(page, QueryPage) and not page.running)
-        self.stop_action.setEnabled(not self._cancelling and (bool(self._mongo_index_jobs) or bool(self._mongo_collection_jobs) or bool(self._mongo_timeseries_jobs) or bool(self._mongo_view_jobs) or
+        self.stop_action.setEnabled(not self._cancelling and (bool(self._mongo_index_jobs) or bool(self._mongo_collection_jobs) or bool(self._mongo_timeseries_jobs) or bool(self._mongo_view_jobs) or bool(self._mongo_pipeline_jobs) or
             any(isinstance(self.tabs.widget(i), QueryPage) and self.tabs.widget(i).running for i in range(self.tabs.count()))))
         self.import_action.setEnabled(isinstance(page, TablePage) and page.kind == "table" and not self.configs[page.connection_id].read_only)
         self.export_action.setEnabled(isinstance(page, (QueryPage, TablePage)) and page.current_result() is not None)
@@ -3422,9 +3660,12 @@ class MainWindow(QMainWindow):
             self.status.setText(f"{len(page.current_result().rows)} 条记录")
         elif isinstance(page, TablePage) and page.model is not None and not page.loading:
             self.status.setText(f"{page.total} 条记录在第 {page.offset // int(page.page_size.currentText()) + 1} 页")
-        elif isinstance(page, MONGO_PAGES) and page.page is not None and not page.loading:
+        elif isinstance(page, (MongoCollectionPage, MongoGridFSPage)) and page.page is not None and not page.loading:
             unit = "文件" if isinstance(page, MongoGridFSPage) else "文档"
             self.status.setText(f"本页 {len(page.page.documents)} 个{unit}" + (" · 已编辑" if page.dirty else ""))
+        elif isinstance(page, MongoPipelinePage):
+            self.status.setText(
+                f"{len(page.definition.stages)} 个阶段" + (" · 已编辑" if page.dirty else ""))
         elif isinstance(page, DESIGNER_PAGES) and page.definition is not None and not page.loading:
             if isinstance(page, MongoCollectionDesignerPage):
                 label = f"集合选项: {len(page.definition.options)}"

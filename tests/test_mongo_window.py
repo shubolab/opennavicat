@@ -28,6 +28,7 @@ from opennavicat.ui.mongo_index_designer import MongoIndexDesignerPage
 from opennavicat.ui.mongo_view_designer import MongoViewDesignerPage
 from opennavicat.ui.mongo_timeseries_designer import MongoTimeSeriesDesignerPage
 from opennavicat.ui.mongo_maintenance import MongoMaintenanceConfirmDialog, MongoMaintenanceResultDialog
+from opennavicat.ui.mongo_pipeline import MongoPipelinePage
 from opennavicat.ui.window import MainWindow, TablePage
 from test_mongodb_session import mongodb_service  # Reuse the owned-container fixture contract.
 
@@ -138,6 +139,54 @@ def test_real_window_mongo_tree_statistics_typed_page_and_sqlite_switch(qtbot, m
     assert browser.table.columnCount() == 5 and window.category_actions["table"].text() == "表"
     assert window.category_actions["trigger"].isVisible() and not window.mongo_pipeline_action.isVisible()
     assert threads and not errors
+
+
+def test_real_aggregation_pipeline_preview_run_explain_and_saved_object(qtbot, mongo_window):
+    window, config, database, schema, errors, threads = mongo_window
+    assert window.mongo_pipeline_action.isVisible() and window.mongo_pipeline_action.isEnabled()
+    page = window.open_mongo_pipeline(config.id, config.database)
+    assert isinstance(page, MongoPipelinePage)
+    qtbot.waitUntil(lambda: 'docs' in page._sources, timeout=15000)
+    idle(qtbot, window)
+    page.source_combo.setCurrentText('docs')
+    page.stage_editor.setPlainText('{"_id":{"$gte":4}}')
+    page.add_stage()
+    page.operator_combo.setCurrentText('$group')
+    page.stage_editor.setPlainText('{"_id":null,"count":{"$sum":1}}')
+    definition = page.draft()
+    assert window.preview_mongo_pipeline(page, definition)
+    qtbot.waitUntil(lambda: page._preview is not None and not page.running, timeout=15000)
+    idle(qtbot, window)
+    assert len(page._preview.source_rows) == 6
+    assert len(page._preview.final_rows) == 1
+    assert canonical_loads(page._preview.final_rows[0])['count'] == 2
+
+    assert window.run_mongo_pipeline(page, page.draft())
+    qtbot.waitUntil(lambda: bool(page.last_rows) and not page.running, timeout=15000)
+    idle(qtbot, window)
+    assert canonical_loads(page.last_rows[0])['count'] == 2
+    assert window.explain_mongo_pipeline(page, page.draft())
+    qtbot.waitUntil(lambda: 'executionStats' in page.messages.toPlainText() and not page.running, timeout=15000)
+    idle(qtbot, window)
+    assert '$group' in page.messages.toPlainText()
+
+    definition = page.draft(); definition.name = 'generated_pipeline'
+    saved = window.save_mongo_pipeline(page, definition)
+    assert saved is not None and page.pipeline_id == saved['id']
+    assert window.store.mongo_pipeline(saved['id'])['source'] == 'docs'
+    window.show_objects('mongo_pipeline')
+    qtbot.waitUntil(lambda: any(entry['name'] == 'generated_pipeline' for entry in window.object_page.records), timeout=15000)
+    idle(qtbot, window)
+    assert window.object_page.table.columnCount() == 7
+    assert [window.object_page.table.horizontalHeaderItem(i).text() for i in range(7)] == [
+        '名称', '文件大小', '创建的用户', '创建日期', '修改的用户', '修改日期', '访问时间']
+    window.close_tab(window.tabs.indexOf(page))
+    reopened = window.open_mongo_pipeline(config.id, config.database, pipeline_id=saved['id'])
+    assert reopened is not None and reopened is not page
+    assert reopened.definition.name == 'generated_pipeline'
+    assert reopened.definition.source == 'docs'
+    assert len(reopened.definition.stages) == 2
+    assert not errors and threads
 
 
 def test_real_collection_designer_creates_and_collmods_with_worker_owned_io(qtbot, mongo_window):

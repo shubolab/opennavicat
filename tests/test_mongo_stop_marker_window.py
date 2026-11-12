@@ -132,3 +132,31 @@ def test_two_running_query_documents_share_one_marker_bound_control_request(cont
         pending[0].finish()
     finally:
         other.running = False
+
+
+def test_pipeline_job_stop_uses_exact_operation_marker(controlled):
+    import threading
+
+    from opennavicat.ui.mongo_pipeline import MongoPipelinePage
+
+    window, _query_page, session, control, pending = controlled
+    pipeline = MongoPipelinePage(session.config.id, session.config.database)
+    window.tabs.addTab(pipeline, "Generated pipeline")
+    cancelled, started = threading.Event(), threading.Event()
+    started.set()
+    window._mongo_pipeline_jobs["pipeline-job"] = (session, cancelled, started)
+    try:
+        with session._operation() as marker:
+            control.operations["pipeline"] = marker
+            window.stop()
+            assert cancelled.is_set()
+            assert len(pending) == 1
+            pending[0].run()
+            assert control.killed == ["pipeline"]
+            assert control.closed_cursors == 1
+            assert control.queries[0][1]["$match"]["command.comment"] == marker
+        pending[0].finish()
+        assert not window._cancelling
+    finally:
+        window._mongo_pipeline_jobs.clear()
+        pipeline.running = False

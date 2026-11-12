@@ -109,7 +109,7 @@
     "dependency_command_stub_tests": 16,
     "all_protocol_source_hashes_match": true
   },
-  "updated_at": "2026-11-12T16:03:50.760985+08:00",
+  "updated_at": "2026-11-12T16:54:12.234089+08:00",
   "ci_after_storage": {
     "id": 43051367511,
     "source_sha": "7c65c70d6822cf7607cceaa06a860b1561893a53",
@@ -321,16 +321,17 @@
     "source_smoke_passed": true
   },
   "latest_main_demo": {
-    "frames": 253,
-    "duration_seconds": 42.17,
-    "sha256": "4e9349e6e346e202672381532b8943601b3ea9b94a63305eeef5523e57dddeaa",
-    "phases": 19,
+    "frames": 290,
+    "duration_seconds": 48.34,
+    "sha256": "380c4266e357469a4f54d62814b8b572f308afd8f1ab96d8f2250ea152db9bca",
+    "phases": 22,
     "inline_index_key_editor": true,
     "visual_privacy_reviewed": true,
     "latest_public_installer": "v0.10.0",
     "structured_collation_editor": true,
     "structured_collation_save_and_readonly_readback": true,
-    "collection_options": true
+    "collection_options": true,
+    "aggregation_pipeline": true
   },
   "collation_ui": {
     "document": "../mongodb-collation-ui.md",
@@ -385,5 +386,33 @@
     "visual_privacy_reviewed": true,
     "windows_linux_reference_open": true,
     "other_mongodb_versions_open": true
+  },
+  "mongo_pipeline": {
+    "document": "../mongodb-pipeline.md",
+    "runtime_reference": "../ui-reference-18-mongodb-pipeline.md",
+    "stage_catalog": 42,
+    "source_selection_and_sample_options": true,
+    "stage_add_delete_move_enable": true,
+    "per_stage_preview": true,
+    "script_preview": true,
+    "run_and_explain": true,
+    "cancel_exact_operation": true,
+    "canonical_ejson_export": true,
+    "local_nagg_save_and_reopen": true,
+    "reference_nagg_compatibility_open": true,
+    "stage_drag_and_specialized_tools_open": true,
+    "visual_explain_and_automation_open": true,
+    "collection_runner_passed": 268,
+    "collection_runner_fixtures": 8,
+    "native_cocoa_passed": 5,
+    "full_source_passed": 1801,
+    "full_source_skipped": 561,
+    "source_smoke_passed": true,
+    "recorded_demo_phases": 22,
+    "recorded_demo_frames": 290,
+    "recorded_demo_duration_seconds": 48.34,
+    "recorded_demo_sha256": "380c4266e357469a4f54d62814b8b572f308afd8f1ab96d8f2250ea152db9bca",
+    "visual_privacy_reviewed": true,
+    "windows_linux_reference_open": true
   }
 }

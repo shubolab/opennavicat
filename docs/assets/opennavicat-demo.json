@@ -10,8 +10,8 @@
     900
   ],
   "fps": 6,
-  "frames": 253,
-  "duration_seconds": 42.17,
+  "frames": 290,
+  "duration_seconds": 48.34,
   "loop": "infinite",
   "data": "All profiles, customer/product data, email addresses, BSON, dates, SQL and images are generated for this demo",
   "connection_name": "演示数据库 · 示例数据",
@@ -72,20 +72,20 @@
         900
       ],
       "fit": "existing_main_window_scale",
-      "frames": 16,
-      "privacy_checked_frames": 16
+      "frames": 15,
+      "privacy_checked_frames": 15
     },
     {
       "name": "table_designer",
-      "first_frame": 55,
+      "first_frame": 54,
       "surface": "main_window",
       "source_size_logical": [
         1440,
         900
       ],
       "fit": "existing_main_window_scale",
-      "frames": 11,
-      "privacy_checked_frames": 11
+      "frames": 12,
+      "privacy_checked_frames": 12
     },
     {
       "name": "designer_sql_preview",
@@ -96,24 +96,24 @@
         900
       ],
       "fit": "existing_main_window_scale",
-      "frames": 17,
-      "privacy_checked_frames": 17
+      "frames": 16,
+      "privacy_checked_frames": 16
     },
     {
       "name": "mongodb_collection_grid",
-      "first_frame": 83,
+      "first_frame": 82,
       "surface": "main_window",
       "source_size_logical": [
         1440,
         900
       ],
       "fit": "existing_main_window_scale",
-      "frames": 14,
-      "privacy_checked_frames": 14
+      "frames": 13,
+      "privacy_checked_frames": 13
     },
     {
       "name": "mongodb_typed_tree",
-      "first_frame": 97,
+      "first_frame": 95,
       "surface": "main_window",
       "source_size_logical": [
         1440,
@@ -125,19 +125,19 @@
     },
     {
       "name": "mongodb_gridfs_preview",
-      "first_frame": 110,
+      "first_frame": 108,
       "surface": "main_window",
       "source_size_logical": [
         1440,
         900
       ],
       "fit": "existing_main_window_scale",
-      "frames": 13,
-      "privacy_checked_frames": 13
+      "frames": 14,
+      "privacy_checked_frames": 14
     },
     {
       "name": "mongodb_javascript_editor",
-      "first_frame": 123,
+      "first_frame": 122,
       "surface": "main_window",
       "source_size_logical": [
         1440,
@@ -149,15 +149,15 @@
     },
     {
       "name": "mongodb_javascript_results",
-      "first_frame": 136,
+      "first_frame": 135,
       "surface": "main_window",
       "source_size_logical": [
         1440,
         900
       ],
       "fit": "existing_main_window_scale",
-      "frames": 15,
-      "privacy_checked_frames": 15
+      "frames": 16,
+      "privacy_checked_frames": 16
     },
     {
       "name": "mongodb_collection_inline_index",
@@ -180,12 +180,12 @@
         320
       ],
       "fit": "keep_aspect_centered_neutral_letterbox",
-      "frames": 17,
-      "privacy_checked_frames": 17
+      "frames": 16,
+      "privacy_checked_frames": 16
     },
     {
       "name": "mongodb_collection_storage_engine",
-      "first_frame": 181,
+      "first_frame": 180,
       "surface": "main_window",
       "source_size_logical": [
         1440,
@@ -197,7 +197,7 @@
     },
     {
       "name": "mongodb_collection_index_defaults",
-      "first_frame": 191,
+      "first_frame": 190,
       "surface": "main_window",
       "source_size_logical": [
         1440,
@@ -209,7 +209,7 @@
     },
     {
       "name": "mongodb_collection_options",
-      "first_frame": 201,
+      "first_frame": 200,
       "surface": "main_window",
       "source_size_logical": [
         1440,
@@ -221,15 +221,15 @@
     },
     {
       "name": "mongodb_collection_collation",
-      "first_frame": 214,
+      "first_frame": 213,
       "surface": "main_window",
       "source_size_logical": [
         1440,
         900
       ],
       "fit": "existing_main_window_scale",
-      "frames": 12,
-      "privacy_checked_frames": 12
+      "frames": 13,
+      "privacy_checked_frames": 13
     },
     {
       "name": "mongodb_collection_storage_save_sheet",
@@ -246,6 +246,42 @@
     {
       "name": "mongodb_collection_options_reopened",
       "first_frame": 239,
+      "surface": "main_window",
+      "source_size_logical": [
+        1440,
+        900
+      ],
+      "fit": "existing_main_window_scale",
+      "frames": 11,
+      "privacy_checked_frames": 11
+    },
+    {
+      "name": "mongodb_aggregation_pipeline",
+      "first_frame": 250,
+      "surface": "main_window",
+      "source_size_logical": [
+        1440,
+        900
+      ],
+      "fit": "existing_main_window_scale",
+      "frames": 13,
+      "privacy_checked_frames": 13
+    },
+    {
+      "name": "mongodb_aggregation_pipeline_script",
+      "first_frame": 263,
+      "surface": "main_window",
+      "source_size_logical": [
+        1440,
+        900
+      ],
+      "fit": "existing_main_window_scale",
+      "frames": 13,
+      "privacy_checked_frames": 13
+    },
+    {
+      "name": "mongodb_aggregation_pipeline_results",
+      "first_frame": 276,
       "surface": "main_window",
       "source_size_logical": [
         1440,
@@ -306,17 +342,26 @@
   "mongodb_collection_storage_reopened_readonly": true,
   "mongodb_collection_options_reopened_readonly": true,
   "mongodb_collection_options_verified": true,
+  "mongodb_aggregation_pipeline_preview": {
+    "source_rows": 6,
+    "stage_rows": [
+      6,
+      1
+    ],
+    "final_rows": 1
+  },
+  "mongodb_aggregation_pipeline_results": 1,
   "visible_text_privacy_guard": "labels, editors, titles, actions, combos, tree/table display fields; paths/endpoints/credentials rejected before frame save",
   "sqlite_closed_in_worker": true,
   "native_window_closed_before_quit": true,
   "background_io_completed_before_quit": true,
-  "captured_nominal_duration_seconds": 42.167,
+  "captured_nominal_duration_seconds": 48.333,
   "gif_probe": {
-    "frames": 253,
-    "duration_seconds": 42.17,
+    "frames": 290,
+    "duration_seconds": 48.34,
     "r_frame_rate": "6/1",
     "avg_frame_rate": "25/4",
-    "effective_frames_per_second": 5.999526,
+    "effective_frames_per_second": 5.999173,
     "note": "GIF delays are quantized to centiseconds; fps is the requested capture rate."
   },
   "mongodb_service": {
@@ -329,8 +374,8 @@
     "credentials_generated_in_memory": true
   },
   "encoder": "ffmpeg version 9.0.2 Copyright (c) 2000-2026 the FFmpeg developers",
-  "gif_bytes": 1165654,
-  "gif_sha256": "4e9349e6e346e202672381532b8943601b3ea9b94a63305eeef5523e57dddeaa",
+  "gif_bytes": 1280236,
+  "gif_sha256": "380c4266e357469a4f54d62814b8b572f308afd8f1ab96d8f2250ea152db9bca",
   "temporary_workspace_removed": true,
   "temporary_frame_files_removed": true
 }

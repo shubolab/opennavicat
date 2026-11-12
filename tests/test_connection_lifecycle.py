@@ -308,6 +308,8 @@ def test_invalid_mongo_designer_save_cannot_leave_a_stale_close_retry(qtbot, hos
     page.load_snapshot(snapshot)
     w.tabs.addTab(page, 'Generated draft')
     page.name_edit.setText('generated_object')
+    if kind == 'collection':
+        page.validator_widget.mode_combo.setCurrentIndex(1)
     invalid.setText('invalid') if kind == 'timeseries' else invalid.setPlainText('{broken')
     assert page.dirty and page._invalid
     monkeypatch.setattr(QMessageBox, 'question', lambda *_a, **_k: QMessageBox.StandardButton.Save)

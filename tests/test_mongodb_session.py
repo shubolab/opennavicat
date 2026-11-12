@@ -31,6 +31,8 @@ from opennavicat.mongodb_session import (
 )
 
 
+MONGO_FIXTURE_IMAGE = "mongo:8.0.34@sha256:b9924c330a8bbc5800fe9c69f04a84e221eca7b28fd049a0354147d9908fa142"
+
 RICH_VALUES = [ObjectId(), Int64(1), Int64(9007199254740993), Binary(bytes(range(256)), 128),
     Decimal128('1.00'), Decimal128('-0.00'), Decimal128('1E-6176'), DatetimeMS(2**63-1),
     Timestamp(123, 4), Regex('a.*b', 'ims'), Code('return 1'), DBRef('docs', Int64(5), database='example'),
@@ -105,7 +107,7 @@ def mongodb_service(request):
     directory=os.environ.get('OPENNAVICAT_MONGODB_PROTOCOL_REPORT_DIR')
     report=Path(directory)/('fixture-'+token+'.json') if directory else None
     evidence=dict(module=request.module.__name__,run_id=run_id,container_name=name,owner_token=token,
-        owner_token_verified=False,cleanup_removed=False,image='mongo:8.0')
+        owner_token_verified=False,cleanup_removed=False,image=MONGO_FIXTURE_IMAGE)
     def receipt():
         if report:
             report.parent.mkdir(parents=True,exist_ok=True)
@@ -152,7 +154,7 @@ def mongodb_service(request):
         container=_docker('run','--detach','--name',name,'--label','opennavicat.test=true',
             '--label','opennavicat.task=mongodb-adapter-tests','--label','opennavicat.mongodb-protocol-fixture='+token,
             '--label','opennavicat.mongodb-protocol-run='+run_id,'--publish','127.0.0.1::27017',
-            '-e','MONGO_INITDB_ROOT_USERNAME=fixture','-e','MONGO_INITDB_ROOT_PASSWORD=fixture-password','mongo:8.0','--bind_ip_all')
+            '-e','MONGO_INITDB_ROOT_USERNAME=fixture','-e','MONGO_INITDB_ROOT_PASSWORD=fixture-password',MONGO_FIXTURE_IMAGE,'--bind_ip_all')
         evidence['container_id']=container
         receipt()
         info=owned_info(json.loads(_docker('inspect',container))[0])

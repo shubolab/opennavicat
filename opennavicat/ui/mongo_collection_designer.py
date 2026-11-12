@@ -22,6 +22,7 @@ from opennavicat.mongodb_session import BSON_CODEC, canonical_dumps, canonical_l
 from .editor import SqlEditor
 from .schema_object_designer import _ObjectDesignerPage
 from .table_designer import TableSaveDialog
+from .mongo_validator import MongoValidatorEditor
 
 
 def collection_error_text(error):
@@ -214,6 +215,8 @@ class MongoCollectionDesignerPage(_ObjectDesignerPage):
         self._invalid = {}
         self.index_rows = []
         self.toolbar.addSeparator()
+        self.validator_add_action = self._action('添加属性', 'add', self._add_validator_property)
+        self.validator_delete_action = self._action('删除属性', 'delete', self._delete_validator_property)
 
         self.general = QWidget()
         general = QVBoxLayout(self.general)
@@ -251,11 +254,11 @@ class MongoCollectionDesignerPage(_ObjectDesignerPage):
         self.action_combo = self._choice(
             form, '验证动作', [('', None), ('error', 'error'), ('warn', 'warn')])
         validation.addLayout(form)
-        validation.addWidget(QLabel('验证器（Canonical Extended JSON 文档）'))
-        self.validator_editor = self._document_editor()
-        self.validator_editor.textChanged.connect(
-            lambda: self._document_changed('validator', self.validator_editor))
-        validation.addWidget(self.validator_editor, 1)
+        self.validator_widget = MongoValidatorEditor()
+        self.validator_editor = self.validator_widget.query_editor
+        self.validator_widget.changed.connect(self._validator_changed)
+        self.validator_widget.actionsChanged.connect(self._update_validator_actions)
+        validation.addWidget(self.validator_widget, 1)
         self.tabs.addTab(self.validation, '验证')
 
         self.storage = QWidget()
@@ -515,6 +518,36 @@ class MongoCollectionDesignerPage(_ObjectDesignerPage):
             self._invalid[key] = str(error)
         self._edited()
 
+    def _validator_changed(self):
+        if self._populating or self.definition is None or self._read_only:
+            return
+        self._invalid.pop('validator', None)
+        try:
+            value = self.validator_widget.validator()
+            if value is None:
+                self.definition.options.pop('validator', None)
+            else:
+                self.definition.options['validator'] = value
+        except DatabaseError as error:
+            self._invalid['validator'] = str(error)
+        self._edited()
+
+    def _update_validator_actions(self):
+        if not hasattr(self, 'validator_widget'):
+            return
+        visible = self.tabs.currentWidget() is self.validation and self.validator_widget.mode == 'schema'
+        self.validator_add_action.setVisible(visible)
+        self.validator_delete_action.setVisible(visible)
+        editable = self.definition is not None and not self.loading and not self._read_only
+        self.validator_add_action.setEnabled(editable and self.validator_widget.can_add)
+        self.validator_delete_action.setEnabled(editable and self.validator_widget.can_delete)
+
+    def _add_validator_property(self):
+        self.validator_widget.add_property()
+
+    def _delete_validator_property(self):
+        self.validator_widget.delete_property()
+
     def _show_raw(self):
         if self.raw_action.isVisible():
             self.raw.show()
@@ -555,10 +588,7 @@ class MongoCollectionDesignerPage(_ObjectDesignerPage):
             self.collation_editor.setPlainText(canonical_dumps(options['collation']) if 'collation' in options else '')
         except Exception:
             self.collation_editor.setPlainText('')
-        try:
-            self.validator_editor.setPlainText(canonical_dumps(options['validator']) if 'validator' in options else '')
-        except Exception:
-            self.validator_editor.setPlainText('')
+        self.validator_widget.load_validator(options.get('validator'))
         for key, editor in (('storageEngine', self.storage_editor), ('indexOptionDefaults', self.index_options_editor)):
             try:
                 editor.setPlainText(canonical_dumps(options[key]) if key in options else '')
@@ -584,6 +614,7 @@ class MongoCollectionDesignerPage(_ObjectDesignerPage):
     def _update_specific_controls(self, editable):
         for widget in (self.validation, self.collation):
             widget.setEnabled(editable)
+        self.validator_widget.set_read_only(not editable)
         self.name_edit.setReadOnly(bool(self.snapshot and self.snapshot.exists))
         new = bool(self.snapshot and not self.snapshot.exists)
         self.capped_check.setEnabled(editable and new)
@@ -592,10 +623,12 @@ class MongoCollectionDesignerPage(_ObjectDesignerPage):
         for editor in (self.storage_editor, self.index_options_editor):
             editor.setReadOnly(not editable or not new)
         self.raw_action.setVisible(bool(self.snapshot and self.snapshot.raw_spec and
-                                       (self.snapshot.read_only or self.snapshot.issues)))
+                                       (self.snapshot.read_only or self.snapshot.issues or
+                                        self.validator_widget._query_unrenderable)))
         if hasattr(self, 'save_action'):
             self.save_action.setEnabled(editable and self.dirty and not self._invalid)
         self._update_index_buttons()
+        self._update_validator_actions()
 
     def _render_plan(self, *_):
         if not hasattr(self, 'sql_preview'):

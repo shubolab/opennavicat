@@ -32,7 +32,7 @@ from test_connection_security_integration import (
 
 pytestmark = pytest.mark.skipif(os.environ.get("OPENNAVICAT_TEST_MONGODB_SECURITY") != "1",
     reason="Opt in to fresh owned MongoDB TLS/SSH with OPENNAVICAT_TEST_MONGODB_SECURITY=1")
-IMAGE = "mongo:8.0"
+IMAGE = "mongo:8.0.34@sha256:b9924c330a8bbc5800fe9c69f04a84e221eca7b28fd049a0354147d9908fa142"
 OWNER_LABEL = "opennavicat.mongodb-security-fixture"
 REPORT = Path(os.environ.get("OPENNAVICAT_MONGODB_SECURITY_REPORT_DIR", "artifacts/mongodb-security"))
 

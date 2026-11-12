@@ -241,23 +241,62 @@ class MongoCollectionDesignerPage(_ObjectDesignerPage):
         self.name_edit.hide()  # New names are entered in the observed save sheet.
         self.name_edit.setMaximumWidth(360)
         self.name_edit.textChanged.connect(self._name_changed)
-        self.capped_check = QCheckBox('固定大小集合（Capped）')
+        self.capped_check = QCheckBox('固定集合')
         self.capped_check.setObjectName('cappedCollectionCheckbox')
-        self.capped_check.toggled.connect(self._capped_changed)
         self.size_edit = QLineEdit()
         self.size_edit.setMaximumWidth(260)
-        self.size_edit.textChanged.connect(lambda value: self._integer_changed('size', value))
         self.max_edit = QLineEdit()
         self.max_edit.setMaximumWidth(260)
-        self.max_edit.textChanged.connect(lambda value: self._integer_changed('max', value))
+        self.clustered_check = QCheckBox('聚集集合')
+        self.clustered_check.setObjectName('clusteredCollectionCheckbox')
+        self.cluster_name_edit = QLineEdit()
+        self.cluster_name_edit.setMaximumWidth(260)
+        self.cluster_expire_check = QCheckBox('在此之后过期（秒）')
+        self.cluster_expire_check.setObjectName('clusteredExpireCheckbox')
+        self.cluster_expire_edit = QLineEdit()
+        self.cluster_expire_edit.setMaximumWidth(260)
+        self.change_images_check = QCheckBox('更改流前图像和后图像')
+        self.change_images_check.setObjectName('changeStreamImagesCheckbox')
+        self.auto_index_id_check = QCheckBox('自动索引 ID')
+        self.auto_index_id_check.setObjectName('automaticIdIndexCheckbox')
+        self.auto_index_id_check.setChecked(True)
+        self.power2_check = QCheckBox('使用 2 的次方的大小')
+        self.power2_check.setObjectName('powerOfTwoSizesCheckbox')
+        self.power2_check.setChecked(True)
+        self.no_padding_check = QCheckBox('无填充')
+        self.no_padding_check.setObjectName('noPaddingCheckbox')
         form.addRow('', self.capped_check)
         form.addRow('最大大小（字节）', self.size_edit)
-        form.addRow('最大文档数', self.max_edit)
+        form.addRow('最大文档数量', self.max_edit)
+        form.addRow('', self.clustered_check)
+        form.addRow('聚集索引名称', self.cluster_name_edit)
+        expire_row = QWidget()
+        expire_layout = QHBoxLayout(expire_row)
+        expire_layout.setContentsMargins(0, 0, 0, 0)
+        expire_layout.addWidget(self.cluster_expire_check)
+        expire_layout.addWidget(self.cluster_expire_edit)
+        expire_layout.addStretch()
+        form.addRow('', expire_row)
+        form.addRow('', self.change_images_check)
+        form.addRow('', self.auto_index_id_check)
+        form.addRow('', self.power2_check)
+        form.addRow('', self.no_padding_check)
         general.addLayout(form)
-        note = QLabel('Capped 大小按 256 字节整数倍编辑；MongoDB 会按服务端规则处理该值。')
+        note = QLabel('固定集合大小按 256 字节整数倍编辑；聚集集合与固定集合互斥。旧版存储选项会按原样提交并由服务器判定。')
         note.setWordWrap(True)
         general.addWidget(note)
         general.addStretch()
+        self.capped_check.toggled.connect(self._capped_changed)
+        self.size_edit.textChanged.connect(lambda value: self._integer_changed('size', value))
+        self.max_edit.textChanged.connect(lambda value: self._integer_changed('max', value))
+        self.clustered_check.toggled.connect(self._clustered_changed)
+        self.cluster_name_edit.textChanged.connect(self._cluster_name_changed)
+        self.cluster_expire_check.toggled.connect(self._cluster_expire_changed)
+        self.cluster_expire_edit.textChanged.connect(self._cluster_expire_text_changed)
+        self.change_images_check.toggled.connect(self._change_images_changed)
+        self.auto_index_id_check.toggled.connect(self._auto_index_id_changed)
+        self.power2_check.toggled.connect(self._old_storage_option_changed)
+        self.no_padding_check.toggled.connect(self._old_storage_option_changed)
         self.tabs.addTab(self.general, '集合选项')
 
         self.validation = QWidget()
@@ -731,6 +770,14 @@ class MongoCollectionDesignerPage(_ObjectDesignerPage):
         if self._populating or self.definition is None or self._read_only:
             return
         if checked:
+            self._populating = True
+            self.clustered_check.setChecked(False)
+            for key in ('clusteredIndex', 'expireAfterSeconds'):
+                self.definition.options.pop(key, None)
+            self.cluster_name_edit.clear()
+            self.cluster_expire_check.setChecked(False)
+            self.cluster_expire_edit.clear()
+            self._populating = False
             self.definition.options['capped'] = True
         else:
             for key in ('capped', 'size', 'max'):
@@ -740,6 +787,115 @@ class MongoCollectionDesignerPage(_ObjectDesignerPage):
             self.max_edit.clear()
             self._populating = False
         self._invalid.pop('capped', None)
+        self._edited()
+
+    def _cluster_document(self, name=''):
+        value = {'key': {'_id': 1}, 'unique': True}
+        if name:
+            value['name'] = name
+        return value
+
+    def _clustered_changed(self, checked):
+        if self._populating or self.definition is None or self._read_only:
+            return
+        self._invalid.pop('clusteredIndex', None)
+        if checked:
+            self._populating = True
+            self.capped_check.setChecked(False)
+            for key in ('capped', 'size', 'max'):
+                self.definition.options.pop(key, None)
+            self.size_edit.clear()
+            self.max_edit.clear()
+            self._populating = False
+            self.definition.options['clusteredIndex'] = self._cluster_document(
+                self.cluster_name_edit.text().strip())
+        else:
+            self.definition.options.pop('clusteredIndex', None)
+            self.definition.options.pop('expireAfterSeconds', None)
+            self._invalid.pop('expireAfterSeconds', None)
+            self._populating = True
+            self.cluster_name_edit.clear()
+            self.cluster_expire_check.setChecked(False)
+            self.cluster_expire_edit.clear()
+            self._populating = False
+        self._edited()
+
+    def _cluster_name_changed(self, value):
+        if (self._populating or self.definition is None or self._read_only
+                or not self.clustered_check.isChecked()):
+            return
+        self.definition.options['clusteredIndex'] = self._cluster_document(value.strip())
+        self._edited()
+
+    def _set_cluster_expire(self, value):
+        text = value.strip()
+        self._invalid.pop('expireAfterSeconds', None)
+        if not self.cluster_expire_check.isChecked():
+            self.definition.options.pop('expireAfterSeconds', None)
+        elif not text:
+            self.definition.options.pop('expireAfterSeconds', None)
+            self._invalid['expireAfterSeconds'] = '过期秒数必须是正的 BSON 整数。'
+        elif not text.isdecimal() or int(text) < 1 or int(text) >= 2**63:
+            self.definition.options.pop('expireAfterSeconds', None)
+            self._invalid['expireAfterSeconds'] = '过期秒数必须是正的 BSON 整数。'
+        else:
+            self.definition.options['expireAfterSeconds'] = int(text)
+
+    def _cluster_expire_changed(self, checked):
+        if self._populating or self.definition is None or self._read_only:
+            return
+        if checked:
+            self._set_cluster_expire(self.cluster_expire_edit.text())
+        else:
+            self.definition.options.pop('expireAfterSeconds', None)
+            self._invalid.pop('expireAfterSeconds', None)
+            self._populating = True
+            self.cluster_expire_edit.clear()
+            self._populating = False
+        self._edited()
+
+    def _cluster_expire_text_changed(self, value):
+        if self._populating or self.definition is None or self._read_only:
+            return
+        self._set_cluster_expire(value)
+        self._edited()
+
+    def _change_images_changed(self, checked):
+        if self._populating or self.definition is None or self._read_only:
+            return
+        key = 'changeStreamPreAndPostImages'
+        if checked:
+            self.definition.options[key] = {'enabled': True}
+        else:
+            was_enabled = bool(
+                self.snapshot and self.snapshot.exists
+                and self.snapshot.definition.options.get(key, {}).get('enabled') is True)
+            if was_enabled:
+                self.definition.options[key] = {'enabled': False}
+            else:
+                self.definition.options.pop(key, None)
+        self._edited()
+
+    def _auto_index_id_changed(self, checked):
+        if self._populating or self.definition is None or self._read_only:
+            return
+        if checked:
+            self.definition.options.pop('autoIndexId', None)
+        else:
+            self.definition.options['autoIndexId'] = False
+        self._edited()
+
+    def _old_storage_option_changed(self, *_):
+        if self._populating or self.definition is None or self._read_only:
+            return
+        if self.power2_check.isChecked():
+            self.definition.options.pop('usePowerOf2Sizes', None)
+        else:
+            self.definition.options['usePowerOf2Sizes'] = False
+        if self.no_padding_check.isChecked():
+            self.definition.options['noPadding'] = True
+        else:
+            self.definition.options.pop('noPadding', None)
         self._edited()
 
     def _integer_changed(self, key, value):
@@ -871,6 +1027,18 @@ class MongoCollectionDesignerPage(_ObjectDesignerPage):
         self.capped_check.setChecked(bool(options.get('capped')))
         self.size_edit.setText(str(options.get('size', '')))
         self.max_edit.setText(str(options.get('max', '')))
+        clustered = options.get('clusteredIndex')
+        clustered = clustered if isinstance(clustered, dict) else {}
+        self.clustered_check.setChecked(bool(clustered))
+        self.cluster_name_edit.setText(str(clustered.get('name', '')))
+        self.cluster_expire_check.setChecked('expireAfterSeconds' in options)
+        self.cluster_expire_edit.setText(str(options.get('expireAfterSeconds', '')))
+        change_images = options.get('changeStreamPreAndPostImages')
+        self.change_images_check.setChecked(
+            isinstance(change_images, dict) and change_images.get('enabled') is True)
+        self.auto_index_id_check.setChecked(options.get('autoIndexId', True) is not False)
+        self.power2_check.setChecked(options.get('usePowerOf2Sizes', True) is not False)
+        self.no_padding_check.setChecked(options.get('noPadding') is True)
         self.collation_editor.load(options.get('collation'))
         self.validator_widget.load_validator(options.get('validator'))
         for key, editor in (('storageEngine', self.storage_editor), ('indexOptionDefaults', self.index_options_editor)):
@@ -905,6 +1073,15 @@ class MongoCollectionDesignerPage(_ObjectDesignerPage):
         self.capped_check.setEnabled(editable and new)
         self.size_edit.setEnabled(editable and new and self.capped_check.isChecked())
         self.max_edit.setEnabled(editable and new and self.capped_check.isChecked())
+        self.clustered_check.setEnabled(editable and new)
+        self.cluster_name_edit.setEnabled(editable and new and self.clustered_check.isChecked())
+        self.cluster_expire_check.setEnabled(editable and new and self.clustered_check.isChecked())
+        self.cluster_expire_edit.setEnabled(
+            editable and new and self.clustered_check.isChecked() and self.cluster_expire_check.isChecked())
+        self.change_images_check.setEnabled(editable)
+        self.auto_index_id_check.setEnabled(editable and new)
+        self.power2_check.setEnabled(editable)
+        self.no_padding_check.setEnabled(editable)
         for editor in (self.storage_editor, self.index_options_editor):
             editor.setReadOnly(not editable or not new)
         self.raw_action.setVisible(bool(self.snapshot and self.snapshot.raw_spec and

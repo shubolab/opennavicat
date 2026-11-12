@@ -76,6 +76,65 @@ def test_collection_page_edits_exact_supported_options_and_caps_size_units(qtbot
     assert not page.size_edit.isEnabled() and not page.max_edit.isEnabled()
 
 
+def test_reference_collection_option_controls_keep_defaults_implicit(qtbot, page):
+    assert page.capped_check.text() == '固定集合'
+    assert page.clustered_check.text() == '聚集集合'
+    assert page.auto_index_id_check.isChecked()
+    assert page.power2_check.isChecked()
+    assert not page.no_padding_check.isChecked()
+    assert page.draft().options == {}
+
+    page.clustered_check.setChecked(True)
+    page.cluster_name_edit.setText('cluster_main')
+    page.cluster_expire_check.setChecked(True)
+    page.cluster_expire_edit.setText('60')
+    page.change_images_check.setChecked(True)
+    assert page.draft().options == {
+        'clusteredIndex': {'key': {'_id': 1}, 'unique': True, 'name': 'cluster_main'},
+        'expireAfterSeconds': 60,
+        'changeStreamPreAndPostImages': {'enabled': True},
+    }
+
+    page.capped_check.setChecked(True)
+    assert not page.clustered_check.isChecked()
+    assert page.draft().options == {
+        'capped': True,
+        'changeStreamPreAndPostImages': {'enabled': True},
+    }
+    page.change_images_check.setChecked(False)
+    assert not page.cluster_name_edit.isEnabled()
+    assert not page.cluster_expire_check.isEnabled()
+
+    page.auto_index_id_check.setChecked(False)
+    page.power2_check.setChecked(False)
+    page.no_padding_check.setChecked(True)
+    assert page.draft().options == {
+        'capped': True,
+        'autoIndexId': False,
+        'usePowerOf2Sizes': False,
+        'noPadding': True,
+    }
+
+
+def test_existing_collection_matches_reference_mutable_and_disabled_options(qtbot):
+    definition = CollectionDefinition('existing', {
+        'clusteredIndex': {'key': {'_id': 1}, 'name': 'cluster_main', 'unique': True},
+        'expireAfterSeconds': 60,
+        'changeStreamPreAndPostImages': {'enabled': True},
+    })
+    page = MongoCollectionDesignerPage('generated', 'demo_catalog', 'existing')
+    qtbot.addWidget(page)
+    page.load_snapshot(CollectionSnapshot('demo_catalog', 'existing', definition, exists=True))
+    assert page.clustered_check.isChecked() and not page.clustered_check.isEnabled()
+    assert page.cluster_name_edit.text() == 'cluster_main' and not page.cluster_name_edit.isEnabled()
+    assert page.cluster_expire_check.isChecked() and not page.cluster_expire_check.isEnabled()
+    assert not page.auto_index_id_check.isEnabled()
+    assert page.change_images_check.isChecked() and page.change_images_check.isEnabled()
+    assert page.power2_check.isEnabled() and page.no_padding_check.isEnabled()
+    page.change_images_check.setChecked(False)
+    assert page.draft().options['changeStreamPreAndPostImages'] == {'enabled': False}
+
+
 def test_invalid_document_is_dirty_but_never_emitted(qtbot, page):
     previews, saves = [], []
     page.previewRequested.connect(previews.append)

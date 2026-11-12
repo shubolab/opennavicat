@@ -41,6 +41,7 @@ TARGETS = [
     'tests/test_connection_lifecycle.py',
     'tests/test_mongo_window.py::test_real_window_mongo_tree_statistics_typed_page_and_sqlite_switch',
     'tests/test_mongo_window.py::test_real_collection_designer_creates_and_collmods_with_worker_owned_io',
+    'tests/test_mongo_window.py::test_real_window_collection_options_create_and_change_stream_collmod',
     'tests/test_mongo_window.py::test_real_collection_designer_lists_indexes_and_opens_embedded_key_editor',
     'tests/test_mongo_window.py::test_real_window_collection_storage_creates_reopens_and_sheet_cancel_preserves_draft',
     'tests/test_mongo_window.py::test_real_window_collection_storage_server_error_keeps_text_and_can_retry',

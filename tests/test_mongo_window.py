@@ -189,6 +189,49 @@ def test_real_collection_designer_creates_and_collmods_with_worker_owned_io(qtbo
     assert not errors and threads
 
 
+def test_real_window_collection_options_create_and_change_stream_collmod(qtbot, mongo_window):
+    window, config, database, schema, errors, threads = mongo_window
+    page = window.open_mongo_collection_designer(config.id, config.database)
+    qtbot.waitUntil(lambda: page.snapshot is not None and not page.loading, timeout=15000)
+    page.name_edit.setText('ui_clustered')
+    page.clustered_check.setChecked(True)
+    page.cluster_name_edit.setText('ui_cluster_main')
+    page.cluster_expire_check.setChecked(True)
+    page.cluster_expire_edit.setText('60')
+    page.change_images_check.setChecked(True)
+    page.request_save()
+    dialog = page._save_dialog
+    qtbot.waitUntil(dialog.save_button.isEnabled, timeout=15000)
+    command = dialog.plan.commands[0]
+    assert command['clusteredIndex'] == {'key': {'_id': 1}, 'name': 'ui_cluster_main', 'unique': True}
+    assert command['expireAfterSeconds'] == 60
+    assert command['changeStreamPreAndPostImages'] == {'enabled': True}
+    dialog.save_button.click()
+    idle(qtbot, window)
+    assert page.snapshot.exists and page.snapshot.name == 'ui_clustered'
+    with database.list_collections(filter={'name': 'ui_clustered'}) as cursor:
+        actual = next(cursor)['options']
+    assert actual['clusteredIndex']['name'] == 'ui_cluster_main'
+    assert actual['expireAfterSeconds'] == 60
+    assert actual['changeStreamPreAndPostImages'] == {'enabled': True}
+    assert not page.clustered_check.isEnabled() and not page.auto_index_id_check.isEnabled()
+    assert page.change_images_check.isEnabled()
+
+    database.ui_clustered.insert_one({'generated': True})
+    page.change_images_check.setChecked(False)
+    page.request_save()
+    dialog = page._save_dialog
+    qtbot.waitUntil(dialog.save_button.isEnabled, timeout=15000)
+    assert dialog.plan.commands[0]['changeStreamPreAndPostImages'] == {'enabled': False}
+    dialog.save_button.click()
+    idle(qtbot, window)
+    with database.list_collections(filter={'name': 'ui_clustered'}) as cursor:
+        actual = next(cursor)['options']
+    assert 'changeStreamPreAndPostImages' not in actual
+    assert database.ui_clustered.count_documents({}) == 1
+    assert not errors and threads
+
+
 def test_real_window_collection_storage_creates_reopens_and_sheet_cancel_preserves_draft(qtbot, mongo_window, monkeypatch):
     window, config, database, schema, errors, threads = mongo_window
     catalog_threads = []

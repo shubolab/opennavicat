@@ -133,8 +133,14 @@ db.createCollection("Untitled",{
 
 重开已有普通集合时，固定集合、聚集集合、过期以及自动索引 ID 显示禁用；
 更改流前图像和后图像、使用 2 的次方的大小、无填充仍显示可操作。
-本轮没有保存这些选项，尤其没有验证旧选项在 MongoDB 8 的服务器接受行为，
+本轮没有保存这些选项，尤其没有在首轮验证旧选项在 MongoDB 8 的服务器接受行为，
 也未验证聚集集合、capped、change-stream 的实际 DDL。
+
+后续独立实现回归已在 pinned MongoDB 8.0.34 上验证：带名称聚集键、60 秒 TTL、
+更改流前后图像和 `autoIndexId=true` 可创建并由 catalog 回读；前后图像可由 `collMod`
+关闭且 UUID/文档保留。`usePowerOf2Sizes`、`noPadding` 与 `autoIndexId=false`
+由 MongoDB 8 拒绝，现已作为真实服务器错误流程保留。详见
+[MongoDB集合选项](mongodb-collection-options.md)。
 
 ## MC18-06：排序规则和脚本预览
 

@@ -70,3 +70,27 @@ the complete enablement/error behavior still need reference-backed closure in
 addition to the inline collection index/key editor and structured collation.
 Windows and Linux reference UI/workflows also remain open. Therefore MV18, U23
 and O14 remain partial gates in the parity matrix.
+
+## Non-projectable Schema fallback
+
+An exact single `$jsonSchema` can still exceed what the property table can
+represent safely, for example when `properties` is not an object map, a property
+value is not a document, or the bounded row limit is exceeded. Such a validator
+now opens in the `Query` editor with the complete original BSON/JavaScript
+literal intact instead of showing an empty editable table. Switching to the
+schema page is still available for inspection, but the raw Query buffer remains
+the authoritative editable representation until the structure becomes
+projectable.
+
+This matches the observed reference state where a server-provided complex Schema
+could appear as raw Query while the JSON Schema property table remained empty. It
+does not claim a lossy Schema-to-Query conversion: the editor preserves the
+original object and writes the user's actual Query text.
+
+A fresh owned MongoDB 8.0.34 MainWindow test created a `$jsonSchema` with
+`1,001` string properties, opened it in the designer, changed its title through
+the raw Query editor, saved through the normal preview/collMod path, and then
+read back the title, all `1,001` properties, `strict` and `error` from the
+catalog. The updated checkpoint passed **1,821 source tests with 563 conditional
+skips**, **290 exact-owned MongoDB runner cases without skips**, and **34 Cocoa
+collection-designer UI tests**.

@@ -6,7 +6,7 @@ from copy import deepcopy
 import pytest
 
 from opennavicat.database import DatabaseError
-from bson import Binary
+from bson import Binary, Int64
 
 from opennavicat.mongodb_collections import (
     CollectionApplyError, CollectionDefinition, CollectionOutcome, CollectionPlan, CollectionSnapshot,
@@ -147,6 +147,24 @@ def test_invalid_document_is_dirty_but_never_emitted(qtbot, page):
     assert page._invalid and page.dirty
     assert not previews and not saves
     assert 'line' in page.message.text() and 'column' in page.message.text()
+
+
+def test_unprojectable_json_schema_opens_exact_raw_query_and_preserves_typed_values(qtbot, page):
+    value = {'$jsonSchema': {
+        'title': 'External schema',
+        'properties': [{'unexpected': Int64(7)}],
+        'required': ['unmapped'],
+    }}
+    page.validator_widget.load_validator(value)
+    widget = page.validator_widget
+    assert widget.mode == 'query'
+    assert 'Long("7")' in widget.query_editor.toPlainText()
+    assert widget.validator() == value
+    widget.mode_combo.setCurrentIndex(0)
+    assert widget.table.rowCount() == 0
+    assert widget.message.isVisible() or widget.message.text()
+    widget.mode_combo.setCurrentIndex(1)
+    assert widget.validator() == value
 
 
 def test_name_sheet_previews_exact_plan_and_confirms_save(qtbot, page):

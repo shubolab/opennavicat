@@ -28,6 +28,7 @@ from opennavicat.ui.mongo_index_designer import MongoIndexDesignerPage
 from opennavicat.ui.mongo_view_designer import MongoViewDesignerPage
 from opennavicat.ui.mongo_timeseries_designer import MongoTimeSeriesDesignerPage
 from opennavicat.ui.mongo_maintenance import MongoMaintenanceConfirmDialog, MongoMaintenanceResultDialog
+from opennavicat.ui.mongo_validator import MAX_PROPERTY_ROWS
 from opennavicat.ui.mongo_pipeline import MongoPipelinePage
 from opennavicat.ui.window import MainWindow, TablePage
 from test_mongodb_session import mongodb_service  # Reuse the owned-container fixture contract.
@@ -250,6 +251,37 @@ def test_real_collection_designer_creates_and_collmods_with_worker_owned_io(qtbo
     assert browser.delete_action.isEnabled() and browser.clear_action.isEnabled()
     entry = dict(browser.selected(), table="ui_created")
     assert window.design_object(entry) is page
+    assert not errors and threads
+
+
+def test_real_collection_designer_unprojectable_schema_uses_typed_raw_query(qtbot, mongo_window):
+    window, config, database, schema, errors, threads = mongo_window
+    properties = {f'p{index}': {'bsonType': 'string'} for index in range(MAX_PROPERTY_ROWS + 1)}
+    original = {'$jsonSchema': {'title': 'Generated external schema', 'properties': properties}}
+    database.create_collection(
+        'external_schema_ui', validator=original,
+        validationLevel='strict', validationAction='error')
+    page = window.open_mongo_collection_designer(
+        config.id, config.database, 'external_schema_ui')
+    qtbot.waitUntil(lambda: page.snapshot is not None and not page.loading, timeout=30000)
+    widget = page.validator_widget
+    assert widget.mode == 'query'
+    text = widget.query_editor.toPlainText()
+    assert 'Generated external schema' in text
+    assert 'p1000' in text
+
+    page.validator_editor.setPlainText(text.replace(
+        'Generated external schema', 'Generated external schema edited'))
+    page.request_save()
+    dialog = page._save_dialog
+    qtbot.waitUntil(dialog.save_button.isEnabled, timeout=30000)
+    dialog.save_button.click()
+    idle(qtbot, window)
+    actual = database.command('listCollections', filter={'name': 'external_schema_ui'})['cursor']['firstBatch'][0]
+    assert actual['options']['validator']['$jsonSchema']['title'] == 'Generated external schema edited'
+    assert len(actual['options']['validator']['$jsonSchema']['properties']) == MAX_PROPERTY_ROWS + 1
+    assert actual['options']['validationLevel'] == 'strict'
+    assert actual['options']['validationAction'] == 'error'
     assert not errors and threads
 
 

@@ -46,6 +46,19 @@ ROOT_FIELDS = (
 )
 
 
+def _schema_projection_safe(schema):
+    """Whether the property table can represent this schema without weakening it."""
+    properties = schema.get('properties', {})
+    required = schema.get('required', [])
+    return (
+        isinstance(properties, dict)
+        and len(properties) <= MAX_PROPERTY_ROWS
+        and all(isinstance(value, dict) for value in properties.values())
+        and isinstance(required, list)
+        and all(type(name) is str for name in required)
+    )
+
+
 def _literal(value):
     try:
         return bson_literal(value)
@@ -239,9 +252,10 @@ class MongoValidatorEditor(QWidget):
                     # editing limits. Keep the entire original Query buffer;
                     # never turn a failed projection into an empty validator.
                     draft = None
-                pure = draft is not None and draft.visual_schema is not None
-                self._schema = draft if pure else ValidatorDraft({'$jsonSchema': {}})
-                self._schema_touched = value is not None and pure
+                projected = draft.visual_schema if draft is not None else None
+                pure = projected is not None and _schema_projection_safe(projected)
+                self._schema = draft if projected is not None else ValidatorDraft({'$jsonSchema': {}})
+                self._schema_touched = value is not None and projected is not None
                 self._query = None if pure else deepcopy(value)
                 self.mode_combo.setCurrentIndex(0 if pure else 1)
             elif self.mode == 'schema':

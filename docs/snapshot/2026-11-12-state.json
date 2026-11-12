@@ -109,7 +109,7 @@
     "dependency_command_stub_tests": 16,
     "all_protocol_source_hashes_match": true
   },
-  "updated_at": "2026-11-12T09:03:19.325502+08:00",
+  "updated_at": "2026-11-12T11:44:12.232248+08:00",
   "ci_after_storage": {
     "id": 43051367511,
     "source_sha": "7c65c70d6822cf7607cceaa06a860b1561893a53",
@@ -296,5 +296,37 @@
     "protocol_cases": 298,
     "js_protocol_cases": 195,
     "js_qt_protocol_cases": 12
+  },
+  "inline_index_ui": {
+    "document": "../mongodb-inline-index.md",
+    "reference_observation": "existing rename drop/create, server error retention, AX key-type limitation",
+    "implemented": [
+      "three-column rows",
+      "nested key modal",
+      "new/delete/rename",
+      "unique/background/sparse/TTL/bucketSize",
+      "ordered non-transactional save"
+    ],
+    "collection_runner_passed": 234,
+    "collection_runner_skipped": 0,
+    "protocol_runner_passed": 301,
+    "protocol_runner_skipped": 0,
+    "native_cocoa_passed": 38,
+    "fixtures_cleanup_verified": true,
+    "new_collection_coupled_index_sequence_open": true,
+    "advanced_options_open": true,
+    "windows_linux_reference_open": true,
+    "full_source_passed": 1768,
+    "full_source_skipped": 551,
+    "source_smoke_passed": true
+  },
+  "latest_main_demo": {
+    "frames": 229,
+    "duration_seconds": 38.17,
+    "sha256": "ab71968e92028b8801361c66f4ed4d28a278244138deda87e3d8b6cea2c8dff1",
+    "phases": 17,
+    "inline_index_key_editor": true,
+    "visual_privacy_reviewed": true,
+    "latest_public_installer": "v0.10.0"
   }
 }

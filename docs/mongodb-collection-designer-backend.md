@@ -128,13 +128,18 @@ UI slice backed only by capabilities in this module:
   total/object-average/storage/index sizes, index count, with unknown values kept
   explicit. This is a real metadata projection, not a fabricated summary.
 
-- Ordinary collection design now has an `索引` tab populated from the live
-  `listIndexes` result. It shows keys, uniqueness, background/sparse flags, TTL,
-  bucket size and version, disables editing of `_id_`, and routes New/Design/
-  Delete to the already-qualified independent Mongo index designer. The index
-  table refreshes through the owner queue after index changes; collection-option
-  saves do not rewrite indexes. The exact original tab order, empty-collection
-  behavior and every embedded control remain to be observed at runtime.
+- Ordinary collection design now has a reference-shaped embedded `索引` tab
+  populated from the live `listIndexes` result. It shows the leading index icon
+  plus Name and Keys; controls below the table expose unique, background,
+  sparse, TTL and bucket size. The nested key modal explicitly commits
+  ASC/DESC/2D/2DSphere/Hashed/Text values. New/Delete stage model rows rather
+  than opening the independent designer. See
+  [embedded index editor](mongodb-inline-index.md).
+  Saving a set of rows creates an ordered, separately UUID-guarded plan for
+  each changed index. Plans execute in display order and are not transactional;
+  a later failure retains earlier confirmed steps and preserves the draft.
+  Collection-option and index edits use separate saves. `_id_` remains hidden
+  and the new-collection/coupled create-index sequencing stays open.
 
 - Collection maintenance exposes fast/full `validate` for ordinary and
   time-series collections and `reIndex` for ordinary collections. Every command

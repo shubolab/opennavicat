@@ -258,33 +258,63 @@ def test_storage_literal_parser_bounds_utf8_and_preserves_string_escapes():
     with pytest.raises(DatabaseError): parse_storage_option('{wiredTiger:{configString:"\ud800"}}', 'storageEngine')
 
 
-def test_existing_collection_index_table_exposes_full_index_designer_routes(qtbot):
+def test_existing_collection_index_table_uses_reference_inline_controls(qtbot):
     definition = CollectionDefinition('orders', {})
     page = MongoCollectionDesignerPage('generated', 'demo_catalog', 'orders')
     qtbot.addWidget(page)
     page.load_snapshot(CollectionSnapshot('demo_catalog', 'orders', definition, exists=True))
-    requests = {'new': 0, 'edit': [], 'delete': [], 'refresh': 0}
-    page.newIndexRequested.connect(lambda: requests.__setitem__('new', requests['new'] + 1))
-    page.editIndexRequested.connect(requests['edit'].append)
-    page.deleteIndexRequested.connect(requests['delete'].append)
-    page.indexesRequested.connect(lambda: requests.__setitem__('refresh', requests['refresh'] + 1))
     page.set_indexes([
         {'name': '_id_', 'keys': [('_id', 1)], 'unique': True, 'system': True, 'options': {'v': 2}},
         {'name': 'orders_status', 'keys': [('status', 1)], 'unique': False,
          'options': {'background': True, 'sparse': True, 'expireAfterSeconds': 60, 'v': 2}},
     ])
     assert page.index_table.rowCount() == 1
-    assert page.index_table.item(0, 0).text() == 'orders_status'
-    assert page.index_table.item(0, 1).text() == 'status: 1'
-    assert page.index_table.item(0, 5).text() == '60'
+    assert page.index_table.item(0, 0).text() == '' and not page.index_table.item(0, 0).icon().isNull()
+    assert page.index_table.cellWidget(0, 1).text() == 'orders_status'
+    assert page.index_table.cellWidget(0, 2).text() == 'status ASC'
+    page.index_table.selectRow(0)
+    assert not page.unique_index_check.isChecked()
+    assert page.background_index_check.isChecked()
+    assert page.sparse_index_check.isChecked()
+    assert page.ttl_index_check.isChecked() and page.ttl_index_edit.text() == '60'
     assert page.new_index_button.isEnabled()
     page.new_index_button.click()
-    page.index_table.selectRow(0)
-    page.edit_index_button.click(); page.delete_index_button.click(); page.refresh_index_button.click()
-    assert requests['new'] == 1 and requests['edit'] == ['orders_status']
-    assert requests['delete'][0]['name'] == 'orders_status' and requests['refresh'] == 1
+    assert page.index_table.rowCount() == 2 and page.dirty
+    assert not page.save_action.isEnabled()
+    page.delete_index_button.click()
+    assert page.index_table.rowCount() == 1
     page.set_index_error('permission denied')
     assert 'permission denied' in page.index_message.text() and not page.index_message.isHidden()
+
+
+def test_inline_index_rename_options_delete_and_key_summary_are_exact(qtbot):
+    page = MongoCollectionDesignerPage('generated', 'demo_catalog', 'orders')
+    qtbot.addWidget(page)
+    page.load_snapshot(CollectionSnapshot(
+        'demo_catalog', 'orders', CollectionDefinition('orders', {}), exists=True))
+    page.set_indexes([{
+        'name': 'orders_status', 'keys': [('status', 1)],
+        'unique': False, 'options': {'v': 2},
+    }])
+    page.index_table.selectRow(0)
+    name = page.index_table.cellWidget(0, 1)
+    name.setText('orders_status_v2'); name.editingFinished.emit()
+    page.unique_index_check.click()
+    page.background_index_check.click()
+    page.sparse_index_check.click()
+    page.ttl_index_check.click(); page.ttl_index_edit.setText('120'); page.ttl_index_edit.editingFinished.emit()
+    page.bucket_size_edit.setText('4.5'); page.bucket_size_edit.editingFinished.emit()
+    drafts = page.inline_index_drafts()
+    assert len(drafts) == 1 and drafts[0].original_name == 'orders_status'
+    assert drafts[0].definition.name == 'orders_status_v2'
+    assert drafts[0].definition.keys[0].field == 'status'
+    assert drafts[0].definition.options == {
+        'v': 2, 'unique': True, 'background': True, 'sparse': True,
+        'expireAfterSeconds': 120, 'bucketSize': 4.5,
+    }
+    page.delete_index_button.click()
+    assert page.inline_index_drafts()[0].deleted is True
+    assert page.index_table.rowCount() == 0
 
 
 def test_apply_error_formatter_keeps_status_reply_and_observation():

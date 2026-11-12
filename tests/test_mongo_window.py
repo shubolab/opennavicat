@@ -19,6 +19,7 @@ from shiboken6 import isValid
 import opennavicat.ui.window as window_module
 from opennavicat.database import ConnectionConfig, DatabaseSession
 from opennavicat.mongodb_session import MongoSession, canonical_dumps, canonical_loads
+from opennavicat import mongodb_indexes as tools
 from opennavicat.storage import Store
 from opennavicat.ui.mongo_browser import MongoCollectionPage
 from opennavicat.ui.mongo_gridfs import MongoGridFSPage
@@ -279,20 +280,22 @@ def test_real_window_collection_storage_server_error_keeps_text_and_can_retry(qt
     assert threads and not errors
 
 
-def test_real_collection_designer_lists_indexes_and_opens_index_designer(qtbot, mongo_window):
+def test_real_collection_designer_lists_indexes_and_opens_embedded_key_editor(qtbot, mongo_window):
     window, config, database, schema, errors, threads = mongo_window
     database.docs.create_index([('name', 1)], name='docs_name_idx')
     page = window.open_mongo_collection_designer(config.id, config.database, 'docs')
     qtbot.waitUntil(lambda: page.snapshot is not None and page.index_table.rowCount() >= 1 and not page.loading, timeout=15000)
-    names = [page.index_table.item(row, 0).text() for row in range(page.index_table.rowCount())]
+    names = [page.index_table.cellWidget(row, 1).text() for row in range(page.index_table.rowCount())]
     assert names == ['docs_name_idx']
     assert set(database.docs.index_information()) == {'_id_', 'docs_name_idx'}
     page.index_table.selectRow(names.index('docs_name_idx'))
-    assert page.edit_index_button.isEnabled() and page.delete_index_button.isEnabled()
-    page.edit_index_button.click()
-    qtbot.waitUntil(lambda: any(isinstance(widget, MongoIndexDesignerPage)
-        and widget.collection == 'docs' and widget.object_name == 'docs_name_idx'
-        for widget in (window.tabs.widget(i) for i in range(window.tabs.count()))), timeout=15000)
+    assert page.new_index_button.isEnabled() and page.delete_index_button.isEnabled()
+    page.index_table.cellWidget(0, 2).click()
+    qtbot.waitUntil(lambda: page._inline_key_dialog is not None)
+    assert page._inline_key_dialog.definition.keys == [tools.IndexKey('name', 1)]
+    page._inline_key_dialog.reject()
+    assert not any(isinstance(widget, MongoIndexDesignerPage)
+        for widget in (window.tabs.widget(i) for i in range(window.tabs.count())))
     idle(qtbot, window)
     assert threads and not errors
 
@@ -851,3 +854,93 @@ def test_real_window_collection_maintenance_validate_reindex_and_compact(qtbot, 
     assert database.docs.count_documents({}) == before_count
     assert database.docs.index_information() == before_indexes
     assert not errors
+
+
+def test_real_window_embedded_index_create_rename_options_and_delete(qtbot, mongo_window, monkeypatch):
+    window, config, database, schema, errors, threads = mongo_window
+    database.docs.create_index([('name', 1)], name='inline_existing')
+    database.docs.create_index([('long', -1)], name='inline_remove')
+    page = window.open_mongo_collection_designer(config.id, config.database, 'docs')
+    qtbot.waitUntil(lambda: page.snapshot is not None and not page.loading and page.index_table.rowCount() == 2,
+                    timeout=15000)
+    idle(qtbot, window)
+
+    def row_for(name):
+        for row in range(page.index_table.rowCount()):
+            if page.index_table.cellWidget(row, 1).text() == name:
+                return row
+        raise AssertionError(name)
+
+    page.index_table.selectRow(row_for('inline_existing'))
+    name_widget = page.index_table.cellWidget(page.index_table.currentRow(), 1)
+    name_widget.setText('inline_existing_v2'); name_widget.editingFinished.emit()
+    page.unique_index_check.click()
+
+    page.new_index_button.click()
+    new_row = page.index_table.rowCount() - 1
+    page.index_table.selectRow(new_row)
+    page.index_table.cellWidget(new_row, 1).setText('inline_new')
+    page.index_table.cellWidget(new_row, 1).editingFinished.emit()
+    page.index_table.cellWidget(new_row, 2).click()
+    key_dialog = page._inline_key_dialog
+    key_dialog.add_key()
+    key_dialog.table.cellWidget(0, 0).setCurrentText('long')
+    kind = key_dialog.table.cellWidget(0, 1)
+    kind.setCurrentIndex(kind.findData(1))
+    key_dialog.accept()
+    assert not page._inline_index_invalid, page._inline_index_invalid
+    assert page.save_action.isEnabled()
+
+    confirmed = []
+    preview_requests = []
+    page.inlineIndexPreviewRequested.connect(preview_requests.append)
+    save_calls = []
+    original_save = window.save_mongo_collection_inline_indexes
+    def traced_save(target, bundle):
+        save_calls.append((target, bundle))
+        return original_save(target, bundle)
+    monkeypatch.setattr(window, 'save_mongo_collection_inline_indexes', traced_save)
+    page.inlineIndexSaveRequested.connect(confirmed.append)
+    page.request_save()
+    dialog = page._inline_index_save_dialog
+    qtbot.waitUntil(dialog.save_button.isEnabled, timeout=15000)
+    preview = dialog.preview.toPlainText()
+    assert [(d.original_name, d.definition.name, d.deleted) for d in dialog.plan.drafts] == [
+        ('inline_existing', 'inline_existing_v2', False),
+        ('inline_remove', 'inline_remove', False),
+        ('', 'inline_new', False),
+    ]
+    assert 'dropIndexes' in preview and 'createIndexes' in preview
+    assert [(p.snapshot.name, p.definition.name, [list(c)[0] for c in p.commands]) for p in dialog.plan.plans] == [
+        ('inline_existing', 'inline_existing_v2', ['dropIndexes', 'createIndexes']),
+        ('', 'inline_new', ['createIndexes']),
+    ]
+    dialog.save_button.click()
+    assert len(confirmed) == 1 and confirmed[0].command_script
+    assert len(save_calls) == 1
+    idle(qtbot, window)
+    qtbot.waitUntil(lambda: not page.loading, timeout=15000)
+    idle(qtbot, window)
+    assert not errors, errors
+    indexes = database.docs.index_information()
+    assert {'_id_', 'inline_existing_v2', 'inline_new', 'inline_remove'} == set(indexes)
+    assert indexes['inline_existing_v2'].get('unique') is True
+    assert indexes['inline_new']['key'] == [('long', 1)]
+    assert database.docs.count_documents({}) == 6
+
+    page.index_table.selectRow(row_for('inline_remove'))
+    assert 'inline_remove' in database.docs.index_information()
+    page.delete_index_button.click()
+    assert page.index_table.rowCount() == 2
+    page.request_save()
+    delete_dialog = page._inline_index_save_dialog
+    qtbot.waitUntil(lambda: len(preview_requests) >= 2, timeout=15000)
+    assert not page.loading and page._inline_index_dirty
+    qtbot.waitUntil(lambda: delete_dialog.save_button.isEnabled() or not delete_dialog.error.isHidden(), timeout=15000)
+    assert delete_dialog.save_button.isEnabled(), delete_dialog.error.text()
+    assert 'dropIndexes' in delete_dialog.preview.toPlainText()
+    delete_dialog.save_button.click()
+    idle(qtbot, window)
+    assert {'_id_', 'inline_existing_v2', 'inline_new'} == set(database.docs.index_information())
+    assert database.docs.count_documents({}) == 6
+    assert not errors and threads

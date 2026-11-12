@@ -16,13 +16,20 @@ from bson import BSON
 from opennavicat.database import DatabaseError
 from opennavicat.mongodb_collections import CollectionApplyError, CollectionPlan, validate_definition
 from opennavicat.mongodb_collection_literals import parse_storage_option
+from opennavicat.mongodb_indexes import (
+    InlineIndexDraft, IndexDefinition, IndexKey, validate_definition as validate_index_definition,
+)
 from opennavicat.mongodb_index_script import bson_literal
 from opennavicat.mongodb_session import BSON_CODEC, canonical_dumps, canonical_loads
 
 from .editor import SqlEditor
+from .icons import tool_icon
 from .schema_object_designer import _ObjectDesignerPage
 from .table_designer import TableSaveDialog
 from .mongo_validator import MongoValidatorEditor
+from .mongo_inline_index import (
+    InlineIndexKeyDialog, MongoInlineIndexSaveDialog, key_summary,
+)
 
 
 def collection_error_text(error):
@@ -208,12 +215,19 @@ class MongoCollectionDesignerPage(_ObjectDesignerPage):
     newIndexRequested = Signal()
     editIndexRequested = Signal(str)
     deleteIndexRequested = Signal(object)
+    inlineIndexPreviewRequested = Signal(object)
+    inlineIndexSaveRequested = Signal(object)
 
     def __init__(self, connection_id, schema='', name='', parent=None):
         super().__init__(connection_id, schema, name, parent)
         self._initial_name = name
         self._invalid = {}
         self.index_rows = []
+        self._inline_index_drafts = []
+        self._inline_index_dirty = False
+        self._inline_index_invalid = {}
+        self._inline_index_plan = None
+        self._inline_index_save_dialog = None
         self.toolbar.addSeparator()
         self.validator_add_action = self._action('添加属性', 'add', self._add_validator_property)
         self.validator_delete_action = self._action('删除属性', 'delete', self._delete_validator_property)
@@ -294,30 +308,48 @@ class MongoCollectionDesignerPage(_ObjectDesignerPage):
         indexes.setContentsMargins(12, 12, 12, 12)
         index_bar = QHBoxLayout()
         self.new_index_button = QPushButton('新建索引')
-        self.edit_index_button = QPushButton('设计索引')
         self.delete_index_button = QPushButton('删除索引')
-        self.refresh_index_button = QPushButton('刷新')
-        index_bar.addWidget(self.new_index_button); index_bar.addWidget(self.edit_index_button)
-        index_bar.addWidget(self.delete_index_button); index_bar.addWidget(self.refresh_index_button)
+        index_bar.addWidget(self.new_index_button)
+        index_bar.addWidget(self.delete_index_button)
         index_bar.addStretch(); indexes.addLayout(index_bar)
-        self.index_table = QTableWidget(0, 8)
+        self.index_table = QTableWidget(0, 3)
         self.index_table.setObjectName('mongoCollectionIndexes')
-        self.index_table.setHorizontalHeaderLabels(
-            ['名称', '字段', '唯一键', '背景', '稀疏', 'TTL', 'Bucket Size', '版本'])
+        self.index_table.setHorizontalHeaderLabels(['', '名称', '键'])
         self.index_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.index_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.index_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.index_table.verticalHeader().hide()
         self.index_table.horizontalHeader().setStretchLastSection(True)
+        self.index_table.setColumnWidth(0, 26); self.index_table.setColumnWidth(1, 300)
         indexes.addWidget(self.index_table, 1)
+        options_row = QHBoxLayout()
+        self.unique_index_check = QCheckBox('唯一键')
+        self.background_index_check = QCheckBox('背景')
+        self.sparse_index_check = QCheckBox('稀疏')
+        for widget in (self.unique_index_check, self.background_index_check, self.sparse_index_check):
+            options_row.addWidget(widget)
+        options_row.addStretch(); indexes.addLayout(options_row)
+        ttl_row = QHBoxLayout()
+        self.ttl_index_check = QCheckBox('在此之后过期（秒）:')
+        self.ttl_index_edit = QLineEdit(); self.ttl_index_edit.setMaximumWidth(180)
+        ttl_row.addWidget(self.ttl_index_check); ttl_row.addWidget(self.ttl_index_edit); ttl_row.addStretch()
+        indexes.addLayout(ttl_row)
+        bucket_row = QHBoxLayout()
+        bucket_row.addWidget(QLabel('存储桶大小:'))
+        self.bucket_size_edit = QLineEdit(); self.bucket_size_edit.setMaximumWidth(180)
+        bucket_row.addWidget(self.bucket_size_edit); bucket_row.addStretch(); indexes.addLayout(bucket_row)
         self.index_message = QLabel(); self.index_message.setWordWrap(True); self.index_message.hide()
         indexes.addWidget(self.index_message)
-        indexes.addWidget(QLabel('索引通过独立索引设计器保存；集合选项保存不会修改索引。'))
-        self.new_index_button.clicked.connect(lambda: self.newIndexRequested.emit())
-        self.edit_index_button.clicked.connect(self._edit_index)
-        self.delete_index_button.clicked.connect(self._delete_index)
-        self.refresh_index_button.clicked.connect(lambda: self.indexesRequested.emit())
-        self.index_table.itemSelectionChanged.connect(self._update_index_buttons)
+        indexes.addWidget(QLabel('所有索引变更按表格顺序执行，整批不是事务；失败后不会自动回滚或重试。'))
+        self.new_index_button.clicked.connect(self._new_inline_index)
+        self.delete_index_button.clicked.connect(self._delete_inline_index)
+        self.index_table.itemSelectionChanged.connect(self._index_selection_changed)
+        self.unique_index_check.toggled.connect(lambda value: self._inline_index_option('unique', value))
+        self.background_index_check.toggled.connect(lambda value: self._inline_index_option('background', value))
+        self.sparse_index_check.toggled.connect(lambda value: self._inline_index_option('sparse', value))
+        self.ttl_index_check.toggled.connect(self._inline_ttl_toggled)
+        self.ttl_index_edit.editingFinished.connect(self._inline_ttl_changed)
+        self.bucket_size_edit.editingFinished.connect(self._inline_bucket_changed)
         self.tabs.addTab(self.indexes, '索引')
 
         self.raw = QDialog(self)
@@ -385,59 +417,302 @@ class MongoCollectionDesignerPage(_ObjectDesignerPage):
     def collection(self):
         return self.table
 
+    def load_snapshot(self, snapshot):
+        if hasattr(self, '_inline_index_dirty'):
+            self._inline_index_dirty = False
+            self._inline_index_invalid.clear()
+            self._inline_index_plan = None
+            self._inline_index_save_dialog = None
+        super().load_snapshot(snapshot)
+
     def set_indexes(self, rows):
         self.index_message.clear(); self.index_message.hide()
-        # The observed Navicat ordinary-collection editor omits the built-in
-        # _id_ row; metadata and standalone index tools still retain it.
         self.index_rows = [deepcopy(row) for row in rows if row.get('name') != '_id_']
-        self.index_table.setRowCount(0)
+        if self._inline_index_dirty:
+            self.index_message.setText('服务器索引已刷新；未保存的内嵌索引草稿已保留。')
+            self.index_message.show()
+            return
+        collection = self.table
+        drafts = []
         for row in self.index_rows:
-            values = [row.get('name', '')]
-            keys = row.get('keys') or [(key, None) for key in row.get('columns', [])]
-            values.append(', '.join(f'{key}: {direction}' for key, direction in keys))
-            options = row.get('options') or {}
-            values.extend([
-                '是' if row.get('unique') else '否',
-                '是' if options.get('background') else '否',
-                '是' if options.get('sparse') else '否',
-                options.get('expireAfterSeconds', ''),
-                options.get('bucketSize', ''),
-                options.get('v', ''),
-            ])
-            table_row = self.index_table.rowCount()
-            self.index_table.insertRow(table_row)
-            for column, value in enumerate(values):
-                self.index_table.setItem(table_row, column, QTableWidgetItem(str(value)))
-            self.index_table.item(table_row, 0).setData(Qt.ItemDataRole.UserRole, deepcopy(row))
-        self._update_index_buttons()
+            keys = row.get('keys') or [
+                (field, -1 if direction == 'DESC' else direction) for field, direction in [(field, None) for field in row.get('columns', [])]
+            ]
+            parsed = []
+            for field, order in keys:
+                if order in (1, '1', 'ASC'):
+                    order = 1
+                elif order in (-1, '-1', 'DESC'):
+                    order = -1
+                parsed.append(IndexKey(str(field), order if order is not None else ''))
+            options = deepcopy(row.get('options') or {})
+            # session.indexes returns the complete listIndexes specification
+            # plus normalized top-level columns. Structural identity is not an
+            # editable index option.
+            for structural in ('key', 'name', 'ns'):
+                options.pop(structural, None)
+            if row.get('unique') is True:
+                options['unique'] = True
+            definition = IndexDefinition(str(row.get('name', '')), collection, parsed, options)
+            drafts.append(InlineIndexDraft(definition, str(row.get('name', '')), False))
+        self._inline_index_drafts = drafts
+        self._inline_index_dirty = False
+        self._inline_index_invalid.clear()
+        self._inline_index_plan = None
+        self._render_inline_indexes()
 
     def set_index_error(self, error):
         self.index_message.setText('索引读取失败：' + str(error))
         self.index_message.show()
         self._update_index_buttons()
 
-    def _selected_index(self):
+    def _visible_inline_drafts(self):
+        return [draft for draft in self._inline_index_drafts if not draft.deleted]
+
+    def _selected_inline_draft(self):
         row = self.index_table.currentRow()
-        item = self.index_table.item(row, 0) if row >= 0 else None
-        return item.data(Qt.ItemDataRole.UserRole) if item is not None else None
+        drafts = self._visible_inline_drafts()
+        return drafts[row] if 0 <= row < len(drafts) else None
 
-    def _edit_index(self):
-        row = self._selected_index()
-        if row is not None and not self._read_only and not row.get('system'):
-            self.editIndexRequested.emit(row.get('name', ''))
+    def _render_inline_indexes(self):
+        selected = self.index_table.currentRow()
+        self._inline_index_populating = True
+        try:
+            self.index_table.setRowCount(0)
+            for draft in self._visible_inline_drafts():
+                row = self.index_table.rowCount()
+                self.index_table.insertRow(row)
+                icon = QTableWidgetItem()
+                if draft.definition.keys:
+                    icon.setIcon(tool_icon('index', 16))
+                icon.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
+                self.index_table.setItem(row, 0, icon)
+                name = QLineEdit(draft.definition.name)
+                name.setObjectName('embeddedIndexName')
+                name.editingFinished.connect(lambda draft=draft: self._inline_index_name_changed(draft))
+                self.index_table.setCellWidget(row, 1, name)
+                key_button = QPushButton(key_summary(draft.definition.keys) or '选择字段')
+                key_button.setObjectName('embeddedIndexKeys')
+                key_button.setFlat(True)
+                key_button.setStyleSheet('text-align:left; padding:2px 6px;')
+                key_button.clicked.connect(lambda _=False, draft=draft: self._open_inline_keys(draft))
+                self.index_table.setCellWidget(row, 2, key_button)
+            if self.index_table.rowCount():
+                self.index_table.selectRow(min(max(selected, 0), self.index_table.rowCount() - 1))
+        finally:
+            self._inline_index_populating = False
+        self._index_selection_changed()
 
-    def _delete_index(self):
-        row = self._selected_index()
-        if row is not None and not self._read_only and not row.get('system'):
-            self.deleteIndexRequested.emit(deepcopy(row))
+    def _mark_inline_indexes_edited(self):
+        self._inline_index_dirty = True
+        self._inline_index_plan = None
+        self._validate_inline_indexes()
+        self.dirty = True
+        self.dirtyChanged.emit(True)
+        self.titleChanged.emit(self.title)
+        self._update_controls()
+        self._render_plan()
+        if self._inline_index_invalid:
+            self.show_message('\n'.join(self._inline_index_invalid.values()))
+        else:
+            self.show_message('')
+
+    def _validate_inline_indexes(self):
+        ui_errors = {key: value for key, value in self._inline_index_invalid.items()
+                     if key in {'ttl', 'bucketSize'}}
+        self._inline_index_invalid.clear()
+        self._inline_index_invalid.update(ui_errors)
+        names = []
+        for draft in self._visible_inline_drafts():
+            definition = draft.definition
+            try:
+                validate_index_definition(definition)
+                names.append(definition.name)
+            except DatabaseError as error:
+                label = definition.name.strip() or '新索引'
+                self._inline_index_invalid[label] = label + '：' + str(error)
+        if len(names) != len(set(names)):
+            self._inline_index_invalid['duplicate'] = '索引名称必须唯一。'
+        return not self._inline_index_invalid
+
+    def _new_inline_index(self):
+        if not self.snapshot or not self.snapshot.exists or self._read_only or self.loading:
+            return
+        draft = InlineIndexDraft(IndexDefinition('', self.table, [], {}), '', False)
+        self._inline_index_drafts.append(draft)
+        self._render_inline_indexes()
+        self.index_table.selectRow(self.index_table.rowCount() - 1)
+        self._mark_inline_indexes_edited()
+
+    def _delete_inline_index(self):
+        draft = self._selected_inline_draft()
+        if draft is None or self._read_only or self.loading:
+            return
+        if draft.original_name:
+            draft.deleted = True
+        else:
+            self._inline_index_drafts.remove(draft)
+        self._render_inline_indexes()
+        self._mark_inline_indexes_edited()
+
+    def _inline_index_name_changed(self, draft):
+        if self._inline_index_populating or self._read_only:
+            return
+        row = self._visible_inline_drafts().index(draft)
+        widget = self.index_table.cellWidget(row, 1)
+        if widget is None:
+            return
+        name = widget.text().strip()
+        if draft.definition.name != name:
+            draft.definition.name = name
+            self._mark_inline_indexes_edited()
+            self.index_table.selectRow(row)
+
+    def _open_inline_keys(self, draft):
+        if self._read_only:
+            return
+        dialog = InlineIndexKeyDialog(draft.definition, self)
+        self._inline_key_dialog = dialog
+        def accepted():
+            draft.definition.keys = deepcopy(dialog.definition.keys)
+            self._render_inline_indexes()
+            row = self._visible_inline_drafts().index(draft)
+            self.index_table.selectRow(row)
+            self._mark_inline_indexes_edited()
+        dialog.accepted.connect(accepted)
+        dialog.finished.connect(lambda *_: self._inline_key_finished(dialog))
+        dialog.open()
+
+    def _inline_key_finished(self, dialog):
+        if getattr(self, '_inline_key_dialog', None) is dialog:
+            self._inline_key_dialog = None
+        dialog.deleteLater()
+
+    def _index_selection_changed(self):
+        if getattr(self, '_inline_index_populating', False):
+            return
+        draft = self._selected_inline_draft()
+        editable = bool(draft and not self._read_only and not self.loading)
+        options = draft.definition.options if draft else {}
+        self._inline_index_populating = True
+        try:
+            self.unique_index_check.setChecked(bool(options.get('unique')))
+            self.background_index_check.setChecked(bool(options.get('background')))
+            self.sparse_index_check.setChecked(bool(options.get('sparse')))
+            has_ttl = 'expireAfterSeconds' in options
+            self.ttl_index_check.setChecked(has_ttl)
+            self.ttl_index_edit.setText(str(options.get('expireAfterSeconds', '')))
+            self.bucket_size_edit.setText(str(options.get('bucketSize', '')))
+        finally:
+            self._inline_index_populating = False
+        for widget in (self.unique_index_check, self.background_index_check,
+                       self.sparse_index_check, self.ttl_index_check):
+            widget.setEnabled(editable)
+        self.ttl_index_edit.setEnabled(editable and self.ttl_index_check.isChecked())
+        self.bucket_size_edit.setEnabled(editable)
+        self._update_index_buttons()
+
+    def _inline_index_option(self, key, value):
+        if getattr(self, '_inline_index_populating', False) or self._read_only:
+            return
+        draft = self._selected_inline_draft()
+        if draft is None:
+            return
+        if value:
+            draft.definition.options[key] = True
+        else:
+            draft.definition.options.pop(key, None)
+        self._mark_inline_indexes_edited()
+
+    def _inline_ttl_toggled(self, checked):
+        if getattr(self, '_inline_index_populating', False) or self._read_only:
+            return
+        draft = self._selected_inline_draft()
+        if draft is None:
+            return
+        self.ttl_index_edit.setEnabled(checked)
+        if not checked:
+            draft.definition.options.pop('expireAfterSeconds', None)
+            self._mark_inline_indexes_edited()
+        elif self.ttl_index_edit.text().strip():
+            self._inline_ttl_changed()
+
+    def _inline_ttl_changed(self):
+        if getattr(self, '_inline_index_populating', False) or self._read_only:
+            return
+        draft = self._selected_inline_draft()
+        if draft is None:
+            return
+        text = self.ttl_index_edit.text().strip()
+        self._inline_index_invalid.pop('ttl', None)
+        draft.definition.options.pop('expireAfterSeconds', None)
+        if self.ttl_index_check.isChecked():
+            try:
+                if not text.isdecimal():
+                    raise ValueError
+                draft.definition.options['expireAfterSeconds'] = int(text)
+            except ValueError:
+                self._inline_index_invalid['ttl'] = '过期时间必须是 0–2147483647 的整数秒。'
+        self._mark_inline_indexes_edited()
+
+    def _inline_bucket_changed(self):
+        if getattr(self, '_inline_index_populating', False) or self._read_only:
+            return
+        draft = self._selected_inline_draft()
+        if draft is None:
+            return
+        text = self.bucket_size_edit.text().strip()
+        self._inline_index_invalid.pop('bucketSize', None)
+        draft.definition.options.pop('bucketSize', None)
+        if text:
+            try:
+                value = float(text)
+                if not value > 0 or value != value or value == float('inf'):
+                    raise ValueError
+                draft.definition.options['bucketSize'] = int(value) if value.is_integer() else value
+            except ValueError:
+                self._inline_index_invalid['bucketSize'] = '存储桶大小必须是正数。'
+        self._mark_inline_indexes_edited()
+
+    def inline_index_drafts(self):
+        if not self._validate_inline_indexes():
+            raise DatabaseError('\n'.join(self._inline_index_invalid.values()))
+        return deepcopy(self._inline_index_drafts)
+
+    def _inline_index_values_changed(self):
+        return self._inline_index_dirty
 
     def _update_index_buttons(self):
-        selected = self._selected_index()
         editable = bool(self.snapshot and self.snapshot.exists and not self._read_only and not self.loading)
         self.new_index_button.setEnabled(editable)
-        self.edit_index_button.setEnabled(bool(editable and selected and not selected.get('system')))
-        self.delete_index_button.setEnabled(bool(editable and selected and not selected.get('system')))
-        self.refresh_index_button.setEnabled(bool(self.snapshot and self.snapshot.exists and not self.loading))
+        self.delete_index_button.setEnabled(bool(editable and self._selected_inline_draft()))
+
+    def show_inline_index_plan(self, bundle):
+        if self._inline_index_save_dialog is None:
+            return
+        if self._inline_index_save_dialog.drafts != self._visible_inline_drafts() and self._inline_index_save_dialog.drafts != self._inline_index_drafts:
+            return
+        self._inline_index_plan = deepcopy(bundle)
+        self._inline_index_save_dialog.show_plan(bundle)
+
+    def _inline_index_sheet_finished(self, dialog):
+        if self._inline_index_save_dialog is dialog:
+            self._inline_index_save_dialog = None
+        dialog.deleteLater()
+
+    def _inline_indexes_confirmed(self):
+        dialog = self._inline_index_save_dialog
+        if dialog is None or self._inline_index_plan is None or not self._inline_index_plan.changed:
+            return
+        self.inlineIndexSaveRequested.emit(deepcopy(self._inline_index_plan))
+
+    def inline_indexes_saved(self):
+        self._inline_index_dirty = False
+        self._inline_index_plan = None
+        self._inline_index_invalid.clear()
+        self.dirty = False
+        self.dirtyChanged.emit(False)
+        self._update_controls()
 
     def _choice_changed(self, combo):
         if self._populating or self.definition is None or self._read_only:
@@ -563,12 +838,14 @@ class MongoCollectionDesignerPage(_ObjectDesignerPage):
 
     def _edited(self):
         super()._edited()
-        if self._invalid:
+        invalid = dict(self._invalid)
+        invalid.update(self._inline_index_invalid)
+        if invalid:
             self.dirty = True
             self.dirtyChanged.emit(True)
             self.titleChanged.emit(self.title)
             self._update_controls()
-            self.show_message('\n'.join(self._invalid.values()))
+            self.show_message('\n'.join(invalid.values()))
         elif self.definition is not None and not self._read_only and not self._populating:
             self.show_message('')
 
@@ -626,12 +903,18 @@ class MongoCollectionDesignerPage(_ObjectDesignerPage):
                                        (self.snapshot.read_only or self.snapshot.issues or
                                         self.validator_widget._query_unrenderable)))
         if hasattr(self, 'save_action'):
-            self.save_action.setEnabled(editable and self.dirty and not self._invalid)
+            self.save_action.setEnabled(editable and self.dirty and not self._invalid and not self._inline_index_invalid)
         self._update_index_buttons()
         self._update_validator_actions()
 
     def _render_plan(self, *_):
         if not hasattr(self, 'sql_preview'):
+            return
+        if self._inline_index_dirty and not self._collection_options_changed():
+            text = ('索引变更将按表格顺序分别生成 drop/create 命令；确认后由串行 worker 执行。'
+                    if self.preview_mode.currentIndex() == 0 else
+                    '索引 BSON 命令在保存脚本页中按表格顺序显示。')
+            self.sql_preview.setPlainText(text)
             return
         try:
             plan = self._plan
@@ -657,7 +940,18 @@ class MongoCollectionDesignerPage(_ObjectDesignerPage):
             text = '无法安全生成执行脚本：\n' + str(error)
         self.sql_preview.setPlainText(text)
 
+    def _collection_options_changed(self):
+        if self.snapshot is None:
+            return True
+        try:
+            return self.draft() != self.snapshot.definition
+        except DatabaseError:
+            return True
+
     def request_preview(self):
+        if self._inline_index_dirty and not self._collection_options_changed():
+            self._render_plan()
+            return
         if self.definition is not None and self.snapshot is not None and not self.snapshot.exists and not self.definition.name:
             self._render_plan()
             return
@@ -665,6 +959,30 @@ class MongoCollectionDesignerPage(_ObjectDesignerPage):
 
     def request_save(self):
         if self.definition is None or not self.dirty or self.loading or self._read_only:
+            return
+        if self._inline_index_dirty and self._collection_options_changed():
+            self.show_error(DatabaseError('请分别保存集合选项和嵌入式索引；当前实现不会把两类 DDL 合并成一个事务。'))
+            return
+        if self._inline_index_dirty:
+            if not self.snapshot or not self.snapshot.exists:
+                self.show_error(DatabaseError('请先创建集合并重新打开设计器，再保存索引。'))
+                return
+            try:
+                drafts = self.inline_index_drafts()
+            except DatabaseError as error:
+                self.show_error(error)
+                return
+            if self._inline_index_save_dialog is not None:
+                self._inline_index_save_dialog.raise_()
+                return
+            dialog = MongoInlineIndexSaveDialog(drafts, self)
+            self._inline_index_save_dialog = dialog
+            dialog.previewRequested.connect(self.inlineIndexPreviewRequested)
+            dialog.accepted.connect(self._inline_indexes_confirmed)
+            dialog.finished.connect(lambda *_: self._inline_index_sheet_finished(dialog))
+            dialog.open()
+            from PySide6.QtCore import QTimer
+            QTimer.singleShot(0, dialog.request_preview)
             return
         try:
             definition = self.draft()
@@ -689,6 +1007,9 @@ class MongoCollectionDesignerPage(_ObjectDesignerPage):
         QTimer.singleShot(0, dialog.request_preview)
 
     def show_error(self, error):
+        if self._inline_index_save_dialog is not None:
+            self._inline_index_save_dialog.show_error(error)
+            return
         error = DatabaseError(collection_error_text(error))
         super().show_error(error)
         if self.tabs.currentIndex() == self.tabs.count() - 1:

@@ -280,16 +280,19 @@ def test_pipeline_visual_explain_plan_views_and_search(qtbot):
     page.show_explain(explain)
     assert page.tabs.currentWidget() is page.explain_panel
     assert page.tabs.tabText(page.explain_tab_index) == "解释 1"
-    assert page.explain_panel.visual_tree.topLevelItemCount() == 1
-    root = page.explain_panel.visual_tree.topLevelItem(0)
-    assert root.text(0) == "GROUP" and root.child(0).text(0) == "COLLSCAN"
-    assert root.child(0).text(3) == "4"
+    canvas = page.explain_panel.explain_canvas
+    assert [item.node.stage for item in canvas._items] == ["GROUP", "COLLSCAN"]
+    assert canvas._items[0].pos().x() < canvas._items[1].pos().x()
+    assert canvas._items[1].node.docs_examined == 4
+    canvas.select_index(1)
+    assert canvas._selected.node.stage == "COLLSCAN"
+    assert "docsExamined" in canvas.detail_view.toPlainText()
     assert page.explain_panel.stats_table.rowCount() == 2
     assert "unknownMetric" in page.explain_panel.json_view.toPlainText()
     page.explain_panel.search_edit.setText("COLLSCAN")
-    assert not root.isHidden() and not root.child(0).isHidden()
+    assert canvas._items[0].opacity() < 1 and canvas._items[1].opacity() == 1
     page.explain_panel.search_edit.setText("no-such-node")
-    assert root.isHidden()
+    assert all(item.opacity() < 1 for item in canvas._items)
 
 
 def test_pipeline_explain_unexpected_shape_and_png_export(qtbot, monkeypatch, tmp_path):
@@ -297,7 +300,7 @@ def test_pipeline_explain_unexpected_shape_and_png_export(qtbot, monkeypatch, tm
     qtbot.addWidget(page)
     explain = parse_explain_reply({"ok": 1, "unexpectedPlan": {"futureShape": True}})
     page.show_explain(explain)
-    assert page.explain_panel.visual_tree.topLevelItemCount() == 0
+    assert page.explain_panel.explain_canvas._items == []
     assert "unexpectedPlan" in page.explain_panel.json_view.toPlainText()
     target = tmp_path / "plan"
     monkeypatch.setattr(

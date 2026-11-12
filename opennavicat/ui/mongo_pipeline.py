@@ -4,14 +4,15 @@ from __future__ import annotations
 from copy import deepcopy
 import json
 
-from PySide6.QtCore import QMimeData, QPoint, Qt, Signal
-from PySide6.QtGui import QAction, QColor, QDrag, QKeySequence
+from PySide6.QtCore import QMimeData, QPoint, QPointF, QRectF, Qt, Signal
+from PySide6.QtGui import QAction, QColor, QDrag, QKeySequence, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import (
     QAbstractItemView, QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
     QDoubleSpinBox, QFileDialog, QFormLayout, QFrame, QHBoxLayout, QHeaderView, QLabel,
     QLineEdit, QMessageBox, QPlainTextEdit, QPushButton, QScrollArea, QSizePolicy,
-    QSpinBox, QSplitter, QStackedWidget, QTabWidget, QTableWidget, QTableWidgetItem,
-    QToolBar, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget,
+    QGraphicsObject, QGraphicsPathItem, QGraphicsProxyWidget, QGraphicsScene,
+    QGraphicsView, QSpinBox, QSplitter, QStackedWidget, QTabWidget, QTableWidget,
+    QTableWidgetItem, QToolBar, QVBoxLayout, QWidget,
 )
 
 from bson import BSON
@@ -624,8 +625,203 @@ class MongoPipelineUnwindTool(QWidget):
         return result
 
 
+class _ExplainNodeItem(QGraphicsObject):
+    def __init__(self, node, expensive, callback):
+        super().__init__()
+        self.node = node
+        self.expensive = bool(expensive)
+        self.callback = callback
+        self.selected = False
+        self.setAcceptHoverEvents(True)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setToolTip(
+            f"{node.stage}\nexecutionTimeMillis: {node.total_elapsed_ms or 0:g}\n"
+            f"nReturned: {node.returned if node.returned is not None else '---'}")
+
+    def boundingRect(self):
+        return QRectF(0, 0, 58, 72)
+
+    def paint(self, painter, _option, _widget=None):
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        icon = QRectF(10, 9, 34, 34)
+        painter.setBrush(QColor("#f1f4f7"))
+        painter.setPen(QPen(QColor("#8db5e8") if self.selected else QColor("#89919c"), 1.5 if self.selected else 0.8))
+        painter.drawRoundedRect(icon, 3, 3)
+        painter.setPen(QPen(QColor("#54677c"), 1))
+        for offset, width in ((14, 20), (19, 16), (24, 22), (29, 12)):
+            painter.drawLine(QPointF(17, offset + 8), QPointF(17 + width, offset + 8))
+        painter.setPen(QColor("#d9dde3"))
+        painter.drawText(QRectF(0, -1, 58, 11), Qt.AlignmentFlag.AlignLeft, f"{self.node.total_elapsed_ms or 0:g}")
+        painter.setPen(QColor("#d58a58") if self.expensive else QColor("#d9dde3"))
+        painter.drawText(QRectF(0, 49, 58, 18), Qt.AlignmentFlag.AlignHCenter, self.node.stage)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.callback(self)
+        super().mousePressEvent(event)
+
+
+class MongoExplainCanvas(QGraphicsView):
+    """Native left-to-right execution-plan canvas matching the reference."""
+
+    NODE_WIDTH = 58
+    NODE_HEIGHT = 72
+    COLUMN_GAP = 112
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("mongoExplainCanvas")
+        self.setRenderHint(QPainter.RenderHint.Antialiasing)
+        self.setBackgroundBrush(QColor("#202124"))
+        self.setFrameShape(QFrame.Shape.NoFrame)
+        self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
+        self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
+        self.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorViewCenter)
+        self._scale = 1.0
+        self._threshold = 50.0
+        self._root_elapsed = None
+        self._items = []
+        self._selected = None
+        self._detail_proxy = None
+        self.detail_view = None
+        self.scene = None
+        self.set_explain(PipelineExplain(raw={}, raw_text=""))
+
+    def set_explain(self, explain):
+        if self.scene is not None:
+            self.scene.deleteLater()
+        self.scene = QGraphicsScene(self)
+        self.setScene(self.scene)
+        self._items = []
+        self._selected = None
+        self._detail_proxy = None
+        self.detail_view = None
+        roots = explain.roots
+        self._root_elapsed = roots[0].total_elapsed_ms if roots else None
+        positions = {}
+        next_row = [90]
+
+        def place(node, depth):
+            if node.children:
+                child_positions = [place(child, depth + 1) for child in node.children]
+                y = sum(item[1] for item in child_positions) / len(child_positions)
+            else:
+                y = next_row[0]
+                next_row[0] += 118
+            positions[id(node)] = (70 + depth * self.COLUMN_GAP, y)
+            return positions[id(node)]
+
+        for root in roots:
+            place(root, 0)
+            next_row[0] += 28
+        edge_pen = QPen(QColor("#80a9d9"), 2)
+        for root in roots:
+            self._add_tree(root, positions, edge_pen)
+        options = []
+        for root in roots:
+            options.extend([node for node in self._walk(root)])
+        left = min((positions[id(node)][0] for node in options), default=0)
+        right = max((positions[id(node)][0] + self.NODE_WIDTH for node in options), default=400)
+        top = min((positions[id(node)][1] for node in options), default=0)
+        bottom = max((positions[id(node)][1] + self.NODE_HEIGHT for node in options), default=300)
+        self.scene.setSceneRect(QRectF(left - 35, top - 65, right - left + 650, bottom - top + 220))
+        if options:
+            self.centerOn((left + right) / 2, (top + bottom) / 2)
+        self.resetTransform()
+        self._scale = 1.0
+
+    def _walk(self, node):
+        yield node
+        for child in node.children:
+            yield from self._walk(child)
+
+    def _add_tree(self, node, positions, edge_pen):
+        parent_x, parent_y = positions[id(node)]
+        for child in node.children:
+            child_x, child_y = positions[id(child)]
+            path = QPainterPath(QPointF(parent_x + self.NODE_WIDTH, parent_y + 26))
+            midpoint = (parent_x + self.NODE_WIDTH + child_x) / 2
+            path.cubicTo(midpoint, parent_y + 26, midpoint, child_y + 26, child_x, child_y + 26)
+            edge = QGraphicsPathItem(path)
+            edge.setPen(edge_pen)
+            self.scene.addItem(edge)
+        elapsed = node.stage_elapsed_ms
+        percent = (100.0 * elapsed / self._root_elapsed
+                   if elapsed is not None and self._root_elapsed else 0.0)
+        item = _ExplainNodeItem(node, percent >= self._threshold, self._select_item)
+        item.setPos(parent_x, parent_y)
+        self.scene.addItem(item)
+        self._items.append(item)
+        for child in node.children:
+            self._add_tree(child, positions, edge_pen)
+
+    def _select_item(self, item):
+        if self._selected is not None:
+            self._selected.selected = False
+            self._selected.update()
+        self._selected = item
+        item.selected = True
+        item.update()
+        self._show_detail(item)
+
+    def _show_detail(self, item):
+        if self._detail_proxy is not None:
+            self.scene.removeItem(self._detail_proxy)
+            self._detail_proxy = None
+        panel = QFrame()
+        panel.setObjectName("mongoExplainDetailPanel")
+        panel.setStyleSheet(
+            "QFrame#mongoExplainDetailPanel { background: #25282c; border: 1px solid #69717b; }")
+        panel.setFixedSize(300, 390)
+        layout = QVBoxLayout(panel)
+        header = QHBoxLayout()
+        title = QLabel(item.node.stage)
+        title.setStyleSheet("font-weight: 600; color: #f0f2f5;")
+        close_button = QPushButton("×")
+        close_button.setFixedSize(24, 24)
+        header.addWidget(title)
+        header.addStretch()
+        header.addWidget(close_button)
+        layout.addLayout(header)
+        self.detail_view = QPlainTextEdit()
+        self.detail_view.setObjectName("mongoExplainNodeDetail")
+        self.detail_view.setReadOnly(True)
+        self.detail_view.setPlainText(canonical_dumps(item.node.raw))
+        layout.addWidget(self.detail_view, 1)
+        proxy = self.scene.addWidget(panel)
+        x = item.x() + self.NODE_WIDTH + 28
+        y = max(24.0, item.y() - 35)
+        proxy.setPos(x, y)
+        self._detail_proxy = proxy
+        close_button.clicked.connect(lambda: self.scene.removeItem(proxy))
+
+    def select_index(self, index):
+        if 0 <= index < len(self._items):
+            self._select_item(self._items[index])
+
+    def set_threshold(self, value):
+        self._threshold = float(value)
+        for item in self._items:
+            elapsed = item.node.stage_elapsed_ms
+            percent = (100.0 * elapsed / self._root_elapsed
+                       if elapsed is not None and self._root_elapsed else 0.0)
+            item.expensive = percent >= self._threshold
+            item.update()
+
+    def set_search(self, text):
+        needle = str(text).strip().lower()
+        for item in self._items:
+            matches = not needle or needle in item.node.stage.lower()
+            item.setOpacity(1.0 if matches else 0.22)
+
+    def zoom(self, delta):
+        self._scale = max(0.45, min(2.5, self._scale + delta))
+        factor = self._scale / self.transform().m11()
+        self.scale(factor, factor)
+
+
 class MongoPipelineExplainPanel(QWidget):
-    """Reference-shaped Explain workspace with a native plan tree and raw views."""
+    """Reference-shaped Explain workspace with a native plan canvas and raw views."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -634,7 +830,7 @@ class MongoPipelineExplainPanel(QWidget):
         self._connection_name = ""
         self._schema = ""
         self._script = ""
-        self._zoom = 10
+        self._zoom = 1.0
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         controls = QHBoxLayout()
@@ -667,22 +863,8 @@ class MongoPipelineExplainPanel(QWidget):
         self.visual_page = QWidget()
         visual_layout = QVBoxLayout(self.visual_page)
         visual_layout.setContentsMargins(4, 4, 4, 4)
-        self.visual_split = QSplitter(Qt.Orientation.Vertical)
-        self.visual_tree = QTreeWidget()
-        self.visual_tree.setObjectName("mongoExplainVisualTree")
-        self.visual_tree.setHeaderLabels(["节点", "耗时 (ms)", "返回", "扫描文档", "索引"])
-        self.visual_tree.setAlternatingRowColors(True)
-        self.visual_tree.header().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        for column in range(1, 5):
-            self.visual_tree.header().setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
-        self.detail_view = QPlainTextEdit()
-        self.detail_view.setObjectName("mongoExplainNodeDetail")
-        self.detail_view.setReadOnly(True)
-        self.detail_view.setPlaceholderText("选择计划节点以查看服务端原始指标与未知字段。")
-        self.visual_split.addWidget(self.visual_tree)
-        self.visual_split.addWidget(self.detail_view)
-        self.visual_split.setSizes([360, 180])
-        visual_layout.addWidget(self.visual_split)
+        self.explain_canvas = MongoExplainCanvas()
+        visual_layout.addWidget(self.explain_canvas)
         self.view_tabs.addTab(self.visual_page, "可视化")
 
         self.json_view = QPlainTextEdit()
@@ -716,12 +898,11 @@ class MongoPipelineExplainPanel(QWidget):
         info_layout.addWidget(self.info_script, 1)
         self.view_tabs.addTab(self.info_page, "信息")
 
-        self.zoom_out_button.clicked.connect(lambda: self._set_zoom(self._zoom - 1))
-        self.zoom_in_button.clicked.connect(lambda: self._set_zoom(self._zoom + 1))
+        self.zoom_out_button.clicked.connect(lambda: self._set_zoom(-0.1))
+        self.zoom_in_button.clicked.connect(lambda: self._set_zoom(0.1))
         self.search_edit.textChanged.connect(self._filter_plan)
         self.threshold_spin.valueChanged.connect(self._highlight_threshold)
         self.export_image_button.clicked.connect(self._export_image)
-        self.visual_tree.itemSelectionChanged.connect(self._show_selected_node)
 
     @staticmethod
     def _summary(value):
@@ -740,15 +921,7 @@ class MongoPipelineExplainPanel(QWidget):
         self._connection_name = str(connection_name)
         self._schema = str(schema)
         self._script = str(script)
-        self.visual_tree.clear()
-        root_elapsed = explain.root.elapsed_ms if explain.root is not None else None
-        for node in explain.roots:
-            self.visual_tree.addTopLevelItem(self._plan_item(node, root_elapsed))
-        self.visual_tree.expandAll()
-        if self.visual_tree.topLevelItemCount():
-            self.visual_tree.setCurrentItem(self.visual_tree.topLevelItem(0))
-        else:
-            self.detail_view.setPlainText(explain.raw_text)
+        self.explain_canvas.set_explain(explain)
         self.json_view.setPlainText(explain.raw_text)
         self._populate_grid(explain.raw)
         self._populate_stats(explain.stats_rows())
@@ -759,23 +932,6 @@ class MongoPipelineExplainPanel(QWidget):
         self.info_script.setPlainText(self._script)
         self._filter_plan(self.search_edit.text())
         self._highlight_threshold(self.threshold_spin.value())
-
-    def _plan_item(self, node, root_elapsed):
-        elapsed = node.elapsed_ms
-        item = QTreeWidgetItem([
-            node.stage,
-            "" if elapsed is None else f"{elapsed:.2f}",
-            "" if node.returned is None else str(node.returned),
-            "" if node.docs_examined is None else str(node.docs_examined),
-            node.index_name or "",
-        ])
-        item.setData(0, Qt.ItemDataRole.UserRole, node)
-        item.setData(1, Qt.ItemDataRole.UserRole, (
-            None if root_elapsed in (None, 0) or elapsed is None
-            else 100.0 * elapsed / root_elapsed))
-        for child in node.children:
-            item.addChild(self._plan_item(child, root_elapsed))
-        return item
 
     def _populate_grid(self, raw):
         self.grid_table.setRowCount(0)
@@ -798,47 +954,14 @@ class MongoPipelineExplainPanel(QWidget):
             for column, value in enumerate(values):
                 self.stats_table.setItem(row_index, column, QTableWidgetItem(str(value)))
 
-    def _show_selected_node(self):
-        items = self.visual_tree.selectedItems()
-        node = items[0].data(0, Qt.ItemDataRole.UserRole) if items else None
-        self.detail_view.setPlainText(canonical_dumps(node.raw) if node is not None else "")
-
     def _highlight_threshold(self, value):
-        threshold = float(value)
-        stack = [self.visual_tree.topLevelItem(index)
-                 for index in range(self.visual_tree.topLevelItemCount())]
-        while stack:
-            item = stack.pop()
-            percent = item.data(1, Qt.ItemDataRole.UserRole)
-            expensive = isinstance(percent, (int, float)) and percent > threshold
-            color = QColor("#7a332e") if expensive else QColor(0, 0, 0, 0)
-            for column in range(self.visual_tree.columnCount()):
-                item.setBackground(column, color)
-            stack.extend(item.child(index) for index in range(item.childCount()))
+        self.explain_canvas.set_threshold(value)
 
     def _filter_plan(self, text):
-        needle = str(text).strip().lower()
+        self.explain_canvas.set_search(text)
 
-        def apply(item):
-            own = any(needle in item.text(column).lower()
-                      for column in range(self.visual_tree.columnCount())) if needle else False
-            child_visible = False
-            for index in range(item.childCount()):
-                child_visible = apply(item.child(index)) or child_visible
-            visible = not needle or own or child_visible
-            item.setHidden(not visible)
-            if needle and child_visible:
-                item.setExpanded(True)
-            return visible
-
-        for index in range(self.visual_tree.topLevelItemCount()):
-            apply(self.visual_tree.topLevelItem(index))
-
-    def _set_zoom(self, value):
-        self._zoom = max(8, min(20, int(value)))
-        font = self.visual_tree.font()
-        font.setPointSize(self._zoom)
-        self.visual_tree.setFont(font)
+    def _set_zoom(self, delta):
+        self.explain_canvas.zoom(delta)
 
     def _export_image(self):
         filename, _selected = QFileDialog.getSaveFileName(

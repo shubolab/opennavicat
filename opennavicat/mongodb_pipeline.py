@@ -130,6 +130,21 @@ class ExplainPlanNode:
         return None
 
     @property
+    def total_elapsed_ms(self):
+        for key in ("executionTimeMillis", "executionTimeMillisEstimate", "elapsedMillis"):
+            value = self.raw.get(key)
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                return float(value)
+        return None
+
+    @property
+    def stage_elapsed_ms(self):
+        value = self.raw.get("stageExecutionTimeMillis")
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return float(value)
+        return self.elapsed_ms
+
+    @property
     def returned(self):
         value = self.raw.get("nReturned")
         return value if isinstance(value, int) and not isinstance(value, bool) else None
@@ -196,8 +211,8 @@ class PipelineExplain:
         for node in self.nodes():
             row = grouped.setdefault(node.stage, {"stage": node.stage, "count": 0, "elapsed_ms": 0.0})
             row["count"] += 1
-            row["elapsed_ms"] += node.elapsed_ms or 0.0
-        root_elapsed = self.root.elapsed_ms if self.root is not None else None
+            row["elapsed_ms"] += node.stage_elapsed_ms or 0.0
+        root_elapsed = self.root.total_elapsed_ms if self.root is not None else None
         denominator = root_elapsed if root_elapsed and root_elapsed > 0 else sum(
             row["elapsed_ms"] for row in grouped.values())
         return tuple({

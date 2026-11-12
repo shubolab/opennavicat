@@ -177,7 +177,7 @@ def test_real_aggregation_pipeline_preview_run_explain_and_saved_object(qtbot, m
     idle(qtbot, window)
     assert 'executionStats' in page._explain.raw
     assert page.tabs.currentWidget() is page.explain_panel
-    assert page.explain_panel.visual_tree.topLevelItemCount() >= 1
+    assert len(page.explain_panel.explain_canvas._items) >= 1
     assert any('$group' in node.stage.lower() or 'group' in node.stage.lower()
                for node in page._explain.nodes())
     assert page._explain.command['allowDiskUse'] is True

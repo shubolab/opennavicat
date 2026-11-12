@@ -241,6 +241,43 @@ while matching the reference's five-tool availability.
 The generated pipeline was discarded without saving. The exact-owned
 container and anonymous volumes were verified by identity and removed.
 
+## AP18-08 Multi-node visual Explain canvas
+
+AP18-08 used a fresh exact-owned fixture with 12 synthetic documents and a
+`$match(active=true) + $group` pipeline. The visual Explain view rendered a
+left-to-right node canvas rather than a table:
+
+```text
+project → project → group → project → filter → scan
+```
+
+Each node used an icon card, a small elapsed-time badge, a lowercase operator
+label and a thin connection to its child. `filter` and `scan` were highlighted
+at the default 50% cost threshold while zero-stage-time nodes remained neutral.
+Selecting `group` outlined the node, showed a small floating summary and opened
+a bordered detail pane to its right containing the exact server fields:
+
+```text
+stage: group
+executionTimeMillis: 2
+stageExecutionTimeMillis: 0
+nReturned: 3
+planNodeId: 3
+opens/closes/saveState/restoreState/isEOF
+groupBySlots, expressions, mergingExprs
+usedDisk, spills and spill byte counters
+```
+
+The detail pane kept all unknown BSON values through Canonical EJSON. The
+canvas toolbar retained the observed threshold, zoom, search, export-image and
+pan behaviour.
+
+OpenNavicat now uses a native `QGraphicsView` canvas with the same left-to-right
+stage ordering, curved parent/child connectors, elapsed badges, threshold
+highlighting, search dimming and a floating server-detail panel. The generated
+pipeline was discarded, and the exact-owned container and volumes were removed
+after identity verification.
+
 ## Boundaries
 
 This round did not complete an automated reference drag operation, every

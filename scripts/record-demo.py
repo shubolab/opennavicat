@@ -1176,9 +1176,13 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
         page = state["mongo_pipeline_page"]
         page.explain_panel.view_tabs.setCurrentIndex(0)
         if (page.tabs.currentWidget() is not page.explain_panel
-                or page.explain_panel.visual_tree.topLevelItemCount() < 1
+                or len(page.explain_panel.explain_canvas._items) < 1
                 or "executionStats" not in page._explain.raw):
             raise RuntimeError("The generated aggregation-pipeline Explain did not produce a visual plan.")
+        for index, item in enumerate(page.explain_panel.explain_canvas._items):
+            if item.node.stage.lower() == "group":
+                page.explain_panel.explain_canvas.select_index(index)
+                break
         state["mongo_pipeline_explain"] = {
             "nodes": len(page._explain.nodes()),
             "root": page._explain.root.stage if page._explain.root is not None else None,

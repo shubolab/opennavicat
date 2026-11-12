@@ -34,10 +34,11 @@ sample size and local persistence.
   opens a native `解释` workspace matching the observed five-view family:
   visual plan, Canonical EJSON, grid, grouped node statistics and run
   information.
-- The visual plan is a bounded `QTreeWidget` with stage, elapsed time, returned
-  documents, examined documents and index columns. It supports threshold
-  highlighting, search, zoom, node detail and PNG export. The raw server reply
-  remains available without flattening unknown fields or BSON values.
+- The visual plan is a bounded native `QGraphicsView` canvas with left-to-right
+  parent/child connectors, elapsed-time badges, threshold colouring, search,
+  zoom, pan, node highlighting and a floating Canonical-EJSON detail panel. The
+  raw server reply remains available without flattening unknown fields or BSON
+  values.
 - Result export writes Canonical Extended JSON without converting Int64,
   Decimal128, dates, binaries or ObjectIds through Python `str()`.
 - Saved pipelines appear in a seven-column object list matching the observed
@@ -84,10 +85,10 @@ unknown fields remain in the node detail and JSON view, while absent or
 unexpected plan shapes still open the raw response instead of manufacturing a
 plan node.
 
-The current native plan tree follows the observed information architecture but
-is not yet a pixel-for-pixel node canvas. Every MongoDB operator, shard/replica
-plan shape, profiler output, cost-colouring rule and Windows/Linux reference
-layout remains a parity gate.
+The native canvas follows the observed left-to-right information architecture,
+node badges, cost highlighting and floating detail pane. Every MongoDB operator,
+large branched/sharded/replica plan shape, profiler output, exact cost formula
+and Windows/Linux reference layout remains a parity gate.
 
 ## Safety and execution boundary
 
@@ -108,7 +109,7 @@ save/reopen path. The expanded collection runner passed **288 cases with zero
 skips/failures/errors across eight exact-owned fixtures**; focused Cocoa pipeline
 checks passed **14/14**, the full source suite passed **1820 cases with 562
 conditionally skipped**, and source smoke returned 6 rows × 4 columns. The README
-GIF is 25 phases, 323 encoded frames and 53.84 seconds. Runtime reference observations are recorded in
+GIF is 25 phases, 326 encoded frames and 54.34 seconds. Runtime reference observations are recorded in
 [the Navicat observation](ui-reference-18-mongodb-pipeline.md).
 
 All 42 operator-specific editor templates were enumerated from the reference;

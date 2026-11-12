@@ -10,8 +10,12 @@ sample size and local persistence.
 - Main MongoDB toolbar `管道` and the `聚合管道` object category open the native
   Qt workspace.
 - The operator combo contains all 42 stage names observed from Navicat 18.0.5.
-- Users can add/delete and move stages, enable or disable a stage, choose the
-  source collection and edit Canonical Extended JSON stage bodies.
+- Users can add/delete and drag or button-move stages, enable or disable a
+  stage, choose the source collection and edit Canonical Extended JSON stage
+  bodies.
+- `$match` has the observed structured create tool with AND/OR groups and
+  field/operator/value rows. Complex expressions automatically fall back to the
+  exact EJSON editor instead of being flattened lossily.
 - A graph represents `source → ordered stages → output`.
 - `预览全部` runs each enabled prefix against an isolated source sample and shows
   the selected stage's input/output plus the final result.
@@ -51,13 +55,14 @@ Unit tests cover the 42-entry catalog, nagg roundtrip with Int64 and Decimal128,
 stage import, persistence, UI graph operations, preview rendering and save-sheet
 naming. Owned MongoDB tests cover per-stage preview, final aggregation,
 `executionStats` Explain, `$out` confirmation boundaries and a full MainWindow
-save/reopen path. The expanded collection runner passed **268 cases with zero
+save/reopen path. The expanded collection runner passed **270 cases with zero
 skips/failures/errors across eight exact-owned fixtures**; focused Cocoa pipeline
-checks passed **5/5**, the full source suite passed **1801 cases with 561
+checks passed **7/7**, the full source suite passed **1803 cases with 561
 conditionally skipped**, and source smoke returned 6 rows × 4 columns. The README
-GIF is 22 phases, 290 encoded frames and 48.34 seconds. Runtime reference observations are recorded in
+GIF is 22 phases, 291 encoded frames and 48.50 seconds. Runtime reference observations are recorded in
 [the Navicat observation](ui-reference-18-mongodb-pipeline.md).
 
-Dragging, each stage's specialized visual create tool, visual Explain trees,
-automatic-task references, reference `.nagg` compatibility, change-stream UI,
-all MongoDB versions/topologies and Windows/Linux visual acceptance remain open.
+Specialized visual create tools for stages other than `$match`, visual Explain
+trees, automatic-task references, reference `.nagg` compatibility,
+change-stream UI, all MongoDB versions/topologies and Windows/Linux visual
+acceptance remain open.

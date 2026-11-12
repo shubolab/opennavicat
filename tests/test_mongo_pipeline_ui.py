@@ -1,6 +1,8 @@
 """Native aggregation-pipeline workspace tests without database I/O."""
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from PySide6.QtWidgets import QMessageBox
 
 from opennavicat.mongodb_pipeline import PipelineDefinition, PipelinePreview, PipelineStage
@@ -27,6 +29,39 @@ def test_pipeline_page_edits_source_stages_order_enable_and_script(qtbot):
     assert page.draft().stages[0].enabled is False
     assert '$group' not in page.script_editor.toPlainText()
     assert '$match' in page.script_editor.toPlainText()
+
+
+def test_match_create_tool_builds_structured_conditions(qtbot):
+    page = MongoPipelinePage("generated", "demo_catalog")
+    qtbot.addWidget(page)
+    page.set_sources(["docs"])
+    page.source_combo.setCurrentText("docs")
+    assert page.stage_mode.currentData() == "create"
+    page.match_tool.add_row("_id", "$gte", "4")
+    page.match_tool.add_row("active", "$eq", "true")
+    assert page.draft().stages[0].body == {
+        "_id": {"$gte": 4},
+        "active": True,
+    }
+    page.match_tool.combinator.setCurrentIndex(1)
+    assert page.draft().stages[0].body == {"$or": [
+        {"_id": {"$gte": 4}}, {"active": True}]}
+    page.stage_editor.setPlainText('{"created_at":{"$date":"2026-01-01T00:00:00Z"}}')
+    page.stage_mode.setCurrentIndex(page.stage_mode.findData("editor"))
+    assert page.draft().stages[0].body["created_at"] == datetime(2026, 1, 1, tzinfo=timezone.utc)
+
+
+def test_stage_drag_target_moves_stage_in_definition(qtbot):
+    page = MongoPipelinePage("generated", "demo_catalog")
+    qtbot.addWidget(page)
+    page.set_sources(["docs"])
+    page.source_combo.setCurrentText("docs")
+    page.add_stage()
+    page.operator_combo.setCurrentText("$group")
+    page.stage_editor.setPlainText('{"_id":"$group"}')
+    page.move_stage_to(1, 0)
+    assert [stage.operator for stage in page.draft().stages] == ["$group", "$match"]
+    assert page.definition.selected_stage == 0
 
 
 def test_pipeline_page_delete_requires_confirmation(qtbot, monkeypatch):

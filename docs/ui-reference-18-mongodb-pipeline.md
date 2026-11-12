@@ -25,8 +25,9 @@ A new pipeline opens as a main-workspace tab with:
 ## AP18-02 Stage catalog and editor
 
 Selecting the default stage exposed a `运算符:` combo, `创建工具` and `编辑器`
-radio choices, input/output previews, and a stage preview action. The editor
-shows a source editor with a stage-specific help comment.
+radio choices, input/output previews, and a stage preview action. The
+`$match` create tool starts with a `点击“+”以添加匹配条件` row. The raw editor
+shows a stage-specific help comment.
 
 The actual operator list contained 42 entries in this order:
 
@@ -72,8 +73,10 @@ serialized `.nagg` bytes.
 
 ## Boundaries
 
-This round did not complete drag ordering, every stage's specialized create tool,
-visual Explain tree, automatic-task references, export of every result type,
-saved-pipeline reopening, concurrent peer changes, all server/topology variants,
-or Windows/Linux reference layouts. The fixture was disconnected and removed
+This round did not complete an automated reference drag operation, every
+stage's specialized create tool, visual Explain tree, automatic-task references,
+export of every result type, saved-pipeline reopening, concurrent peer changes,
+all server/topology variants, or Windows/Linux reference layouts. OpenNavicat's
+corresponding stage drag and `$match` create tool are implementation results,
+not proof of unobserved reference behavior. The fixture was disconnected and removed
 after verifying its exact container ID, owner label and loopback port.

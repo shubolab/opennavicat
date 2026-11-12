@@ -25,13 +25,18 @@
   },
   "main_at_resume": "929a0277de826ecb5bc465d1ce92f203f650d74f",
   "published": {
-    "tag": "v0.9.0",
-    "source_sha": "c5f30995a0211d7f5f5c31177543d191a17b001a",
-    "formal_run_id": 42983388008,
-    "public_metadata_rechecked": true,
-    "asset_count": 8,
+    "tag": "v0.10.0",
+    "source_sha": "711a458a873a96034f865d36f46d4919fce39359",
+    "formal_run_id": 43129758054,
+    "conclusion": "success",
     "native_installers": 6,
-    "all_asset_bytes_redownloaded_this_resume": false
+    "public_assets": 8,
+    "anonymous_download_verified": true,
+    "sha256sums_verified": true,
+    "build_manifests_verified": true,
+    "prerelease": true,
+    "publisher_signed": false,
+    "notarized": false
   },
   "ci_at_resume": {
     "id": 43043705231,
@@ -104,7 +109,7 @@
     "dependency_command_stub_tests": 16,
     "all_protocol_source_hashes_match": true
   },
-  "updated_at": "2026-11-12T08:46:09.176553+08:00",
+  "updated_at": "2026-11-12T09:03:19.325502+08:00",
   "ci_after_storage": {
     "id": 43051367511,
     "source_sha": "7c65c70d6822cf7607cceaa06a860b1561893a53",
@@ -185,10 +190,10 @@
   },
   "candidate_release": {
     "version": "0.10.0",
-    "status": "retag_pending_after_failed_unpublished_preflight",
+    "status": "published_and_independently_verified",
     "workspace": "managed_release-0-10_worktree",
     "base_sha": "b358c6216177bc896b3c57f1f7412758463a1f9b",
-    "frozen_source_sha": null,
+    "frozen_source_sha": "711a458a873a96034f865d36f46d4919fce39359",
     "six_target_ci_started": true,
     "tag_created": true,
     "public_release_created": false,
@@ -246,14 +251,13 @@
       "sample_columns": 4
     },
     "six_target_ci": {
-      "id": 43058448004,
-      "source_sha": "2b28b79317859b44eda739d2b19d1bcf350d3050",
+      "id": 43129758054,
       "conclusion": "success",
       "desktop_jobs": 6,
       "security_success": true,
-      "publisher": "skipped",
+      "publisher": "success",
       "artifact_audit": "passed",
-      "receipt": "artifacts/release-010/ci-audit-43058448004/verification.json"
+      "public_asset_audit": "passed"
     },
     "next_steps": [
       "merge exact verified source to main",

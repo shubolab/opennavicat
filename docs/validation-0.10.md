@@ -1,8 +1,8 @@
 # 0.10 候选验证记录
 
-记录日期：2026-11-12，Asia/Shanghai。**0.10.0 已完成精确源码六目标预检与安装器独立审计；正式 tag 流水线、公开 Release 和匿名下载复核仍待完成。**
+记录日期：2026-11-12，Asia/Shanghai。**0.10.0 已正式发布；精确 tag 流水线、六安装器独立审计及八份公开资产匿名下载复核全部通过。**
 当前公开安装器仍为 [v0.9.0](https://github.com/shubolab/opennavicat/releases/tag/v0.9.0)。
-本文件先记录已经取得的证据与待完成项，后续必须用本版精确冻结 SHA、正式运行和实际公开资产补齐。
+本文件记录候选开发、失败预检、修复后的正式运行和公开资产结果。
 
 完整目标仍为 Windows、Linux、macOS 的独立原生 Qt 实现、完整 Navicat 数据库工具和 1:1 保留 UI。
 产品账号、产品登录/注册、激活、订阅和云账号/团队协作继续排除；数据库认证、用户/角色/授权、云数据库连接、
@@ -43,8 +43,8 @@
 | 候选录制脚本回归 | **28 passed、零跳过**；`artifacts/release-010/recorder-owned.xml` | 包含 owned MongoDB 与真实 FFmpeg 回归，仍不替代最终 GIF 的录制及隐私验收。 |
 | 本候选 native helper / Cocoa 源运行 | VM **101/0 skip**；原生 Cocoa 设计器及真实存储路径 **51/0 skip**；Cocoa 源 smoke **6 行 × 4 列**通过，七驱动、crypto 与 native JS 探针通过 | 本版打包 smoke 仍待 CI；这些源检查不替代安装器或三平台参考 UI。 |
 | README 唯一 GIF | 实际 Cocoa 完整录制 **17阶段、230帧、38.34秒**，逐阶段视觉隐私检查通过，逐帧可见文字 guard 通过，已替换唯一 GIF | 仅生成示例数据；真实存储保存由独立客户端核验；临时服务和工作区均清理。 |
-| 0.10 精确源码六原生目标 CI | [43058448004](https://github.com/shubolab/opennavicat/actions/runs/43058448004) **7/7 成功**：六个桌面目标与真实数据库安全专项；13份 artifact 已独立下载审计，六安装器全部通过 | 这是 `2b28b79` 的 workflow_dispatch 预检，publisher 按非 tag 规则 skipped；正式 tag 仍将重建并验收六份新资产。 |
-| 正式 tag、Release 与公开资产 | **尚未创建或核验** | 预检安装器不能直接充作正式资产；仍缺 tag 重建、校验和、合并 manifest 与匿名下载复核。 |
+| 0.10 精确源码六原生目标 CI | [43129758054](https://github.com/shubolab/opennavicat/actions/runs/43129758054) **8/8 成功**：六个桌面、真实数据库安全和发布；13份 artifact 与六安装器独立审计通过 | 正式 tag 源为 `711a458`；发布 job 已创建公开 Release。 |
+| 正式 tag、Release 与公开资产 | [v0.10.0](https://github.com/shubolab/opennavicat/releases/tag/v0.10.0) 已公开；八资产匿名下载、GitHub digest、`SHA256SUMS` 与合并 manifest 全部一致 | 公开 Release 为 prerelease；安装包无发布者签名或 Apple 公证。 |
 
 上述1658项全源执行早于新增的编码回归；该回归及其它录制用例随后在28项专项中全部执行。
 本机不同测试范围不得相加为另一轮全源。私有 JUnit、fixture、构建和录制收据保留在 ignored 的 `artifacts/`，
@@ -66,7 +66,7 @@
 `mongo:8.0.34@sha256:b9924c330a8bbc5800fe9c69f04a84e221eca7b28fd049a0354147d9908fa142`，
 并让 protocol、collection和JS runners拒绝收到其它镜像/版本回执，没有放宽版本保护。
 本机重跑：MongoDB protocol/index/MainWindow **298 passed**、集合专项 **226 passed**，均零跳过/失败/错误，
-所有精确 container ID 另行确认已清理。正式资格仍须新源码的完整 tag pipeline。
+所有精确 container ID 另行确认已清理。正式资格随后由新源码 tag run 43129758054 完整通过。
 
 ## 0.10 精确源码预检：六安装器独立审计通过
 
@@ -92,6 +92,29 @@ JS protocol 193、JS Qt protocol 12。不同范围不求和。源码及安装器
 
 这次预检证明 `2b28b79` 的原生构建与安装链，**不证明正式公开资产、完整 Navicat parity 或三平台人工 UI 验收**。
 正式 tag 必须在同一冻结源码上重新完成全部六目标并生成新的 Release 资产。
+
+## 0.10 正式 tag 与公开资产审计
+
+正式 `v0.10.0` 指向源码提交 `711a458a873a96034f865d36f46d4919fce39359` 的 tag。
+[43129758054](https://github.com/shubolab/opennavicat/actions/runs/43129758054) 为 **8/8 job 成功**：
+六个原生桌面、真实数据库安全专项及发布 job 全部完成。独立下载并审计13份 CI artifact 后，总收据 `passed=true`；
+六安装器的安装、启动、卸载、测试、原生 payload 和 helper 字节均核验。
+
+随后使用无认证 HTTP 下载公开 Release 的八份资产，重新计算大小和 SHA256，并与 GitHub asset digest、
+`SHA256SUMS` 和 `build-manifests.json` 三方交叉核对。六个安装器摘要如下：
+
+| 目标 | SHA256 |
+| --- | --- |
+| Linux amd64 | `63c31782d4292d4065425b009387755966c3273f56af4b24bfbdea5ae769462d` |
+| Linux arm64 | `d4b21e8dce628946e0209269690c4ef86f2792921144df2744e44dc564d72c29` |
+| macOS amd64 | `3ecd9b5bcfba61bbf99909114be214bab0d81e75405e79fa4b61a6d791eb60a3` |
+| macOS arm64 | `eac5ad1c2c6822bfa6bb56199c48e8f1bdc47b9e906516894fad95e35484903b` |
+| Windows amd64 | `b27d34a6d4ca19ae769dd960ee47f0e40caf66cccb7062730d3af9e7216c2338` |
+| Windows arm64 | `550711108a109d4574d0570bb3c617049c39ecbee85ccb96366f6b6e4a454467` |
+
+正式数据库安全范围均零跳过：TLS/SSH 75、SQL Server/Redis 131、MongoDB protocol/index/MainWindow 289、
+MongoDB TLS/SSH 22、集合 226、JS protocol 195、JS Qt protocol 12。各范围重叠，不相加为全源。
+公开 Release 被标记为 prerelease，安装包没有发布者签名或 Apple 公证；这些限制不改变原生安装与运行回执。
 
 ## 003c486 历史六目标预检：独立产物审计通过
 

@@ -23,7 +23,8 @@ OBJECT_LABELS = {"table": "表", "view": "视图", "index": "索引", "trigger":
 
 def object_symbol(kind):
     return {"mongo_collection": "table", "mongo_timeseries": "table", "mongo_view": "view",
-            "mongo_index": "index", "mongo_bucket": "database"}.get(kind, kind)
+            "mongo_index": "index", "mongo_bucket": "database",
+            "mongo_pipeline": "query"}.get(kind, kind)
 
 
 def _mongo_index_type(entry):
@@ -142,7 +143,12 @@ class ObjectBrowser(QWidget):
         if kind == "mongo_collection":
             headers = ["名称", "文档数", "已固定", "内存中的总大小", "对象的平均大小", "存储大小", "索引数", "索引的总大小"]
         elif kind.startswith("mongo_"):
-            headers = ["名称", "索引类型", "集合名称", "唯一键", "背景", "稀疏", "在此之后过期（秒）", "版本", "大小"] if kind == "mongo_index" else ["名称", "", "", "", ""]
+            if kind == "mongo_index":
+                headers = ["名称", "索引类型", "集合名称", "唯一键", "背景", "稀疏", "在此之后过期（秒）", "版本", "大小"]
+            elif kind == "mongo_pipeline":
+                headers = ["名称", "文件大小", "创建的用户", "创建日期", "修改的用户", "修改日期", "访问时间"]
+            else:
+                headers = ["名称", "", "", "", ""]
         self.table.setColumnCount(len(headers))
         self.table.setHorizontalHeaderLabels(headers)
         self.system_indexes_action.setVisible(kind == "index")
@@ -188,8 +194,16 @@ class ObjectBrowser(QWidget):
                              for name in dict.fromkeys(row["collection"] for row in rows)}
                     return [dict(obj, kind=kind, schema=schema, id=connection_id,
                                  size=sizes.get(obj["collection"], {}).get(obj["name"])) for obj in rows], 0
-                if kind in {"mongo_function", "mongo_mapreduce", "mongo_pipeline"}:
+                if kind in {"mongo_function", "mongo_mapreduce"}:
                     return [], 0
+                if kind == "mongo_pipeline":
+                    return [dict(
+                        name=item["name"], kind="mongo_pipeline", id=connection_id,
+                        schema=schema, pipeline_id=item["id"], size=item.get("size", 0),
+                        created_user=item.get("created_user", ""), created=item.get("created", ""),
+                        modified_user=item.get("modified_user", ""), modified=item.get("modified", ""),
+                        accessed=item.get("accessed", ""))
+                        for item in self.window.store.mongo_pipelines(connection_id, schema)], 0
                 all_objects = session.objects(schema)
                 matching = {"mongo_collection", "mongo_timeseries"} if kind == "mongo_collection" else {kind}
                 objects = [dict(obj, id=connection_id) for obj in all_objects
@@ -255,6 +269,10 @@ class ObjectBrowser(QWidget):
                     "是" if entry.get("unique") else "否", "是" if options.get("background") else "否",
                     "是" if options.get("sparse") else "否", options.get("expireAfterSeconds", "—"),
                     options.get("v", "—"), _byte_size(entry.get("size"))]
+            elif self.kind == "mongo_pipeline":
+                values = [entry["name"], _byte_size(entry.get("size")), entry.get("created_user", ""),
+                          entry.get("created", ""), entry.get("modified_user", ""),
+                          entry.get("modified", ""), entry.get("accessed", "")]
             elif self.kind.startswith("mongo_"):
                 values = [entry["name"], "", "", "", ""]
             if self.kind in {"query", "backup", "redis_data"}:
@@ -316,9 +334,11 @@ class ObjectBrowser(QWidget):
         self.open_action.setEnabled(selected and self.kind != "mongo_index")
         self.design_action.setEnabled(connected and selected and self.kind in {
             "table", "view", "index", "trigger", "mongo_index", "mongo_collection", "mongo_timeseries", "mongo_view"})
-        self.new_action.setEnabled(writable and self.kind in {"table", "index", "trigger", "mongo_index", "mongo_collection"})
+        self.new_action.setEnabled(writable and self.kind in {
+            "table", "index", "trigger", "mongo_index", "mongo_collection", "mongo_pipeline"})
         self.delete_action.setEnabled(writable and selected and self.kind in {
-            "table", "view", "index", "trigger", "mongo_index", "mongo_collection", "mongo_view"}
+            "table", "view", "index", "trigger", "mongo_index", "mongo_collection", "mongo_view",
+            "mongo_pipeline"}
             and not self.selected().get("automatic") and not (self.kind in {"mongo_index", "mongo_collection"} and self.selected().get("system")))
         self.clear_action.setEnabled(writable and selected and self.kind == "mongo_collection")
         self.rename_action.setEnabled(writable and selected and self.kind == "mongo_collection")
@@ -346,6 +366,9 @@ class ObjectBrowser(QWidget):
             self.window.statusBar().showMessage(entry["path"], 10000)
         elif entry["kind"] == "redis_data":
             self.window.open_redis_browser(entry["id"], entry["schema"])
+        elif entry["kind"] == "mongo_pipeline":
+            self.window.open_mongo_pipeline(
+                entry["id"], entry["schema"], pipeline_id=entry.get("pipeline_id"))
         elif entry["kind"] in {"index", "trigger", "mongo_index"}:
             self.window.design_object(entry)
         else:
@@ -371,6 +394,8 @@ class ObjectBrowser(QWidget):
                 self.window.delete_mongo_collection(entry)
             elif entry["kind"] == "mongo_view":
                 self.window.delete_mongo_view(entry)
+            elif entry["kind"] == "mongo_pipeline":
+                self.window.delete_mongo_pipeline(entry)
             else:
                 self.window.drop_object(entry)
 

@@ -29,8 +29,10 @@ TARGETS = [
     'tests/test_mongodb_collection_copy.py',
     'tests/test_mongodb_collection_maintenance.py',
     'tests/test_mongodb_views.py',
+    'tests/test_mongodb_pipeline.py',
     'tests/test_mongodb_session.py::test_canonical_array_editor_preserves_bson_types_and_rejects_duplicate_fields',
     'tests/test_mongo_collection_designer_ui.py',
+    'tests/test_mongo_pipeline_ui.py',
     'tests/test_mongo_collation_ui.py',
     'tests/test_mongo_inline_index_ui.py',
     'tests/test_mongo_timeseries_designer_ui.py',
@@ -42,6 +44,7 @@ TARGETS = [
     'tests/test_mongo_window.py::test_real_window_mongo_tree_statistics_typed_page_and_sqlite_switch',
     'tests/test_mongo_window.py::test_real_collection_designer_creates_and_collmods_with_worker_owned_io',
     'tests/test_mongo_window.py::test_real_window_collection_options_create_and_change_stream_collmod',
+    'tests/test_mongo_window.py::test_real_aggregation_pipeline_preview_run_explain_and_saved_object',
     'tests/test_mongo_window.py::test_real_collection_designer_lists_indexes_and_opens_embedded_key_editor',
     'tests/test_mongo_window.py::test_real_window_collection_storage_creates_reopens_and_sheet_cancel_preserves_draft',
     'tests/test_mongo_window.py::test_real_window_collection_storage_server_error_keeps_text_and_can_retry',
@@ -60,7 +63,7 @@ TARGETS = [
 ]
 EXPECTED_MONGODB_IMAGE = "mongo:8.0.34@sha256:b9924c330a8bbc5800fe9c69f04a84e221eca7b28fd049a0354147d9908fa142"
 EXPECTED_MONGODB_VERSION = "8.0.34"
-EXPECTED_FIXTURE_MODULES = {'test_mongodb_collections', 'test_mongodb_timeseries', 'test_mongodb_collection_copy', 'test_mongodb_collection_maintenance', 'test_mongodb_views', 'test_mongo_collation_ui', 'test_mongo_window'}
+EXPECTED_FIXTURE_MODULES = {'test_mongodb_collections', 'test_mongodb_timeseries', 'test_mongodb_collection_copy', 'test_mongodb_collection_maintenance', 'test_mongodb_views', 'test_mongodb_pipeline', 'test_mongo_collation_ui', 'test_mongo_window'}
 COLLECT = '''import json,sys,pytest
 from pathlib import Path
 class Collect:
@@ -96,7 +99,7 @@ def main():
              'opennavicat/mongodb_collection_copy.py', 'opennavicat/mongodb_collection_maintenance.py',
              'opennavicat/mongodb_views.py', 'opennavicat/mongodb_session.py', 'opennavicat/mongodb_collection_literals.py',
              'opennavicat/ui/mongo_collection_designer.py', 'opennavicat/ui/mongo_collation.py',
-             'opennavicat/ui/mongo_view_designer.py',
+             'opennavicat/ui/mongo_pipeline.py', 'opennavicat/ui/mongo_view_designer.py',
              'opennavicat/ui/mongo_timeseries_designer.py', 'opennavicat/ui/mongo_maintenance.py',
              'opennavicat/ui/window.py', 'opennavicat/ui/schema_object_designer.py',
              'opennavicat/ui/workspace.py', 'opennavicat/js_engine/server_errors.py',
@@ -104,7 +107,7 @@ def main():
              'tests/test_mongodb_collection_copy.py', 'tests/test_mongodb_collection_maintenance.py',
              'tests/test_mongodb_views.py',
              'tests/test_mongodb_session.py', 'tests/test_mongo_collection_designer_ui.py',
-             'tests/test_mongo_collation_ui.py',
+             'tests/test_mongo_pipeline_ui.py', 'tests/test_mongo_collation_ui.py', 'tests/test_mongodb_pipeline.py',
              'tests/test_mongo_timeseries_designer_ui.py', 'tests/test_mongo_maintenance_ui.py',
              'tests/test_mongo_inspector_ui.py', 'tests/test_mongo_view_designer_ui.py',
              'tests/test_mongo_window.py', 'tests/test_schema_object_designer_ui.py', 'tests/test_connection_lifecycle.py',

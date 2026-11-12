@@ -1095,6 +1095,71 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
         phase("mongodb_collection_options_reopened")
         capture()
         capture_timer.start()
+        hold(1.8, open_mongo_pipeline)
+
+    def open_mongo_pipeline():
+        page = window.open_mongo_pipeline(MONGO_CONNECTION_ID, MONGO_DATABASE)
+        if page is None:
+            raise RuntimeError("The demo did not open a native aggregation-pipeline workspace.")
+        state["mongo_pipeline_page"] = page
+        wait_for(lambda: MONGO_COLLECTION in page._sources and idle(), mongo_pipeline_ready,
+                 "reading generated aggregation-pipeline sources")
+
+    def mongo_pipeline_ready():
+        from opennavicat.mongodb_session import canonical_loads
+
+        page = state["mongo_pipeline_page"]
+        page.source_combo.setCurrentText(MONGO_COLLECTION)
+        page.stage_editor.setPlainText('{"attributes.active": true}')
+        page.add_stage()
+        page.operator_combo.setCurrentText("$group")
+        page.stage_editor.setPlainText('{"_id": "$attributes.origin", "count": {"$sum": 1}}')
+        if not window.preview_mongo_pipeline(page, page.draft()):
+            raise RuntimeError("The generated aggregation-pipeline preview did not start.")
+        wait_for(lambda: page._preview is not None and not page.running and idle(), mongo_pipeline_preview,
+                 "previewing generated aggregation-pipeline stages")
+
+    def mongo_pipeline_preview():
+        from opennavicat.mongodb_session import canonical_loads
+
+        page = state["mongo_pipeline_page"]
+        if (len(page._preview.source_rows) != 6 or len(page._preview.final_rows) != 1
+                or canonical_loads(page._preview.final_rows[0]).get("count") != 6):
+            raise RuntimeError("The generated aggregation-pipeline preview returned unexpected rows.")
+        state["mongo_pipeline_preview"] = {
+            "source_rows": len(page._preview.source_rows),
+            "stage_rows": [len(stage["rows"]) for stage in page._preview.stages],
+            "final_rows": len(page._preview.final_rows),
+        }
+        phase("mongodb_aggregation_pipeline")
+        hold(2.2, mongo_pipeline_script)
+
+    def mongo_pipeline_script():
+        page = state["mongo_pipeline_page"]
+        page.tabs.setCurrentWidget(page.script_tab)
+        if "db.getCollection" not in page.script_editor.toPlainText() or "$group" not in page.script_editor.toPlainText():
+            raise RuntimeError("The generated aggregation-pipeline script is incomplete.")
+        phase("mongodb_aggregation_pipeline_script")
+        hold(2.0, run_mongo_pipeline)
+
+    def run_mongo_pipeline():
+        from opennavicat.mongodb_session import canonical_loads
+
+        page = state["mongo_pipeline_page"]
+        if not window.run_mongo_pipeline(page, page.draft()):
+            raise RuntimeError("The generated aggregation pipeline did not start.")
+        wait_for(lambda: bool(page.last_rows) and not page.running and idle(), mongo_pipeline_results,
+                 "running the generated aggregation pipeline")
+
+    def mongo_pipeline_results():
+        from opennavicat.mongodb_session import canonical_loads
+
+        page = state["mongo_pipeline_page"]
+        page.tabs.setCurrentWidget(page.results)
+        if len(page.last_rows) != 1 or canonical_loads(page.last_rows[0]).get("count") != 6:
+            raise RuntimeError("The generated aggregation pipeline returned unexpected results.")
+        state["mongo_pipeline_results"] = len(page.last_rows)
+        phase("mongodb_aggregation_pipeline_results")
         hold(2.2, finish)
 
     def finish():
@@ -1157,6 +1222,12 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
                                 if index >= 0:
                                     window.tabs.removeTab(index)
                                     page.deleteLater()
+                        page = state.get("mongo_pipeline_page")
+                        if page is not None:
+                            index = window.tabs.indexOf(page)
+                            if index >= 0:
+                                window.tabs.removeTab(index)
+                                page.deleteLater()
                         discarded = True
                     elif CONNECTION_ID in window.sessions:
                         session = window.sessions[CONNECTION_ID]
@@ -1201,7 +1272,7 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
         raise RuntimeError(state["error"] or "Demo application failed.")
     if not window._closed or not idle():
         raise RuntimeError("The demo exited before its native sessions and window had closed.")
-    if state["count"] < 2 or len(state["phases"]) != (19 if mongo is not None else 6):
+    if state["count"] < 2 or len(state["phases"]) != (22 if mongo is not None else 6):
         raise RuntimeError("The demo did not capture all required workflows.")
     for index, item in enumerate(state["phases"]):
         stop = state["phases"][index + 1]["first_frame"] if index + 1 < len(state["phases"]) else state["count"]
@@ -1233,6 +1304,8 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
         "mongodb_collection_storage_reopened_readonly": state["mongo_storage_verification"] is not None,
         "mongodb_collection_options_reopened_readonly": state["mongo_storage_verification"] is not None,
         "mongodb_collection_options_verified": bool(state["mongo_storage_verification"]),
+        "mongodb_aggregation_pipeline_preview": state.get("mongo_pipeline_preview"),
+        "mongodb_aggregation_pipeline_results": state.get("mongo_pipeline_results"),
         "visible_text_privacy_guard": "labels, editors, titles, actions, combos, tree/table display fields; paths/endpoints/credentials rejected before frame save",
         "sqlite_closed_in_worker": state["sqlite_closed_in_worker"],
         "native_window_closed_before_quit": bool(window._closed),

@@ -100,7 +100,8 @@ class Store:
         self.directory = directory or data_directory()
         self.directory.mkdir(parents=True, exist_ok=True)
         self.path = self.directory / "workspace.json"
-        self.state = {"connections": [], "favorites": [], "drafts": [], "remembered_passwords": [], "remembered_secrets": {}, "navicat_imports": {}}
+        self.state = {"connections": [], "favorites": [], "drafts": [], "remembered_passwords": [],
+                      "remembered_secrets": {}, "navicat_imports": {}, "mongo_pipelines": []}
         if self.path.exists():
             try:
                 self.state.update(json.loads(self.path.read_text("utf-8")))
@@ -398,6 +399,55 @@ class Store:
         with closing(sqlite3.connect(self.history_path)) as db, db:
             db.row_factory = sqlite3.Row
             return [dict(r) for r in db.execute("SELECT * FROM history WHERE sql LIKE ? OR connection_name LIKE ? ORDER BY id DESC LIMIT 200", (f"%{search}%", f"%{search}%"))]
+
+    def save_mongo_pipeline(self, connection_id, schema, name, text, *, pipeline_id=None):
+        from .mongodb_pipeline import from_nagg
+
+        definition = from_nagg(text)
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("A pipeline name is required")
+        definition.name = name.strip()
+        from .mongodb_pipeline import to_nagg
+        text = to_nagg(definition)
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        entries = self.state.setdefault("mongo_pipelines", [])
+        entry = next((item for item in entries if item.get("id") == pipeline_id), None)
+        if entry is None:
+            entry = {"id": str(uuid.uuid4()), "created": now, "created_user": "本机用户"}
+            entries.append(entry)
+        entry.update({
+            "connection_id": connection_id, "schema": schema, "name": name.strip(),
+            "source": definition.source, "modified": now, "modified_user": "本机用户",
+            "accessed": now, "size": len(text.encode("utf-8")), "nagg": text,
+        })
+        self.flush()
+        return deepcopy(entry)
+
+    def mongo_pipelines(self, connection_id=None, schema=None):
+        entries = self.state.setdefault("mongo_pipelines", [])
+        return [deepcopy(item) for item in entries
+                if (connection_id is None or item.get("connection_id") == connection_id)
+                and (schema is None or item.get("schema") == schema)]
+
+    def mongo_pipeline(self, pipeline_id):
+        entry = next((item for item in self.state.setdefault("mongo_pipelines", [])
+                      if item.get("id") == pipeline_id), None)
+        return deepcopy(entry) if entry is not None else None
+
+    def touch_mongo_pipeline(self, pipeline_id):
+        entry = next((item for item in self.state.setdefault("mongo_pipelines", [])
+                      if item.get("id") == pipeline_id), None)
+        if entry is not None:
+            entry["accessed"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+            self.flush()
+
+    def delete_mongo_pipeline(self, pipeline_id):
+        before = len(self.state.setdefault("mongo_pipelines", []))
+        self.state["mongo_pipelines"] = [item for item in self.state["mongo_pipelines"]
+                                          if item.get("id") != pipeline_id]
+        if len(self.state["mongo_pipelines"]) == before:
+            raise ValueError("Pipeline not found")
+        self.flush()
 
     def add_favorite(self, name, sql, connection_id, *, query_language=LEGACY):
         if not isinstance(query_language, str) or query_language not in LANGUAGES: raise ValueError('Unknown query language')

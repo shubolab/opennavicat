@@ -9,10 +9,161 @@ from PySide6.QtWidgets import QComboBox, QFormLayout, QWidget
 from opennavicat.database import DatabaseError
 
 
-LOCALE_SUGGESTIONS = (
-    'simple', 'root', 'af', 'am', 'ar', 'ar@collation=compat', 'en', 'en_US',
-    'zh', 'zh_CN',
-)
+# Ordered non-empty values enumerated from the Navicat 18.0.5 edit combo.
+LOCALE_SUGGESTIONS = tuple('''
+simple
+af
+am
+ar
+ar@collation=compat
+as
+az
+az@collation=search
+be
+bg
+bn
+bn@collation=traditional
+bo
+bs
+bs@collation=search
+bs_Cyrl
+ca
+ca@collation=search
+chr
+cs
+cs@collation=search
+cy
+da
+da@collation=search
+de
+de@collation=eor
+de@collation=phonebook
+de@collation=search
+de_AT
+de_AT@collation=phonebook
+dsb
+dz
+ee
+el
+en
+en_US
+en_US_POSIX
+eo
+es
+es@collation=search
+es@collation=traditional
+et
+fa
+fa_AF
+fi
+fi@collation=search
+fi@collation=traditional
+fil
+fo
+fo@collation=search
+fr
+fr_CA
+ga
+gl
+gl@collation=search
+gu
+ha
+haw
+he
+he@collation=search
+hi
+hr
+hr@collation=search
+hsb
+hu
+hy
+id
+ig
+is
+is@collation=search
+it
+ja
+ja@collation=unihan
+ka
+kk
+kl
+kl@collation=search
+km
+kn
+kn@collation=traditional
+ko
+ko@collation=search
+ko@collation=searchjl
+ko@collation=unihan
+kok
+ky
+lb
+lkt
+ln
+ln@collation=phonetic
+lo
+lt
+lv
+mk
+ml
+mn
+mr
+ms
+mt
+my
+nb
+nb@collation=search
+ne
+nl
+nn
+nn@collation=search
+om
+or
+pa
+pl
+ps
+pt
+ro
+ru
+se
+se@collation=search
+si
+si@collation=dictionary
+sk
+sk@collation=search
+sl
+smn
+smn@collation=search
+sq
+sr
+sr_Latn
+sr_Latn@collation=search
+sv
+sv@collation=search
+sw
+ta
+te
+th
+to
+tr
+tr@collation=search
+ug
+uk
+ur
+vi
+vi@collation=traditional
+wae
+yi
+yi@collation=search
+yo
+zh
+zh@collation=big5han
+zh@collation=gb2312han
+zh@collation=unihan
+zh@collation=zhuyin
+zh_Hant
+zu
+'''.split())
 CASE_LEVEL = (('off', False), ('on', True))
 CASE_FIRST = (('upper', 'upper'), ('lower', 'lower'), ('off', 'off'))
 STRENGTH = (
@@ -45,7 +196,6 @@ class MongoCollationEditor(QWidget):
         self.locale_combo.setObjectName('mongoCollationLocale')
         self.locale_combo.setEditable(True)
         self.locale_combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
-        self.locale_combo.addItem('', None)
         for value in LOCALE_SUGGESTIONS:
             self.locale_combo.addItem(value, value)
         self.form.addRow('区域设置:', self.locale_combo)
@@ -102,7 +252,11 @@ class MongoCollationEditor(QWidget):
             value = value or {}
             known = {'locale', *(key for key, _ in FIELDS)}
             self._unknown = {key: deepcopy(item) for key, item in value.items() if key not in known}
-            self.locale_combo.setCurrentText(str(value.get('locale', '')))
+            locale = str(value.get('locale', ''))
+            if locale:
+                self.locale_combo.setCurrentText(locale)
+            else:
+                self.locale_combo.setCurrentIndex(-1)
             for key, combo in self.combos.items():
                 item = value.get(key)
                 index = 0 if item is None else combo.findData(item)

@@ -379,11 +379,14 @@ def fit_capture_image(source, width, height, *, save_sheet=False):
         image = source.scaled(width, height, Qt.AspectRatioMode.IgnoreAspectRatio,
                               Qt.TransformationMode.SmoothTransformation)
         image.setDevicePixelRatio(1)
-        return image
+        return image.convertToFormat(QImage.Format.Format_RGB32)
     image = source.scaled(width, height, Qt.AspectRatioMode.KeepAspectRatio,
                           Qt.TransformationMode.SmoothTransformation)
     image.setDevicePixelRatio(1)
-    canvas = QImage(width, height, QImage.Format.Format_ARGB32_Premultiplied)
+    # A native main-window grab can be RGB while a modal is RGBA. Keep every
+    # PNG in the same opaque format so palette filters never reinitialize when
+    # the recorded surface changes. Both surfaces already have a background.
+    canvas = QImage(width, height, QImage.Format.Format_RGB32)
     canvas.fill(QColor('#202124'))
     painter = QPainter(canvas)
     painter.drawImage((width - image.width()) // 2, (height - image.height()) // 2, image)

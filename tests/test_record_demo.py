@@ -53,10 +53,13 @@ def test_generated_javascript_demo_requires_exact_bson_and_actual_display(record
             recorder.verify_mongo_query_values(tree, rows)
 
 
-@pytest.mark.parametrize('corruption', [None, 'name', 'options', 'option_type', 'non_bson_value', 'not_empty', 'engine', 'index'])
+@pytest.mark.parametrize('corruption', [None, 'name', 'options', 'option_type', 'non_bson_value', 'not_empty', 'engine', 'index',
+    'collation_missing', 'collation_value', 'collation_version'])
 def test_demo_storage_requires_exact_independent_catalog_and_actual_engine_settings(recorder, corruption):
     from bson import Int64
-    catalog = {'name': recorder.MONGO_STORAGE_COLLECTION, 'type': 'collection', 'options': recorder.mongo_storage_options()}
+    catalog = {'name': recorder.MONGO_STORAGE_COLLECTION, 'type': 'collection',
+               'options': {**recorder.mongo_storage_options(),
+                   'collation': {**recorder.mongo_demo_collation(), 'version': '57.1'}}}
     stats = {'wiredTiger': {'creationString': 'allocation_size=4KB,block_compressor=zlib'},
              'indexDetails': {'_id_': {'creationString': 'prefix_compression=false,internal_page_max=16KB'}}}
     count = 0
@@ -67,9 +70,13 @@ def test_demo_storage_requires_exact_independent_catalog_and_actual_engine_setti
     elif corruption == 'not_empty': count = 1
     elif corruption == 'engine': stats['wiredTiger']['creationString'] = 'block_compressor=snappy'
     elif corruption == 'index': stats['indexDetails']['_id_']['creationString'] = 'prefix_compression=true'
+    elif corruption == 'collation_missing': catalog['options'].pop('collation')
+    elif corruption == 'collation_value': catalog['options']['collation']['strength'] = 3
+    elif corruption == 'collation_version': catalog['options']['collation']['version'] = ''
     if corruption is None:
         receipt = recorder.verify_mongo_storage_values(catalog, stats, count)
         assert receipt['options_verified'] and receipt['collection_storage_verified'] and receipt['default_index_storage_verified']
+        assert receipt['collation_verified'] and receipt['collation_selected'] == recorder.mongo_demo_collation()
         assert receipt['collection'] == recorder.MONGO_STORAGE_COLLECTION
     else:
         with pytest.raises(RuntimeError, match='independently verified'):
@@ -78,14 +85,16 @@ def test_demo_storage_requires_exact_independent_catalog_and_actual_engine_setti
 
 def test_real_demo_storage_verifier_reads_owned_collection_and_default_id_index(recorder, session):
     database = session.connection[session.config.database]
-    database.create_collection(recorder.MONGO_STORAGE_COLLECTION, **recorder.mongo_storage_options())
+    database.create_collection(recorder.MONGO_STORAGE_COLLECTION,
+        collation=recorder.mongo_demo_collation(), **recorder.mongo_storage_options())
     with database.list_collections(filter={'name': recorder.MONGO_STORAGE_COLLECTION}) as cursor:
         catalog = list(cursor)
     assert len(catalog) == 1
     stats = database.command({'collStats': recorder.MONGO_STORAGE_COLLECTION})
     receipt = recorder.verify_mongo_storage_values(catalog[0], stats,
         database[recorder.MONGO_STORAGE_COLLECTION].count_documents({}, limit=1))
-    assert receipt['empty_collection_verified'] and receipt['default_index_storage_verified']
+    assert (receipt['empty_collection_verified'] and receipt['default_index_storage_verified']
+            and receipt['collation_verified'])
 
 
 def test_demo_storage_independent_client_never_runs_on_gui_thread(recorder, monkeypatch):

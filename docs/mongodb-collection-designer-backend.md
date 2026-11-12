@@ -123,6 +123,13 @@ UI slice backed only by capabilities in this module:
   race can still create it, and no existing target is intentionally dropped.
   Successful rename preserves documents, indexes, collection options and UUID.
 
+- New ordinary collections use structured collation controls for locale,
+  case level/first, strength, numeric ordering, alternate handling, maximum
+  variable, backwards and normalization. Existing server-normalized collation
+  values are displayed read-only because MongoDB collection collation is
+  immutable; unknown fields and the server version are preserved. See
+  [collation controls](mongodb-collation-ui.md).
+
 - MongoDB collection and time-series selections now populate the inspector with
   the same observed metadata family as the object list: document count, capped,
   total/object-average/storage/index sizes, index count, with unknown values kept

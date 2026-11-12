@@ -41,7 +41,9 @@ def test_collection_page_edits_exact_supported_options_and_caps_size_units(qtbot
     page.validator_editor.setPlainText('{"amount": {"$gte": 0}}')
     page.level_combo.setCurrentIndex(page.level_combo.findData('strict'))
     page.action_combo.setCurrentIndex(page.action_combo.findData('error'))
-    page.collation_editor.setPlainText('{"locale": "en", "strength": 2}')
+    page.collation_editor.locale_combo.setCurrentText('en')
+    page.collation_editor.combos['strength'].setCurrentIndex(
+        page.collation_editor.combos['strength'].findData(2))
 
     draft = page.draft()
     assert draft.name == 'events'

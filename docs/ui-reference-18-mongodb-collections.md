@@ -196,6 +196,30 @@ db.getCollection("items").createIndex({
 本次自动化对复选框的 AX 改动没有进入原版脚本模型，因此不能据此判定这些选项在真实人工
 交互中的完整保存语义已经关闭。此限制单独保留。
 
+## MC18-09：新集合结构化排序规则与服务器归一值
+
+新建集合的排序规则页初始只有区域设置可编辑，其它八个联动控件禁用。区域设置列表报告
+100 项，首批包含 `simple`、`af`、`am`、`ar`、`ar@collation=compat`；输入 `en`
+后原版规范显示为 `en_US` 并启用其余控件。实际展开值为：
+
+| 控件 | 实际选项 |
+| --- | --- |
+| 大小写级别 | off、on |
+| 大小写优先 | upper、lower、off |
+| 强度 | primary/secondary/tertiary/quaternary/identical level |
+| 数值排序 | off、on |
+| 替代 | non-ignorable、shifted |
+| 最大变量 | punct、space |
+| 逆向 | off、on |
+| 规范化 | off、on |
+
+通过 CUA 修改非 locale 控件时，界面值可变化但原版脚本模型只保留 locale，因此这些 AX
+改动没有被当作成功保存语义。仅保存 locale 的新集合 `collation_ui_probe` 后，独立
+MongoDB 8.0.34 catalog 返回服务器归一值：`caseLevel=false`、`caseFirst=off`、
+`strength=3`、`numericOrdering=false`、`alternate=non-ignorable`、
+`maxVariable=punct`、`normalization=false`、`backwards=false`、`version=57.1`。
+关闭并重开该集合后，结构化控件回显上述值且全部禁用。该测试集合及连接均已清理。
+
 ## 本轮边界、私有收据和清理
 
 私有 fixture/独立读取/精确清理收据保存在 Git 忽略的

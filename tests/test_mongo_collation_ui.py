@@ -5,7 +5,8 @@ import pytest
 
 from opennavicat.mongodb_collections import CollectionDefinition, CollectionSnapshot
 from opennavicat.ui.mongo_collection_designer import MongoCollectionDesignerPage
-from opennavicat.ui.mongo_collation import MongoCollationEditor
+from opennavicat.ui.mongo_collation import LOCALE_SUGGESTIONS, MongoCollationEditor
+from test_mongodb_session import mongodb_service, session  # noqa: F401 - pytest fixtures
 
 
 def test_new_collation_starts_blank_and_enables_after_locale(qtbot):
@@ -21,8 +22,6 @@ def test_new_collation_starts_blank_and_enables_after_locale(qtbot):
 
 
 def test_reference_locale_catalog_preserves_order_and_variants(qtbot):
-    from opennavicat.ui.mongo_collation import LOCALE_SUGGESTIONS
-
     editor = MongoCollationEditor()
     qtbot.addWidget(editor)
     assert len(LOCALE_SUGGESTIONS) == len(set(LOCALE_SUGGESTIONS)) == 152
@@ -35,6 +34,35 @@ def test_reference_locale_catalog_preserves_order_and_variants(qtbot):
     assert visible_values == list(LOCALE_SUGGESTIONS)
     editor.locale_combo.setCurrentText('generated_future_locale')
     assert editor.collation() == {'locale': 'generated_future_locale'}
+
+
+def test_real_locale_catalog_creates_and_roundtrips_every_server_default(qtbot, session):
+    database = session.connection[session.config.database]
+    prefix = 'locale_catalog_'
+    observed = {}
+    editor = MongoCollationEditor()
+    qtbot.addWidget(editor)
+    try:
+        for index, locale in enumerate(LOCALE_SUGGESTIONS):
+            name = prefix + f'{index:03d}'
+            database.create_collection(name, collation={'locale': locale})
+            with database.list_collections(filter={'name': name}) as cursor:
+                catalog = next(cursor)
+            actual = catalog['options'].get('collation')
+            observed[locale] = actual
+            if locale == 'simple':
+                assert actual is None
+            else:
+                assert actual['locale'] == locale and actual['version']
+                editor.load(actual)
+                assert editor.collation() == actual
+        assert len(observed) == len(LOCALE_SUGGESTIONS) == 152
+        assert observed['fr_CA']['backwards'] is True
+    finally:
+        for name in database.list_collection_names():
+            if name.startswith(prefix):
+                database.drop_collection(name)
+    assert not [name for name in database.list_collection_names() if name.startswith(prefix)]
 
 
 def test_observed_structured_values_generate_exact_collation_and_preserve_unknown(qtbot):

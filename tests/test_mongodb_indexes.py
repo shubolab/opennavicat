@@ -373,3 +373,62 @@ def test_real_post_ack_replacement_is_reported_instead_of_returning_a_false_succ
         tools.apply_plan(session, plan)
     assert error.value.outcome.steps[0].status == "acknowledged"
     assert list(error.value.outcome.observation["docs"]["indexes"][0]["key"].items()) == [("replacement", 1)]
+
+
+def test_real_inline_index_bundle_applies_rename_create_and_drop_in_order(session):
+    database = session.connection[session.config.database]
+    collection = database.inline_bundle
+    collection.insert_many([
+        {"_id": 1, "code": "A", "label": "one"},
+        {"_id": 2, "code": "B", "label": "two"},
+    ])
+    collection.create_index("code", name="inline_existing")
+    collection.create_index("label", name="inline_remove")
+    drafts = [
+        tools.InlineIndexDraft(tools.IndexDefinition(
+            "inline_existing_v2", "inline_bundle", [tools.IndexKey("code", 1)], {"unique": True}),
+            "inline_existing"),
+        tools.InlineIndexDraft(tools.IndexDefinition(
+            "inline_new", "inline_bundle",
+            [tools.IndexKey("code", -1), tools.IndexKey("label", 1)], {"bucketSize": 2}),
+            ""),
+        tools.InlineIndexDraft(tools.IndexDefinition(
+            "inline_remove", "inline_bundle", [tools.IndexKey("label", 1)], {}),
+            "inline_remove", True),
+    ]
+    bundle = tools.plan_inline_changes(
+        session, session.config.database, "inline_bundle", drafts)
+    assert bundle.changed and len(bundle.plans) == 3
+    assert any("不是事务" in warning for warning in bundle.warnings)
+    assert 'dropIndexes' in bundle.command_script and 'createIndexes' in bundle.command_text
+    updated = tools.apply_inline_plans(session, bundle)
+    assert len(updated) == 3
+    indexes = collection.index_information()
+    assert {'_id_', 'inline_existing_v2', 'inline_new'} == set(indexes)
+    assert indexes['inline_existing_v2']['key'] == [('code', 1)]
+    assert indexes['inline_new']['key'] == [('code', -1), ('label', 1)]
+    assert collection.count_documents({}) == 2
+
+
+def test_real_inline_index_bundle_stops_on_first_server_error_without_rollback(session):
+    database = session.connection[session.config.database]
+    collection = database.inline_failure
+    collection.insert_many([{"_id": 1, "code": "A", "label": "same"},
+                            {"_id": 2, "code": "B", "label": "same"}])
+    drafts = [
+        tools.InlineIndexDraft(tools.IndexDefinition(
+            "inline_first", "inline_failure", [tools.IndexKey("code", 1)], {}), ""),
+        tools.InlineIndexDraft(tools.IndexDefinition(
+            "inline_duplicate_unique", "inline_failure",
+            [tools.IndexKey("label", 1)], {"unique": True}), ""),
+    ]
+    bundle = tools.plan_inline_changes(
+        session, session.config.database, "inline_failure", drafts)
+    with pytest.raises(tools.InlineIndexApplyError) as captured:
+        tools.apply_inline_plans(session, bundle)
+    assert captured.value.failed_definition.name == "inline_duplicate_unique"
+    assert len(captured.value.completed) == 1
+    assert "no automatic rollback" in str(captured.value)
+    indexes = collection.index_information()
+    assert "inline_first" in indexes and "inline_duplicate_unique" not in indexes
+    assert collection.count_documents({}) == 2

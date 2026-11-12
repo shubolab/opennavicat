@@ -31,7 +31,7 @@ _OPTIONS = {
     "v", "background", "unique", "sparse", "hidden", "expireAfterSeconds",
     "partialFilterExpression", "storageEngine", "collation", "wildcardProjection",
     "weights", "default_language", "language_override", "textIndexVersion",
-    "2dsphereIndexVersion", "bits", "min", "max",
+    "2dsphereIndexVersion", "bits", "min", "max", "bucketSize",
 }
 
 
@@ -313,9 +313,11 @@ def validate_definition(definition):
     if "expireAfterSeconds" in options:
         if not 0 <= options["expireAfterSeconds"] <= 2147483647 or len(definition.keys) != 1 or definition.keys[0].order not in (1, -1):
             raise DatabaseError("TTL requires one ascending/descending field and 0–2147483647 seconds")
-    for option in {"min", "max"} & options.keys():
+    for option in {"min", "max", "bucketSize"} & options.keys():
         if isinstance(options[option], bool) or not isinstance(options[option], (int, float)) or not math.isfinite(options[option]):
             raise DatabaseError(option + " must be a finite number")
+    if "bucketSize" in options and options["bucketSize"] <= 0:
+        raise DatabaseError("bucketSize must be positive")
     if "min" in options and "max" in options and options["min"] >= options["max"]:
         raise DatabaseError("The 2D minimum must be less than its maximum")
     if "bits" in options and not 1 <= options["bits"] <= 32:
@@ -451,6 +453,120 @@ def plan_drop(session, snapshot):
     return _seal_plan(session, IndexPlan(snapshot, deepcopy(snapshot.definition), commands,
         helper_script(snapshot.schema, commands), "", True, ["删除是永久性的且无法撤消。目录检查不是索引定义的原子比较交换。"], True, True))
 
+
+@dataclass
+class InlineIndexDraft:
+    """One staged row from the collection designer's embedded index table."""
+
+    definition: IndexDefinition
+    original_name: str = ""
+    deleted: bool = False
+
+
+@dataclass
+class InlineIndexPlanBundle:
+    """Ordered, independently UUID-guarded index plans; never transactional."""
+
+    schema: str
+    collection: str
+    drafts: list[InlineIndexDraft]
+    plans: list[IndexPlan]
+    warnings: list[str] = field(default_factory=list)
+
+    @property
+    def changed(self):
+        return bool(self.plans)
+
+    @property
+    def command_text(self):
+        return '\n\n'.join(plan.command_text for plan in self.plans) if self.plans else '无更改'
+
+    @property
+    def command_script(self):
+        return '\n\n'.join(plan.command_script for plan in self.plans) if self.plans else '无更改'
+
+
+class InlineIndexApplyError(DatabaseError):
+    """A sequential embedded-index save stopped at its first failed plan."""
+
+    def __init__(self, message, completed, failed_original, failed_definition, cause):
+        super().__init__(message)
+        self.completed = list(completed)
+        self.failed_original = failed_original
+        self.failed_definition = deepcopy(failed_definition)
+        self.cause = cause
+
+
+def plan_inline_changes(session, schema, collection, drafts):
+    """Plan embedded-table drafts without making them transactional."""
+    if not isinstance(schema, str) or not schema or not isinstance(collection, str) or not collection:
+        raise DatabaseError("An embedded index save requires one collection")
+    staged = deepcopy(list(drafts))
+    if not staged:
+        raise DatabaseError("There are no staged index changes")
+    if len(staged) > 256:
+        raise DatabaseError("An embedded index save is limited to 256 rows")
+    if any(not isinstance(draft, InlineIndexDraft) for draft in staged):
+        raise DatabaseError("Invalid embedded index draft")
+    for draft in staged:
+        if draft.deleted:
+            if draft.original_name == "_id_":
+                raise DatabaseError("The default _id index cannot be edited here")
+            continue
+        definition = draft.definition
+        if definition.collection != collection:
+            raise DatabaseError("Every embedded index must belong to the selected collection")
+        validate_definition(definition)
+        if draft.original_name == "_id_":
+            raise DatabaseError("The default _id index cannot be edited here")
+    target_names = [draft.definition.name for draft in staged if not draft.deleted]
+    if len(target_names) != len(set(target_names)):
+        raise DatabaseError("Embedded index names must be unique")
+    plans = []
+    for draft in staged:
+        try:
+            if draft.deleted:
+                snapshot = load_index(session, schema, collection, draft.original_name)
+                plan = plan_drop(session, snapshot)
+            else:
+                snapshot = (load_index(session, schema, collection, draft.original_name)
+                            if draft.original_name else new_index(session, schema, collection))
+                plan = plan_index(session, snapshot, draft.definition)
+        except MongoConflictError as error:
+            label = draft.original_name or draft.definition.name
+            raise DatabaseError("Embedded index '" + label + "' could not be planned: " + str(error)) from None
+        if plan.changed:
+            plans.append(plan)
+    if not plans:
+        return InlineIndexPlanBundle(schema, collection, staged, [], [])
+    warnings = []
+    if any(plan.delete for plan in plans):
+        warnings.append("删除的索引无法恢复；所有变更会按表格顺序逐个执行，整批不是事务。")
+    if any(not plan.delete and plan.snapshot.exists and plan.snapshot.name != plan.definition.name for plan in plans):
+        warnings.append("重命名索引会先删除原索引再创建新索引；中途失败可能只留下部分步骤。")
+    if len(plans) > 1:
+        warnings.append(f"本次包含 {len(plans)} 个索引操作；后续操作失败时，前面已确认的步骤不会自动回滚或重试。")
+    return InlineIndexPlanBundle(schema, collection, staged, plans, warnings)
+
+
+def apply_inline_plans(session, bundle, *, cancelled=None):
+    """Apply already-confirmed per-index plans in display order."""
+    bundle = deepcopy(bundle)
+    if not isinstance(bundle, InlineIndexPlanBundle):
+        raise DatabaseError("Invalid embedded index plan")
+    completed = []
+    for plan in bundle.plans:
+        if cancelled is not None and cancelled():
+            raise DatabaseError("Embedded index save was cancelled; confirmed earlier steps are not rolled back")
+        try:
+            updated = apply_plan(session, plan, cancelled=cancelled)
+        except Exception as error:
+            message = ("Embedded index save stopped after " + str(len(completed)) +
+                       " completed operation(s); no automatic rollback was attempted")
+            raise InlineIndexApplyError(message, completed, plan.snapshot.name,
+                plan.definition, error) from error
+        completed.append(updated)
+    return completed
 
 def _observe(session, plan):
     result = {}

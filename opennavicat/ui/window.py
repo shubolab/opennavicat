@@ -37,6 +37,7 @@ from .. import mongodb_collection_copy as mongo_collection_copy_tools
 from .. import mongodb_collection_maintenance as mongo_maintenance_tools
 from .. import mongodb_timeseries as mongo_timeseries_tools
 from .. import mongodb_views as mongo_view_tools
+from ..mongodb_session import MongoConflictError
 from .connection_manager import ConnectionManagerDialog
 from .dialogs import ConnectionDialog, RowDialog, TableDesignerDialog, confirm_ssh_host_key
 from .editor import SqlEditor, pretty_sql
@@ -1355,12 +1356,10 @@ class MainWindow(QMainWindow):
         page.focusRequested.connect(lambda enabled: self.focus_workspace(page, enabled))
         page.savePreviewPreferenceChanged.connect(self.set_schema_preview_suppressed)
         page.indexesRequested.connect(lambda: self.refresh_mongo_collection_designer_indexes(page))
-        page.newIndexRequested.connect(lambda: self.open_mongo_index_designer(
-            page.connection_id, page.schema, page.table))
-        page.editIndexRequested.connect(lambda name: self.open_mongo_index_designer(
-            page.connection_id, page.schema, page.table, name))
-        page.deleteIndexRequested.connect(lambda row: self.drop_mongo_index(dict(
-            row, id=page.connection_id, schema=page.schema, collection=page.table)))
+        page.inlineIndexPreviewRequested.connect(
+            lambda drafts: self.preview_mongo_collection_inline_indexes(page, drafts))
+        page.inlineIndexSaveRequested.connect(
+            lambda bundle: self.save_mongo_collection_inline_indexes(page, bundle))
         page._collection_request = 0
         page._index_request = 0
         page._pending_connection = session is None
@@ -1448,6 +1447,63 @@ class MainWindow(QMainWindow):
             if self._collection_page_alive(page) and page._index_request == request:
                 page.loading = False; page._update_controls()
         self.submit(work, done, failed, label="读取集合索引", finished=finished)
+
+    def preview_mongo_collection_inline_indexes(self, page, drafts):
+        session = self.sessions.get(page.connection_id)
+        if (not self._collection_page_alive(page) or session is None or page.loading or page.snapshot is None
+                or not page.snapshot.exists or not self._collection_session_current(page.connection_id, session)):
+            return
+        schema, collection = page.schema, page.snapshot.name
+        captured = deepcopy(list(drafts))
+        def current():
+            dialog = page._inline_index_save_dialog
+            return (self._collection_page_alive(page) and not page.loading
+                and self._collection_session_current(page.connection_id, session)
+                and dialog is not None and dialog.drafts == captured
+                and page.snapshot.schema == schema and page.snapshot.name == collection)
+        def work():
+            bundle = mongo_index_tools.plan_inline_changes(session, schema, collection, captured)
+            # Planning each row performs catalog reads; retain the collection
+            # snapshot identity so a collection replacement cannot reuse it.
+            current_uuid = mongo_collection_tools.load_collection(session, schema, collection).namespace_uuid
+            if current_uuid != page.snapshot.namespace_uuid:
+                raise MongoConflictError("The MongoDB collection changed while planning its embedded indexes")
+            return bundle
+        self.submit(work,
+            lambda bundle: page.show_inline_index_plan(bundle) if current() else None,
+            lambda error: page.show_error(error) if current() else None,
+            label="生成内嵌索引预览")
+
+    def save_mongo_collection_inline_indexes(self, page, bundle):
+        session = self.sessions.get(page.connection_id)
+        if (not self._collection_page_alive(page) or session is None or page.loading or page.snapshot is None
+                or not self._collection_session_current(page.connection_id, session)):
+            return
+        schema, collection = page.snapshot.schema, page.snapshot.name
+        captured = deepcopy(bundle)
+        page.set_busy(True, "正在保存内嵌索引…")
+        def work():
+            if page.inline_index_drafts() != captured.drafts:
+                raise DatabaseError("The embedded index draft changed after its preview")
+            updated = mongo_index_tools.apply_inline_plans(session, captured)
+            return updated, session.indexes(schema, collection)
+        def done(result):
+            updated, rows = result
+            page.inline_indexes_saved()
+            page.set_indexes(rows)
+            self.update_designer_title(page)
+            self.when_idle(lambda: self.load_schemas(page.connection_id))
+            if self.object_page.connection_id == page.connection_id and self.object_page.schema == schema:
+                self.when_idle(self.object_page.refresh)
+        def failed(error):
+            page.show_error(error)
+            # Drop/create operations are not transactional. Refresh the table
+            # for actual state while retaining the user's unapplied draft rows.
+            self.when_idle(lambda: self.refresh_mongo_collection_designer_indexes(page))
+        def finished():
+            if self._collection_page_alive(page):
+                page.set_busy(False)
+        self.submit(work, done, failed, label="保存内嵌索引", finished=finished)
 
     def preview_mongo_collection_designer(self, page, definition):
         session = self.sessions.get(page.connection_id)

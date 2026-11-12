@@ -831,35 +831,64 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
         hold(2.5, open_mongo_index)
 
     def open_mongo_index():
-        from opennavicat.ui.mongo_index_designer import MongoIndexDesignerPage
+        from opennavicat.ui.mongo_collection_designer import MongoCollectionDesignerPage
 
-        page = window.open_mongo_index_designer(MONGO_CONNECTION_ID, MONGO_DATABASE,
-                                                MONGO_COLLECTION, "demo_stock_sku")
-        if not isinstance(page, MongoIndexDesignerPage):
-            raise RuntimeError("The demo did not open the integrated index designer.")
-        state["mongo_index_page"] = page
-        wait_for(lambda: page.snapshot is not None and not page.loading and idle(), mongo_index_ready,
-                 "reading the generated compound index")
+        page = window.open_mongo_collection_designer(
+            MONGO_CONNECTION_ID, MONGO_DATABASE, MONGO_COLLECTION)
+        if not isinstance(page, MongoCollectionDesignerPage):
+            raise RuntimeError("The demo did not open the embedded collection index table.")
+        state["inline_index_page"] = page
+        wait_for(lambda: page.snapshot is not None and not page.loading and idle(),
+                 mongo_index_ready, "reading the generated embedded index table")
 
     def mongo_index_ready():
-        page = state["mongo_index_page"]
-        if [(key.field, key.order) for key in page.definition.keys] != [("stock", -1), ("sku", 1)]:
-            raise RuntimeError("The generated compound index order changed.")
-        page.sparse_check.setChecked(True)
-        phase("mongodb_index_designer")
-        hold(2.2, preview_mongo_index)
+        page = state["inline_index_page"]
+        page.tabs.setCurrentWidget(page.indexes)
+        names = [page.index_table.cellWidget(row, 1).text()
+                 for row in range(page.index_table.rowCount())]
+        if names != ["demo_stock_sku"]:
+            raise RuntimeError("The generated embedded index table has unexpected rows.")
+        page.index_table.selectRow(0)
+        phase("mongodb_collection_inline_index")
+        capture()
+        capture_timer.start()
+        hold(2.2, open_mongo_inline_key)
 
-    def preview_mongo_index():
-        page = state["mongo_index_page"]
-        page.tabs.setCurrentIndex(5)
-        wait_for(lambda: page._plan is not None and idle(), mongo_index_preview_ready,
-                 "previewing the generated index draft without applying it")
+    def open_mongo_inline_key():
+        page = state["inline_index_page"]
+        page.index_table.cellWidget(0, 2).click()
+        wait_for(lambda: page._inline_key_dialog is not None,
+                 mongo_inline_key_ready, "opening the generated embedded index key editor")
 
-    def mongo_index_preview_ready():
-        if "createIndex(" not in state["mongo_index_page"].sql_preview.toPlainText():
-            raise RuntimeError("The demo index did not render its actual helper preview.")
-        phase("mongodb_index_script_preview")
-        hold(2.5, open_mongo_storage)
+    def mongo_inline_key_ready():
+        page = state["inline_index_page"]
+        dialog = page._inline_key_dialog
+        if [(key.field, key.order) for key in dialog.definition.keys] != [("stock", -1), ("sku", 1)]:
+            raise RuntimeError("The generated embedded index key order changed.")
+        state["inline_key_editor_opened"] = True
+        state["capture_target"] = dialog
+        phase("mongodb_collection_inline_key_editor")
+        capture()
+        capture_timer.start()
+        hold(2.4, close_mongo_inline_key)
+
+    def close_mongo_inline_key():
+        page = state["inline_index_page"]
+        dialog = page._inline_key_dialog
+        capture(); capture_timer.stop()
+        state["capture_target"] = window
+        dialog.reject()
+        wait_for(lambda: page._inline_key_dialog is None and not page.dirty,
+                 close_mongo_inline_index, "closing the generated embedded index key editor without changes")
+
+    def close_mongo_inline_index():
+        page = state["inline_index_page"]
+        state["capture_target"] = window
+        capture()
+        capture_timer.start()
+        window.close_tab(window.tabs.indexOf(page))
+        state["inline_index_page"] = None
+        wait_for(idle, open_mongo_storage, "closing the generated embedded index table")
 
     def open_mongo_storage():
         from opennavicat.ui.mongo_collection_designer import MongoCollectionDesignerPage
@@ -1070,7 +1099,7 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
         stop = state["phases"][index + 1]["first_frame"] if index + 1 < len(state["phases"]) else state["count"]
         item["frames"] = stop - item["first_frame"]
         if item["frames"] <= 0:
-            raise RuntimeError("A required demo phase did not contain a privacy-checked frame.")
+            raise RuntimeError("A required demo phase did not contain a privacy-checked frame: " + item["name"])
         item["privacy_checked_frames"] = item["frames"]
     return frames, {
         "application": "OpenNavicat", "version": __version__, "theme": args.theme,
@@ -1089,7 +1118,8 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
         "mongodb_bson_types_checked": ["Int64","Decimal128"] if mongo is not None else [],
         "mongodb_gridfs_image_previewed": state["gridfs_page"] is not None,
         "mongodb_javascript_read_completed": state["mongo_query"] is not None,
-        "mongodb_index_preview_applied": False,
+        "mongodb_inline_index_preview_applied": False,
+        "mongodb_inline_key_editor_opened": state["inline_key_editor_opened"],
         "mongodb_collection_storage_save": state["mongo_storage_verification"],
         "mongodb_collection_storage_reopened_readonly": state["mongo_storage_verification"] is not None,
         "visible_text_privacy_guard": "labels, editors, titles, actions, combos, tree/table display fields; paths/endpoints/credentials rejected before frame save",

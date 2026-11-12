@@ -8,10 +8,12 @@ from PySide6.QtCore import QMimeData, QPoint, Qt, Signal
 from PySide6.QtGui import QAction, QDrag, QKeySequence
 from PySide6.QtWidgets import (
     QAbstractItemView, QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
-    QFileDialog, QFrame, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMessageBox, QPlainTextEdit,
+    QFileDialog, QFormLayout, QFrame, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMessageBox, QPlainTextEdit,
     QPushButton, QScrollArea, QSizePolicy, QSpinBox, QSplitter, QStackedWidget,
     QTabWidget, QTableWidget, QTableWidgetItem, QToolBar, QVBoxLayout, QWidget,
 )
+
+from bson import BSON
 
 from opennavicat.database import DatabaseError
 from opennavicat.mongodb_pipeline import (
@@ -19,7 +21,7 @@ from opennavicat.mongodb_pipeline import (
     explain_pipeline, from_nagg, pipeline_script, preview_pipeline,
     to_nagg, validate_pipeline,
 )
-from opennavicat.mongodb_session import canonical_dumps, canonical_loads
+from opennavicat.mongodb_session import BSON_CODEC, canonical_dumps, canonical_loads
 
 from .icons import tool_icon
 
@@ -219,6 +221,404 @@ class MongoPipelineMatchTool(QWidget):
         return result
 
 
+def _parse_stage_value(text):
+    text = str(text).strip()
+    if not text:
+        return ""
+    try:
+        return canonical_loads('{"value":' + text + '}')["value"]
+    except Exception:
+        return text
+
+
+def _stage_value_text(value):
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        return canonical_dumps(value)
+    if isinstance(value, list):
+        return canonical_dumps({"value": value})
+    return json.dumps(value)
+
+
+class _PipelineRowsTool(QWidget):
+    changed = Signal()
+
+    def __init__(self, labels, parent=None):
+        super().__init__(parent)
+        self._loading = False
+        layout = QVBoxLayout(self)
+        self.table = QTableWidget(0, len(labels))
+        self.table.setHorizontalHeaderLabels(labels)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        layout.addWidget(self.table, 1)
+        buttons = QHBoxLayout()
+        self.add_button = QPushButton("+")
+        self.remove_button = QPushButton("−")
+        buttons.addWidget(self.add_button)
+        buttons.addWidget(self.remove_button)
+        buttons.addStretch()
+        layout.addLayout(buttons)
+        self.add_button.clicked.connect(self.add_row)
+        self.remove_button.clicked.connect(self.remove_row)
+
+    def add_row(self, *values):
+        raise NotImplementedError
+
+    def remove_row(self):
+        row = self.table.currentRow()
+        if row < 0:
+            row = self.table.rowCount() - 1
+        if row >= 0:
+            self.table.removeRow(row)
+            self.changed.emit()
+
+    def _changed(self, *_):
+        if not self._loading:
+            self.changed.emit()
+
+
+class MongoPipelineProjectTool(_PipelineRowsTool):
+    MODES = (("包含", "include"), ("排除", "exclude"), ("表达式", "expression"))
+
+    def __init__(self, parent=None):
+        super().__init__(["字段", "操作", "表达式"], parent)
+        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+
+    def add_row(self, field="", mode="include", expression=""):
+        row = self.table.rowCount()
+        self.table.insertRow(row)
+        field_edit = QLineEdit(field)
+        mode_combo = QComboBox()
+        for label, value in self.MODES:
+            mode_combo.addItem(label, value)
+        mode_combo.setCurrentIndex(max(0, mode_combo.findData(mode)))
+        expression_edit = QLineEdit(expression)
+        expression_edit.setEnabled(mode == "expression")
+        mode_combo.currentIndexChanged.connect(
+            lambda _index, editor=expression_edit, combo=mode_combo: editor.setEnabled(combo.currentData() == "expression"))
+        self.table.setCellWidget(row, 0, field_edit)
+        self.table.setCellWidget(row, 1, mode_combo)
+        self.table.setCellWidget(row, 2, expression_edit)
+        for widget in (field_edit, expression_edit):
+            widget.textChanged.connect(self._changed)
+        mode_combo.currentIndexChanged.connect(self._changed)
+
+    def load(self, body):
+        self._loading = True
+        try:
+            self.table.setRowCount(0)
+            if not isinstance(body, dict) or any(key.startswith("$") for key in body):
+                self.setEnabled(False)
+                return
+            for field, value in body.items():
+                if value in (1, True):
+                    self.add_row(field, "include", "")
+                elif value in (0, False):
+                    self.add_row(field, "exclude", "")
+                else:
+                    self.add_row(field, "expression", _stage_value_text(value))
+            self.setEnabled(True)
+        finally:
+            self._loading = False
+
+    def document(self):
+        result = {}
+        for row in range(self.table.rowCount()):
+            field = self.table.cellWidget(row, 0).text().strip()
+            if not field:
+                continue
+            mode = self.table.cellWidget(row, 1).currentData()
+            if mode == "include":
+                result[field] = 1
+            elif mode == "exclude":
+                result[field] = 0
+            else:
+                result[field] = _parse_stage_value(self.table.cellWidget(row, 2).text())
+        return result
+
+
+class MongoPipelineSortTool(_PipelineRowsTool):
+    def __init__(self, parent=None):
+        super().__init__(["字段", "方向"], parent)
+        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+
+    def add_row(self, field="", direction=1):
+        row = self.table.rowCount()
+        self.table.insertRow(row)
+        field_edit = QLineEdit(field)
+        direction_combo = QComboBox()
+        direction_combo.addItem("ASC", 1)
+        direction_combo.addItem("DESC", -1)
+        direction_combo.setCurrentIndex(0 if direction in (1, "ASC") else 1)
+        self.table.setCellWidget(row, 0, field_edit)
+        self.table.setCellWidget(row, 1, direction_combo)
+        field_edit.textChanged.connect(self._changed)
+        direction_combo.currentIndexChanged.connect(self._changed)
+
+    def load(self, body):
+        self._loading = True
+        try:
+            self.table.setRowCount(0)
+            if not isinstance(body, dict) or any(value not in (1, -1) for value in body.values()):
+                self.setEnabled(False)
+                return
+            for field, direction in body.items():
+                self.add_row(field, direction)
+            self.setEnabled(True)
+        finally:
+            self._loading = False
+
+    def document(self):
+        return {self.table.cellWidget(row, 0).text().strip(): self.table.cellWidget(row, 1).currentData()
+                for row in range(self.table.rowCount())
+                if self.table.cellWidget(row, 0).text().strip()}
+
+
+class MongoPipelineGroupTool(QWidget):
+    changed = Signal()
+    ACCUMULATORS = ("$sum", "$avg", "$min", "$max", "$first", "$last", "$push", "$addToSet")
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._loading = False
+        layout = QVBoxLayout(self)
+        id_row = QHBoxLayout()
+        id_row.addWidget(QLabel("分组 _id:"))
+        self.id_edit = QLineEdit("null")
+        id_row.addWidget(self.id_edit, 1)
+        layout.addLayout(id_row)
+        self.table = QTableWidget(0, 3)
+        self.table.setHorizontalHeaderLabels(["输出字段", "累加器", "表达式"])
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        layout.addWidget(self.table, 1)
+        buttons = QHBoxLayout()
+        self.add_button = QPushButton("+")
+        self.remove_button = QPushButton("−")
+        buttons.addWidget(self.add_button)
+        buttons.addWidget(self.remove_button)
+        buttons.addStretch()
+        layout.addLayout(buttons)
+        self.id_edit.textChanged.connect(self._changed)
+        self.add_button.clicked.connect(self.add_row)
+        self.remove_button.clicked.connect(self.remove_row)
+
+    def _changed(self, *_):
+        if not self._loading:
+            self.changed.emit()
+
+    def add_row(self, field="", operator="$sum", expression="1"):
+        row = self.table.rowCount()
+        self.table.insertRow(row)
+        field_edit = QLineEdit(field)
+        operator_combo = QComboBox()
+        operator_combo.addItems(self.ACCUMULATORS)
+        operator_combo.setCurrentText(operator)
+        expression_edit = QLineEdit(expression)
+        self.table.setCellWidget(row, 0, field_edit)
+        self.table.setCellWidget(row, 1, operator_combo)
+        self.table.setCellWidget(row, 2, expression_edit)
+        field_edit.textChanged.connect(self._changed)
+        operator_combo.currentIndexChanged.connect(self._changed)
+        expression_edit.textChanged.connect(self._changed)
+
+    def remove_row(self):
+        row = self.table.currentRow()
+        if row < 0:
+            row = self.table.rowCount() - 1
+        if row >= 0:
+            self.table.removeRow(row)
+            self.changed.emit()
+
+    def load(self, body):
+        self._loading = True
+        try:
+            self.table.setRowCount(0)
+            if not isinstance(body, dict) or set(body) - {"_id"} and not any(
+                    isinstance(value, dict) and len(value) == 1 and next(iter(value)) in self.ACCUMULATORS
+                    for key, value in body.items() if key != "_id"):
+                self.setEnabled(False)
+                return
+            if "_id" not in body:
+                self.setEnabled(False)
+                return
+            self.id_edit.setText(_stage_value_text(body["_id"]))
+            for field, value in body.items():
+                if field == "_id":
+                    continue
+                if not isinstance(value, dict) or len(value) != 1:
+                    self.setEnabled(False)
+                    return
+                operator, expression = next(iter(value.items()))
+                if operator not in self.ACCUMULATORS:
+                    self.setEnabled(False)
+                    return
+                self.add_row(field, operator, _stage_value_text(expression))
+            self.setEnabled(True)
+        finally:
+            self._loading = False
+
+    def document(self):
+        result = {"_id": _parse_stage_value(self.id_edit.text())}
+        for row in range(self.table.rowCount()):
+            field = self.table.cellWidget(row, 0).text().strip()
+            if field:
+                result[field] = {self.table.cellWidget(row, 1).currentText():
+                                 _parse_stage_value(self.table.cellWidget(row, 2).text())}
+        return result
+
+
+class MongoPipelineScalarTool(QWidget):
+    changed = Signal()
+
+    def __init__(self, kind, parent=None):
+        super().__init__(parent)
+        self.kind = kind
+        layout = QHBoxLayout(self)
+        self.number = QSpinBox()
+        self.number.setRange(1 if kind == "sample" else 0, 100000)
+        self.number.setValue(100 if kind in {"limit", "sample"} else 0)
+        self.text = QLineEdit("count")
+        if kind in {"limit", "skip", "sample"}:
+            layout.addWidget(QLabel("数量:"))
+            layout.addWidget(self.number)
+            self.text.hide()
+        else:
+            layout.addWidget(QLabel("输出字段:"))
+            layout.addWidget(self.text)
+            self.number.hide()
+        layout.addStretch()
+        self.number.valueChanged.connect(lambda _value: self.changed.emit())
+        self.text.textChanged.connect(lambda _value: self.changed.emit())
+
+    def load(self, body):
+        self.setEnabled(True)
+        if self.kind == "count":
+            if not isinstance(body, str):
+                self.setEnabled(False)
+                return
+            self.text.setText(body)
+        elif isinstance(body, bool) or not isinstance(body, int):
+            self.setEnabled(False)
+        else:
+            self.number.setValue(body)
+
+    def document(self):
+        return self.text.text() if self.kind == "count" else self.number.value()
+
+
+class MongoPipelineFieldsTool(_PipelineRowsTool):
+    def __init__(self, parent=None):
+        super().__init__(["字段", "表达式"], parent)
+        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+
+    def add_row(self, field="", expression=""):
+        row = self.table.rowCount()
+        self.table.insertRow(row)
+        field_edit = QLineEdit(field)
+        expression_edit = QLineEdit(expression)
+        self.table.setCellWidget(row, 0, field_edit)
+        self.table.setCellWidget(row, 1, expression_edit)
+        field_edit.textChanged.connect(self._changed)
+        expression_edit.textChanged.connect(self._changed)
+
+    def load(self, body):
+        self._loading = True
+        try:
+            self.table.setRowCount(0)
+            if not isinstance(body, dict):
+                self.setEnabled(False)
+                return
+            for field, value in body.items():
+                self.add_row(field, _stage_value_text(value))
+            self.setEnabled(True)
+        finally:
+            self._loading = False
+
+    def document(self):
+        return {self.table.cellWidget(row, 0).text().strip():
+                _parse_stage_value(self.table.cellWidget(row, 1).text())
+                for row in range(self.table.rowCount())
+                if self.table.cellWidget(row, 0).text().strip()}
+
+
+class MongoPipelineUnsetTool(_PipelineRowsTool):
+    def __init__(self, parent=None):
+        super().__init__(["字段"], parent)
+        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+
+    def add_row(self, field=""):
+        row = self.table.rowCount()
+        self.table.insertRow(row)
+        field_edit = QLineEdit(field)
+        self.table.setCellWidget(row, 0, field_edit)
+        field_edit.textChanged.connect(self._changed)
+
+    def load(self, body):
+        self._loading = True
+        try:
+            self.table.setRowCount(0)
+            fields = [body] if isinstance(body, str) else body
+            if not isinstance(fields, list) or any(not isinstance(value, str) for value in fields):
+                self.setEnabled(False)
+                return
+            for field in fields:
+                self.add_row(field)
+            self.setEnabled(True)
+        finally:
+            self._loading = False
+
+    def document(self):
+        fields = [self.table.cellWidget(row, 0).text().strip() for row in range(self.table.rowCount())]
+        fields = [field for field in fields if field]
+        return fields[0] if len(fields) == 1 else fields
+
+
+class MongoPipelineUnwindTool(QWidget):
+    changed = Signal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        layout = QFormLayout(self)
+        self.path = QLineEdit("$field")
+        self.preserve = QCheckBox("保留空值和缺失值")
+        self.index = QLineEdit()
+        layout.addRow("路径:", self.path)
+        layout.addRow("", self.preserve)
+        layout.addRow("索引字段:", self.index)
+        self.path.textChanged.connect(lambda _value: self.changed.emit())
+        self.preserve.toggled.connect(lambda _value: self.changed.emit())
+        self.index.textChanged.connect(lambda _value: self.changed.emit())
+
+    def load(self, body):
+        self.setEnabled(True)
+        if isinstance(body, str):
+            self.path.setText(body)
+            self.preserve.setChecked(False)
+            self.index.clear()
+        elif isinstance(body, dict) and set(body) <= {"path", "preserveNullAndEmptyArrays", "includeArrayIndex"}:
+            self.path.setText(str(body.get("path", "")))
+            self.preserve.setChecked(body.get("preserveNullAndEmptyArrays") is True)
+            self.index.setText(str(body.get("includeArrayIndex", "")))
+        else:
+            self.setEnabled(False)
+
+    def document(self):
+        path = self.path.text().strip()
+        result = {"path": path}
+        if self.preserve.isChecked():
+            result["preserveNullAndEmptyArrays"] = True
+        if self.index.text().strip():
+            result["includeArrayIndex"] = self.index.text().strip()
+        return result
+
 class MongoPipelineSaveDialog(QDialog):
     def __init__(self, definition, parent=None):
         super().__init__(parent)
@@ -364,9 +764,34 @@ class MongoPipelinePage(QWidget):
         editor_layout.addLayout(stage_header)
         self.stage_stack = QStackedWidget()
         self.match_tool = MongoPipelineMatchTool()
+        self.project_tool = MongoPipelineProjectTool()
+        self.sort_tool = MongoPipelineSortTool()
+        self.group_tool = MongoPipelineGroupTool()
+        self.limit_tool = MongoPipelineScalarTool("limit")
+        self.skip_tool = MongoPipelineScalarTool("skip")
+        self.count_tool = MongoPipelineScalarTool("count")
+        self.sample_tool = MongoPipelineScalarTool("sample")
+        self.fields_tool = MongoPipelineFieldsTool()
+        self.unset_tool = MongoPipelineUnsetTool()
+        self.unwind_tool = MongoPipelineUnwindTool()
+        self.stage_tools = {
+            "$match": self.match_tool,
+            "$project": self.project_tool,
+            "$sort": self.sort_tool,
+            "$group": self.group_tool,
+            "$limit": self.limit_tool,
+            "$skip": self.skip_tool,
+            "$count": self.count_tool,
+            "$sample": self.sample_tool,
+            "$addFields": self.fields_tool,
+            "$set": self.fields_tool,
+            "$unset": self.unset_tool,
+            "$unwind": self.unwind_tool,
+        }
         self.stage_editor = QPlainTextEdit()
         self.stage_editor.setObjectName("mongoPipelineStageEditor")
-        self.stage_stack.addWidget(self.match_tool)
+        for tool in dict.fromkeys(self.stage_tools.values()):
+            self.stage_stack.addWidget(tool)
         self.stage_stack.addWidget(self.stage_editor)
         editor_layout.addWidget(self.stage_stack, 1)
         stage_actions = QHBoxLayout()
@@ -417,7 +842,8 @@ class MongoPipelinePage(QWidget):
 
         self.operator_combo.currentTextChanged.connect(self._operator_changed)
         self.stage_editor.textChanged.connect(self._body_changed)
-        self.match_tool.changed.connect(self._match_tool_changed)
+        for tool in dict.fromkeys(self.stage_tools.values()):
+            tool.changed.connect(self._create_tool_changed)
         self.stage_mode.currentIndexChanged.connect(self._mode_changed)
         self.enabled_check.toggled.connect(self._enabled_changed)
         self.add_stage_button.clicked.connect(self.add_stage)
@@ -592,15 +1018,17 @@ class MongoPipelinePage(QWidget):
         self.enabled_check.setChecked(stage.enabled)
         self.enabled_check.blockSignals(False)
         self.stage_editor.blockSignals(True)
-        self.stage_editor.setPlainText(canonical_dumps(stage.body))
+        self.stage_editor.setPlainText(_stage_value_text(stage.body))
         self.stage_editor.blockSignals(False)
-        self.match_tool.load(stage.body)
-        can_create = stage.operator == "$match" and self.match_tool.isEnabled()
+        tool = self.stage_tools.get(stage.operator)
+        if tool is not None:
+            tool.load(stage.body)
+        can_create = tool is not None and tool.isEnabled()
         self.stage_mode.setEnabled(can_create)
         self.stage_mode.blockSignals(True)
         self.stage_mode.setCurrentIndex(self.stage_mode.findData("create" if can_create else "editor"))
         self.stage_mode.blockSignals(False)
-        self.stage_stack.setCurrentWidget(self.match_tool if can_create else self.stage_editor)
+        self.stage_stack.setCurrentWidget(tool if can_create else self.stage_editor)
 
     def _render_script(self):
         try:
@@ -625,10 +1053,12 @@ class MongoPipelinePage(QWidget):
         if index is None or not 0 <= index < len(self.definition.stages):
             return
         try:
-            if self.stage_stack.currentWidget() is self.match_tool:
-                body = self.match_tool.document()
-                if not isinstance(body, dict):
-                    raise ValueError("Match criteria must be a document")
+            if self.stage_stack.currentWidget() is not self.stage_editor:
+                tool = self.stage_stack.currentWidget()
+                body = tool.document()
+                if body is None:
+                    raise ValueError("Stage create tool did not produce a value")
+                BSON.encode({"body": body}, codec_options=BSON_CODEC)
             else:
                 body = canonical_loads(self.stage_editor.toPlainText())
                 canonical_dumps(body)
@@ -645,15 +1075,19 @@ class MongoPipelinePage(QWidget):
         if self.definition.stages[index].operator == value:
             return
         self.definition.stages[index].operator = value
+        self.definition.stages[index].body = self._default_stage_body(value)
         self._render_graph()
         self._render_stage_editor()
         self._edited()
 
     def _mode_changed(self, _index):
-        self.stage_stack.setCurrentWidget(
-            self.match_tool if self.stage_mode.currentData() == "create" else self.stage_editor)
+        if self.stage_mode.currentData() == "create":
+            tool = self.stage_tools.get(self.operator_combo.currentText())
+            self.stage_stack.setCurrentWidget(tool or self.stage_editor)
+        else:
+            self.stage_stack.setCurrentWidget(self.stage_editor)
 
-    def _match_tool_changed(self):
+    def _create_tool_changed(self):
         if self._loading_mode:
             return
         self._commit_stage_editor()
@@ -661,6 +1095,14 @@ class MongoPipelinePage(QWidget):
             self.messages.setPlainText(self._invalid)
             return
         self._edited()
+
+    @staticmethod
+    def _default_stage_body(operator):
+        return {
+            "$match": {}, "$project": {}, "$sort": {}, "$group": {"_id": None},
+            "$addFields": {}, "$set": {}, "$unset": [], "$unwind": {"path": "$field"},
+            "$limit": 100, "$skip": 0, "$count": "count", "$sample": {"size": 100},
+        }.get(operator, {})
 
     def _body_changed(self):
         self._commit_stage_editor()

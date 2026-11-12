@@ -75,6 +75,7 @@ class PipelineStage:
     enabled: bool = True
     stage_id: str = field(default_factory=lambda: uuid.uuid4().hex)
     reference_extra: dict[str, Any] = field(default_factory=dict, repr=False)
+    reference_mql: str | None = field(default=None, repr=False)
 
     def __eq__(self, other):
         return (isinstance(other, PipelineStage) and self.operator == other.operator
@@ -490,13 +491,55 @@ def _stage_value_dumps(value):
         raise DatabaseError("Stage body cannot be represented as exact compact Canonical EJSON") from None
 
 
+def _strip_mql_comments(text):
+    """Remove JavaScript comments outside quoted strings while keeping offsets readable."""
+    result, index, quote, escaped = [], 0, None, False
+    while index < len(text):
+        char = text[index]
+        if quote is not None:
+            result.append(char)
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                quote = None
+            index += 1
+            continue
+        if char in {'"', "'"}:
+            quote = char
+            result.append(char)
+            index += 1
+            continue
+        if char == "/" and index + 1 < len(text) and text[index + 1] == "/":
+            index += 2
+            while index < len(text) and text[index] not in "\r\n":
+                index += 1
+            continue
+        if char == "/" and index + 1 < len(text) and text[index + 1] == "*":
+            end = text.find("*/", index + 2)
+            if end < 0:
+                raise DatabaseError("Reference .nagg MQL contains an unterminated block comment")
+            result.extend("\n" for value in text[index:end + 2] if value == "\n")
+            index = end + 2
+            continue
+        result.append(char)
+        index += 1
+    if quote is not None:
+        raise DatabaseError("Reference .nagg MQL contains an unterminated string")
+    return "".join(result)
+
+
 def _stage_value_loads(text):
     if not isinstance(text, str):
         raise DatabaseError("Reference .nagg MQL must be text")
     try:
-        return canonical_loads('{"value":' + text + '}')["value"]
+        return canonical_loads('{"value":' + _strip_mql_comments(text) + '}')["value"]
     except Exception:
         raise DatabaseError("Reference .nagg MQL is not valid Canonical Extended JSON") from None
+
+
+parse_mql = _stage_value_loads
 
 
 def to_nagg(definition):
@@ -517,7 +560,7 @@ def to_nagg(definition):
     for stage in definition.stages:
         item = {
             "Op": stage.operator,
-            "MQL": _stage_value_dumps(stage.body),
+            "MQL": stage.reference_mql if stage.reference_mql is not None else _stage_value_dumps(stage.body),
             "Enabled": bool(stage.enabled),
         }
         item.update({key: deepcopy(value) for key, value in stage.reference_extra.items()
@@ -580,6 +623,7 @@ def _from_reference_nagg(document):
             operator=operator,
             body=_stage_value_loads(mql),
             enabled=enabled,
+            reference_mql=mql,
             reference_extra={key: deepcopy(value) for key, value in item.items()
                              if key not in {"Op", "MQL", "Enabled"}},
         ))

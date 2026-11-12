@@ -54,6 +54,50 @@ def test_match_create_tool_builds_structured_conditions(qtbot):
     assert page.draft().stages[0].body["created_at"] == datetime(2026, 1, 1, tzinfo=timezone.utc)
 
 
+def test_pipeline_editor_preserves_and_replaces_reference_mql_comments(qtbot):
+    original = '''{
+/* Perform a left outer join. */
+"from":"customers","localField":"customer","foreignField":"customer","as":"customer_docs"
+}'''
+    definition = PipelineDefinition(
+        source="sales", stages=[PipelineStage(
+            "$lookup", {"from": "customers", "localField": "customer",
+                        "foreignField": "customer", "as": "customer_docs"},
+            reference_mql=original)])
+    page = MongoPipelinePage("generated", "demo_catalog")
+    qtbot.addWidget(page)
+    page.load_definition(definition)
+    assert page.stage_editor.toPlainText() == original
+    assert page.draft().stages[0].reference_mql == original
+
+    edited = '''{
+/* Generated edited join. */
+"from":"customers","localField":"id","foreignField":"customer","as":"matched"
+}'''
+    page.stage_editor.setPlainText(edited)
+    drafted = page.draft()
+    assert drafted.stages[0].body == {
+        "from": "customers", "localField": "id", "foreignField": "customer", "as": "matched"}
+    assert drafted.stages[0].reference_mql == edited
+
+
+def test_match_create_tool_preserves_untouched_reference_mql(qtbot):
+    original = '''{
+/* Filter out generated documents. */
+}'''
+    definition = PipelineDefinition(
+        source="sales", stages=[PipelineStage("$match", {}, reference_mql=original)])
+    page = MongoPipelinePage("generated", "demo_catalog")
+    qtbot.addWidget(page)
+    page.load_definition(definition)
+    assert page.stage_stack.currentWidget() is page.match_tool
+    assert page.draft().stages[0].reference_mql == original
+    page.match_tool.add_row("active", "$eq", "true")
+    changed = page.draft()
+    assert changed.stages[0].body == {"active": True}
+    assert changed.stages[0].reference_mql is None
+
+
 def test_reference_preview_sample_controls_include_all_first_random(qtbot):
     page = MongoPipelinePage("generated", "demo_catalog")
     qtbot.addWidget(page)

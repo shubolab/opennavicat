@@ -137,6 +137,12 @@ object. `Option` contained the observed plain-JSON defaults:
 `bypassDocumentValidation=0`, the collation/read/write fields, and empty
 `hint`, `comment`, `w`, and `let` values.
 
+The reference also saved stage-editor help text as JavaScript comments inside
+`MQL`. A default `$match` could therefore contain a `/* ... */` description
+around its `{}` value. OpenNavicat now preserves that text unchanged on import
+and writes the same text back while it remains unedited; runtime parsing strips
+comments only outside quoted strings.
+
 The source-stage popup offered `全部`, `最初` and `随机` in that order. With the
 sample size disabled for `全部`, saving each mode established the exact mapping
 `全部=0`, `最初=1`, `随机=2`; the saved size remained `1000`.

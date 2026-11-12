@@ -60,6 +60,12 @@ format and the earlier `opennavicat-nagg-v1` format. A generated 588-byte
 `$lookup` fixture is byte-identical, including SHA-256
 `bde5e0bc931dcdab5d922fa5cf0f19f4da148639d23001c52fb414838900dd0a`.
 
+Reference `MQL` text may contain JavaScript block or line comments around the
+Canonical EJSON value. The editor retains the original `MQL` text byte-for-byte
+when it is untouched, including help comments; execution and preview parse a
+copy with comments removed only outside quoted strings. Editing the stage
+exports the new text verbatim instead of restoring the old template.
+
 The reference file does not store the pipeline name or selected editor stage;
 the name remains external object-list metadata, and reopening selects the first
 stage. OpenNavicat preserves the reference `Option` document, including unknown
@@ -98,9 +104,9 @@ stage import, persistence, UI graph operations, preview rendering, save-sheet
 naming, nested visual plan projection, unknown-field retention and visual-view
 search. Owned MongoDB tests cover per-stage preview, final aggregation,
 `executionStats` Explain, `$out` confirmation boundaries and a full MainWindow
-save/reopen path. The expanded collection runner passed **284 cases with zero
+save/reopen path. The expanded collection runner passed **287 cases with zero
 skips/failures/errors across eight exact-owned fixtures**; focused Cocoa pipeline
-checks passed **11/11**, the full source suite passed **1816 cases with 562
+checks passed **13/13**, the full source suite passed **1819 cases with 562
 conditionally skipped**, and source smoke returned 6 rows × 4 columns. The README
 GIF is 24 phases, 312 encoded frames and 52.00 seconds. Runtime reference observations are recorded in
 [the Navicat observation](ui-reference-18-mongodb-pipeline.md).

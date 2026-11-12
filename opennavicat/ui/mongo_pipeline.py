@@ -20,7 +20,7 @@ from opennavicat.database import DatabaseError
 from opennavicat.mongodb_pipeline import (
     REFERENCE_OPTION_DEFAULTS, STAGE_NAMES, PipelineDefinition, PipelineExplain,
     PipelinePreview, PipelineStage,
-    explain_pipeline, from_nagg, pipeline_script, preview_pipeline,
+    explain_pipeline, from_nagg, parse_mql, pipeline_script, preview_pipeline,
     to_nagg, validate_pipeline,
 )
 from opennavicat.mongodb_session import BSON_CODEC, canonical_dumps, canonical_loads
@@ -1548,7 +1548,8 @@ class MongoPipelinePage(QWidget):
         self.enabled_check.setChecked(stage.enabled)
         self.enabled_check.blockSignals(False)
         self.stage_editor.blockSignals(True)
-        self.stage_editor.setPlainText(_stage_value_text(stage.body))
+        self.stage_editor.setPlainText(
+            stage.reference_mql if stage.reference_mql is not None else _stage_value_text(stage.body))
         self.stage_editor.blockSignals(False)
         tool = self.stage_tools.get(stage.operator)
         if tool is not None:
@@ -1590,14 +1591,22 @@ class MongoPipelinePage(QWidget):
                 if body is None:
                     raise ValueError("Stage create tool did not produce a value")
                 BSON.encode({"body": body}, codec_options=BSON_CODEC)
+                current = self.definition.stages[index]
+                unchanged = (
+                    current.reference_mql is not None
+                    and BSON.encode({"body": current.body}, codec_options=BSON_CODEC)
+                    == BSON.encode({"body": body}, codec_options=BSON_CODEC))
+                reference_mql = current.reference_mql if unchanged else None
             else:
-                body = canonical_loads(self.stage_editor.toPlainText())
+                reference_mql = self.stage_editor.toPlainText()
+                body = parse_mql(reference_mql)
                 canonical_dumps(body)
         except Exception as error:
             self._invalid = "Stage body is not valid Canonical Extended JSON: " + str(error)
             return
         self._invalid = None
         self.definition.stages[index].body = body
+        self.definition.stages[index].reference_mql = reference_mql
 
     def _operator_changed(self, value):
         index = self.definition.selected_stage
@@ -1607,6 +1616,7 @@ class MongoPipelinePage(QWidget):
             return
         self.definition.stages[index].operator = value
         self.definition.stages[index].body = self._default_stage_body(value)
+        self.definition.stages[index].reference_mql = None
         self._render_graph()
         self._render_stage_editor()
         self._edited()

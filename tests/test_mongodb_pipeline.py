@@ -195,6 +195,34 @@ def test_reference_nagg_preserves_stage_extensions_and_exact_bson():
     assert restored.stages[0].body["amount"] == Decimal128("1.25")
 
 
+def test_reference_nagg_preserves_mql_comments_and_parses_them_safely():
+    mql = '''{
+/* Filter out documents based on given criteria. *
+ * query: criteria to filter the documents.      *
+ { <query> }
+ */
+}'''
+    document = {
+        "Version": "0.0",
+        "Collection": "sales",
+        "PreviewSourceOption": {"SampleMode": 2, "SampleSize": 1000},
+        "Stages": [{"Op": "$match", "MQL": mql, "Enabled": True}],
+        "Option": {},
+    }
+    definition = from_nagg(json.dumps(document, separators=(",", ":")))
+    assert definition.stages[0].body == {}
+    assert definition.stages[0].reference_mql == mql
+    exported = json.loads(to_nagg(definition))
+    assert exported["Stages"][0]["MQL"] == mql
+
+    stage = PipelineStage(
+        "$match", {"url": "https://generated.example/*not-a-comment*/", "active": True},
+        reference_mql='{"url":"https://generated.example/*not-a-comment*/","active":true}')
+    restored = from_nagg(to_nagg(PipelineDefinition(
+        source="sales", stages=[stage])))
+    assert restored.stages[0].body["url"] == "https://generated.example/*not-a-comment*/"
+
+
 def test_legacy_opennavicat_nagg_remains_importable():
     legacy = json.dumps({
         "format": "opennavicat-nagg-v1",

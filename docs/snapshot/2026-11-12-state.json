@@ -104,7 +104,7 @@
     "dependency_command_stub_tests": 16,
     "all_protocol_source_hashes_match": true
   },
-  "updated_at": "2026-11-12T08:35:37.110351+08:00",
+  "updated_at": "2026-11-12T08:44:49.965479+08:00",
   "ci_after_storage": {
     "id": 43051367511,
     "source_sha": "7c65c70d6822cf7607cceaa06a860b1561893a53",
@@ -185,12 +185,12 @@
   },
   "candidate_release": {
     "version": "0.10.0",
-    "status": "qualified_waiting_main_merge_and_tag",
+    "status": "retag_pending_after_failed_unpublished_preflight",
     "workspace": "managed_release-0-10_worktree",
     "base_sha": "b358c6216177bc896b3c57f1f7412758463a1f9b",
-    "frozen_source_sha": "2b28b79317859b44eda739d2b19d1bcf350d3050",
+    "frozen_source_sha": null,
     "six_target_ci_started": true,
-    "tag_created": false,
+    "tag_created": true,
     "public_release_created": false,
     "local_full_source": {
       "passed": 1658,
@@ -259,7 +259,18 @@
       "merge exact verified source to main",
       "push v0.10.0 tag and require tag six-target pipeline",
       "verify public assets anonymously"
-    ]
+    ],
+    "qualification_source_sha": "e08f48b",
+    "qualification_scope": "Merged visual validator and pinned-fixture source; tag adds release documentation and must independently pass all six targets",
+    "prior_tag_preflight": {
+      "tag": "v0.10.0",
+      "source_sha": "36cc20c",
+      "run_id": 43126589459,
+      "conclusion": "cancelled_after_security_failure",
+      "public_release_created": false,
+      "root_cause": "mongo:8.0 tag drift from 8.0.34 to 8.0.38",
+      "fix": "pinned multiarch digest and strict runner identity checks"
+    }
   },
   "validator_ui": {
     "document": "../mongodb-validator-ui.md",

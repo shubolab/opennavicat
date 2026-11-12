@@ -104,7 +104,7 @@
     "dependency_command_stub_tests": 16,
     "all_protocol_source_hashes_match": true
   },
-  "updated_at": "2026-11-12T08:44:49.965479+08:00",
+  "updated_at": "2026-11-12T08:46:09.176553+08:00",
   "ci_after_storage": {
     "id": 43051367511,
     "source_sha": "7c65c70d6822cf7607cceaa06a860b1561893a53",
@@ -269,8 +269,10 @@
       "conclusion": "cancelled_after_security_failure",
       "public_release_created": false,
       "root_cause": "mongo:8.0 tag drift from 8.0.34 to 8.0.38",
-      "fix": "pinned multiarch digest and strict runner identity checks"
-    }
+      "fix": "pinned multiarch digest and strict runner identity checks",
+      "retag_reason": "tag commit carried skip-ci marker; add documentation-only source commit so GitHub starts the tag workflow"
+    },
+    "retag_source_ready": true
   },
   "validator_ui": {
     "document": "../mongodb-validator-ui.md",

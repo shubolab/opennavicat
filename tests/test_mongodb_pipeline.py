@@ -8,7 +8,7 @@ from opennavicat.database import DatabaseError
 from opennavicat.mongodb_pipeline import (
     STAGE_NAMES, PipelineDefinition, PipelineStage, execute_pipeline,
     explain_pipeline, from_nagg, parse_query_pipeline, pipeline_script,
-    preview_pipeline, to_nagg, validate_pipeline,
+    parse_explain_reply, preview_pipeline, to_nagg, validate_pipeline,
 )
 from test_mongodb_session import mongodb_service, session  # noqa: F401 - pytest fixtures
 
@@ -49,6 +49,41 @@ def test_nagg_and_query_import_reject_partial_or_ambiguous_stages():
             stages=[PipelineStage("$match", {})]))
 
 
+def test_explain_projection_builds_nested_plan_and_preserves_unknown_fields():
+    reply = {
+        "explainVersion": "1",
+        "queryPlanner": {"namespace": "demo.sales", "winningPlan": {"stage": "COLLSCAN"}},
+        "executionStats": {
+            "executionTimeMillis": 17,
+            "executionStages": {
+                "stage": "GROUP",
+                "nReturned": 1,
+                "executionTimeMillisEstimate": 12,
+                "customNodeMetric": {"$numberLong": 7},
+                "inputStage": {
+                    "stage": "COLLSCAN",
+                    "nReturned": 3,
+                    "docsExamined": 4,
+                    "executionTimeMillisEstimate": 10,
+                    "unknownNodeFlag": True,
+                },
+            },
+        },
+        "unknownTopLevel": {"preserved": True},
+        "ok": 1,
+    }
+    explain = parse_explain_reply(reply)
+    assert explain.root is not None and explain.root.stage == "GROUP"
+    assert [node.stage for node in explain.nodes()] == ["GROUP", "COLLSCAN"]
+    assert explain.root.children[0].docs_examined == 4
+    assert explain.raw["unknownTopLevel"] == {"preserved": True}
+    assert explain.root.raw["customNodeMetric"] == Int64(7)
+    assert "unknownNodeFlag" in explain.root.children[0].raw
+    assert explain.stats_rows()[1]["stage"] == "COLLSCAN"
+    assert explain.stats_rows()[1]["elapsed_percent"] > 80
+    assert '"unknownTopLevel"' in explain.raw_text
+
+
 def test_real_pipeline_preview_execute_and_explain(session):
     database = session.connection[session.config.database]
     database.pipeline_source.insert_many([
@@ -69,7 +104,9 @@ def test_real_pipeline_preview_execute_and_explain(session):
     rows, truncated = execute_pipeline(session, session.config.database, definition)
     assert rows == preview.final_rows and not truncated
     plan = explain_pipeline(session, session.config.database, definition)
-    assert "$group" in plan and "executionStats" in plan
+    assert plan.root is not None
+    assert "executionStats" in plan.raw
+    assert any(node.stage for node in plan.nodes())
 
 
 def test_preview_refuses_out_but_execute_allows_it_only_on_writable_session(session):

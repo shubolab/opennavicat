@@ -4,6 +4,7 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import dataclass, field
 import json
+from typing import Any
 import uuid
 
 from bson import BSON
@@ -29,6 +30,8 @@ STREAM_STAGES = frozenset({"$changeStream", "$changeStreamSplitLargeEvent"})
 MAX_STAGES = 200
 MAX_PREVIEW_ROWS = 200
 MAX_EXECUTION_ROWS = 1000
+MAX_EXPLAIN_NODES = 512
+MAX_EXPLAIN_DEPTH = 32
 
 
 @dataclass(eq=False)
@@ -65,6 +68,183 @@ class PipelinePreview:
     stages: list[dict]
     final_rows: list[str]
     truncated: bool = False
+
+
+@dataclass(eq=False)
+class ExplainPlanNode:
+    """One bounded node from a MongoDB execution or query plan tree."""
+
+    stage: str
+    raw: dict[str, Any] = field(default_factory=dict, repr=False)
+    children: list["ExplainPlanNode"] = field(default_factory=list)
+
+    @property
+    def elapsed_ms(self):
+        for key in ("executionTimeMillisEstimate", "executionTimeMillis", "elapsedMillis"):
+            value = self.raw.get(key)
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                return float(value)
+        return None
+
+    @property
+    def returned(self):
+        value = self.raw.get("nReturned")
+        return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+    @property
+    def docs_examined(self):
+        for key in ("docsExamined", "totalDocsExamined"):
+            value = self.raw.get(key)
+            if isinstance(value, int) and not isinstance(value, bool):
+                return value
+        return None
+
+    @property
+    def keys_examined(self):
+        for key in ("keysExamined", "totalKeysExamined"):
+            value = self.raw.get(key)
+            if isinstance(value, int) and not isinstance(value, bool):
+                return value
+        return None
+
+    @property
+    def index_name(self):
+        value = self.raw.get("indexName")
+        return value if isinstance(value, str) and value else None
+
+
+@dataclass(eq=False)
+class PipelineExplain:
+    """Canonical server reply plus a bounded native visual-plan projection."""
+
+    raw: dict[str, Any]
+    raw_text: str
+    roots: list[ExplainPlanNode] = field(default_factory=list)
+
+    @property
+    def root(self):
+        return self.roots[0] if self.roots else None
+
+    @property
+    def command(self):
+        value = self.raw.get("command")
+        return value if isinstance(value, dict) else {}
+
+    @property
+    def server_info(self):
+        value = self.raw.get("serverInfo")
+        return value if isinstance(value, dict) else {}
+
+    @property
+    def execution_stats(self):
+        value = self.raw.get("executionStats")
+        return value if isinstance(value, dict) else {}
+
+    def nodes(self):
+        result, stack = [], list(reversed(self.roots))
+        while stack:
+            node = stack.pop()
+            result.append(node)
+            stack.extend(reversed(node.children))
+        return result
+
+    def stats_rows(self):
+        grouped = {}
+        for node in self.nodes():
+            row = grouped.setdefault(node.stage, {"stage": node.stage, "count": 0, "elapsed_ms": 0.0})
+            row["count"] += 1
+            row["elapsed_ms"] += node.elapsed_ms or 0.0
+        root_elapsed = self.root.elapsed_ms if self.root is not None else None
+        denominator = root_elapsed if root_elapsed and root_elapsed > 0 else sum(
+            row["elapsed_ms"] for row in grouped.values())
+        return tuple({
+            **row,
+            "elapsed_percent": (100.0 * row["elapsed_ms"] / denominator) if denominator > 0 else 0.0,
+        } for row in grouped.values())
+
+
+_PLAN_CHILD_KEYS = (
+    "inputStage", "inputStages", "queryPlan", "innerStage", "outerStage",
+    "thenStage", "executionStages", "winningPlan", "rejectedPlans", "plans",
+    "shards", "stages", "children",
+)
+
+
+def _plan_documents(value):
+    if isinstance(value, dict):
+        stage = value.get("stage")
+        if isinstance(stage, str) and stage:
+            yield value
+            return
+        for child in value.values():
+            yield from _plan_documents(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from _plan_documents(child)
+
+
+def _parse_plan_node(raw, *, depth=0, counter=None):
+    if counter is None:
+        counter = [0]
+    if not isinstance(raw, dict):
+        return None
+    stage = raw.get("stage")
+    if not isinstance(stage, str) or not stage:
+        return None
+    if depth > MAX_EXPLAIN_DEPTH:
+        raise DatabaseError("MongoDB Explain plan exceeds the bounded tree depth")
+    counter[0] += 1
+    if counter[0] > MAX_EXPLAIN_NODES:
+        raise DatabaseError("MongoDB Explain plan exceeds the bounded node count")
+    node = ExplainPlanNode(stage=stage, raw=deepcopy(raw))
+    seen = set()
+    for key in _PLAN_CHILD_KEYS:
+        if key not in raw:
+            continue
+        for child_raw in _plan_documents(raw[key]):
+            identity = id(child_raw)
+            if identity in seen:
+                continue
+            seen.add(identity)
+            child = _parse_plan_node(child_raw, depth=depth + 1, counter=counter)
+            if child is not None:
+                node.children.append(child)
+    return node
+
+
+def parse_explain_reply(reply):
+    """Build a visual plan while retaining the complete bounded server reply."""
+    if not isinstance(reply, dict):
+        raise DatabaseError("MongoDB Explain did not return a document")
+    try:
+        encoded = BSON.encode({"reply": reply}, codec_options=BSON_CODEC)
+        if len(encoded) > _MAX_PAGE_BYTES:
+            raise ValueError()
+        raw_text = canonical_dumps(reply)
+        raw = canonical_loads(raw_text)
+    except DatabaseError:
+        raise
+    except Exception:
+        raise DatabaseError("MongoDB Explain reply cannot be preserved as exact bounded Canonical EJSON") from None
+
+    candidates = []
+    execution = raw.get("executionStats")
+    if isinstance(execution, dict):
+        candidates.extend(_plan_documents(execution.get("executionStages")))
+        if not candidates:
+            candidates.extend(_plan_documents(execution.get("shards")))
+    query = raw.get("queryPlanner")
+    if not candidates and isinstance(query, dict):
+        candidates.extend(_plan_documents(query.get("winningPlan")))
+    if not candidates:
+        candidates.extend(_plan_documents(raw.get("stages")))
+    counter = [0]
+    roots = []
+    for candidate in candidates:
+        node = _parse_plan_node(candidate, counter=counter)
+        if node is not None:
+            roots.append(node)
+    return PipelineExplain(raw=raw, raw_text=raw_text, roots=roots)
 
 
 def _encoded(value):
@@ -271,4 +451,4 @@ def explain_pipeline(session, database, definition, *, verbosity="executionStats
     session.use_schema(database)
     with timeout(30), session._operation() as comment:
         reply = session.connection[database].command({**command, "comment": comment})
-    return canonical_dumps(reply)
+    return parse_explain_reply(reply)

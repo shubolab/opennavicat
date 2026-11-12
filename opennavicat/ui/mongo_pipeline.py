@@ -5,19 +5,20 @@ from copy import deepcopy
 import json
 
 from PySide6.QtCore import QMimeData, QPoint, Qt, Signal
-from PySide6.QtGui import QAction, QDrag, QKeySequence
+from PySide6.QtGui import QAction, QColor, QDrag, QKeySequence
 from PySide6.QtWidgets import (
     QAbstractItemView, QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
-    QFileDialog, QFormLayout, QFrame, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMessageBox, QPlainTextEdit,
-    QPushButton, QScrollArea, QSizePolicy, QSpinBox, QSplitter, QStackedWidget,
-    QTabWidget, QTableWidget, QTableWidgetItem, QToolBar, QVBoxLayout, QWidget,
+    QDoubleSpinBox, QFileDialog, QFormLayout, QFrame, QHBoxLayout, QHeaderView, QLabel,
+    QLineEdit, QMessageBox, QPlainTextEdit, QPushButton, QScrollArea, QSizePolicy,
+    QSpinBox, QSplitter, QStackedWidget, QTabWidget, QTableWidget, QTableWidgetItem,
+    QToolBar, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget,
 )
 
 from bson import BSON
 
 from opennavicat.database import DatabaseError
 from opennavicat.mongodb_pipeline import (
-    STAGE_NAMES, PipelineDefinition, PipelinePreview, PipelineStage,
+    STAGE_NAMES, PipelineDefinition, PipelineExplain, PipelinePreview, PipelineStage,
     explain_pipeline, from_nagg, pipeline_script, preview_pipeline,
     to_nagg, validate_pipeline,
 )
@@ -619,6 +620,232 @@ class MongoPipelineUnwindTool(QWidget):
             result["includeArrayIndex"] = self.index.text().strip()
         return result
 
+
+class MongoPipelineExplainPanel(QWidget):
+    """Reference-shaped Explain workspace with a native plan tree and raw views."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("mongoPipelineExplainPanel")
+        self._explain = PipelineExplain(raw={}, raw_text="")
+        self._connection_name = ""
+        self._schema = ""
+        self._script = ""
+        self._zoom = 10
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        controls = QHBoxLayout()
+        controls.setContentsMargins(8, 5, 8, 5)
+        controls.addWidget(QLabel("耗时阈值(%):"))
+        self.threshold_spin = QDoubleSpinBox()
+        self.threshold_spin.setObjectName("mongoExplainThreshold")
+        self.threshold_spin.setRange(0, 1000)
+        self.threshold_spin.setDecimals(2)
+        self.threshold_spin.setValue(50)
+        self.threshold_spin.setToolTip("当节点成本超过阈值时，节点将被高亮显示")
+        controls.addWidget(self.threshold_spin)
+        self.zoom_out_button = QPushButton("缩小")
+        self.zoom_in_button = QPushButton("放大")
+        controls.addWidget(self.zoom_out_button)
+        controls.addWidget(self.zoom_in_button)
+        controls.addWidget(QLabel("搜索:"))
+        self.search_edit = QLineEdit()
+        self.search_edit.setObjectName("mongoExplainSearch")
+        self.search_edit.setClearButtonEnabled(True)
+        controls.addWidget(self.search_edit, 1)
+        self.export_image_button = QPushButton("导出图像")
+        controls.addWidget(self.export_image_button)
+        layout.addLayout(controls)
+
+        self.view_tabs = QTabWidget()
+        self.view_tabs.setObjectName("mongoExplainViewTabs")
+        layout.addWidget(self.view_tabs, 1)
+
+        self.visual_page = QWidget()
+        visual_layout = QVBoxLayout(self.visual_page)
+        visual_layout.setContentsMargins(4, 4, 4, 4)
+        self.visual_split = QSplitter(Qt.Orientation.Vertical)
+        self.visual_tree = QTreeWidget()
+        self.visual_tree.setObjectName("mongoExplainVisualTree")
+        self.visual_tree.setHeaderLabels(["节点", "耗时 (ms)", "返回", "扫描文档", "索引"])
+        self.visual_tree.setAlternatingRowColors(True)
+        self.visual_tree.header().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        for column in range(1, 5):
+            self.visual_tree.header().setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
+        self.detail_view = QPlainTextEdit()
+        self.detail_view.setObjectName("mongoExplainNodeDetail")
+        self.detail_view.setReadOnly(True)
+        self.detail_view.setPlaceholderText("选择计划节点以查看服务端原始指标与未知字段。")
+        self.visual_split.addWidget(self.visual_tree)
+        self.visual_split.addWidget(self.detail_view)
+        self.visual_split.setSizes([360, 180])
+        visual_layout.addWidget(self.visual_split)
+        self.view_tabs.addTab(self.visual_page, "可视化")
+
+        self.json_view = QPlainTextEdit()
+        self.json_view.setObjectName("mongoExplainJson")
+        self.json_view.setReadOnly(True)
+        self.view_tabs.addTab(self.json_view, "JSON")
+
+        self.grid_table = QTableWidget(0, 1)
+        self.grid_table.setObjectName("mongoExplainGrid")
+        self.grid_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.grid_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.view_tabs.addTab(self.grid_table, "网格")
+
+        self.stats_table = QTableWidget(0, 4)
+        self.stats_table.setObjectName("mongoExplainStats")
+        self.stats_table.setHorizontalHeaderLabels(["节点类型", "计数", "耗时 (ms)", "耗时 (%)"])
+        self.stats_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.stats_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.stats_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.view_tabs.addTab(self.stats_table, "统计信息")
+
+        self.info_page = QWidget()
+        info_layout = QVBoxLayout(self.info_page)
+        self.info_summary = QLabel()
+        self.info_summary.setObjectName("mongoExplainInfoSummary")
+        self.info_summary.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        info_layout.addWidget(self.info_summary)
+        self.info_script = QPlainTextEdit()
+        self.info_script.setObjectName("mongoExplainInfoScript")
+        self.info_script.setReadOnly(True)
+        info_layout.addWidget(self.info_script, 1)
+        self.view_tabs.addTab(self.info_page, "信息")
+
+        self.zoom_out_button.clicked.connect(lambda: self._set_zoom(self._zoom - 1))
+        self.zoom_in_button.clicked.connect(lambda: self._set_zoom(self._zoom + 1))
+        self.search_edit.textChanged.connect(self._filter_plan)
+        self.threshold_spin.valueChanged.connect(self._highlight_threshold)
+        self.export_image_button.clicked.connect(self._export_image)
+        self.visual_tree.itemSelectionChanged.connect(self._show_selected_node)
+
+    @staticmethod
+    def _summary(value):
+        if isinstance(value, dict):
+            return f"(Document) {len(value)} Fields"
+        if isinstance(value, list):
+            return f"(Array) {len(value)} Items"
+        if isinstance(value, str):
+            return value
+        return canonical_dumps({"value": value})
+
+    def set_explain(self, explain, *, connection_name="", schema="", script=""):
+        if not isinstance(explain, PipelineExplain):
+            explain = PipelineExplain(raw={}, raw_text=str(explain))
+        self._explain = explain
+        self._connection_name = str(connection_name)
+        self._schema = str(schema)
+        self._script = str(script)
+        self.visual_tree.clear()
+        root_elapsed = explain.root.elapsed_ms if explain.root is not None else None
+        for node in explain.roots:
+            self.visual_tree.addTopLevelItem(self._plan_item(node, root_elapsed))
+        self.visual_tree.expandAll()
+        if self.visual_tree.topLevelItemCount():
+            self.visual_tree.setCurrentItem(self.visual_tree.topLevelItem(0))
+        else:
+            self.detail_view.setPlainText(explain.raw_text)
+        self.json_view.setPlainText(explain.raw_text)
+        self._populate_grid(explain.raw)
+        self._populate_stats(explain.stats_rows())
+        elapsed = explain.execution_stats.get("executionTimeMillis")
+        self.info_summary.setText(
+            f"查询时间: {elapsed if elapsed is not None else '---'} ms；"
+            f"连接: {self._connection_name or '---'}；数据库: {self._schema or '---'}")
+        self.info_script.setPlainText(self._script)
+        self._filter_plan(self.search_edit.text())
+        self._highlight_threshold(self.threshold_spin.value())
+
+    def _plan_item(self, node, root_elapsed):
+        elapsed = node.elapsed_ms
+        item = QTreeWidgetItem([
+            node.stage,
+            "" if elapsed is None else f"{elapsed:.2f}",
+            "" if node.returned is None else str(node.returned),
+            "" if node.docs_examined is None else str(node.docs_examined),
+            node.index_name or "",
+        ])
+        item.setData(0, Qt.ItemDataRole.UserRole, node)
+        item.setData(1, Qt.ItemDataRole.UserRole, (
+            None if root_elapsed in (None, 0) or elapsed is None
+            else 100.0 * elapsed / root_elapsed))
+        for child in node.children:
+            item.addChild(self._plan_item(child, root_elapsed))
+        return item
+
+    def _populate_grid(self, raw):
+        self.grid_table.setRowCount(0)
+        self.grid_table.setColumnCount(0)
+        if not isinstance(raw, dict) or not raw:
+            return
+        keys = [str(key) for key in raw]
+        self.grid_table.setColumnCount(len(keys))
+        self.grid_table.setHorizontalHeaderLabels(keys)
+        self.grid_table.setRowCount(1)
+        for column, key in enumerate(raw):
+            self.grid_table.setItem(0, column, QTableWidgetItem(self._summary(raw[key])))
+        self.grid_table.resizeColumnsToContents()
+
+    def _populate_stats(self, rows):
+        self.stats_table.setRowCount(len(rows))
+        for row_index, row in enumerate(rows):
+            values = (row["stage"], row["count"], f"{row['elapsed_ms']:.2f}",
+                      f"{row['elapsed_percent']:.2f}%")
+            for column, value in enumerate(values):
+                self.stats_table.setItem(row_index, column, QTableWidgetItem(str(value)))
+
+    def _show_selected_node(self):
+        items = self.visual_tree.selectedItems()
+        node = items[0].data(0, Qt.ItemDataRole.UserRole) if items else None
+        self.detail_view.setPlainText(canonical_dumps(node.raw) if node is not None else "")
+
+    def _highlight_threshold(self, value):
+        threshold = float(value)
+        stack = [self.visual_tree.topLevelItem(index)
+                 for index in range(self.visual_tree.topLevelItemCount())]
+        while stack:
+            item = stack.pop()
+            percent = item.data(1, Qt.ItemDataRole.UserRole)
+            expensive = isinstance(percent, (int, float)) and percent > threshold
+            color = QColor("#7a332e") if expensive else QColor(0, 0, 0, 0)
+            for column in range(self.visual_tree.columnCount()):
+                item.setBackground(column, color)
+            stack.extend(item.child(index) for index in range(item.childCount()))
+
+    def _filter_plan(self, text):
+        needle = str(text).strip().lower()
+
+        def apply(item):
+            own = any(needle in item.text(column).lower()
+                      for column in range(self.visual_tree.columnCount())) if needle else False
+            child_visible = False
+            for index in range(item.childCount()):
+                child_visible = apply(item.child(index)) or child_visible
+            visible = not needle or own or child_visible
+            item.setHidden(not visible)
+            if needle and child_visible:
+                item.setExpanded(True)
+            return visible
+
+        for index in range(self.visual_tree.topLevelItemCount()):
+            apply(self.visual_tree.topLevelItem(index))
+
+    def _set_zoom(self, value):
+        self._zoom = max(8, min(20, int(value)))
+        font = self.visual_tree.font()
+        font.setPointSize(self._zoom)
+        self.visual_tree.setFont(font)
+
+    def _export_image(self):
+        filename, _selected = QFileDialog.getSaveFileName(
+            self, "导出 Explain 图像", "mongo-explain.png", "PNG image (*.png)")
+        if not filename:
+            return False
+        if not filename.lower().endswith(".png"):
+            filename += ".png"
+        return self.visual_page.grab().save(filename, "PNG")
+
 class MongoPipelineSaveDialog(QDialog):
     def __init__(self, definition, parent=None):
         super().__init__(parent)
@@ -672,6 +899,7 @@ class MongoPipelinePage(QWidget):
         self.setObjectName("mongoPipelinePage")
         self.kind = "mongo_pipeline"
         self.connection_id = connection_id
+        self.connection_name = connection_id
         self.schema = schema
         self.pipeline_id = None
         self.definition = PipelineDefinition(name=name)
@@ -682,6 +910,8 @@ class MongoPipelinePage(QWidget):
         self._invalid = None
         self._loading_mode = False
         self._preview = None
+        self._explain = None
+        self._explain_count = 0
         self._sources = []
         self.last_rows = []
         layout = QVBoxLayout(self)
@@ -839,6 +1069,9 @@ class MongoPipelinePage(QWidget):
         self.results.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.results.setHorizontalHeaderLabels(["Canonical Extended JSON"])
         self.tabs.addTab(self.results, "结果")
+        self.explain_panel = MongoPipelineExplainPanel()
+        self.explain_tab_index = self.tabs.addTab(self.explain_panel, "解释")
+        self.tabs.setTabVisible(self.explain_tab_index, False)
 
         self.operator_combo.currentTextChanged.connect(self._operator_changed)
         self.stage_editor.textChanged.connect(self._body_changed)
@@ -1254,9 +1487,19 @@ class MongoPipelinePage(QWidget):
         self.messages.setPlainText(f"运行完成：{len(rows)} 行" + ("；结果已截断" if truncated else ""))
         self._update_controls()
 
-    def show_explain(self, text):
-        self.messages.setPlainText(text)
-        self.tabs.setCurrentWidget(self.messages)
+    def show_explain(self, explain):
+        self._explain = explain
+        self._explain_count += 1
+        script = ""
+        try:
+            script = pipeline_script(deepcopy(self.definition))
+        except DatabaseError:
+            pass
+        self.explain_panel.set_explain(
+            explain, connection_name=self.connection_name, schema=self.schema, script=script)
+        self.tabs.setTabText(self.explain_tab_index, f"解释 {self._explain_count}")
+        self.tabs.setTabVisible(self.explain_tab_index, True)
+        self.tabs.setCurrentWidget(self.explain_panel)
 
     def request_preview_all(self):
         try:

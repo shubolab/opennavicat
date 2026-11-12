@@ -71,12 +71,51 @@ The sheet was cancelled. The generated unsaved pipeline was then closed and
 discarded. This observation does not claim compatibility with the reference's
 serialized `.nagg` bytes.
 
+## AP18-04 Visual Explain
+
+AP18-04 used the same exact-owned fixture with four synthetic `sales`
+documents. The pipeline contained one `$match` stage with
+`{"active":true}`. Activating `解释` left pipeline mode and opened a top-level
+`解释 1` tab containing five inner switches: `可视化`, `JSON`, `网格`,
+`统计信息` and `信息`.
+
+The Explain toolbar exposed `耗时阈值(%): 50`, `缩小`, `放大`, search and
+`导出图像`. The visual view initially showed a `COLLSCAN` node labelled `10`.
+Selecting the node displayed its server metrics and unknown plan fields:
+
+```text
+stage: COLLSCAN
+executionTimeMillis: 10
+stageExecutionTimeMillis: 10 (100.00%)
+nReturned: 3
+isCached: false
+namespace: pipeline_reference.sales
+filter: { active: { $eq: true } }
+works: 5
+advanced: 3
+needTime: 1
+docsExamined: 4
+```
+
+The `JSON` view retained the complete server response, including
+`queryPlanner`, `executionStats`, `queryShapeHash`, `command`, `serverInfo`,
+`serverParameters` and `ok`. The `网格` view presented the top-level response
+fields as columns with document/field counts. The `统计信息` view contained a
+grouped `节点类型 / 计数 / 耗时 / 耗时 (%)` table and showed `COLLSCAN`, `1`,
+`10.00`, `100.00%`. The `信息` view showed query timing, generated connection
+and database names, a retrieval timestamp and the generated aggregate script.
+
+OpenNavicat consumes this observed contract while retaining the complete raw
+reply. This observation does not claim that every MongoDB operator, shard tree,
+profiler response or visual cost rule has already matched the reference.
+
 ## Boundaries
 
 This round did not complete an automated reference drag operation, every
-stage's specialized create tool, visual Explain tree, automatic-task references,
-export of every result type, saved-pipeline reopening, concurrent peer changes,
-all server/topology variants, or Windows/Linux reference layouts. OpenNavicat's
+stage's specialized create tool, every visual Explain operator/shape,
+automatic-task references, export of every result type, saved-pipeline
+reopening, concurrent peer changes, all server/topology variants, or
+Windows/Linux reference layouts. OpenNavicat's
 corresponding stage drag and `$match` create tool are implementation results,
 not proof of unobserved reference behavior. The fixture was disconnected and removed
 after verifying its exact container ID, owner label and loopback port.

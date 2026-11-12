@@ -2059,6 +2059,7 @@ class MainWindow(QMainWindow):
                     self.tabs.setCurrentWidget(existing)
                     return existing
         page = MongoPipelinePage(connection_id, schema)
+        page.connection_name = config.name
         page.suppress_save_preview = self.store.state.get("suppress_pipeline_save_preview") is True
         page.previewRequested.connect(lambda definition: self.preview_mongo_pipeline(page, definition))
         page.runRequested.connect(lambda definition: self.run_mongo_pipeline(page, definition))

@@ -167,9 +167,13 @@ def test_real_aggregation_pipeline_preview_run_explain_and_saved_object(qtbot, m
     idle(qtbot, window)
     assert canonical_loads(page.last_rows[0])['count'] == 2
     assert window.explain_mongo_pipeline(page, page.draft())
-    qtbot.waitUntil(lambda: 'executionStats' in page.messages.toPlainText() and not page.running, timeout=15000)
+    qtbot.waitUntil(lambda: page._explain is not None and not page.running, timeout=15000)
     idle(qtbot, window)
-    assert '$group' in page.messages.toPlainText()
+    assert 'executionStats' in page._explain.raw
+    assert page.tabs.currentWidget() is page.explain_panel
+    assert page.explain_panel.visual_tree.topLevelItemCount() >= 1
+    assert any('$group' in node.stage.lower() or 'group' in node.stage.lower()
+               for node in page._explain.nodes())
 
     definition = page.draft(); definition.name = 'generated_pipeline'
     saved = window.save_mongo_pipeline(page, definition)

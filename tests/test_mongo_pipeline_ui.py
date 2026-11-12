@@ -3,9 +3,12 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from PySide6.QtGui import QImage
 from PySide6.QtWidgets import QMessageBox
 
-from opennavicat.mongodb_pipeline import PipelineDefinition, PipelinePreview, PipelineStage
+from opennavicat.mongodb_pipeline import (
+    PipelineDefinition, PipelinePreview, PipelineStage, parse_explain_reply,
+)
 from opennavicat.ui.mongo_pipeline import MongoPipelinePage, MongoPipelineSaveDialog
 
 
@@ -124,6 +127,58 @@ def test_pipeline_preview_and_execution_tables_preserve_ejson(qtbot):
     page.show_execution([grouped])
     assert page.last_rows == [grouped]
     assert page.export_action.isEnabled()
+
+
+def test_pipeline_visual_explain_plan_views_and_search(qtbot):
+    page = MongoPipelinePage("generated", "demo_catalog")
+    qtbot.addWidget(page)
+    explain = parse_explain_reply({
+        "executionStats": {
+            "executionTimeMillis": 17,
+            "executionStages": {
+                "stage": "GROUP",
+                "nReturned": 1,
+                "executionTimeMillisEstimate": 12,
+                "inputStage": {
+                    "stage": "COLLSCAN",
+                    "nReturned": 3,
+                    "docsExamined": 4,
+                    "executionTimeMillisEstimate": 10,
+                },
+            },
+        },
+        "unknownMetric": {"preserved": True},
+        "ok": 1,
+    })
+    page.show_explain(explain)
+    assert page.tabs.currentWidget() is page.explain_panel
+    assert page.tabs.tabText(page.explain_tab_index) == "解释 1"
+    assert page.explain_panel.visual_tree.topLevelItemCount() == 1
+    root = page.explain_panel.visual_tree.topLevelItem(0)
+    assert root.text(0) == "GROUP" and root.child(0).text(0) == "COLLSCAN"
+    assert root.child(0).text(3) == "4"
+    assert page.explain_panel.stats_table.rowCount() == 2
+    assert "unknownMetric" in page.explain_panel.json_view.toPlainText()
+    page.explain_panel.search_edit.setText("COLLSCAN")
+    assert not root.isHidden() and not root.child(0).isHidden()
+    page.explain_panel.search_edit.setText("no-such-node")
+    assert root.isHidden()
+
+
+def test_pipeline_explain_unexpected_shape_and_png_export(qtbot, monkeypatch, tmp_path):
+    page = MongoPipelinePage("generated", "demo_catalog")
+    qtbot.addWidget(page)
+    explain = parse_explain_reply({"ok": 1, "unexpectedPlan": {"futureShape": True}})
+    page.show_explain(explain)
+    assert page.explain_panel.visual_tree.topLevelItemCount() == 0
+    assert "unexpectedPlan" in page.explain_panel.json_view.toPlainText()
+    target = tmp_path / "plan"
+    monkeypatch.setattr(
+        "opennavicat.ui.mongo_pipeline.QFileDialog.getSaveFileName",
+        lambda *_args, **_kwargs: (str(target), "PNG image (*.png)"))
+    page.explain_panel.export_image_button.click()
+    image = QImage(str(target) + ".png")
+    assert not image.isNull()
 
 
 def test_pipeline_save_dialog_requires_name_and_keeps_definition():

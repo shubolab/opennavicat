@@ -24,7 +24,14 @@ sample size and local persistence.
   the selected stage's input/output plus the final result.
 - `运行` executes the unsaved pipeline without applying preview sample options.
   `$out` and `$merge` require explicit confirmation.
-- `解释` runs an aggregate command inside `explain` with `executionStats`.
+- `解释` runs an aggregate command inside `explain` with `executionStats` and
+  opens a native `解释` workspace matching the observed five-view family:
+  visual plan, Canonical EJSON, grid, grouped node statistics and run
+  information.
+- The visual plan is a bounded `QTreeWidget` with stage, elapsed time, returned
+  documents, examined documents and index columns. It supports threshold
+  highlighting, search, zoom, node detail and PNG export. The raw server reply
+  remains available without flattening unknown fields or BSON values.
 - Result export writes Canonical Extended JSON without converting Int64,
   Decimal128, dates, binaries or ObjectIds through Python `str()`.
 - Saved pipelines appear in a seven-column object list matching the observed
@@ -44,6 +51,21 @@ enabled state and stable in-workspace stage IDs. The reference's actual `.nagg`
 serialization has not been reconciled byte-for-byte or semantically, so no
 reference-file compatibility is claimed.
 
+## Visual Explain boundary
+
+The worker consumes the execution-stage tree with a fallback to
+`queryPlanner.winningPlan`. The complete reply is validated as bounded exact
+Canonical EJSON before the GUI receives it. Parsing is capped at 512 nodes and
+32 levels; exceeding either limit produces an explicit error. Server-shaped
+unknown fields remain in the node detail and JSON view, while absent or
+unexpected plan shapes still open the raw response instead of manufacturing a
+plan node.
+
+The current native plan tree follows the observed information architecture but
+is not yet a pixel-for-pixel node canvas. Every MongoDB operator, shard/replica
+plan shape, profiler output, cost-colouring rule and Windows/Linux reference
+layout remains a parity gate.
+
 ## Safety and execution boundary
 
 Preview never runs `$out` or `$merge` and never executes `$changeStream` as an
@@ -55,17 +77,19 @@ streaming stages.
 ## Verification boundary
 
 Unit tests cover the 42-entry catalog, nagg roundtrip with Int64 and Decimal128,
-stage import, persistence, UI graph operations, preview rendering and save-sheet
-naming. Owned MongoDB tests cover per-stage preview, final aggregation,
+stage import, persistence, UI graph operations, preview rendering, save-sheet
+naming, nested visual plan projection, unknown-field retention and visual-view
+search. Owned MongoDB tests cover per-stage preview, final aggregation,
 `executionStats` Explain, `$out` confirmation boundaries and a full MainWindow
-save/reopen path. The expanded collection runner passed **271 cases with zero
+save/reopen path. The expanded collection runner passed **274 cases with zero
 skips/failures/errors across eight exact-owned fixtures**; focused Cocoa pipeline
-checks passed **8/8**, the full source suite passed **1804 cases with 561
+checks passed **9/9**, the full source suite passed **1807 cases with 561
 conditionally skipped**, and source smoke returned 6 rows × 4 columns. The README
-GIF is 22 phases, 291 encoded frames and 48.50 seconds. Runtime reference observations are recorded in
+GIF is 23 phases, 306 encoded frames and 51.00 seconds. Runtime reference observations are recorded in
 [the Navicat observation](ui-reference-18-mongodb-pipeline.md).
 
-Specialized visual create tools for the remaining complex/lookup/search/bucket/
-stream stages, visual Explain trees, automatic-task references, reference `.nagg`
-compatibility, change-stream UI, all MongoDB versions/topologies and Windows/Linux
-visual acceptance remain open.
+Specialized visual create tools for the remaining
+complex/lookup/search/bucket/stream stages, exact visual Explain canvas and all
+operator shapes, automatic-task references, reference `.nagg` compatibility,
+change-stream UI, all MongoDB versions/topologies and Windows/Linux visual
+acceptance remain open.

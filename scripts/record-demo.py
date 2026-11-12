@@ -1142,7 +1142,29 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
         if "db.getCollection" not in page.script_editor.toPlainText() or "$group" not in page.script_editor.toPlainText():
             raise RuntimeError("The generated aggregation-pipeline script is incomplete.")
         phase("mongodb_aggregation_pipeline_script")
-        hold(2.0, run_mongo_pipeline)
+        hold(2.0, explain_mongo_pipeline)
+
+    def explain_mongo_pipeline():
+        page = state["mongo_pipeline_page"]
+        if not window.explain_mongo_pipeline(page, page.draft()):
+            raise RuntimeError("The generated aggregation-pipeline Explain did not start.")
+        wait_for(lambda: page._explain is not None and not page.running and idle(),
+                 mongo_pipeline_explain, "explaining the generated aggregation pipeline")
+
+    def mongo_pipeline_explain():
+        page = state["mongo_pipeline_page"]
+        page.explain_panel.view_tabs.setCurrentIndex(0)
+        if (page.tabs.currentWidget() is not page.explain_panel
+                or page.explain_panel.visual_tree.topLevelItemCount() < 1
+                or "executionStats" not in page._explain.raw):
+            raise RuntimeError("The generated aggregation-pipeline Explain did not produce a visual plan.")
+        state["mongo_pipeline_explain"] = {
+            "nodes": len(page._explain.nodes()),
+            "root": page._explain.root.stage if page._explain.root is not None else None,
+            "raw_canonical_ejson": True,
+        }
+        phase("mongodb_aggregation_pipeline_explain")
+        hold(2.4, run_mongo_pipeline)
 
     def run_mongo_pipeline():
         from opennavicat.mongodb_session import canonical_loads
@@ -1274,7 +1296,7 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
         raise RuntimeError(state["error"] or "Demo application failed.")
     if not window._closed or not idle():
         raise RuntimeError("The demo exited before its native sessions and window had closed.")
-    if state["count"] < 2 or len(state["phases"]) != (22 if mongo is not None else 6):
+    if state["count"] < 2 or len(state["phases"]) != (23 if mongo is not None else 6):
         raise RuntimeError("The demo did not capture all required workflows.")
     for index, item in enumerate(state["phases"]):
         stop = state["phases"][index + 1]["first_frame"] if index + 1 < len(state["phases"]) else state["count"]
@@ -1307,6 +1329,7 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
         "mongodb_collection_options_reopened_readonly": state["mongo_storage_verification"] is not None,
         "mongodb_collection_options_verified": bool(state["mongo_storage_verification"]),
         "mongodb_aggregation_pipeline_preview": state.get("mongo_pipeline_preview"),
+        "mongodb_aggregation_pipeline_explain": state.get("mongo_pipeline_explain"),
         "mongodb_aggregation_pipeline_results": state.get("mongo_pipeline_results"),
         "visible_text_privacy_guard": "labels, editors, titles, actions, combos, tree/table display fields; paths/endpoints/credentials rejected before frame save",
         "sqlite_closed_in_worker": state["sqlite_closed_in_worker"],

@@ -1,6 +1,6 @@
 # 0.10 候选验证记录
 
-记录日期：2026-11-12，Asia/Shanghai。**0.10.0 正在准备，尚未冻结最终源码、启动本版六目标 CI、创建正式 tag 或公开 Release。**
+记录日期：2026-11-12，Asia/Shanghai。**0.10.0 已完成精确源码六目标预检与安装器独立审计；正式 tag 流水线、公开 Release 和匿名下载复核仍待完成。**
 当前公开安装器仍为 [v0.9.0](https://github.com/shubolab/opennavicat/releases/tag/v0.9.0)。
 本文件先记录已经取得的证据与待完成项，后续必须用本版精确冻结 SHA、正式运行和实际公开资产补齐。
 
@@ -11,7 +11,7 @@
 ## 候选归属与实现范围
 
 本候选在独立 `release-0-10` 工作树准备，基点为 **`b358c6216177bc896b3c57f1f7412758463a1f9b`**，
-随后将包版本调整为 **0.10.0**。最终冻结 SHA 尚待候选文档、唯一 GIF 及必要验证完成后确定；
+随后将包版本调整为 **0.10.0**。经验证的发布候选源码为 **`2b28b79317859b44eda739d2b19d1bcf350d3050`**；
 原 main 上并行开发的验证器 UI 或其它未整合工作不自动属于本候选。
 
 相对公开 0.9.0，候选包含普通集合设计、集合/时序/普通视图及其已实现管理工作流，以及以下进展：
@@ -43,8 +43,8 @@
 | 候选录制脚本回归 | **28 passed、零跳过**；`artifacts/release-010/recorder-owned.xml` | 包含 owned MongoDB 与真实 FFmpeg 回归，仍不替代最终 GIF 的录制及隐私验收。 |
 | 本候选 native helper / Cocoa 源运行 | VM **101/0 skip**；原生 Cocoa 设计器及真实存储路径 **51/0 skip**；Cocoa 源 smoke **6 行 × 4 列**通过，七驱动、crypto 与 native JS 探针通过 | 本版打包 smoke 仍待 CI；这些源检查不替代安装器或三平台参考 UI。 |
 | README 唯一 GIF | 实际 Cocoa 完整录制 **17阶段、230帧、38.34秒**，逐阶段视觉隐私检查通过，逐帧可见文字 guard 通过，已替换唯一 GIF | 仅生成示例数据；真实存储保存由独立客户端核验；临时服务和工作区均清理。 |
-| 0.10 精确源码六原生目标 CI | **尚未启动** | Windows/Linux/macOS × amd64/arm64 的源码、打包、安装、运行、卸载分别验收。 |
-| 正式 tag、Release 与公开资产 | **尚未创建或核验** | 仍缺六安装器、校验和、合并 manifest 的正式及匿名下载验收。 |
+| 0.10 精确源码六原生目标 CI | [43058448004](https://github.com/shubolab/opennavicat/actions/runs/43058448004) **7/7 成功**：六个桌面目标与真实数据库安全专项；13份 artifact 已独立下载审计，六安装器全部通过 | 这是 `2b28b79` 的 workflow_dispatch 预检，publisher 按非 tag 规则 skipped；正式 tag 仍将重建并验收六份新资产。 |
+| 正式 tag、Release 与公开资产 | **尚未创建或核验** | 预检安装器不能直接充作正式资产；仍缺 tag 重建、校验和、合并 manifest 与匿名下载复核。 |
 
 上述1658项全源执行早于新增的编码回归；该回归及其它录制用例随后在28项专项中全部执行。
 本机不同测试范围不得相加为另一轮全源。私有 JUnit、fixture、构建和录制收据保留在 ignored 的 `artifacts/`，
@@ -54,6 +54,31 @@
 编码失败已由小样例复现为主窗口 RGB24 与 modal RGBA 切换触发 FFmpeg palette filter 错误；
 `fit_capture_image` 统一输出 RGB32 后小样例和上述录制回归通过。1658项全源早于这项最终录制修复，
 最终冻结和跨平台验证仍须准确记录源码归属；该次全源不覆盖随后新增的编码回归。
+
+## 0.10 精确源码预检：六安装器独立审计通过
+
+`2b28b79317859b44eda739d2b19d1bcf350d3050` 的
+[43058448004](https://github.com/shubolab/opennavicat/actions/runs/43058448004) 为分支 workflow_dispatch：
+六个原生桌面 job 与真实数据库安全 job 共 **7/7 成功**，发布 job 按非 tag 规则 skipped。
+独立脚本下载并审计 13 份 artifact，重点重算六安装器大小与 SHA256，交叉核对 installation artifact 与 validation artifact 的两份 manifest、
+安装/启动/卸载回执、每种操作系统架构的主程序及全部原生映像、QuickJS helper/receipt/license 字节；总收据 `passed=true`。
+
+| 0.10 目标 | 源码 passed / skipped | VM | Qt | 安装器 SHA256 |
+| --- | ---: | ---: | ---: | --- |
+| Linux amd64 | 1640 / 546 | 101/0 skip | 4/0 skip | `22ae2e39ce50a14b521c561220652ec35bc9284b2caf8356ba3f80fde0e2dfb1` |
+| Linux arm64 | 1640 / 546 | 101/0 skip | 4/0 skip | `0a714e70edcc6a3086fbe12ae431cf99c0d90ecaba7333ead50db020c2ce65da` |
+| macOS amd64 | 1658 / 546 | 101/0 skip | 4/0 skip | `4cc7ef3c35bad4a9d70e52c8d5555d7269e1e631eefad5d730ccc2259f39d0f0` |
+| macOS arm64 | 1658 / 546 | 101/0 skip | 4/0 skip | `6a11847ea6ed42ceb4aca6963386dde8b2095cb57c5061cd583efc812183033c` |
+| Windows amd64 | 1551 / 671 | 101/0 skip | 4/0 skip | `df16d9918d506b96d7821a0fbd985e88aa355583de1a84301cf629f259c61c81` |
+| Windows arm64 | 1551 / 671 | 101/0 skip | 4/0 skip | `fefc51621ae90a1b5341cdacc5eb34ef8a44b98ae698a7cb89e0cb77e0204ccc` |
+
+集合专项为 **226 passed、零跳过/失败/错误**，六份明确所有权、原生架构、loopback MongoDB fixture 已验证清理。
+真实数据库安全范围也全部零跳过：TLS/SSH 75、SQL Server/Redis 131、MongoDB 协议 289、MongoDB TLS/SSH 22、
+JS protocol 193、JS Qt protocol 12。不同范围不求和。源码及安装器审计收据保留在 ignored 的
+`artifacts/release-010/ci-audit-43058448004/verification.json`。
+
+这次预检证明 `2b28b79` 的原生构建与安装链，**不证明正式公开资产、完整 Navicat parity 或三平台人工 UI 验收**。
+正式 tag 必须在同一冻结源码上重新完成全部六目标并生成新的 Release 资产。
 
 ## 003c486 历史六目标预检：独立产物审计通过
 

@@ -104,7 +104,7 @@
     "dependency_command_stub_tests": 16,
     "all_protocol_source_hashes_match": true
   },
-  "updated_at": "2026-11-12T00:26:33.383457+08:00",
+  "updated_at": "2026-11-12T08:19:18.305050+08:00",
   "ci_after_storage": {
     "id": 43051367511,
     "source_sha": "7c65c70d6822cf7607cceaa06a860b1561893a53",
@@ -180,11 +180,11 @@
   },
   "candidate_release": {
     "version": "0.10.0",
-    "status": "preparing_not_published",
+    "status": "qualified_waiting_main_merge_and_tag",
     "workspace": "managed_release-0-10_worktree",
     "base_sha": "b358c6216177bc896b3c57f1f7412758463a1f9b",
-    "frozen_source_sha": null,
-    "six_target_ci_started": false,
+    "frozen_source_sha": "2b28b79317859b44eda739d2b19d1bcf350d3050",
+    "six_target_ci_started": true,
     "tag_created": false,
     "public_release_created": false,
     "local_full_source": {
@@ -239,6 +239,21 @@
       "source_smoke_passed": true,
       "sample_rows": 6,
       "sample_columns": 4
-    }
+    },
+    "six_target_ci": {
+      "id": 43058448004,
+      "source_sha": "2b28b79317859b44eda739d2b19d1bcf350d3050",
+      "conclusion": "success",
+      "desktop_jobs": 6,
+      "security_success": true,
+      "publisher": "skipped",
+      "artifact_audit": "passed",
+      "receipt": "artifacts/release-010/ci-audit-43058448004/verification.json"
+    },
+    "next_steps": [
+      "merge exact verified source to main",
+      "push v0.10.0 tag and require tag six-target pipeline",
+      "verify public assets anonymously"
+    ]
   }
 }

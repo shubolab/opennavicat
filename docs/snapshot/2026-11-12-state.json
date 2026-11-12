@@ -104,7 +104,7 @@
     "dependency_command_stub_tests": 16,
     "all_protocol_source_hashes_match": true
   },
-  "updated_at": "2026-11-12T08:19:18.305050+08:00",
+  "updated_at": "2026-11-12T08:35:37.110351+08:00",
   "ci_after_storage": {
     "id": 43051367511,
     "source_sha": "7c65c70d6822cf7607cceaa06a860b1561893a53",
@@ -174,9 +174,14 @@
   },
   "validator_foundation": {
     "source_commit": "d6e63cf",
-    "pure_tests_passed": 68,
-    "ui_integrated": false,
-    "full_builder_qualified": false
+    "ui_integrated": true,
+    "reference_shaped_editor": true,
+    "full_source_passed": 1761,
+    "full_source_skipped": 548,
+    "owned_mongodb_mainwindow_passed": 3,
+    "native_cocoa_passed": 38,
+    "full_builder_qualified": false,
+    "remaining": "external conversion, unknown/root combinations, inline index/key editor and Windows/Linux reference UI"
   },
   "candidate_release": {
     "version": "0.10.0",
@@ -255,5 +260,24 @@
       "push v0.10.0 tag and require tag six-target pipeline",
       "verify public assets anonymously"
     ]
+  },
+  "validator_ui": {
+    "document": "../mongodb-validator-ui.md",
+    "visual_schema_query": true,
+    "bson_types": 22,
+    "multiple": true,
+    "owned_fixtures_cleaned": true,
+    "source_scope_only": true
+  },
+  "mongodb_fixture_pin": {
+    "image": "mongo:8.0.34@sha256:b9924c330a8bbc5800fe9c69f04a84e221eca7b28fd049a0354147d9908fa142",
+    "server_version": "8.0.34",
+    "reason": "mongo:8.0 tag drifted to 8.0.38 during first tag run",
+    "verified_protocol_cases": 298,
+    "exact_cleanup": true,
+    "collection_cases": 226,
+    "protocol_cases": 298,
+    "js_protocol_cases": 195,
+    "js_qt_protocol_cases": 12
   }
 }

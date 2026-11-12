@@ -74,6 +74,7 @@ def test_invalid_mongo_draft_preview_preserves_input_and_recovers(qtbot, kind, e
     page.load_snapshot(snapshot)
     page.name_edit.setText("generated_object")
     if kind == "collection":
+        page.validator_widget.mode_combo.setCurrentIndex(1)
         input_widget, invalid, valid = page.validator_editor, "{broken", '{"score": {"$gte": 0}}'
         read_input, write_input = input_widget.toPlainText, input_widget.setPlainText
     elif kind == "timeseries":

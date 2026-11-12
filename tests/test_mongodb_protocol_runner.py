@@ -68,7 +68,8 @@ def fixtures(directory, run_id):
     for module in runner.MODULES:
         value = dict(module=module, run_id=run_id, owner_token_verified=True,
             cleanup_removed=True, port_loopback_only=True,
-            native_docker_architecture_matches=True, external_auth_readiness=True)
+            native_docker_architecture_matches=True, external_auth_readiness=True,
+            image=runner.EXPECTED_MONGODB_IMAGE, server_version=runner.EXPECTED_MONGODB_VERSION)
         (directory / (module + "-fixture.json")).write_text(json.dumps(value))
         # The real fixture naming is independent of a module's display name.
         (directory / (module + "-fixture.json")).rename(directory / ("fixture-" + module + ".json"))
@@ -89,6 +90,17 @@ def test_protocol_gate_requires_cleanup_ownership_and_native_ready_server(tmp_pa
     value = json.loads(path.read_text()); value[key] = False
     path.write_text(json.dumps(value))
     with pytest.raises(RuntimeError, match="readiness or cleanup"):
+        runner.check_fixtures(tmp_path, "current-run")
+
+
+@pytest.mark.parametrize(("key", "value"), [("image", "mongo:8.0"), ("server_version", "8.0.38")])
+def test_protocol_gate_rejects_pinned_server_identity_drift(tmp_path, key, value):
+    fixtures(tmp_path, "current-run")
+    path = tmp_path / "fixture-test_mongo_window.json"
+    receipt = json.loads(path.read_text())
+    receipt[key] = value
+    path.write_text(json.dumps(receipt))
+    with pytest.raises(RuntimeError, match="pinned server identity"):
         runner.check_fixtures(tmp_path, "current-run")
 
 

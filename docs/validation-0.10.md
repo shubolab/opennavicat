@@ -55,6 +55,19 @@
 `fit_capture_image` 统一输出 RGB32 后小样例和上述录制回归通过。1658项全源早于这项最终录制修复，
 最终冻结和跨平台验证仍须准确记录源码归属；该次全源不覆盖随后新增的编码回归。
 
+## 正式 tag 首次门禁：镜像漂移失败与修复
+
+首次 `v0.10.0` tag run [43126589459](https://github.com/shubolab/opennavicat/actions/runs/43126589459)
+指向 `36cc20c`。六个桌面目标当时均已成功，但真实 MongoDB 安全专项失败；发布 job 未创建，公开 Release 不存在。
+原因不是服务器写入回退，而是 `mongo:8.0` 在两次运行之间从 8.0.34 漂移到 8.0.38，
+索引 UUID 空选择器保护只对已实际验证的旧版本放行，因此 32 项在 DDL 前安全拒绝。
+
+修复将所有 owned fixture 固定到8.0.34多架构digest
+`mongo:8.0.34@sha256:b9924c330a8bbc5800fe9c69f04a84e221eca7b28fd049a0354147d9908fa142`，
+并让 protocol、collection和JS runners拒绝收到其它镜像/版本回执，没有放宽版本保护。
+本机重跑：MongoDB protocol/index/MainWindow **298 passed**、集合专项 **226 passed**，均零跳过/失败/错误，
+所有精确 container ID 另行确认已清理。正式资格仍须新源码的完整 tag pipeline。
+
 ## 0.10 精确源码预检：六安装器独立审计通过
 
 `2b28b79317859b44eda739d2b19d1bcf350d3050` 的

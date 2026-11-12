@@ -39,6 +39,7 @@ MONGO_DATABASE = "demo_catalog"
 MONGO_COLLECTION = "products"
 MONGO_BUCKET = "sample_files"
 MONGO_STORAGE_COLLECTION = "generated_storage"
+MONGO_IMAGE = "mongo:8.0.34@sha256:b9924c330a8bbc5800fe9c69f04a84e221eca7b28fd049a0354147d9908fa142"
 MONGO_STORAGE_TEXT = '{ wiredTiger: { configString: "block_compressor=zlib" } }'
 MONGO_INDEX_DEFAULTS_TEXT = '{ storageEngine: { wiredTiger: { configString: "prefix_compression=false" } } }'
 QUERY = """-- 以下客户、城市和订单均为程序生成的示例数据
@@ -181,7 +182,7 @@ class OwnedMongoDemo:
             "--label", "opennavicat.test=true", "--label", "opennavicat.task=readme-demo",
             "--label", "opennavicat.owner=" + self.owner, "--publish", "127.0.0.1::27017",
             "-e", "MONGO_INITDB_ROOT_USERNAME=" + self.username,
-            "-e", "MONGO_INITDB_ROOT_PASSWORD=" + self.password, "mongo:8.0", "--bind_ip_all")
+            "-e", "MONGO_INITDB_ROOT_PASSWORD=" + self.password, MONGO_IMAGE, "--bind_ip_all")
         self.container_id = identifier
         entry = self.inspect()
         mappings = entry.get("NetworkSettings", {}).get("Ports", {}).get("27017/tcp") or []
@@ -299,7 +300,7 @@ class OwnedMongoDemo:
             raise RuntimeError("Independent generated collection storage verification failed.") from None
 
     def receipt(self):
-        return {"image": "mongo:8.0", "server_version": self.server_version,
+        return {"image": MONGO_IMAGE, "server_version": self.server_version,
             "image_architecture": self.architecture, "loopback_only": True,
             "exact_container_identity_verified": self.identity_verified,
             "owned_container_removed": self.removed, "credentials_generated_in_memory": True}

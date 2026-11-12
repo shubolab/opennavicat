@@ -9,7 +9,7 @@ import pytest
 from opennavicat.database import DatabaseError
 from opennavicat.mongodb_session import BSON_CODEC
 from opennavicat.mongodb_validator import (
-    AddProperty, RemoveKeyword, RemoveProperty, RenameProperty, SetKeyword,
+    AddProperty, RemoveKeyword, RemoveProperty, RenameProperty, ReplaceSchemaFragment, SetKeyword,
     UnresolvedSchemaDependencyError, ValidatorDraft, ValidatorLimits,
 )
 
@@ -306,3 +306,95 @@ def test_unresolved_keyword_labels_bound_count_individual_names_and_total_text()
     assert '35 more' in text and '41 total' in text
     assert draft.raw_bson == before and encoded(draft.document) == before
     assert long_name in draft.visual_schema
+
+
+def test_explicit_raw_properties_replace_changes_only_chosen_fragment_under_unknown_dependencies():
+    original = sample()
+    original['$jsonSchema']['dependencies'] = {'first': ['unmapped', 'second']}
+    original['$jsonSchema']['futureRule'] = {'first': Binary(b'keep complete unknown rule', 128)}
+    draft = ValidatorDraft(original)
+    fragment = {
+        '$date': {'bsonType': ['date', 'null'], 'enum': [Int64(1), Decimal128('3.00')]},
+        '$oid': {'description': 'literal property name', 'future': {'$date': 'literal', '$oid': 'literal'}},
+    }
+    expected = deepcopy(original)
+    expected['$jsonSchema']['properties'] = deepcopy(fragment)
+    result = draft.apply([ReplaceSchemaFragment(SCHEMA, 'properties', fragment)])
+    assert draft.raw_bson == encoded(expected)
+    assert list(result['$jsonSchema']) == list(original['$jsonSchema'])
+    assert result['$jsonSchema']['required'] == original['$jsonSchema']['required']
+    for name in original['$jsonSchema']:
+        if name != 'properties':
+            assert encoded({'value': result['$jsonSchema'][name]}) == encoded({'value': original['$jsonSchema'][name]})
+    fragment.clear()
+    result['$jsonSchema']['properties'].clear()
+    assert draft.raw_bson == encoded(expected) and draft.original_raw == encoded(original)
+    with pytest.raises(UnresolvedSchemaDependencyError):
+        draft.apply([RenameProperty(SCHEMA, '$date', 'new')])
+    with pytest.raises(DatabaseError, match='ordered property patches'):
+        draft.apply([SetKeyword((*SCHEMA, 'properties'), {})])
+
+
+@pytest.mark.parametrize('keyword,value', [
+    ('properties', {'new': {'bsonType': 'long', 'minimum': Int64(2)}}),
+    ('patternProperties', {'^new': {'description': 'typed', 'unknown': Binary(b'\x00', 128)}}),
+    ('dependencies', {'new': ['unmapped'], 'typed': {'future': Decimal128('1.00')}}),
+    ('enum', [Int64(1), Decimal128('1.0'), Binary(b'\xff', 128), {'$date': 'literal'}]),
+    ('items', {'bsonType': ['long', 'null']}),
+    ('items', [{'bsonType': 'int'}, {'enum': [Int64(1)]}]),
+    ('additionalItems', True),
+    ('additionalItems', {'bsonType': 'long'}),
+    ('additionalProperties', False),
+    ('additionalProperties', {'description': 'explicit object'}),
+    ('required', ['unmapped', '$date']),
+    ('title', ''),
+    ('description', 'explicit new description'),
+])
+def test_explicit_raw_fragment_replacement_retains_typed_values_and_outside_subtrees(keyword, value):
+    document = sample()
+    owner = document['$jsonSchema']['properties']['second']
+    owner['futureNameRule'] = {'$date': ['unmapped']}
+    owner['dependencies'] = {'$date': ['unmapped']}
+    path = (*SCHEMA, 'properties', 'second')
+    draft = ValidatorDraft(document)
+    expected = deepcopy(document)
+    expected['$jsonSchema']['properties']['second'][keyword] = value
+    draft.apply([ReplaceSchemaFragment(path, keyword, value)])
+    assert draft.raw_bson == encoded(expected)
+    assert draft.visual_schema['properties']['first'] == document['$jsonSchema']['properties']['first']
+
+
+@pytest.mark.parametrize('keyword,value', [
+    ('properties', []), ('patternProperties', True), ('dependencies', []),
+    ('enum', {}), ('items', False), ('items', 'string'), ('additionalItems', Int64(1)),
+    ('additionalProperties', 0), ('required', 'first'), ('required', [Int64(1)]),
+    ('title', Code('not a BSON string')), ('description', None), ('futureRule', {}),
+    ('$jsonSchema', {}),
+])
+def test_invalid_raw_fragment_shape_or_keyword_aborts_all_prior_patches(keyword, value):
+    draft = ValidatorDraft(sample())
+    before = draft.raw_bson
+    with pytest.raises(DatabaseError):
+        draft.apply([SetKeyword((*SCHEMA, 'title'), 'must roll back'),
+                     ReplaceSchemaFragment(SCHEMA, keyword, value)])
+    assert draft.raw_bson == draft.original_raw == before and not draft.changed
+
+
+def test_explicit_fragment_replacement_respects_owner_path_and_bson_bounds():
+    source = {'$jsonSchema': {'properties': {'array': {'items': [{'properties': {'old': {}}}]}}}}
+    path = (*SCHEMA, 'properties', 'array', 'items', 0)
+    draft = ValidatorDraft(source)
+    draft.apply([ReplaceSchemaFragment(path, 'properties', {'new': {'enum': [Int64(1)]}})])
+    expected = deepcopy(source)
+    expected['$jsonSchema']['properties']['array']['items'][0]['properties'] = {'new': {'enum': [Int64(1)]}}
+    assert draft.raw_bson == encoded(expected)
+    before = draft.raw_bson
+    with pytest.raises(DatabaseError):
+        draft.apply([ReplaceSchemaFragment((*SCHEMA, 'properties'), 'properties', {})])
+    with pytest.raises(DatabaseError):
+        draft.apply([ReplaceSchemaFragment(path, 'properties', {'bad': {'value': object()}})])
+    assert draft.raw_bson == before
+    limited = ValidatorDraft({'$jsonSchema': {}}, limits=ValidatorLimits(max_bytes=80))
+    with pytest.raises(DatabaseError, match='bound'):
+        limited.apply([ReplaceSchemaFragment(SCHEMA, 'properties', {'x': {'description': 'x' * 100}})])
+    assert limited.raw_bson == limited.original_raw

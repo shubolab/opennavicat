@@ -1,8 +1,8 @@
 # MongoDB validator draft foundation
 
-`opennavicat.mongodb_validator` is a detached BSON editing model, not the visual
-JSON Schema/Query tool. It performs no database, filesystem, UI or JavaScript
-operation. The existing collection backend remains responsible for sealed
+`opennavicat.mongodb_validator` is a detached BSON editing model used by the
+reference-shaped JSON Schema/Query editor. The model performs no database,
+filesystem, UI or JavaScript operation. The existing collection backend remains responsible for sealed
 previews, UUID/catalog checks, writes, cancellation and acknowledgements.
 
 `ValidatorDraft` accepts a complete validator document or original BSON bytes.
@@ -45,7 +45,10 @@ and resource/error-label bounds. They are not native-reference UI, actual
 server validation, a complete builder or six-platform installer acceptance.
 The source JUnit is retained under `artifacts/collection-storage/validator-foundation.xml`.
 
-Next, wire the actual observed type/property/root-schema controls and nested
-object/array modals, separate Query buffer, selection/enablement states and
-save/cancel/error/reopen workflow. The complete U23/O14 gates stay open until
-those behaviors and the corresponding platform/reference tests are qualified.
+The observed property/root-schema controls, separate Query buffer, 22 BSON types
+plus Multiple, type-specific constraints, bounded nested-fragment dialogs,
+lossless read-only fallback and the collection save/cancel/error/reopen workflow
+are now integrated in `opennavicat.ui.mongo_validator`. See
+[MongoDB validator visual editor](mongodb-validator-ui.md). The full external
+conversion rules, every unknown keyword, all root-schema combinations and the
+three-platform reference acceptance remain open; U23 and O14 are still partial.

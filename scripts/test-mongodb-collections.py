@@ -53,6 +53,8 @@ TARGETS = [
     'tests/test_mongo_window.py::test_real_window_mongo_view_designer_creates_collated_view_and_preserves_collation',
     'tests/test_mongo_window.py::test_real_window_delete_mongo_view_requires_permanent_confirmation',
 ]
+EXPECTED_MONGODB_IMAGE = "mongo:8.0.34@sha256:b9924c330a8bbc5800fe9c69f04a84e221eca7b28fd049a0354147d9908fa142"
+EXPECTED_MONGODB_VERSION = "8.0.34"
 EXPECTED_FIXTURE_MODULES = {'test_mongodb_collections', 'test_mongodb_timeseries', 'test_mongodb_collection_copy', 'test_mongodb_collection_maintenance', 'test_mongodb_views', 'test_mongo_window'}
 COLLECT = '''import json,sys,pytest
 from pathlib import Path
@@ -137,6 +139,8 @@ def main():
                     'cleanup_removed', 'owner_token_verified', 'port_loopback_only',
                     'native_docker_architecture_matches', 'external_auth_readiness'))):
             raise RuntimeError('Required exact-owned native fixture/cleanup proof is missing')
+        if any(fixture.get('image') != EXPECTED_MONGODB_IMAGE or fixture.get('server_version') != EXPECTED_MONGODB_VERSION for fixture in fixtures):
+            raise RuntimeError('Owned MongoDB fixture drifted from its pinned server identity')
         summary['fixtures'] = fixtures
         summary['verified'] = True
     except BaseException as error:

@@ -52,6 +52,15 @@ class RemoveKeyword:
 
 
 @dataclass(frozen=True)
+class ReplaceSchemaFragment:
+    """An explicit raw edit of one schema keyword, with no sibling rewrites."""
+
+    schema_path: Path
+    keyword: str
+    value: Any
+
+
+@dataclass(frozen=True)
 class AddProperty:
     schema_path: Path
     name: str
@@ -91,6 +100,29 @@ _SCHEMA_MAPS = frozenset({'properties', 'patternProperties', 'dependencies',
 _SCHEMA_ARRAYS = frozenset({'allOf', 'anyOf', 'oneOf'})
 _SCHEMA_CHILDREN = frozenset({'items', 'additionalItems', 'additionalProperties',
                               'not', 'if', 'then', 'else', 'contains'})
+_DOCUMENT_FRAGMENTS = frozenset({'properties', 'patternProperties', 'dependencies'})
+
+
+def _validate_fragment_shape(keyword, value):
+    """Check the selected raw editor's outer shape, not full server semantics."""
+    if type(keyword) is not str:
+        raise DatabaseError('The selected schema fragment is not qualified for raw replacement')
+    if keyword in _DOCUMENT_FRAGMENTS:
+        valid = isinstance(value, dict)
+    elif keyword == 'enum':
+        valid = isinstance(value, list)
+    elif keyword == 'required':
+        valid = isinstance(value, list) and all(type(name) is str for name in value)
+    elif keyword == 'items':
+        valid = isinstance(value, (dict, list))
+    elif keyword in {'additionalItems', 'additionalProperties'}:
+        valid = isinstance(value, dict) or type(value) is bool
+    elif keyword in {'title', 'description'}:
+        valid = type(value) is str
+    else:
+        raise DatabaseError('The selected schema fragment is not qualified for raw replacement')
+    if not valid:
+        raise DatabaseError('The selected schema fragment has an incompatible BSON shape')
 
 
 def _check_tree(value, limits):
@@ -320,6 +352,15 @@ class ValidatorDraft:
         return self.document
 
     def _apply_one(self, document, patch):
+        if isinstance(patch, ReplaceSchemaFragment):
+            owner = _schema(document, patch.schema_path)
+            _validate_fragment_shape(patch.keyword, patch.value)
+            _encode({'value': patch.value}, self.limits)
+            # Explicit replacement has no inferred rename/delete semantics.
+            # Required/dependency/unknown siblings remain byte-exact even if
+            # the caller intentionally supplies different property names.
+            owner[patch.keyword] = deepcopy(patch.value)
+            return
         if isinstance(patch, (SetKeyword, RemoveKeyword)):
             path = _path(patch.path)
             _check_keyword_structure(document, path)

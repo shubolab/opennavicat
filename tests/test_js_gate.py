@@ -64,12 +64,13 @@ def test_protocol_explicitly_executes_index_helpers_and_requires_three_owned_mod
     assert module.QT_PROTOCOL_FIXTURES=={'test_mongo_native_query_ui','test_js_window'}
 
 
-@pytest.mark.parametrize('fault',[None,'missing','duplicate','extra','stale','cleanup','readiness','architecture'])
+@pytest.mark.parametrize('fault',[None,'missing','duplicate','extra','stale','cleanup','readiness','architecture','image','version'])
 def test_fixture_gate_rejects_missing_helper_receipt_duplicates_and_incomplete_cleanup(tmp_path,fault):
     module=runner();run_id='synthetic-current-run'
     def receipt(name):
         return dict(run_id=run_id,module=name,cleanup_removed=True,owner_token_verified=True,
-            port_loopback_only=True,native_docker_architecture_matches=True,external_auth_readiness=True)
+            port_loopback_only=True,native_docker_architecture_matches=True,external_auth_readiness=True,
+                image=module.EXPECTED_MONGODB_IMAGE,server_version=module.EXPECTED_MONGODB_VERSION)
     rows=[receipt(name)for name in sorted(module.PROTOCOL_FIXTURES)]
     if fault=='missing':rows=[row for row in rows if row['module']!='test_js_index_helpers']
     elif fault=='duplicate':rows.append(dict(rows[0]))
@@ -78,6 +79,8 @@ def test_fixture_gate_rejects_missing_helper_receipt_duplicates_and_incomplete_c
     elif fault=='cleanup':rows[0]['cleanup_removed']=False
     elif fault=='readiness':rows[0]['external_auth_readiness']=False
     elif fault=='architecture':rows[0]['native_docker_architecture_matches']=False
+    elif fault=='image':rows[0]['image']='mongo:8.0'
+    elif fault=='version':rows[0]['server_version']='8.0.38'
     for index,row in enumerate(rows):(tmp_path/f'fixture-{index}.json').write_text(json.dumps(row))
     if fault:
         with pytest.raises(RuntimeError,match='readiness/cleanup not proven'):

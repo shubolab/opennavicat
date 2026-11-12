@@ -37,6 +37,7 @@ def test_collection_page_edits_exact_supported_options_and_caps_size_units(qtbot
     page.capped_check.setChecked(True)
     page.size_edit.setText('4096')
     page.max_edit.setText('250')
+    page.validator_widget.mode_combo.setCurrentIndex(1)
     page.validator_editor.setPlainText('{"amount": {"$gte": 0}}')
     page.level_combo.setCurrentIndex(page.level_combo.findData('strict'))
     page.action_combo.setCurrentIndex(page.action_combo.findData('error'))
@@ -78,12 +79,13 @@ def test_invalid_document_is_dirty_but_never_emitted(qtbot, page):
     page.previewRequested.connect(previews.append)
     page.saveRequested.connect(saves.append)
     page.name_edit.setText('orders')
+    page.validator_widget.mode_combo.setCurrentIndex(1)
     page.validator_editor.setPlainText('{broken')
 
     page.request_save()
     assert page._invalid and page.dirty
     assert not previews and not saves
-    assert 'Canonical Extended JSON' in page.message.text()
+    assert 'line' in page.message.text() and 'column' in page.message.text()
 
 
 def test_name_sheet_previews_exact_plan_and_confirms_save(qtbot, page):

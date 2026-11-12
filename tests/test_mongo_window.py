@@ -145,6 +145,7 @@ def test_real_collection_designer_creates_and_collmods_with_worker_owned_io(qtbo
     assert isinstance(page, MongoCollectionDesignerPage)
     qtbot.waitUntil(lambda: page.snapshot is not None and not page.loading, timeout=15000)
     page.name_edit.setText("ui_created")
+    page.validator_widget.mode_combo.setCurrentIndex(1)
     page.validator_editor.setPlainText('{"score": {"$gte": 0}}')
     page.level_combo.setCurrentIndex(page.level_combo.findData("strict"))
     page.action_combo.setCurrentIndex(page.action_combo.findData("error"))
@@ -616,6 +617,7 @@ def test_real_window_stop_inflight_collection_uses_cancel_pool_and_preserves_dra
     page = window.open_mongo_collection_designer(config.id, config.database)
     qtbot.waitUntil(lambda: page.snapshot is not None and not page.loading, timeout=15000)
     page.name_edit.setText("blocked_collection")
+    page.validator_widget.mode_combo.setCurrentIndex(1)
     page.validator_editor.setPlainText('{"n": {"$gte": 0}}')
     page.request_save()
     dialog = page._save_dialog

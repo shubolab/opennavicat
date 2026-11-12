@@ -22,6 +22,8 @@ VM=("tests/test_js_codec.py","tests/test_js_native.py","tests/test_js_gate.py",
 PROTOCOL=(*VM,"tests/test_js_engine.py","tests/test_js_host_reference.py","tests/test_js_index_helpers.py")
 QT=("tests/test_mongo_native_query_ui.py",)
 PROTOCOL_FIXTURES=frozenset({'test_js_engine','test_js_host_reference','test_js_index_helpers'})
+EXPECTED_MONGODB_IMAGE="mongo:8.0.34@sha256:b9924c330a8bbc5800fe9c69f04a84e221eca7b28fd049a0354147d9908fa142"
+EXPECTED_MONGODB_VERSION="8.0.34"
 QT_PROTOCOL_FIXTURES=frozenset({'test_mongo_native_query_ui','test_js_window'})
 COLLECT="""import json,sys,pytest
 from pathlib import Path
@@ -61,7 +63,8 @@ def check_fixtures(directory,run_id,required):
     fixtures=[value for value in fixtures if value.get('run_id')==run_id]
     if (len(fixtures)!=len(required)or {value.get('module')for value in fixtures}!=set(required)or
         any(value.get(field)is not True for value in fixtures for field in ('cleanup_removed','owner_token_verified',
-            'port_loopback_only','native_docker_architecture_matches','external_auth_readiness'))):
+            'port_loopback_only','native_docker_architecture_matches','external_auth_readiness'))or
+        any(value.get('image')!=EXPECTED_MONGODB_IMAGE or value.get('server_version')!=EXPECTED_MONGODB_VERSION for value in fixtures)):
         raise RuntimeError('Native engine owned MongoDB readiness/cleanup not proven')
     return fixtures
 

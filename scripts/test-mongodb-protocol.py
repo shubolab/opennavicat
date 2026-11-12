@@ -139,6 +139,9 @@ def check_junit(path, manifest=None):
             "modules": {name: len(values) for name, values in grouped.items()}}
 
 
+EXPECTED_MONGODB_IMAGE = "mongo:8.0.34@sha256:b9924c330a8bbc5800fe9c69f04a84e221eca7b28fd049a0354147d9908fa142"
+EXPECTED_MONGODB_VERSION = "8.0.34"
+
 def check_fixtures(directory, run_id):
     fixtures = [json.loads(path.read_text()) for path in directory.glob("fixture-*.json")]
     fixtures = [value for value in fixtures if value.get("run_id") == run_id]
@@ -150,6 +153,8 @@ def check_fixtures(directory, run_id):
                 "native_docker_architecture_matches", "external_auth_readiness")
     if any(value.get(key) is not True for value in fixtures for key in required):
         raise RuntimeError("Owned MongoDB fixture readiness or cleanup was not verified")
+    if any(value.get("image") != EXPECTED_MONGODB_IMAGE or value.get("server_version") != EXPECTED_MONGODB_VERSION for value in fixtures):
+        raise RuntimeError("Owned MongoDB fixture drifted from its pinned server identity")
     return fixtures
 
 

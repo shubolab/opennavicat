@@ -109,7 +109,7 @@
     "dependency_command_stub_tests": 16,
     "all_protocol_source_hashes_match": true
   },
-  "updated_at": "2026-11-12T15:32:18.351300+08:00",
+  "updated_at": "2026-11-12T15:40:42.924079+08:00",
   "ci_after_storage": {
     "id": 43051367511,
     "source_sha": "7c65c70d6822cf7607cceaa06a860b1561893a53",
@@ -337,11 +337,11 @@
     "locale_choices_observed": 152,
     "existing_collection_readonly": true,
     "version_and_unknown_preserved": true,
-    "collection_runner_passed": 240,
+    "collection_runner_passed": 241,
     "collection_runner_skipped": 0,
-    "native_cocoa_passed": 6,
+    "native_cocoa_passed": 7,
     "full_source_passed": 1776,
-    "full_source_skipped": 552,
+    "full_source_skipped": 553,
     "source_smoke_passed": true,
     "complete_locale_catalog_open": true,
     "windows_linux_reference_open": true,
@@ -354,6 +354,12 @@
     "locale_ax_count_after_scroll": 153,
     "locale_catalog_implemented": true,
     "locale_catalog_unique_nonempty_values": 152,
-    "locale_accessibility_count_discrepancy": true
+    "locale_accessibility_count_discrepancy": true,
+    "collection_runner_fixtures": 7,
+    "server_accepted_locale_values": 152,
+    "server_catalog_echoed_locales": 151,
+    "simple_binary_comparison": true,
+    "fr_ca_backwards_default": true,
+    "server_defaults_mongo_version": "8.0.34"
   }
 }

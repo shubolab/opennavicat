@@ -70,14 +70,22 @@ The structured editor has unit coverage for blank/new state, locale enablement,
 all observed value mappings, unknown-field/version retention, clearing locale,
 read-only existing state and exact collection-page drafts. A real MainWindow
 test creates a new collection with every structured value and independently
-reads the server-expanded catalog. The expanded collection runner passed **240
-cases with zero skips/failures/errors**, native Cocoa collation checks passed
-**6/6**, and the full source suite passed **1776 cases with 552 conditionally
-skipped and zero failures/errors**. The source smoke passed 6 rows × 4 columns.
+reads the server-expanded catalog. Another real regression creates every one
+of the 152 listed locales, reads its normalized server collation, loads it back
+through the structured editor and removes the temporary collection. All 152
+were accepted; 151 catalog entries echoed the requested locale and `simple`
+used binary comparison without a stored collation option. The owned fixture
+also confirmed `fr_CA` defaults to `backwards=true`.
+The expanded collection runner passed **241 cases with zero
+skips/failures/errors** across seven exact-owned fixtures, native Cocoa collation
+checks passed **7/7**, and the full source suite passed **1776 cases with 553
+conditionally skipped and zero failures/errors**. The source smoke passed 6 rows
+× 4 columns.
 The single tracked application GIF was re-recorded from the actual Cocoa UI as
 18 phases, 245 encoded frames and 40.84 seconds; representative frames from
 every phase passed the privacy review.
 
-The 18.0.5 locale list values are now reproduced, while the accessibility
-count discrepancy, all server/locale-specific defaults, structured controls for
-other collection types and Windows/Linux reference UI remain open gates.
+The 18.0.5 locale list and MongoDB 8.0.34 normalized defaults are now
+reproduced, while the accessibility count discrepancy, other server versions,
+structured controls for other collection types and Windows/Linux reference UI
+remain open gates.

@@ -109,7 +109,7 @@
     "dependency_command_stub_tests": 16,
     "all_protocol_source_hashes_match": true
   },
-  "updated_at": "2026-11-12T15:07:03.109244+08:00",
+  "updated_at": "2026-11-12T15:32:18.351300+08:00",
   "ci_after_storage": {
     "id": 43051367511,
     "source_sha": "7c65c70d6822cf7607cceaa06a860b1561893a53",
@@ -334,13 +334,13 @@
   "collation_ui": {
     "document": "../mongodb-collation-ui.md",
     "structured_controls": 9,
-    "locale_choices_observed": 100,
+    "locale_choices_observed": 152,
     "existing_collection_readonly": true,
     "version_and_unknown_preserved": true,
-    "collection_runner_passed": 239,
+    "collection_runner_passed": 240,
     "collection_runner_skipped": 0,
-    "native_cocoa_passed": 5,
-    "full_source_passed": 1775,
+    "native_cocoa_passed": 6,
+    "full_source_passed": 1776,
     "full_source_skipped": 552,
     "source_smoke_passed": true,
     "complete_locale_catalog_open": true,
@@ -349,6 +349,11 @@
     "recorded_demo_frames": 245,
     "recorded_demo_duration_seconds": 40.84,
     "recorded_demo_sha256": "08ed34026360052625dd9e88ae461923b90066436c9534793d8eb9f28b4f3a80",
-    "visual_privacy_reviewed": true
+    "visual_privacy_reviewed": true,
+    "locale_ax_count_at_top": 100,
+    "locale_ax_count_after_scroll": 153,
+    "locale_catalog_implemented": true,
+    "locale_catalog_unique_nonempty_values": 152,
+    "locale_accessibility_count_discrepancy": true
   }
 }

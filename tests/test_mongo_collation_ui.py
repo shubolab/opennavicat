@@ -12,10 +12,29 @@ def test_new_collation_starts_blank_and_enables_after_locale(qtbot):
     editor = MongoCollationEditor()
     qtbot.addWidget(editor)
     assert editor.locale_combo.currentText() == ''
+    assert editor.locale_combo.currentIndex() == -1
+    assert editor.locale_combo.count() == 152
     assert all(not combo.isEnabled() for combo in editor.combos.values())
     editor.locale_combo.setCurrentText('en_US')
     assert all(combo.isEnabled() for combo in editor.combos.values())
     assert editor.collation() == {'locale': 'en_US'}
+
+
+def test_reference_locale_catalog_preserves_order_and_variants(qtbot):
+    from opennavicat.ui.mongo_collation import LOCALE_SUGGESTIONS
+
+    editor = MongoCollationEditor()
+    qtbot.addWidget(editor)
+    assert len(LOCALE_SUGGESTIONS) == len(set(LOCALE_SUGGESTIONS)) == 152
+    assert LOCALE_SUGGESTIONS[:8] == (
+        'simple', 'af', 'am', 'ar', 'ar@collation=compat', 'as', 'az', 'az@collation=search')
+    assert LOCALE_SUGGESTIONS[-8:] == (
+        'yo', 'zh', 'zh@collation=big5han', 'zh@collation=gb2312han',
+        'zh@collation=unihan', 'zh@collation=zhuyin', 'zh_Hant', 'zu')
+    visible_values = [editor.locale_combo.itemText(index) for index in range(editor.locale_combo.count())]
+    assert visible_values == list(LOCALE_SUGGESTIONS)
+    editor.locale_combo.setCurrentText('generated_future_locale')
+    assert editor.collation() == {'locale': 'generated_future_locale'}
 
 
 def test_observed_structured_values_generate_exact_collation_and_preserve_unknown(qtbot):

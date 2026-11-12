@@ -24,6 +24,7 @@ from opennavicat.mongodb_pipeline import (
     to_nagg, validate_pipeline,
 )
 from opennavicat.mongodb_session import BSON_CODEC, canonical_dumps, canonical_loads
+from opennavicat.mongodb_stage_templates import CREATE_TOOL_STAGES, STAGE_EDITOR_TEMPLATES
 
 from .icons import tool_icon
 from .mongo_collation import LOCALE_SUGGESTIONS
@@ -1255,28 +1256,16 @@ class MongoPipelinePage(QWidget):
         self.match_tool = MongoPipelineMatchTool()
         self.project_tool = MongoPipelineProjectTool()
         self.sort_tool = MongoPipelineSortTool()
-        self.group_tool = MongoPipelineGroupTool()
         self.limit_tool = MongoPipelineScalarTool("limit")
         self.skip_tool = MongoPipelineScalarTool("skip")
-        self.count_tool = MongoPipelineScalarTool("count")
-        self.sample_tool = MongoPipelineScalarTool("sample")
-        self.fields_tool = MongoPipelineFieldsTool()
-        self.unset_tool = MongoPipelineUnsetTool()
-        self.unwind_tool = MongoPipelineUnwindTool()
         self.stage_tools = {
             "$match": self.match_tool,
             "$project": self.project_tool,
             "$sort": self.sort_tool,
-            "$group": self.group_tool,
             "$limit": self.limit_tool,
             "$skip": self.skip_tool,
-            "$count": self.count_tool,
-            "$sample": self.sample_tool,
-            "$addFields": self.fields_tool,
-            "$set": self.fields_tool,
-            "$unset": self.unset_tool,
-            "$unwind": self.unwind_tool,
         }
+        assert frozenset(self.stage_tools) == CREATE_TOOL_STAGES
         self.stage_editor = QPlainTextEdit()
         self.stage_editor.setObjectName("mongoPipelineStageEditor")
         for tool in dict.fromkeys(self.stage_tools.values()):
@@ -1549,13 +1538,15 @@ class MongoPipelinePage(QWidget):
         self.enabled_check.blockSignals(False)
         self.stage_editor.blockSignals(True)
         self.stage_editor.setPlainText(
-            stage.reference_mql if stage.reference_mql is not None else _stage_value_text(stage.body))
+            stage.reference_mql if stage.reference_mql is not None else
+            STAGE_EDITOR_TEMPLATES.get(stage.operator, _stage_value_text(stage.body)))
         self.stage_editor.blockSignals(False)
         tool = self.stage_tools.get(stage.operator)
         if tool is not None:
             tool.load(stage.body)
         can_create = tool is not None and tool.isEnabled()
         self.stage_mode.setEnabled(can_create)
+        self.stage_mode.setVisible(can_create)
         self.stage_mode.blockSignals(True)
         self.stage_mode.setCurrentIndex(self.stage_mode.findData("create" if can_create else "editor"))
         self.stage_mode.blockSignals(False)
@@ -1616,7 +1607,7 @@ class MongoPipelinePage(QWidget):
             return
         self.definition.stages[index].operator = value
         self.definition.stages[index].body = self._default_stage_body(value)
-        self.definition.stages[index].reference_mql = None
+        self.definition.stages[index].reference_mql = STAGE_EDITOR_TEMPLATES.get(value)
         self._render_graph()
         self._render_stage_editor()
         self._edited()

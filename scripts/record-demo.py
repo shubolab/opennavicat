@@ -1113,8 +1113,15 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
         page.match_tool.add_row('attributes.active', '$eq', 'true')
         page.add_stage()
         page.operator_combo.setCurrentText("$group")
-        page.group_tool.id_edit.setText("$attributes.origin")
-        page.group_tool.add_row("count", "$sum", "1")
+        if "Separate documents into groups" not in page.stage_editor.toPlainText():
+            raise RuntimeError("The generated $group reference editor template is missing.")
+        phase("mongodb_aggregation_pipeline_stage_template")
+        hold(2.2, configure_mongo_pipeline)
+
+    def configure_mongo_pipeline():
+        page = state["mongo_pipeline_page"]
+        page.stage_editor.setPlainText(
+            '{"_id":"$attributes.origin","count":{"$sum":1}}')
         options = page.options_editor
         options.allow_disk_combo.setCurrentIndex(options.allow_disk_combo.findData(1))
         options.batch_size_edit.setText("25")
@@ -1310,7 +1317,7 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
         raise RuntimeError(state["error"] or "Demo application failed.")
     if not window._closed or not idle():
         raise RuntimeError("The demo exited before its native sessions and window had closed.")
-    if state["count"] < 2 or len(state["phases"]) != (24 if mongo is not None else 6):
+    if state["count"] < 2 or len(state["phases"]) != (25 if mongo is not None else 6):
         raise RuntimeError("The demo did not capture all required workflows.")
     for index, item in enumerate(state["phases"]):
         stop = state["phases"][index + 1]["first_frame"] if index + 1 < len(state["phases"]) else state["count"]
@@ -1342,6 +1349,7 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
         "mongodb_collection_storage_reopened_readonly": state["mongo_storage_verification"] is not None,
         "mongodb_collection_options_reopened_readonly": state["mongo_storage_verification"] is not None,
         "mongodb_collection_options_verified": bool(state["mongo_storage_verification"]),
+        "mongodb_aggregation_pipeline_stage_template": bool(mongo is not None),
         "mongodb_aggregation_pipeline_options": ({
             "allowDiskUse": True,
             "cursorBatchSize": 25,

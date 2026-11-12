@@ -98,6 +98,7 @@ def main():
             ('opennavicat/mongodb_collections.py', 'opennavicat/mongodb_timeseries.py',
              'opennavicat/mongodb_collection_copy.py', 'opennavicat/mongodb_collection_maintenance.py',
              'opennavicat/mongodb_views.py', 'opennavicat/mongodb_session.py', 'opennavicat/mongodb_collection_literals.py',
+             'opennavicat/mongodb_pipeline.py', 'opennavicat/mongodb_stage_templates.py',
              'opennavicat/ui/mongo_collection_designer.py', 'opennavicat/ui/mongo_collation.py',
              'opennavicat/ui/mongo_pipeline.py', 'opennavicat/ui/mongo_view_designer.py',
              'opennavicat/ui/mongo_timeseries_designer.py', 'opennavicat/ui/mongo_maintenance.py',

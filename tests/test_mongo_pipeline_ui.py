@@ -9,6 +9,7 @@ from PySide6.QtWidgets import QMessageBox
 from opennavicat.mongodb_pipeline import (
     PipelineDefinition, PipelinePreview, PipelineStage, parse_explain_reply,
 )
+from opennavicat.mongodb_stage_templates import CREATE_TOOL_STAGES, STAGE_EDITOR_TEMPLATES
 from opennavicat.ui.mongo_pipeline import MongoPipelinePage, MongoPipelineSaveDialog
 
 
@@ -20,8 +21,8 @@ def test_pipeline_page_edits_source_stages_order_enable_and_script(qtbot):
     page.stage_editor.setPlainText('{"_id": {"$gte": 4}}')
     page.operator_combo.setCurrentText("$match")
     page.add_stage()
-    page.stage_editor.setPlainText('{"_id": null, "count": {"$sum": 1}}')
     page.operator_combo.setCurrentText("$group")
+    page.stage_editor.setPlainText('{"_id": null, "count": {"$sum": 1}}')
     definition = page.draft()
     assert definition.source == "docs"
     assert [stage.operator for stage in definition.stages] == ["$match", "$group"]
@@ -185,13 +186,6 @@ def test_common_stage_create_tools_generate_exact_documents(qtbot):
     page.project_tool.add_row("computed", "expression", '{"$literal": 5}')
     assert page.draft().stages[0].body == {"name": 1, "computed": {"$literal": 5}}
 
-    page.operator_combo.setCurrentText("$group")
-    assert page.stage_mode.currentData() == "create"
-    page.group_tool.id_edit.setText("$group")
-    page.group_tool.add_row("total", "$sum", "$amount")
-    assert page.draft().stages[0].body == {
-        "_id": "$group", "total": {"$sum": "$amount"}}
-
     page.operator_combo.setCurrentText("$sort")
     page.sort_tool.add_row("amount", -1)
     assert page.draft().stages[0].body == {"amount": -1}
@@ -199,11 +193,24 @@ def test_common_stage_create_tools_generate_exact_documents(qtbot):
     page.operator_combo.setCurrentText("$limit")
     page.limit_tool.number.setValue(25)
     assert page.draft().stages[0].body == 25
-    page.operator_combo.setCurrentText("$unwind")
-    page.unwind_tool.path.setText("$tags")
-    page.unwind_tool.preserve.setChecked(True)
+
+
+def test_reference_stage_create_tools_and_editor_templates(qtbot):
+    assert len(STAGE_EDITOR_TEMPLATES) == 42
+    assert CREATE_TOOL_STAGES == {"$match", "$project", "$sort", "$limit", "$skip"}
+    page = MongoPipelinePage("generated", "demo_catalog")
+    qtbot.addWidget(page)
+    page.set_sources(["docs"])
+    page.source_combo.setCurrentText("docs")
+    for operator in ("$group", "$addFields", "$set", "$unset", "$unwind", "$count", "$sample"):
+        page.operator_combo.setCurrentText(operator)
+        assert page.stage_mode.isHidden()
+        assert page.stage_stack.currentWidget() is page.stage_editor
+        assert page.stage_editor.toPlainText() == STAGE_EDITOR_TEMPLATES[operator]
+    page.operator_combo.setCurrentText("$group")
+    page.stage_editor.setPlainText('{"_id":"$group","total":{"$sum":"$amount"}}')
     assert page.draft().stages[0].body == {
-        "path": "$tags", "preserveNullAndEmptyArrays": True}
+        "_id": "$group", "total": {"$sum": "$amount"}}
 
 
 def test_stage_drag_target_moves_stage_in_definition(qtbot):

@@ -214,6 +214,33 @@ container and anonymous volumes were removed after verification. Exact
 server-specific behavior for every topology and every unknown/future option
 remains open.
 
+## AP18-07 Stage editor templates and create-tool availability
+
+AP18-07 selected every one of the 42 operators in a fresh exact-owned pipeline
+and switched to the reference's `编辑器` control when it existed. Every operator
+provided an operator-specific Help template in `MQL`; the templates are now
+recorded in the application's stage-template module and displayed for new
+stages.
+
+Only these five operators exposed a `创建工具` switch:
+
+```text
+$match
+$project
+$sort
+$limit
+$skip
+```
+
+The other checked operators used the editor template directly. This corrects the
+earlier implementation assumption that `$group`, `$addFields`, `$set`, `$unset`,
+`$unwind`, `$count` and `$sample` also required separate create-tool toggles.
+OpenNavicat retains the raw editor and underlying functionality for every stage
+while matching the reference's five-tool availability.
+
+The generated pipeline was discarded without saving. The exact-owned
+container and anonymous volumes were verified by identity and removed.
+
 ## Boundaries
 
 This round did not complete an automated reference drag operation, every

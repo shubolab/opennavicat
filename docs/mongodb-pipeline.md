@@ -13,12 +13,12 @@ sample size and local persistence.
 - Users can add/delete and drag or button-move stages, enable or disable a
   stage, choose the source collection and edit Canonical Extended JSON stage
   bodies.
-- Structured create tools now cover `$match`, `$project`, `$group`, `$sort`,
-  `$addFields`, `$set`, `$unset`, `$unwind`, `$limit`, `$skip`, `$count` and
-  `$sample`. `$match` has the observed AND/OR field/operator/value rows; `$group`
-  has grouping and accumulator rows; projection/sort/field stages keep typed
-  expressions. Complex expressions automatically fall back to the exact EJSON
-  editor instead of being flattened lossily.
+- Reference create-tool switching is limited to `$match`, `$project`, `$sort`,
+  `$limit` and `$skip`. `$match` has the observed AND/OR
+  field/operator/value rows; projection and sort tools keep typed expressions.
+  Every one of the 42 stage names now opens the Stage Editor with the exact
+  Navicat help template observed for that operator. Other stages use that
+  Canonical-EJSON editor rather than non-reference structured controls.
 - A graph represents `source → ordered stages → output`.
 - The source preview popup now matches the observed `全部`, `最初`, `随机` order.
   `全部` disables the sample-size field; saved mode ids are `0`, `1` and `2`.
@@ -104,17 +104,15 @@ stage import, persistence, UI graph operations, preview rendering, save-sheet
 naming, nested visual plan projection, unknown-field retention and visual-view
 search. Owned MongoDB tests cover per-stage preview, final aggregation,
 `executionStats` Explain, `$out` confirmation boundaries and a full MainWindow
-save/reopen path. The expanded collection runner passed **287 cases with zero
+save/reopen path. The expanded collection runner passed **288 cases with zero
 skips/failures/errors across eight exact-owned fixtures**; focused Cocoa pipeline
-checks passed **13/13**, the full source suite passed **1819 cases with 562
+checks passed **14/14**, the full source suite passed **1820 cases with 562
 conditionally skipped**, and source smoke returned 6 rows × 4 columns. The README
-GIF is 24 phases, 312 encoded frames and 52.00 seconds. Runtime reference observations are recorded in
+GIF is 25 phases, 323 encoded frames and 53.84 seconds. Runtime reference observations are recorded in
 [the Navicat observation](ui-reference-18-mongodb-pipeline.md).
 
-The checked `$lookup`, `$bucket`, `$bucketAuto`, `$facet`, `$graphLookup`,
-`$unionWith`, `$sortByCount`, `$redact`, `$replaceRoot`, `$replaceWith`,
-`$geoNear`, `$fill` and `$densify` stages use the reference editor rather than a
-structured create tool. Operator-specific editor templates, unknown/future
-Option semantics, exact visual Explain canvas and all operator shapes,
-automatic-task references, change-stream UI, all MongoDB versions/topologies and
-Windows/Linux visual acceptance remain open.
+All 42 operator-specific editor templates were enumerated from the reference;
+only the five stages above expose a create-tool switch. Unknown/future Option
+semantics, exact visual Explain canvas and all operator shapes, automatic-task
+references, change-stream UI, all MongoDB versions/topologies and Windows/Linux
+visual acceptance remain open.

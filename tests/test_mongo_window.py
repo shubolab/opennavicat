@@ -150,6 +150,13 @@ def test_real_aggregation_pipeline_preview_run_explain_and_saved_object(qtbot, m
     idle(qtbot, window)
     page.source_combo.setCurrentText('docs')
     page.match_tool.add_row('_id', '$gte', '4')
+    page.options_editor.allow_disk_combo.setCurrentIndex(
+        page.options_editor.allow_disk_combo.findData(1))
+    page.options_editor.batch_size_edit.setText('2')
+    page.options_editor.max_time_edit.setText('5000')
+    page.options_editor.read_concern_combo.setCurrentIndex(
+        page.options_editor.read_concern_combo.findData(1))
+    page.options_editor.comment_edit.setText('generated_pipeline_options')
     page.add_stage()
     page.operator_combo.setCurrentText('$group')
     page.group_tool.id_edit.setText('null')
@@ -174,6 +181,10 @@ def test_real_aggregation_pipeline_preview_run_explain_and_saved_object(qtbot, m
     assert page.explain_panel.visual_tree.topLevelItemCount() >= 1
     assert any('$group' in node.stage.lower() or 'group' in node.stage.lower()
                for node in page._explain.nodes())
+    assert page._explain.command['allowDiskUse'] is True
+    assert page._explain.command['cursor']['batchSize'] == 2
+    assert page._explain.command['readConcern'] == {'level': 'local'}
+    assert page._explain.command['comment']['userComment'] == 'generated_pipeline_options'
 
     definition = page.draft(); definition.name = 'generated_pipeline'
     saved = window.save_mongo_pipeline(page, definition)

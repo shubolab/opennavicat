@@ -18,13 +18,15 @@ from bson import BSON
 
 from opennavicat.database import DatabaseError
 from opennavicat.mongodb_pipeline import (
-    STAGE_NAMES, PipelineDefinition, PipelineExplain, PipelinePreview, PipelineStage,
+    REFERENCE_OPTION_DEFAULTS, STAGE_NAMES, PipelineDefinition, PipelineExplain,
+    PipelinePreview, PipelineStage,
     explain_pipeline, from_nagg, pipeline_script, preview_pipeline,
     to_nagg, validate_pipeline,
 )
 from opennavicat.mongodb_session import BSON_CODEC, canonical_dumps, canonical_loads
 
 from .icons import tool_icon
+from .mongo_collation import LOCALE_SUGGESTIONS
 
 
 class _PipelineStageCard(QPushButton):
@@ -846,6 +848,250 @@ class MongoPipelineExplainPanel(QWidget):
             filename += ".png"
         return self.visual_page.grab().save(filename, "PNG")
 
+
+class MongoPipelineOptionsEditor(QWidget):
+    """Reference-shaped aggregation-pipeline options with Version 0.0 ids."""
+
+    changed = Signal()
+    TRUE_FALSE = (("", 0), ("true", 1), ("false", -1))
+    READ_CONCERN = (("", 0), ("local", 1), ("available", 2), ("majority", 3), ("linearizable", 4))
+    CASE_FIRST = (("", 0), ("upper", 1), ("lower", 2), ("off", 3))
+    STRENGTH = (("", 0), ("Primary Level", 1), ("Secondary Level", 2),
+                ("Tertiary Level", 3), ("Quaternary Level", 4), ("Identical Level", 5))
+    ALTERNATE = (("", 0), ("non-ignorable", 1), ("shifted", 2))
+    MAX_VARIABLE = (("", 0), ("punct", 1), ("space", 2))
+    COLLATION_KEYS = (
+        "caseLevel", "caseFirst", "strength", "numericOrdering",
+        "alternate", "maxVariable", "backwards", "normalization",
+    )
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("mongoPipelineOptionsEditor")
+        self._loading = False
+        self._unknown = {}
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.scroll = QScrollArea()
+        self.scroll.setWidgetResizable(True)
+        body = QWidget()
+        self.form = QFormLayout(body)
+        layout.addWidget(self.scroll, 1)
+        self.scroll.setWidget(body)
+
+        self.allow_disk_combo = self._combo("mongoPipelineOptionsAllowDiskUse", self.TRUE_FALSE)
+        self.form.addRow("允许使用磁盘:", self.allow_disk_combo)
+        self.batch_size_edit = QLineEdit()
+        self.batch_size_edit.setObjectName("mongoPipelineOptionsBatchSize")
+        self.batch_size_edit.setPlaceholderText("留空")
+        self.form.addRow("光标批处理大小:", self.batch_size_edit)
+        self.max_time_edit = QLineEdit()
+        self.max_time_edit.setObjectName("mongoPipelineOptionsMaxTimeMS")
+        self.max_time_edit.setPlaceholderText("留空")
+        self.form.addRow("最大时间（毫秒 ms）:", self.max_time_edit)
+        self.bypass_validation_combo = self._combo(
+            "mongoPipelineOptionsBypassValidation", self.TRUE_FALSE)
+        self.form.addRow("绕过文档验证:", self.bypass_validation_combo)
+        self.read_concern_combo = self._combo(
+            "mongoPipelineOptionsReadConcern", self.READ_CONCERN)
+        self.form.addRow("读关注级别:", self.read_concern_combo)
+
+        self.locale_combo = QComboBox()
+        self.locale_combo.setObjectName("mongoPipelineOptionsLocale")
+        self.locale_combo.setEditable(True)
+        self.locale_combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        self.locale_combo.addItem("", "")
+        for value in LOCALE_SUGGESTIONS:
+            self.locale_combo.addItem(value, value)
+        self.form.addRow("区域设置:", self.locale_combo)
+        self.strength_combo = self._combo("mongoPipelineOptionsStrength", self.STRENGTH)
+        self.form.addRow("强度:", self.strength_combo)
+        self.case_level_combo = self._combo("mongoPipelineOptionsCaseLevel", self.TRUE_FALSE)
+        self.form.addRow("大小写级别:", self.case_level_combo)
+        self.case_first_combo = self._combo("mongoPipelineOptionsCaseFirst", self.CASE_FIRST)
+        self.form.addRow("大小写优先:", self.case_first_combo)
+        self.numeric_ordering_combo = self._combo(
+            "mongoPipelineOptionsNumericOrdering", self.TRUE_FALSE)
+        self.form.addRow("数值排序:", self.numeric_ordering_combo)
+        self.alternate_combo = self._combo("mongoPipelineOptionsAlternate", self.ALTERNATE)
+        self.form.addRow("替代:", self.alternate_combo)
+        self.max_variable_combo = self._combo("mongoPipelineOptionsMaxVariable", self.MAX_VARIABLE)
+        self.form.addRow("最大变量:", self.max_variable_combo)
+        self.backwards_combo = self._combo("mongoPipelineOptionsBackwards", self.TRUE_FALSE)
+        self.form.addRow("逆向:", self.backwards_combo)
+        self.normalization_combo = self._combo("mongoPipelineOptionsNormalization", self.TRUE_FALSE)
+        self.form.addRow("规范化:", self.normalization_combo)
+
+        self.hint_editor = QPlainTextEdit()
+        self.hint_editor.setObjectName("mongoPipelineOptionsHint")
+        self.hint_editor.setMaximumHeight(90)
+        self.form.addRow("提示:", self.hint_editor)
+        self.comment_edit = QLineEdit()
+        self.comment_edit.setObjectName("mongoPipelineOptionsComment")
+        self.form.addRow("注释:", self.comment_edit)
+
+        self.write_concern_check = QCheckBox("写关注")
+        self.write_concern_check.setObjectName("mongoPipelineOptionsWriteConcern")
+        self.form.addRow("", self.write_concern_check)
+        self.w_edit = QLineEdit()
+        self.w_edit.setObjectName("mongoPipelineOptionsW")
+        self.form.addRow("w:", self.w_edit)
+        self.journal_combo = self._combo("mongoPipelineOptionsJournal", self.TRUE_FALSE)
+        self.form.addRow("j:", self.journal_combo)
+        self.wtimeout_edit = QLineEdit()
+        self.wtimeout_edit.setObjectName("mongoPipelineOptionsWTimeout")
+        self.wtimeout_edit.setPlaceholderText("0")
+        self.form.addRow("w 超时:", self.wtimeout_edit)
+        self.let_editor = QPlainTextEdit()
+        self.let_editor.setObjectName("mongoPipelineOptionsLet")
+        self.let_editor.setPlaceholderText("Canonical Extended JSON 文档")
+        self.let_editor.setMaximumHeight(110)
+        self.form.addRow("Let:", self.let_editor)
+
+        for combo in self._combos():
+            combo.currentIndexChanged.connect(self._changed)
+        self.locale_combo.currentTextChanged.connect(self._locale_changed)
+        self.batch_size_edit.textChanged.connect(self._changed)
+        self.max_time_edit.textChanged.connect(self._changed)
+        self.hint_editor.textChanged.connect(self._changed)
+        self.comment_edit.textChanged.connect(self._changed)
+        self.write_concern_check.toggled.connect(self._write_concern_changed)
+        self.w_edit.textChanged.connect(self._changed)
+        self.wtimeout_edit.textChanged.connect(self._changed)
+        self.let_editor.textChanged.connect(self._changed)
+        self._set_collation_enabled(False)
+        self._set_write_concern_enabled(False)
+
+    @staticmethod
+    def _combo(object_name, values):
+        combo = QComboBox()
+        combo.setObjectName(object_name)
+        for label, value in values:
+            combo.addItem(label, value)
+        return combo
+
+    def _combos(self):
+        return (
+            self.allow_disk_combo, self.bypass_validation_combo, self.read_concern_combo,
+            self.case_level_combo, self.case_first_combo, self.strength_combo,
+            self.numeric_ordering_combo, self.alternate_combo, self.max_variable_combo,
+            self.backwards_combo, self.normalization_combo, self.journal_combo,
+        )
+
+    @staticmethod
+    def _set_combo(combo, value):
+        index = combo.findData(value)
+        if index < 0:
+            combo.addItem(str(value), value)
+            index = combo.count() - 1
+        combo.setCurrentIndex(index)
+
+    def _set_collation_enabled(self, enabled):
+        for key in self.COLLATION_KEYS:
+            getattr(self, {
+                "caseLevel": "case_level_combo", "caseFirst": "case_first_combo",
+                "strength": "strength_combo", "numericOrdering": "numeric_ordering_combo",
+                "alternate": "alternate_combo", "maxVariable": "max_variable_combo",
+                "backwards": "backwards_combo", "normalization": "normalization_combo",
+            }[key]).setEnabled(bool(enabled))
+
+    def _set_write_concern_enabled(self, enabled):
+        for widget in (self.w_edit, self.journal_combo, self.wtimeout_edit):
+            widget.setEnabled(bool(enabled))
+
+    def _locale_changed(self, *_):
+        self._set_collation_enabled(bool(self.locale_combo.currentText().strip()))
+        self._changed()
+
+    def _write_concern_changed(self, checked):
+        self._set_write_concern_enabled(checked)
+        self._changed()
+
+    def _changed(self, *_):
+        if not self._loading:
+            self.changed.emit()
+
+    def load_options(self, options):
+        self._loading = True
+        try:
+            value = deepcopy(REFERENCE_OPTION_DEFAULTS)
+            value.update(deepcopy(options or {}))
+            self._unknown = {key: deepcopy(item) for key, item in value.items()
+                             if key not in REFERENCE_OPTION_DEFAULTS}
+            self._set_combo(self.allow_disk_combo, value["allowDiskUse"])
+            self.batch_size_edit.setText("" if value["cursorBatchSize"] == -1 else str(value["cursorBatchSize"]))
+            self.max_time_edit.setText("" if value["maxTimeMS"] == -1 else str(value["maxTimeMS"]))
+            self._set_combo(self.bypass_validation_combo, value["bypassDocumentValidation"])
+            self._set_combo(self.read_concern_combo, value["readConcernLevel"])
+            self.locale_combo.setCurrentText(value["locale"])
+            for key, widget in (
+                    ("caseLevel", self.case_level_combo), ("caseFirst", self.case_first_combo),
+                    ("strength", self.strength_combo), ("numericOrdering", self.numeric_ordering_combo),
+                    ("alternate", self.alternate_combo), ("maxVariable", self.max_variable_combo),
+                    ("backwards", self.backwards_combo), ("normalization", self.normalization_combo)):
+                self._set_combo(widget, value[key])
+            self.hint_editor.setPlainText(value["hint"])
+            self.comment_edit.setText(value["comment"])
+            self.write_concern_check.setChecked(value["enableWriteConcern"])
+            self.w_edit.setText(str(value["w"]))
+            self._set_combo(self.journal_combo, value["j"])
+            self.wtimeout_edit.setText("" if not value["wtimeout"] else str(value["wtimeout"]))
+            self.let_editor.setPlainText(value["let"])
+            self._set_collation_enabled(bool(value["locale"]))
+            self._set_write_concern_enabled(value["enableWriteConcern"])
+        finally:
+            self._loading = False
+
+    @staticmethod
+    def _integer(edit, *, blank, minimum):
+        text = edit.text().strip()
+        if not text:
+            return blank
+        try:
+            value = int(text)
+        except ValueError:
+            raise DatabaseError("选项中的批处理大小、最大时间和写关注超时必须为整数") from None
+        if value < minimum:
+            raise DatabaseError("选项中的整数低于允许的最小值")
+        return value
+
+    def options(self):
+        let = self.let_editor.toPlainText().strip()
+        if let:
+            try:
+                value = canonical_loads('{"value":' + let + '}')["value"]
+            except Exception:
+                raise DatabaseError("Let 必须是 Canonical Extended JSON 文档") from None
+            if not isinstance(value, dict):
+                raise DatabaseError("Let 必须是 Canonical Extended JSON 文档")
+        result = deepcopy(REFERENCE_OPTION_DEFAULTS)
+        result.update(deepcopy(self._unknown))
+        result.update({
+            "allowDiskUse": self.allow_disk_combo.currentData(),
+            "cursorBatchSize": self._integer(self.batch_size_edit, blank=-1, minimum=0),
+            "maxTimeMS": self._integer(self.max_time_edit, blank=-1, minimum=0),
+            "bypassDocumentValidation": self.bypass_validation_combo.currentData(),
+            "readConcernLevel": self.read_concern_combo.currentData(),
+            "locale": self.locale_combo.currentText().strip(),
+            "caseLevel": self.case_level_combo.currentData(),
+            "caseFirst": self.case_first_combo.currentData(),
+            "strength": self.strength_combo.currentData(),
+            "numericOrdering": self.numeric_ordering_combo.currentData(),
+            "alternate": self.alternate_combo.currentData(),
+            "maxVariable": self.max_variable_combo.currentData(),
+            "backwards": self.backwards_combo.currentData(),
+            "normalization": self.normalization_combo.currentData(),
+            "hint": self.hint_editor.toPlainText().strip(),
+            "comment": self.comment_edit.text().strip(),
+            "enableWriteConcern": self.write_concern_check.isChecked(),
+            "w": self.w_edit.text().strip(),
+            "j": self.journal_combo.currentData(),
+            "wtimeout": self._integer(self.wtimeout_edit, blank=0, minimum=0),
+            "let": let,
+        })
+        return result
+
+
 class MongoPipelineSaveDialog(QDialog):
     def __init__(self, definition, parent=None):
         super().__init__(parent)
@@ -957,6 +1203,17 @@ class MongoPipelinePage(QWidget):
         source_controls.addWidget(self.sample_size)
         source_controls.addWidget(QLabel("文档"))
         pipeline_layout.addLayout(source_controls)
+        option_row = QHBoxLayout()
+        self.options_button = QPushButton("选项")
+        self.options_button.setObjectName("mongoPipelineOptionsButton")
+        self.options_button.setCheckable(True)
+        self.options_button.setMinimumWidth(110)
+        self.options_button.setStyleSheet(
+            "QPushButton { border: 2px solid #e6a23c; border-radius: 12px; padding: 5px 18px; }"
+            "QPushButton:checked { background: #3b3326; }")
+        option_row.addWidget(self.options_button)
+        option_row.addStretch()
+        pipeline_layout.addLayout(option_row)
         self.graph_scroll = QScrollArea()
         self.graph_scroll.setWidgetResizable(True)
         self.graph_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
@@ -1044,7 +1301,11 @@ class MongoPipelinePage(QWidget):
         self.splitter.addWidget(self.editor_panel)
         self.splitter.addWidget(self.output_panel)
         self.splitter.setSizes([320, 480, 320])
-        pipeline_layout.addWidget(self.splitter, 1)
+        self.options_editor = MongoPipelineOptionsEditor()
+        self.detail_stack = QStackedWidget()
+        self.detail_stack.addWidget(self.splitter)
+        self.detail_stack.addWidget(self.options_editor)
+        pipeline_layout.addWidget(self.detail_stack, 1)
         self.tabs.addTab(self.pipeline_tab, "管道")
 
         self.script_tab = QWidget()
@@ -1089,6 +1350,8 @@ class MongoPipelinePage(QWidget):
         self.source_combo.currentTextChanged.connect(self._source_changed)
         self.sample_mode.currentIndexChanged.connect(self._sample_changed)
         self.sample_size.valueChanged.connect(self._sample_changed)
+        self.options_button.toggled.connect(self._show_options)
+        self.options_editor.changed.connect(self._reference_options_changed)
         self.save_action.setShortcut(QKeySequence.StandardKey.Save)
         self.save_action.setShortcutContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
         self.tabs.currentChanged.connect(self._tab_changed)
@@ -1179,6 +1442,7 @@ class MongoPipelinePage(QWidget):
 
     def draft(self):
         self._commit_stage_editor()
+        self._commit_options_editor()
         if self._invalid:
             raise DatabaseError(self._invalid)
         validate_pipeline(self.definition)
@@ -1195,6 +1459,7 @@ class MongoPipelinePage(QWidget):
         self._render_sources()
         self._render_graph()
         self._render_stage_editor()
+        self._render_options()
         self._render_script()
         self._update_controls()
 
@@ -1203,6 +1468,32 @@ class MongoPipelinePage(QWidget):
         self.source_combo.setCurrentText(self.definition.source)
         self.source_combo.blockSignals(False)
         self.sample_size.setEnabled(self.definition.sample_mode != "all")
+
+    def _render_options(self):
+        self.options_editor.load_options(self.definition.reference_options)
+        self.options_button.setChecked(False)
+        self.detail_stack.setCurrentWidget(self.splitter)
+
+    def _show_options(self, checked):
+        if checked:
+            self._commit_stage_editor()
+            self.detail_stack.setCurrentWidget(self.options_editor)
+        else:
+            self.detail_stack.setCurrentWidget(self.splitter)
+
+    def _commit_options_editor(self):
+        try:
+            self.definition.reference_options = self.options_editor.options()
+        except DatabaseError as error:
+            self._invalid = str(error)
+
+    def _reference_options_changed(self):
+        try:
+            self.definition.reference_options = self.options_editor.options()
+        except DatabaseError:
+            return
+        self._invalid = None
+        self._edited()
 
     def _render_graph(self):
         while self.graph_row.count():
@@ -1282,6 +1573,7 @@ class MongoPipelinePage(QWidget):
             self._render_script()
 
     def select_stage(self, index):
+        self.options_button.setChecked(False)
         self._commit_stage_editor()
         self.definition.selected_stage = index
         self._render_graph()
@@ -1467,6 +1759,7 @@ class MongoPipelinePage(QWidget):
             table.setToolTip(title)
 
     def show_preview(self, preview):
+        self.options_button.setChecked(False)
         self._preview = preview
         index = self.definition.selected_stage
         enabled = [i for i, stage in enumerate(self.definition.stages) if stage.enabled]
@@ -1488,6 +1781,7 @@ class MongoPipelinePage(QWidget):
             f"最终 {len(preview.final_rows)} 行" + ("；结果已截断" if preview.truncated else ""))
 
     def show_execution(self, rows, truncated=False):
+        self.options_button.setChecked(False)
         self.last_rows = list(rows)
         self.show_rows(self.results, rows)
         self.tabs.setCurrentWidget(self.results)
@@ -1495,6 +1789,7 @@ class MongoPipelinePage(QWidget):
         self._update_controls()
 
     def show_explain(self, explain):
+        self.options_button.setChecked(False)
         self._explain = explain
         self._explain_count += 1
         script = ""
@@ -1545,6 +1840,7 @@ class MongoPipelinePage(QWidget):
         self.load_definition(definition, pipeline_id=pipeline_id)
 
     def show_error(self, error):
+        self.options_button.setChecked(False)
         self.messages.setPlainText(str(error))
         self.tabs.setCurrentWidget(self.messages)
 

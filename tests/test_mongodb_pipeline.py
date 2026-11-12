@@ -10,7 +10,8 @@ from opennavicat.database import DatabaseError
 from opennavicat.mongodb_pipeline import (
     STAGE_NAMES, PipelineDefinition, PipelineStage, execute_pipeline,
     explain_pipeline, from_nagg, parse_query_pipeline, pipeline_script,
-    parse_explain_reply, preview_pipeline, to_nagg, validate_pipeline,
+    parse_explain_reply, pipeline_aggregate_options, preview_pipeline,
+    to_nagg, validate_pipeline,
 )
 from test_mongodb_session import mongodb_service, session  # noqa: F401 - pytest fixtures
 
@@ -118,6 +119,67 @@ def test_reference_nagg_export_matches_observed_lookup_bytes():
     assert len(encoded) == 588
     assert hashlib.sha256(encoded).hexdigest() == (
         "bde5e0bc931dcdab5d922fa5cf0f19f4da148639d23001c52fb414838900dd0a")
+
+
+def test_reference_options_map_to_aggregate_arguments_and_script():
+    definition = PipelineDefinition(
+        source="sales", stages=[PipelineStage("$match", {"active": True})],
+        reference_options={
+            "allowDiskUse": -1,
+            "cursorBatchSize": 25,
+            "maxTimeMS": 1200,
+            "bypassDocumentValidation": 1,
+            "readConcernLevel": 3,
+            "locale": "zh",
+            "caseLevel": 1,
+            "caseFirst": 2,
+            "strength": 3,
+            "numericOrdering": 1,
+            "alternate": 2,
+            "maxVariable": 2,
+            "backwards": 1,
+            "normalization": 1,
+            "hint": "active_1",
+            "comment": "generated_options",
+            "enableWriteConcern": True,
+            "w": "1",
+            "j": 1,
+            "wtimeout": 500,
+            "let": '{"wanted":true}',
+        })
+    options = pipeline_aggregate_options(definition)
+    assert options["allowDiskUse"] is False
+    assert options["bypassDocumentValidation"] is True
+    assert options["batchSize"] == 25 and options["maxTimeMS"] == 1200
+    assert options["readConcern"] == {"level": "majority"}
+    assert options["collation"] == {
+        "locale": "zh", "caseLevel": True, "caseFirst": "lower", "alternate": "shifted",
+        "maxVariable": "space", "numericOrdering": True, "backwards": True,
+        "normalization": True, "strength": 3}
+    assert options["let"] == {"wanted": True}
+    assert options["writeConcern"] == {"w": 1, "j": True, "wtimeout": 500}
+    script = pipeline_script(definition)
+    assert '"allowDiskUse": false' in script
+    assert '"readConcern": {' in script and '"majority"' in script
+    assert '"hint": "active_1"' in script
+    assert '"wtimeout": 500' in script
+
+
+def test_reference_options_reject_unsupported_enum_values():
+    definition = PipelineDefinition(
+        source="sales", stages=[PipelineStage("$match", {})],
+        reference_options={"readConcernLevel": 99})
+    with pytest.raises(DatabaseError, match="readConcernLevel"):
+        validate_pipeline(definition)
+
+
+def test_pipeline_script_with_options_and_no_stages_is_valid():
+    definition = PipelineDefinition(
+        source="sales", stages=[], selected_stage=None,
+        reference_options={"comment": "generated_empty"})
+    script = pipeline_script(definition)
+    assert "db.getCollection(\"sales\").aggregate([]," in script
+    assert '"comment": "generated_empty"' in script
 
 
 def test_reference_nagg_preserves_stage_extensions_and_exact_bson():
@@ -229,12 +291,41 @@ def test_real_pipeline_preview_execute_and_explain(session):
     assert any(node.stage for node in plan.nodes())
 
 
+def test_real_pipeline_options_enter_preview_execute_and_explain(session):
+    database = session.connection[session.config.database]
+    database.pipeline_source.insert_many([
+        {"group": "north", "amount": 10},
+        {"group": "south", "amount": 20},
+    ])
+    definition = PipelineDefinition(
+        source="pipeline_source", stages=[PipelineStage(
+            "$match", {"$expr": {"$eq": ["$group", "$$wanted"]}})],
+        reference_options={
+            "allowDiskUse": 1,
+            "cursorBatchSize": 2,
+            "maxTimeMS": 5000,
+            "readConcernLevel": 1,
+            "comment": "generated_options",
+            "let": '{"wanted":"north"}',
+        })
+    preview = preview_pipeline(session, session.config.database, definition, limit=20)
+    assert len(preview.final_rows) == 1
+    rows, truncated = execute_pipeline(session, session.config.database, definition)
+    assert rows == preview.final_rows and not truncated
+    explain = explain_pipeline(session, session.config.database, definition)
+    assert explain.command["let"] == {"wanted": "north"}
+    assert explain.command["cursor"]["batchSize"] == 2
+
+
 def test_preview_refuses_out_but_execute_allows_it_only_on_writable_session(session):
     database = session.connection[session.config.database]
     database.pipeline_source.insert_one({"group": "north", "amount": 1})
     definition = PipelineDefinition(
         name="write_pipeline", source="pipeline_source",
-        stages=[PipelineStage("$out", "pipeline_output")])
+        stages=[PipelineStage("$out", "pipeline_output")],
+        reference_options={
+            "enableWriteConcern": True, "w": "1", "j": 1, "wtimeout": 500,
+            "comment": "generated_write_options"})
     with pytest.raises(DatabaseError, match="Preview does not execute"):
         preview_pipeline(session, session.config.database, definition)
     rows, _truncated = execute_pipeline(session, session.config.database, definition)

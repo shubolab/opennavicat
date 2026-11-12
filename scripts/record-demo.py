@@ -1115,6 +1115,20 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
         page.operator_combo.setCurrentText("$group")
         page.group_tool.id_edit.setText("$attributes.origin")
         page.group_tool.add_row("count", "$sum", "1")
+        options = page.options_editor
+        options.allow_disk_combo.setCurrentIndex(options.allow_disk_combo.findData(1))
+        options.batch_size_edit.setText("25")
+        options.max_time_edit.setText("5000")
+        options.read_concern_combo.setCurrentIndex(options.read_concern_combo.findData(1))
+        options.locale_combo.setCurrentText("en")
+        options.strength_combo.setCurrentIndex(options.strength_combo.findData(3))
+        options.comment_edit.setText("generated demo options")
+        page.options_button.setChecked(True)
+        phase("mongodb_aggregation_pipeline_options")
+        hold(2.2, start_mongo_pipeline_preview)
+
+    def start_mongo_pipeline_preview():
+        page = state["mongo_pipeline_page"]
         if not window.preview_mongo_pipeline(page, page.draft()):
             raise RuntimeError("The generated aggregation-pipeline preview did not start.")
         wait_for(lambda: page._preview is not None and not page.running and idle(), mongo_pipeline_preview,
@@ -1296,7 +1310,7 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
         raise RuntimeError(state["error"] or "Demo application failed.")
     if not window._closed or not idle():
         raise RuntimeError("The demo exited before its native sessions and window had closed.")
-    if state["count"] < 2 or len(state["phases"]) != (23 if mongo is not None else 6):
+    if state["count"] < 2 or len(state["phases"]) != (24 if mongo is not None else 6):
         raise RuntimeError("The demo did not capture all required workflows.")
     for index, item in enumerate(state["phases"]):
         stop = state["phases"][index + 1]["first_frame"] if index + 1 < len(state["phases"]) else state["count"]
@@ -1328,6 +1342,14 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
         "mongodb_collection_storage_reopened_readonly": state["mongo_storage_verification"] is not None,
         "mongodb_collection_options_reopened_readonly": state["mongo_storage_verification"] is not None,
         "mongodb_collection_options_verified": bool(state["mongo_storage_verification"]),
+        "mongodb_aggregation_pipeline_options": ({
+            "allowDiskUse": True,
+            "cursorBatchSize": 25,
+            "maxTimeMS": 5000,
+            "readConcernLevel": "local",
+            "locale": "en",
+            "strength": 3,
+        } if mongo is not None else None),
         "mongodb_aggregation_pipeline_preview": state.get("mongo_pipeline_preview"),
         "mongodb_aggregation_pipeline_explain": state.get("mongo_pipeline_explain"),
         "mongodb_aggregation_pipeline_results": state.get("mongo_pipeline_results"),

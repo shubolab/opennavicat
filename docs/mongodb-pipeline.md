@@ -22,6 +22,10 @@ sample size and local persistence.
 - A graph represents `source → ordered stages → output`.
 - The source preview popup now matches the observed `全部`, `最初`, `随机` order.
   `全部` disables the sample-size field; saved mode ids are `0`, `1` and `2`.
+- The `选项` pane follows the observed form for disk use, cursor batch size,
+  timeout, document-validation bypass, read concern, collation, hint, comment,
+  optional write concern and `let`. The mapped known options enter preview,
+  execute and Explain commands; unknown Option fields remain preserved.
 - `预览全部` runs each enabled prefix against an isolated source sample and shows
   the selected stage's input/output plus the final result.
 - `运行` executes the unsaved pipeline without applying preview sample options.
@@ -42,8 +46,8 @@ sample size and local persistence.
 - The workspace stores pipeline definitions in its existing protected local
   state file. `导入查询` accepts Navicat `Version 0.0` `.nagg` files, legacy
   OpenNavicat `.nagg` files, or a JSON/Canonical EJSON stage array.
-- The README GIF now includes pipeline stage preview, script preview and real
-  execution results from the generated MongoDB fixture.
+- The README GIF now includes the Options pane, stage preview, script preview,
+  visual Explain and real execution results from the generated fixture.
 
 ## `.nagg` format boundary
 
@@ -59,10 +63,10 @@ format and the earlier `opennavicat-nagg-v1` format. A generated 588-byte
 The reference file does not store the pipeline name or selected editor stage;
 the name remains external object-list metadata, and reopening selects the first
 stage. OpenNavicat preserves the reference `Option` document, including unknown
-fields, but the reference option editor and execution semantics for every
-collation, read/write concern, hint, `let`, timeout and batch option remain open.
-The observed reference format is not claimed to cover every later `.nagg`
-version or every complex BSON value.
+fields, and applies the observed disk, batch, timeout, read concern, collation,
+hint, comment, write concern and `let` ids. Server/topology-specific semantics
+for unknown or future options remain open. The observed reference format is not
+claimed to cover every later `.nagg` version or every complex BSON value.
 
 ## Visual Explain boundary
 
@@ -94,17 +98,17 @@ stage import, persistence, UI graph operations, preview rendering, save-sheet
 naming, nested visual plan projection, unknown-field retention and visual-view
 search. Owned MongoDB tests cover per-stage preview, final aggregation,
 `executionStats` Explain, `$out` confirmation boundaries and a full MainWindow
-save/reopen path. The expanded collection runner passed **279 cases with zero
+save/reopen path. The expanded collection runner passed **284 cases with zero
 skips/failures/errors across eight exact-owned fixtures**; focused Cocoa pipeline
-checks passed **10/10**, the full source suite passed **1812 cases with 561
+checks passed **11/11**, the full source suite passed **1816 cases with 562
 conditionally skipped**, and source smoke returned 6 rows × 4 columns. The README
-GIF is 23 phases, 306 encoded frames and 51.00 seconds. Runtime reference observations are recorded in
+GIF is 24 phases, 312 encoded frames and 52.00 seconds. Runtime reference observations are recorded in
 [the Navicat observation](ui-reference-18-mongodb-pipeline.md).
 
 The checked `$lookup`, `$bucket`, `$bucketAuto`, `$facet`, `$graphLookup`,
 `$unionWith`, `$sortByCount`, `$redact`, `$replaceRoot`, `$replaceWith`,
 `$geoNear`, `$fill` and `$densify` stages use the reference editor rather than a
-structured create tool. Operator-specific editor templates, the complete
-reference option editor/execution semantics, exact visual Explain canvas and all
-operator shapes, automatic-task references, change-stream UI, all MongoDB
-versions/topologies and Windows/Linux visual acceptance remain open.
+structured create tool. Operator-specific editor templates, unknown/future
+Option semantics, exact visual Explain canvas and all operator shapes,
+automatic-task references, change-stream UI, all MongoDB versions/topologies and
+Windows/Linux visual acceptance remain open.

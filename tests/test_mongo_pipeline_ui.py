@@ -70,6 +70,66 @@ def test_reference_preview_sample_controls_include_all_first_random(qtbot):
     assert page.sample_size.isEnabled()
 
 
+def test_pipeline_options_page_preserves_reference_ids_and_unknown_fields(qtbot):
+    page = MongoPipelinePage("generated", "demo_catalog")
+    qtbot.addWidget(page)
+    page.set_sources(["docs"])
+    page.source_combo.setCurrentText("docs")
+    editor = page.options_editor
+    page.definition.reference_options = {"FutureOption": {"preserved": True}}
+    page._render_options()
+    page.options_button.setChecked(True)
+    assert page.detail_stack.currentWidget() is editor
+    editor.allow_disk_combo.setCurrentIndex(editor.allow_disk_combo.findData(-1))
+    editor.batch_size_edit.setText("25")
+    editor.max_time_edit.setText("1200")
+    editor.bypass_validation_combo.setCurrentIndex(editor.bypass_validation_combo.findData(1))
+    editor.read_concern_combo.setCurrentIndex(editor.read_concern_combo.findData(3))
+    editor.locale_combo.setCurrentText("zh")
+    editor.strength_combo.setCurrentIndex(editor.strength_combo.findData(3))
+    editor.case_level_combo.setCurrentIndex(editor.case_level_combo.findData(1))
+    editor.case_first_combo.setCurrentIndex(editor.case_first_combo.findData(2))
+    editor.numeric_ordering_combo.setCurrentIndex(editor.numeric_ordering_combo.findData(1))
+    editor.alternate_combo.setCurrentIndex(editor.alternate_combo.findData(2))
+    editor.max_variable_combo.setCurrentIndex(editor.max_variable_combo.findData(2))
+    editor.backwards_combo.setCurrentIndex(editor.backwards_combo.findData(1))
+    editor.normalization_combo.setCurrentIndex(editor.normalization_combo.findData(1))
+    editor.hint_editor.setPlainText("generated_index")
+    editor.comment_edit.setText("generated_options")
+    editor.write_concern_check.setChecked(True)
+    editor.w_edit.setText("1")
+    editor.journal_combo.setCurrentIndex(editor.journal_combo.findData(1))
+    editor.wtimeout_edit.setText("500")
+    editor.let_editor.setPlainText('{"tenant":"generated"}')
+    definition = page.draft()
+    assert definition.reference_options == {
+        "FutureOption": {"preserved": True},
+        "allowDiskUse": -1,
+        "cursorBatchSize": 25,
+        "maxTimeMS": 1200,
+        "bypassDocumentValidation": 1,
+        "readConcernLevel": 3,
+        "locale": "zh",
+        "caseLevel": 1,
+        "caseFirst": 2,
+        "strength": 3,
+        "numericOrdering": 1,
+        "alternate": 2,
+        "maxVariable": 2,
+        "backwards": 1,
+        "normalization": 1,
+        "hint": "generated_index",
+        "comment": "generated_options",
+        "enableWriteConcern": True,
+        "w": "1",
+        "j": 1,
+        "wtimeout": 500,
+        "let": '{"tenant":"generated"}',
+    }
+    assert '"hint": "generated_index"' in page.script_editor.toPlainText()
+    assert '"wtimeout": 500' in page.script_editor.toPlainText()
+
+
 def test_common_stage_create_tools_generate_exact_documents(qtbot):
     page = MongoPipelinePage("generated", "demo_catalog")
     qtbot.addWidget(page)

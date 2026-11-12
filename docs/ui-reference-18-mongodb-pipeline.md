@@ -162,6 +162,52 @@ semantic import for the observed Version 0.0 shape, in addition to exact bytes
 for the generated fixture. The transferred file, generated profile subfolder,
 container and anonymous volumes were removed after verification.
 
+## AP18-06 Pipeline Options
+
+AP18-06 used another exact-owned MongoDB 8.0.34 fixture and opened the
+reference's `选项` pane from the pipeline canvas. The form order was:
+
+- `允许使用磁盘`
+- `光标批处理大小`
+- `最大时间（毫秒 ms）`
+- `绕过文档验证`
+- `读关注级别`
+- `区域设置`
+- `强度`
+- `大小写级别`
+- `大小写优先`
+- `数值排序`
+- `替代`
+- `最大变量`
+- `逆向`
+- `规范化`
+- `提示`
+- `注释`
+- `写关注` with `w`, `j` and `w 超时`
+- `Let`
+
+The boolean-style popups used blank/`true`/`false`; their saved ids were
+`0`/`1`/`-1`. `读关注级别` saved blank/local/available/majority/linearizable as
+`0` through `4`. The collation controls used the same ordered locale values as
+the collection collation page. In the checked fixture, `strength=Tertiary`,
+`caseLevel=true`, `caseFirst=lower`, `numericOrdering=true`,
+`alternate=shifted`, `maxVariable=space`, `backwards=true` and
+`normalization=true` saved as `3`, `1`, `2`, `1`, `2`, `2`, `1`, `1`.
+
+The Name sheet's script preview showed these options as a second aggregate
+argument, including `allowDiskUse`, cursor `batchSize`, `maxTimeMS`,
+`bypassDocumentValidation`, `readConcern`, `hint`, `comment`, `writeConcern`
+and `let`. The saved Version 0.0 `Option` document retained `w` and `let` as
+strings rather than nested JSON values.
+
+OpenNavicat's Options pane now edits this reference-shaped surface and applies
+the mapped disk, batch, timeout, read concern, collation, hint, comment, write
+concern and `let` values to real preview, execute and Explain paths. Unknown
+Option fields remain intact. The generated reference object, exact-owned
+container and anonymous volumes were removed after verification. Exact
+server-specific behavior for every topology and every unknown/future option
+remains open.
+
 ## Boundaries
 
 This round did not complete an automated reference drag operation, every

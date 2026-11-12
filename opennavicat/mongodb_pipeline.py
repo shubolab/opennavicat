@@ -61,6 +61,11 @@ REFERENCE_OPTION_DEFAULTS = {
     "wtimeout": 0,
     "let": "",
 }
+REFERENCE_TRISTATE = {-1: False, 0: None, 1: True}
+REFERENCE_READ_CONCERNS = {0: None, 1: "local", 2: "available", 3: "majority", 4: "linearizable"}
+REFERENCE_CASE_FIRST = {0: None, 1: "upper", 2: "lower", 3: "off"}
+REFERENCE_ALTERNATE = {0: None, 1: "non-ignorable", 2: "shifted"}
+REFERENCE_MAX_VARIABLE = {0: None, 1: "punct", 2: "space"}
 
 
 @dataclass(eq=False)
@@ -288,6 +293,47 @@ def _encoded(value):
     return BSON.encode({"value": value}, codec_options=BSON_CODEC)
 
 
+def _option_choice(options, key, choices):
+    value = options.get(key, REFERENCE_OPTION_DEFAULTS[key])
+    if isinstance(value, bool) or not isinstance(value, int) or value not in choices:
+        raise DatabaseError(f"Reference .nagg option {key} has an unsupported value")
+    return value
+
+
+def _option_integer(options, key, *, minimum, blank=-1):
+    value = options.get(key, REFERENCE_OPTION_DEFAULTS[key])
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise DatabaseError(f"Reference .nagg option {key} must be an integer")
+    if value != blank and value < minimum:
+        raise DatabaseError(f"Reference .nagg option {key} is below its supported minimum")
+    return value
+
+
+def _validate_pipeline_options(options):
+    if not isinstance(options, dict):
+        raise DatabaseError("Reference .nagg options must be a document")
+    for key in ("allowDiskUse", "bypassDocumentValidation", "caseLevel", "numericOrdering", "backwards", "normalization"):
+        _option_choice(options, key, REFERENCE_TRISTATE)
+    _option_choice(options, "readConcernLevel", REFERENCE_READ_CONCERNS)
+    _option_choice(options, "caseFirst", REFERENCE_CASE_FIRST)
+    _option_choice(options, "alternate", REFERENCE_ALTERNATE)
+    _option_choice(options, "maxVariable", REFERENCE_MAX_VARIABLE)
+    strength = options.get("strength", 0)
+    if isinstance(strength, bool) or not isinstance(strength, int) or not 0 <= strength <= 5:
+        raise DatabaseError("Reference .nagg option strength must be between 0 and 5")
+    _option_integer(options, "cursorBatchSize", minimum=0)
+    _option_integer(options, "maxTimeMS", minimum=0)
+    _option_integer(options, "wtimeout", minimum=0, blank=0)
+    _option_choice(options, "j", REFERENCE_TRISTATE)
+    for key in ("locale", "hint", "comment", "let"):
+        if not isinstance(options.get(key, REFERENCE_OPTION_DEFAULTS[key]), str):
+            raise DatabaseError(f"Reference .nagg option {key} must be text")
+    if not isinstance(options.get("enableWriteConcern", False), bool):
+        raise DatabaseError("Reference .nagg option enableWriteConcern must be boolean")
+    if not isinstance(options.get("w", ""), (str, int)) or isinstance(options.get("w", ""), bool):
+        raise DatabaseError("Reference .nagg option w must be text or integer")
+
+
 def validate_pipeline(definition):
     if not isinstance(definition, PipelineDefinition):
         raise DatabaseError("An aggregation pipeline definition is required")
@@ -320,6 +366,7 @@ def validate_pipeline(definition):
             raise DatabaseError(f"Reference .nagg {label} cannot be encoded as exact BSON") from None
         if len(encoded) > _MAX_PAGE_BYTES:
             raise DatabaseError(f"Reference .nagg {label} exceed the bounded metadata size")
+    _validate_pipeline_options(definition.reference_options)
     for stage in definition.stages:
         if not isinstance(stage, PipelineStage) or stage.operator not in STAGE_NAMES:
             raise DatabaseError("Unsupported aggregation stage")
@@ -350,6 +397,65 @@ def pipeline_documents(definition):
     return [{stage.operator: deepcopy(stage.body)} for stage in definition.stages if stage.enabled]
 
 
+def pipeline_aggregate_options(definition):
+    """Map the observed Version 0.0 Option document to aggregate arguments."""
+    validate_pipeline(definition)
+    options = deepcopy(REFERENCE_OPTION_DEFAULTS)
+    options.update(deepcopy(definition.reference_options))
+    result = {}
+    allow_disk = REFERENCE_TRISTATE[options["allowDiskUse"]]
+    if allow_disk is not None:
+        result["allowDiskUse"] = allow_disk
+    bypass = REFERENCE_TRISTATE[options["bypassDocumentValidation"]]
+    if bypass is not None:
+        result["bypassDocumentValidation"] = bypass
+    batch_size = options["cursorBatchSize"]
+    if batch_size >= 0:
+        result["batchSize"] = batch_size
+    if options["maxTimeMS"] >= 0:
+        result["maxTimeMS"] = options["maxTimeMS"]
+    read_concern = REFERENCE_READ_CONCERNS[options["readConcernLevel"]]
+    if read_concern is not None:
+        result["readConcern"] = {"level": read_concern}
+    if options["locale"]:
+        collation = {"locale": options["locale"]}
+        for key, mapping in (
+                ("caseLevel", REFERENCE_TRISTATE),
+                ("caseFirst", REFERENCE_CASE_FIRST),
+                ("alternate", REFERENCE_ALTERNATE),
+                ("maxVariable", REFERENCE_MAX_VARIABLE),
+                ("numericOrdering", REFERENCE_TRISTATE),
+                ("backwards", REFERENCE_TRISTATE),
+                ("normalization", REFERENCE_TRISTATE)):
+            value = mapping[options[key]]
+            if value is not None:
+                collation[key] = value
+        if options["strength"]:
+            collation["strength"] = options["strength"]
+        result["collation"] = collation
+    if options["hint"]:
+        result["hint"] = options["hint"]
+    if options["comment"]:
+        result["comment"] = options["comment"]
+    if options["let"]:
+        let = _stage_value_loads(options["let"])
+        if not isinstance(let, dict):
+            raise DatabaseError("Reference .nagg option let must be a Canonical EJSON document")
+        result["let"] = let
+    if options["enableWriteConcern"]:
+        w = options["w"]
+        if isinstance(w, str) and w.strip().isdigit():
+            w = int(w.strip())
+        write_concern = {"w": w or 1}
+        journal = REFERENCE_TRISTATE[options["j"]]
+        if journal is not None:
+            write_concern["j"] = journal
+        if options["wtimeout"] > 0:
+            write_concern["wtimeout"] = options["wtimeout"]
+        result["writeConcern"] = write_concern
+    return result
+
+
 def pipeline_script(definition):
     validate_pipeline(definition)
     stages = pipeline_documents(definition)
@@ -359,6 +465,14 @@ def pipeline_script(definition):
         text = canonical_dumps(body).replace("\n", "\n  ")
         comma = "," if index + 1 < len(stages) else ""
         lines.append(f"  {{{operation}: {text}}}{comma}")
+    options = pipeline_aggregate_options(definition)
+    if options:
+        option_text = json.dumps(options, ensure_ascii=False, indent=2).replace("\n", "\n")
+        if stages:
+            lines[-1] += ","
+        else:
+            lines[0] += "],"
+        lines.extend(option_text.splitlines())
     lines.append("]);")
     return "\n".join(lines)
 
@@ -538,9 +652,14 @@ def _aggregate_rows(session, database, definition, pipeline, limit, *, allow_wri
     bounded = list(pipeline) if writes else [
         *pipeline, {"$limit": min(limit + 1, collect_limit + 1)}]
     rows, size, truncated = [], 0, False
-    with session._operation() as comment:
+    aggregate_options = pipeline_aggregate_options(definition)
+    user_comment = aggregate_options.pop("comment", None)
+    aggregate_options.setdefault("batchSize", min(limit + 1, 100))
+    operation = session._operation(user_comment) if user_comment is not None else session._operation()
+    with operation as comment:
+        aggregate_options["comment"] = comment
         cursor = session.connection.get_database(database, codec_options=RAW_CODEC)[definition.source].aggregate(
-            bounded, batchSize=min(limit + 1, 100), comment=comment)
+            bounded, **aggregate_options)
         try:
             for document in cursor:
                 if len(rows) >= limit or (rows and size + len(document.raw) > _MAX_PAGE_BYTES):
@@ -593,9 +712,17 @@ def explain_pipeline(session, database, definition, *, verbosity="executionStats
     if any(stage.operator in WRITE_STAGES or stage.operator in STREAM_STAGES
            for stage in definition.stages if stage.enabled):
         raise DatabaseError("Write and change-stream stages cannot be explained in this workspace")
-    command = {"explain": {"aggregate": definition.source, "pipeline": pipeline_documents(definition), "cursor": {}},
-               "verbosity": verbosity}
+    aggregate = {"aggregate": definition.source, "pipeline": pipeline_documents(definition), "cursor": {}}
+    aggregate_options = pipeline_aggregate_options(definition)
+    user_comment = aggregate_options.pop("comment", None)
+    batch_size = aggregate_options.pop("batchSize", None)
+    if batch_size is not None:
+        aggregate["cursor"]["batchSize"] = batch_size
+    aggregate.update(aggregate_options)
+    command = {"explain": aggregate, "verbosity": verbosity}
     session.use_schema(database)
-    with timeout(30), session._operation() as comment:
-        reply = session.connection[database].command({**command, "comment": comment})
+    operation = session._operation(user_comment) if user_comment is not None else session._operation()
+    with timeout(30), operation as comment:
+        aggregate["comment"] = comment
+        reply = session.connection[database].command(command)
     return parse_explain_reply(reply)

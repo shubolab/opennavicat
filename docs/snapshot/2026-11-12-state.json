@@ -109,7 +109,7 @@
     "dependency_command_stub_tests": 16,
     "all_protocol_source_hashes_match": true
   },
-  "updated_at": "2026-11-12T15:40:42.924079+08:00",
+  "updated_at": "2026-11-12T16:03:50.760985+08:00",
   "ci_after_storage": {
     "id": 43051367511,
     "source_sha": "7c65c70d6822cf7607cceaa06a860b1561893a53",
@@ -321,15 +321,16 @@
     "source_smoke_passed": true
   },
   "latest_main_demo": {
-    "frames": 245,
-    "duration_seconds": 40.84,
-    "sha256": "08ed34026360052625dd9e88ae461923b90066436c9534793d8eb9f28b4f3a80",
-    "phases": 18,
+    "frames": 253,
+    "duration_seconds": 42.17,
+    "sha256": "4e9349e6e346e202672381532b8943601b3ea9b94a63305eeef5523e57dddeaa",
+    "phases": 19,
     "inline_index_key_editor": true,
     "visual_privacy_reviewed": true,
     "latest_public_installer": "v0.10.0",
     "structured_collation_editor": true,
-    "structured_collation_save_and_readonly_readback": true
+    "structured_collation_save_and_readonly_readback": true,
+    "collection_options": true
   },
   "collation_ui": {
     "document": "../mongodb-collation-ui.md",
@@ -361,5 +362,28 @@
     "simple_binary_comparison": true,
     "fr_ca_backwards_default": true,
     "server_defaults_mongo_version": "8.0.34"
+  },
+  "collection_options": {
+    "document": "../mongodb-collection-options.md",
+    "reference_controls": 10,
+    "supported_create_and_collmod": true,
+    "fixed_clustered_mutual_exclusion": true,
+    "existing_collection_state": true,
+    "legacy_server_errors_preserved": true,
+    "server_version": "8.0.34",
+    "collection_runner_passed": 257,
+    "collection_runner_skipped": 0,
+    "collection_runner_fixtures": 7,
+    "native_cocoa_scope_passed": 34,
+    "full_source_passed": 1792,
+    "full_source_skipped": 558,
+    "source_smoke_passed": true,
+    "recorded_demo_phases": 19,
+    "recorded_demo_frames": 253,
+    "recorded_demo_duration_seconds": 42.17,
+    "recorded_demo_sha256": "4e9349e6e346e202672381532b8943601b3ea9b94a63305eeef5523e57dddeaa",
+    "visual_privacy_reviewed": true,
+    "windows_linux_reference_open": true,
+    "other_mongodb_versions_open": true
   }
 }

@@ -68,6 +68,14 @@ def mongo_storage_options():
     }
 
 
+def mongo_collection_options():
+    return {
+        "clusteredIndex": {"key": {"_id": 1}, "name": "generated_cluster", "unique": True},
+        "expireAfterSeconds": 86400,
+        "changeStreamPreAndPostImages": {"enabled": True},
+    }
+
+
 def mongo_demo_collation():
     return {
         "locale": "en_US", "caseLevel": True, "caseFirst": "upper", "strength": 2,
@@ -82,27 +90,48 @@ def verify_mongo_storage_values(catalog, statistics, document_count):
     from opennavicat.mongodb_session import BSON_CODEC
 
     expected = mongo_storage_options()
+    selected_options = mongo_collection_options()
     selected_collation = mongo_demo_collation()
     try:
         actual_options = catalog["options"]
         actual_storage = {key: actual_options[key] for key in expected}
+        actual_cluster = actual_options["clusteredIndex"]
         actual_collation = actual_options["collation"]
+        cluster_name = actual_cluster.get("name", "_id_")
+        index_detail = statistics["indexDetails"].get(cluster_name, {})
+        storage_matches = BSON.encode(
+            actual_storage, codec_options=BSON_CODEC) == BSON.encode(expected, codec_options=BSON_CODEC)
+        cluster_matches = (
+            all(actual_cluster.get(key) == value
+                for key, value in selected_options["clusteredIndex"].items())
+            and index_detail.get("clustered") is True
+            and index_detail.get("name") == cluster_name)
+        plain_index_creation = index_detail.get("creationString", "")
+        default_index_storage_verified = "prefix_compression=false" in plain_index_creation
         matches = (catalog["name"] == MONGO_STORAGE_COLLECTION and catalog["type"] == "collection"
-            and BSON.encode(actual_storage, codec_options=BSON_CODEC) == BSON.encode(expected, codec_options=BSON_CODEC)
+            and storage_matches and cluster_matches
+            and actual_options.get("expireAfterSeconds") == selected_options["expireAfterSeconds"]
+            and actual_options.get("changeStreamPreAndPostImages")
+                == selected_options["changeStreamPreAndPostImages"]
             and all(actual_collation.get(key) == value for key, value in selected_collation.items())
             and isinstance(actual_collation.get("version"), str) and bool(actual_collation["version"])
             and type(document_count) is int and document_count == 0
-            and "block_compressor=zlib" in statistics["wiredTiger"]["creationString"]
-            and "prefix_compression=false" in statistics["indexDetails"]["_id_"]["creationString"])
+            and "block_compressor=zlib" in statistics["wiredTiger"]["creationString"])
     except Exception:
         matches = False
     if not matches:
-        raise RuntimeError("The generated collection storage or collation was not independently verified.")
+        raise RuntimeError("The generated collection storage, options or collation was not independently verified.")
     return {"collection": MONGO_STORAGE_COLLECTION, "options_verified": True,
         "empty_collection_verified": True, "collection_storage_verified": True,
-        "default_index_storage_verified": True, "collation_verified": True,
-        "collation_selected": selected_collation}
-
+        "index_option_defaults_verified": actual_storage.get("indexOptionDefaults") == expected["indexOptionDefaults"],
+        "default_index_storage_verified": default_index_storage_verified,
+        "default_index_storage_observation": (
+            "plain_index_creation_string" if default_index_storage_verified
+            else "clustered_index_exposes_no_creation_string"),
+        "clustered_index_metadata_verified": cluster_matches,
+        "collection_options_verified": True,
+        "collection_options_selected": selected_options,
+        "collation_verified": True, "collation_selected": selected_collation}
 
 def verify_mongo_query_values(tree, rows):
     from bson import BSON, Decimal128, Int64
@@ -933,7 +962,25 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
         if {key: page.draft().options[key] for key in mongo_storage_options()} != mongo_storage_options():
             raise RuntimeError("The generated collection index defaults do not match the demo draft.")
         phase("mongodb_collection_index_defaults")
-        hold(1.8, mongo_collection_collation)
+        hold(1.8, mongo_collection_options_page)
+
+    def mongo_collection_options_page():
+        page = state["mongo_storage_page"]
+        selected = mongo_collection_options()
+        page.tabs.setCurrentWidget(page.general)
+        page.clustered_check.setChecked(True)
+        page.cluster_name_edit.setText(selected["clusteredIndex"]["name"])
+        page.cluster_expire_check.setChecked(True)
+        page.cluster_expire_edit.setText(str(selected["expireAfterSeconds"]))
+        page.change_images_check.setChecked(True)
+        actual = page.draft().options
+        if (actual.get("clusteredIndex") != selected["clusteredIndex"]
+                or actual.get("expireAfterSeconds") != selected["expireAfterSeconds"]
+                or actual.get("changeStreamPreAndPostImages")
+                    != selected["changeStreamPreAndPostImages"]):
+            raise RuntimeError("The generated collection-option controls did not produce the demo draft.")
+        phase("mongodb_collection_options")
+        hold(2.2, mongo_collection_collation)
 
     def mongo_collection_collation():
         page = state["mongo_storage_page"]
@@ -964,8 +1011,13 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
         page = state["mongo_storage_page"]
         dialog = page._save_dialog
         actual = dialog.plan.definition.options if dialog.plan is not None else {}
+        selected_options = mongo_collection_options()
         if (dialog.plan is None or dialog.definition.name != MONGO_STORAGE_COLLECTION
                 or {key: actual[key] for key in mongo_storage_options()} != mongo_storage_options()
+                or actual.get("clusteredIndex") != selected_options["clusteredIndex"]
+                or actual.get("expireAfterSeconds") != selected_options["expireAfterSeconds"]
+                or actual.get("changeStreamPreAndPostImages")
+                    != selected_options["changeStreamPreAndPostImages"]
                 or actual.get("collation") != mongo_demo_collation()
                 or dialog.plan.commands[0].get("create") != MONGO_STORAGE_COLLECTION
                 or "block_compressor=zlib" not in dialog.preview.toPlainText()
@@ -991,8 +1043,15 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
     def verify_mongo_storage():
         page = state["mongo_storage_page"]
         actual = page.snapshot.definition.options
+        selected_options = mongo_collection_options()
+        actual_cluster = actual.get("clusteredIndex", {})
         if (page.snapshot.name != MONGO_STORAGE_COLLECTION
-                or {key: actual[key] for key in mongo_storage_options()} != mongo_storage_options()):
+                or {key: actual[key] for key in mongo_storage_options()} != mongo_storage_options()
+                or not all(actual_cluster.get(key) == value
+                           for key, value in selected_options["clusteredIndex"].items())
+                or actual.get("expireAfterSeconds") != selected_options["expireAfterSeconds"]
+                or actual.get("changeStreamPreAndPostImages")
+                    != selected_options["changeStreamPreAndPostImages"]):
             raise RuntimeError("The application saved unexpected generated collection options.")
         window.submit(mongo.verify_storage_collection, mongo_storage_verified, fail,
                       label="独立核验生成集合的存储设置")
@@ -1016,16 +1075,24 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
     def mongo_storage_reopened():
         page = state["mongo_storage_page"]
         actual = page.snapshot.definition.options
+        selected_options = mongo_collection_options()
         if ({key: actual[key] for key in mongo_storage_options()} != mongo_storage_options()
+                or actual.get("clusteredIndex") != {**selected_options["clusteredIndex"], "v": 2}
+                or actual.get("expireAfterSeconds") != selected_options["expireAfterSeconds"]
+                or actual.get("changeStreamPreAndPostImages")
+                    != selected_options["changeStreamPreAndPostImages"]
                 or not all(actual.get("collation", {}).get(key) == value
                            for key, value in mongo_demo_collation().items())
                 or "version" not in actual.get("collation", {})
                 or page.dirty or not page.storage_editor.isReadOnly()
                 or not page.index_options_editor.isReadOnly()
+                or page.clustered_check.isEnabled() or page.cluster_name_edit.isEnabled()
+                or page.cluster_expire_check.isEnabled() or page.auto_index_id_check.isEnabled()
+                or not page.change_images_check.isEnabled()
                 or page.collation_editor.locale_combo.isEnabled()):
-            raise RuntimeError("The reopened collection did not preserve its read-only storage or collation settings.")
-        page.tabs.setCurrentWidget(page.storage)
-        phase("mongodb_collection_storage_reopened")
+            raise RuntimeError("The reopened collection did not preserve its read-only options or collation settings.")
+        page.tabs.setCurrentWidget(page.general)
+        phase("mongodb_collection_options_reopened")
         capture()
         capture_timer.start()
         hold(2.2, finish)
@@ -1134,7 +1201,7 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
         raise RuntimeError(state["error"] or "Demo application failed.")
     if not window._closed or not idle():
         raise RuntimeError("The demo exited before its native sessions and window had closed.")
-    if state["count"] < 2 or len(state["phases"]) != (18 if mongo is not None else 6):
+    if state["count"] < 2 or len(state["phases"]) != (19 if mongo is not None else 6):
         raise RuntimeError("The demo did not capture all required workflows.")
     for index, item in enumerate(state["phases"]):
         stop = state["phases"][index + 1]["first_frame"] if index + 1 < len(state["phases"]) else state["count"]
@@ -1164,6 +1231,8 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
         "mongodb_collection_storage_save": state["mongo_storage_verification"],
         "mongodb_collection_collation_save": bool(state["mongo_storage_verification"]),
         "mongodb_collection_storage_reopened_readonly": state["mongo_storage_verification"] is not None,
+        "mongodb_collection_options_reopened_readonly": state["mongo_storage_verification"] is not None,
+        "mongodb_collection_options_verified": bool(state["mongo_storage_verification"]),
         "visible_text_privacy_guard": "labels, editors, titles, actions, combos, tree/table display fields; paths/endpoints/credentials rejected before frame save",
         "sqlite_closed_in_worker": state["sqlite_closed_in_worker"],
         "native_window_closed_before_quit": bool(window._closed),

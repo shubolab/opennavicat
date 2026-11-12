@@ -39,6 +39,15 @@ def validation(session, value=1):
     tools.CollectionDefinition('ok', {'capped': True}),
     tools.CollectionDefinition('ok', {'capped': True, 'size': 257}),
     tools.CollectionDefinition('ok', {'max': 20}),
+    tools.CollectionDefinition('ok', {'capped': True, 'size': 256, 'clusteredIndex': {'key': {'_id': 1}, 'unique': True}}),
+    tools.CollectionDefinition('ok', {'clusteredIndex': {'key': {'other': 1}, 'unique': True}}),
+    tools.CollectionDefinition('ok', {'clusteredIndex': {'key': {'_id': 1}}}),
+    tools.CollectionDefinition('ok', {'expireAfterSeconds': 60}),
+    tools.CollectionDefinition('ok', {'expireAfterSeconds': 0, 'clusteredIndex': {'key': {'_id': 1}, 'unique': True}}),
+    tools.CollectionDefinition('ok', {'changeStreamPreAndPostImages': True}),
+    tools.CollectionDefinition('ok', {'autoIndexId': 1}),
+    tools.CollectionDefinition('ok', {'usePowerOf2Sizes': 1}),
+    tools.CollectionDefinition('ok', {'noPadding': 1}),
     tools.CollectionDefinition('ok', {'validator': []}),
     tools.CollectionDefinition('ok', {'validationLevel': []}),
     tools.CollectionDefinition('ok', {'validationLevel': 'constraint'}),
@@ -146,6 +155,47 @@ def test_real_validation_collmod_preserves_create_only_storage_and_index_default
         with pytest.raises(DatabaseError, match='immutable'):
             tools.plan_collection(session, updated, changed)
     assert tools.load_collection(session, saved.schema, 'stored').namespace_uuid == saved.namespace_uuid
+
+
+def test_real_collection_options_create_and_change_stream_collmod(session):
+    options = {
+        'clusteredIndex': {'key': {'_id': 1}, 'name': 'cluster_main', 'unique': True},
+        'expireAfterSeconds': 60,
+        'changeStreamPreAndPostImages': {'enabled': True},
+        'autoIndexId': True,
+    }
+    snapshot, definition = draft(session, 'clustered', **options)
+    result = tools.apply_plan(session, tools.plan_collection(session, snapshot, definition))
+    assert result.outcome.status == 'acknowledged'
+    saved = result.snapshot
+    assert saved.definition.options['clusteredIndex']['name'] == 'cluster_main'
+    assert saved.definition.options['clusteredIndex']['v'] == 2
+    assert saved.definition.options['expireAfterSeconds'] == 60
+    assert saved.definition.options['changeStreamPreAndPostImages'] == {'enabled': True}
+    assert saved.definition.options['autoIndexId'] is True
+
+    database = session.connection[session.config.database]
+    database.clustered.insert_one({'generated': True})
+    changed = deepcopy(saved.definition)
+    changed.options['changeStreamPreAndPostImages'] = {'enabled': False}
+    updated = tools.apply_plan(session, tools.plan_collection(session, saved, changed)).snapshot
+    assert 'changeStreamPreAndPostImages' not in updated.definition.options
+    assert updated.namespace_uuid == saved.namespace_uuid
+    assert database.clustered.count_documents({}) == 1
+
+
+@pytest.mark.parametrize('options', [
+    {'usePowerOf2Sizes': False},
+    {'noPadding': True},
+    {'autoIndexId': False},
+])
+def test_real_server_rejects_old_or_unsafe_collection_options_without_retry(session, options):
+    snapshot, definition = draft(session, 'unsupported_' + next(iter(options)), **options)
+    with pytest.raises(tools.CollectionApplyError) as error:
+        tools.apply_plan(session, tools.plan_collection(session, snapshot, definition))
+    assert error.value.outcome.status == 'server_error'
+    assert error.value.outcome.observed is None
+    assert definition.name not in session.connection[session.config.database].list_collection_names()
 
 
 @pytest.mark.parametrize('key', ['storageEngine', 'indexOptionDefaults'])

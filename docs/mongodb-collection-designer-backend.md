@@ -123,6 +123,12 @@ UI slice backed only by capabilities in this module:
   race can still create it, and no existing target is intentionally dropped.
   Successful rename preserves documents, indexes, collection options and UUID.
 
+- The collection-options page now exposes the reference-shaped fixed,
+  clustered, expiry, change-stream-image and legacy storage controls. Supported
+  options are UUID checked and reconciled against the server; legacy options
+  remain explicit server-error workflows. See
+  [collection options](mongodb-collection-options.md).
+
 - New ordinary collections use structured collation controls for locale,
   case level/first, strength, numeric ordering, alternate handling, maximum
   variable, backwards and normalization. Existing server-normalized collation

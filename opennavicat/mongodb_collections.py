@@ -24,10 +24,14 @@ from .mongodb_index_script import protected_command_script
 from .js_engine.server_errors import server_failure
 
 
-_CREATE = frozenset({'capped', 'size', 'max', 'validator', 'validationLevel', 'validationAction', 'collation',
+_CREATE = frozenset({'capped', 'size', 'max', 'clusteredIndex', 'expireAfterSeconds',
+                     'changeStreamPreAndPostImages', 'autoIndexId', 'usePowerOf2Sizes', 'noPadding',
+                     'validator', 'validationLevel', 'validationAction', 'collation',
                      'storageEngine', 'indexOptionDefaults'})
-_MUTABLE = frozenset({'validator', 'validationLevel', 'validationAction'})
-_DEFAULT = {'validator': {}, 'validationLevel': 'strict', 'validationAction': 'error'}
+_MUTABLE = frozenset({'validator', 'validationLevel', 'validationAction',
+                      'changeStreamPreAndPostImages'})
+_DEFAULT = {'validator': {}, 'validationLevel': 'strict', 'validationAction': 'error',
+            'changeStreamPreAndPostImages': {'enabled': False}}
 _MAX_CATALOG_BYTES = 1024 * 1024
 
 
@@ -283,6 +287,29 @@ def validate_definition(definition):
     # exact user values. MongoDB rounds capped size to a 256-byte multiple.
     if 'size' in options and options['size'] % 256:
         raise DatabaseError('This checkpoint requires a capped size in whole 256-byte units')
+    if options.get('capped') and 'clusteredIndex' in options:
+        raise DatabaseError('A collection cannot be both capped and clustered')
+    if 'clusteredIndex' in options:
+        clustered = options['clusteredIndex']
+        if (not isinstance(clustered, dict) or set(clustered) - {'key', 'name', 'unique', 'v'}
+                or clustered.get('key') != {'_id': 1} or clustered.get('unique') is not True
+                or ('name' in clustered and not isinstance(clustered['name'], str))
+                or ('v' in clustered and (type(clustered['v']) is not int or clustered['v'] < 1))):
+            raise DatabaseError('clusteredIndex must use the _id key, unique=true and an optional string name')
+    for key in {'expireAfterSeconds'} & options.keys():
+        value = options[key]
+        if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value < 2**63:
+            raise DatabaseError('expireAfterSeconds must be a positive BSON integer')
+        if 'clusteredIndex' not in options:
+            raise DatabaseError('expireAfterSeconds requires a clustered collection in this designer')
+    if 'changeStreamPreAndPostImages' in options:
+        setting = options['changeStreamPreAndPostImages']
+        if (not isinstance(setting, dict) or set(setting) != {'enabled'}
+                or type(setting['enabled']) is not bool):
+            raise DatabaseError('changeStreamPreAndPostImages must contain only a boolean enabled field')
+    for key in {'autoIndexId', 'usePowerOf2Sizes', 'noPadding'} & options.keys():
+        if type(options[key]) is not bool:
+            raise DatabaseError(key + ' must be a boolean')
     for key in {'validator', 'collation'} & options.keys():
         if not isinstance(options[key], dict): raise DatabaseError(key + ' must be a BSON document')
     if 'validationLevel' in options and (not isinstance(options['validationLevel'], str) or options['validationLevel'] not in {'off', 'strict', 'moderate'}):
@@ -434,8 +461,13 @@ def _matches(plan, observed):
         if key == 'collation':
             got = actual.get(key, {'locale': 'simple'})
             if not all(got.get(k) == v for k, v in wanted.items()): return False
-        elif key in {'size', 'max'}:
-            if got != wanted: return False  # server catalog uses numeric controls
+        elif key == 'clusteredIndex':
+            if (not isinstance(got, dict) or got.get('key') != wanted.get('key')
+                    or got.get('unique') is not True
+                    or got.get('name', '_id_') != wanted.get('name', '_id_')):
+                return False
+        elif key in {'size', 'max', 'expireAfterSeconds'}:
+            if got != wanted: return False  # server catalog may choose a different BSON integer width
         elif _encoded({'v': wanted}) != _encoded({'v': got}): return False
     return not plan.snapshot.exists or observed.namespace_uuid == plan.snapshot.namespace_uuid
 

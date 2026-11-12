@@ -51,6 +51,38 @@ def test_match_create_tool_builds_structured_conditions(qtbot):
     assert page.draft().stages[0].body["created_at"] == datetime(2026, 1, 1, tzinfo=timezone.utc)
 
 
+def test_common_stage_create_tools_generate_exact_documents(qtbot):
+    page = MongoPipelinePage("generated", "demo_catalog")
+    qtbot.addWidget(page)
+    page.set_sources(["docs"])
+    page.source_combo.setCurrentText("docs")
+    page.operator_combo.setCurrentText("$project")
+    assert page.stage_mode.currentData() == "create"
+    page.project_tool.add_row("name", "include", "")
+    page.project_tool.add_row("computed", "expression", '{"$literal": 5}')
+    assert page.draft().stages[0].body == {"name": 1, "computed": {"$literal": 5}}
+
+    page.operator_combo.setCurrentText("$group")
+    assert page.stage_mode.currentData() == "create"
+    page.group_tool.id_edit.setText("$group")
+    page.group_tool.add_row("total", "$sum", "$amount")
+    assert page.draft().stages[0].body == {
+        "_id": "$group", "total": {"$sum": "$amount"}}
+
+    page.operator_combo.setCurrentText("$sort")
+    page.sort_tool.add_row("amount", -1)
+    assert page.draft().stages[0].body == {"amount": -1}
+
+    page.operator_combo.setCurrentText("$limit")
+    page.limit_tool.number.setValue(25)
+    assert page.draft().stages[0].body == 25
+    page.operator_combo.setCurrentText("$unwind")
+    page.unwind_tool.path.setText("$tags")
+    page.unwind_tool.preserve.setChecked(True)
+    assert page.draft().stages[0].body == {
+        "path": "$tags", "preserveNullAndEmptyArrays": True}
+
+
 def test_stage_drag_target_moves_stage_in_definition(qtbot):
     page = MongoPipelinePage("generated", "demo_catalog")
     qtbot.addWidget(page)

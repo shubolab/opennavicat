@@ -1113,7 +1113,8 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
         page.match_tool.add_row('attributes.active', '$eq', 'true')
         page.add_stage()
         page.operator_combo.setCurrentText("$group")
-        page.stage_editor.setPlainText('{"_id": "$attributes.origin", "count": {"$sum": 1}}')
+        page.group_tool.id_edit.setText("$attributes.origin")
+        page.group_tool.add_row("count", "$sum", "1")
         if not window.preview_mongo_pipeline(page, page.draft()):
             raise RuntimeError("The generated aggregation-pipeline preview did not start.")
         wait_for(lambda: page._preview is not None and not page.running and idle(), mongo_pipeline_preview,

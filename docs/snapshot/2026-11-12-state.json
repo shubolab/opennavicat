@@ -109,7 +109,7 @@
     "dependency_command_stub_tests": 16,
     "all_protocol_source_hashes_match": true
   },
-  "updated_at": "2026-11-12T17:24:06.526944+08:00",
+  "updated_at": "2026-11-12T17:34:52.765938+08:00",
   "ci_after_storage": {
     "id": 43051367511,
     "source_sha": "7c65c70d6822cf7607cceaa06a860b1561893a53",
@@ -402,10 +402,10 @@
     "reference_nagg_compatibility_open": true,
     "stage_drag_and_specialized_tools_open": false,
     "visual_explain_and_automation_open": true,
-    "collection_runner_passed": 270,
+    "collection_runner_passed": 271,
     "collection_runner_fixtures": 8,
-    "native_cocoa_passed": 7,
-    "full_source_passed": 1803,
+    "native_cocoa_passed": 8,
+    "full_source_passed": 1804,
     "full_source_skipped": 561,
     "source_smoke_passed": true,
     "recorded_demo_phases": 22,
@@ -417,6 +417,22 @@
     "stage_drag_reorder": true,
     "match_create_tool": true,
     "complex_ejson_fallback": true,
-    "other_specialized_stage_tools_open": true
+    "other_specialized_stage_tools_open": true,
+    "structured_create_tools": 12,
+    "structured_create_tool_names": [
+      "$match",
+      "$project",
+      "$group",
+      "$sort",
+      "$addFields",
+      "$set",
+      "$unset",
+      "$unwind",
+      "$limit",
+      "$skip",
+      "$count",
+      "$sample"
+    ],
+    "complex_stage_create_tools_open": true
   }
 }

@@ -1110,7 +1110,7 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
 
         page = state["mongo_pipeline_page"]
         page.source_combo.setCurrentText(MONGO_COLLECTION)
-        page.stage_editor.setPlainText('{"attributes.active": true}')
+        page.match_tool.add_row('attributes.active', '$eq', 'true')
         page.add_stage()
         page.operator_combo.setCurrentText("$group")
         page.stage_editor.setPlainText('{"_id": "$attributes.origin", "count": {"$sum": 1}}')
@@ -1131,6 +1131,7 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
             "stage_rows": [len(stage["rows"]) for stage in page._preview.stages],
             "final_rows": len(page._preview.final_rows),
         }
+        page.select_stage(0)
         phase("mongodb_aggregation_pipeline")
         hold(2.2, mongo_pipeline_script)
 

@@ -149,7 +149,7 @@ def test_real_aggregation_pipeline_preview_run_explain_and_saved_object(qtbot, m
     qtbot.waitUntil(lambda: 'docs' in page._sources, timeout=15000)
     idle(qtbot, window)
     page.source_combo.setCurrentText('docs')
-    page.stage_editor.setPlainText('{"_id":{"$gte":4}}')
+    page.match_tool.add_row('_id', '$gte', '4')
     page.add_stage()
     page.operator_combo.setCurrentText('$group')
     page.stage_editor.setPlainText('{"_id":null,"count":{"$sum":1}}')

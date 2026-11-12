@@ -4,13 +4,13 @@ from __future__ import annotations
 from copy import deepcopy
 import json
 
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QAction, QKeySequence
+from PySide6.QtCore import QMimeData, QPoint, Qt, Signal
+from PySide6.QtGui import QAction, QDrag, QKeySequence
 from PySide6.QtWidgets import (
-    QAbstractItemView, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog,
-    QFrame, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPlainTextEdit, QPushButton,
-    QScrollArea, QSizePolicy, QSpinBox, QSplitter, QTabWidget, QTableWidget,
-    QTableWidgetItem, QToolBar, QVBoxLayout, QWidget,
+    QAbstractItemView, QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
+    QFileDialog, QFrame, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMessageBox, QPlainTextEdit,
+    QPushButton, QScrollArea, QSizePolicy, QSpinBox, QSplitter, QStackedWidget,
+    QTabWidget, QTableWidget, QTableWidgetItem, QToolBar, QVBoxLayout, QWidget,
 )
 
 from opennavicat.database import DatabaseError
@@ -22,6 +22,201 @@ from opennavicat.mongodb_pipeline import (
 from opennavicat.mongodb_session import canonical_dumps, canonical_loads
 
 from .icons import tool_icon
+
+
+class _PipelineStageCard(QPushButton):
+    dropRequested = Signal(int, int)
+
+    def __init__(self, page, index, text, parent=None):
+        super().__init__(text, parent)
+        self.page = page
+        self.index = index
+        self._drag_start = None
+        self.setAcceptDrops(True)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._drag_start = event.position().toPoint()
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if (self._drag_start is None or not event.buttons() & Qt.MouseButton.LeftButton
+                or (event.position().toPoint() - self._drag_start).manhattanLength()
+                < self.page.drag_threshold()):
+            return super().mouseMoveEvent(event)
+        mime = QMimeData()
+        mime.setData("application/x-opennavicat-pipeline-stage", str(self.index).encode("ascii"))
+        drag = QDrag(self)
+        drag.setMimeData(mime)
+        drag.exec(Qt.DropAction.MoveAction)
+        self._drag_start = None
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasFormat("application/x-opennavicat-pipeline-stage"):
+            event.acceptProposedAction()
+            self.setProperty("dropTarget", True)
+            self.style().unpolish(self)
+            self.style().polish(self)
+
+    def dragLeaveEvent(self, event):
+        self.setProperty("dropTarget", False)
+        self.style().unpolish(self)
+        self.style().polish(self)
+        super().dragLeaveEvent(event)
+
+    def dropEvent(self, event):
+        try:
+            source = int(bytes(event.mimeData().data(
+                "application/x-opennavicat-pipeline-stage")).decode("ascii"))
+        except Exception:
+            event.ignore()
+            return
+        self.dropRequested.emit(source, self.index)
+        event.acceptProposedAction()
+
+
+class MongoPipelineMatchTool(QWidget):
+    """Structured AND/OR builder for simple $match conditions."""
+    changed = Signal()
+
+    OPERATORS = (
+        ("等于", "$eq"), ("不等于", "$ne"), ("大于", "$gt"), ("大于等于", "$gte"),
+        ("小于", "$lt"), ("小于等于", "$lte"), ("包含于", "$in"),
+        ("不包含于", "$nin"), ("正则", "$regex"), ("存在", "$exists"),
+    )
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._loading = False
+        layout = QVBoxLayout(self)
+        combinator_row = QHBoxLayout()
+        combinator_row.addWidget(QLabel("组合:"))
+        self.combinator = QComboBox()
+        self.combinator.addItem("全部条件（AND）", "and")
+        self.combinator.addItem("任一条件（OR）", "or")
+        combinator_row.addWidget(self.combinator)
+        combinator_row.addStretch()
+        layout.addLayout(combinator_row)
+        self.table = QTableWidget(0, 3)
+        self.table.setHorizontalHeaderLabels(["字段", "运算符", "值"])
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        layout.addWidget(self.table, 1)
+        buttons = QHBoxLayout()
+        self.add_button = QPushButton("+")
+        self.remove_button = QPushButton("−")
+        buttons.addWidget(self.add_button)
+        buttons.addWidget(self.remove_button)
+        buttons.addStretch()
+        layout.addLayout(buttons)
+        self.add_button.clicked.connect(self.add_row)
+        self.remove_button.clicked.connect(self.remove_row)
+        self.combinator.currentIndexChanged.connect(self._changed)
+        self._complex = None
+
+    def add_row(self, field="", operator="$eq", value=""):
+        row = self.table.rowCount()
+        self.table.insertRow(row)
+        field_edit = QLineEdit(field)
+        operator_combo = QComboBox()
+        for label, operator_value in self.OPERATORS:
+            operator_combo.addItem(label, operator_value)
+        index = operator_combo.findData(operator)
+        operator_combo.setCurrentIndex(index if index >= 0 else 0)
+        if isinstance(value, str):
+            value_text = value
+        elif isinstance(value, dict):
+            value_text = canonical_dumps(value)
+        else:
+            value_text = json.dumps(value)
+        value_edit = QLineEdit(value_text)
+        self.table.setCellWidget(row, 0, field_edit)
+        self.table.setCellWidget(row, 1, operator_combo)
+        self.table.setCellWidget(row, 2, value_edit)
+        field_edit.textChanged.connect(self._changed)
+        operator_combo.currentIndexChanged.connect(self._changed)
+        value_edit.textChanged.connect(self._changed)
+
+    def remove_row(self):
+        row = self.table.currentRow()
+        if row < 0:
+            row = self.table.rowCount() - 1
+        if row >= 0:
+            self.table.removeRow(row)
+            self.changed.emit()
+
+    def _changed(self, *_):
+        if not self._loading:
+            self.changed.emit()
+
+    def load(self, body):
+        self._loading = True
+        try:
+            self.table.setRowCount(0)
+            self._complex = None
+            if not isinstance(body, dict):
+                self._complex = body
+                self.setEnabled(False)
+                return
+            keys = list(body)
+            if body and set(keys) == {"$or"}:
+                self.combinator.setCurrentIndex(1)
+                clauses = body["$or"]
+                if not isinstance(clauses, list):
+                    self._complex = body
+                    self.setEnabled(False)
+                    return
+                merged = {}
+                for clause in clauses:
+                    if not isinstance(clause, dict):
+                        self._complex = body
+                        self.setEnabled(False)
+                        return
+                    merged.update(clause)
+            elif any(key.startswith("$") for key in keys):
+                self._complex = body
+                self.setEnabled(False)
+                return
+            else:
+                self.combinator.setCurrentIndex(0)
+                merged = body
+            for field, value in merged.items():
+                if isinstance(value, dict) and len(value) == 1 and next(iter(value)).startswith("$"):
+                    operator, operand = next(iter(value.items()))
+                    if operator in {item[1] for item in self.OPERATORS}:
+                        self.add_row(field, operator, operand)
+                    else:
+                        self._complex = body
+                        self.setEnabled(False)
+                        return
+                else:
+                    self.add_row(field, "$eq", value)
+            self.setEnabled(True)
+        finally:
+            self._loading = False
+            self.add_button.setEnabled(self._complex is None)
+            self.remove_button.setEnabled(self._complex is None)
+
+    def document(self):
+        if self._complex is not None:
+            return deepcopy(self._complex)
+        conditions = []
+        for row in range(self.table.rowCount()):
+            field = self.table.cellWidget(row, 0).text().strip()
+            operator = self.table.cellWidget(row, 1).currentData()
+            text = self.table.cellWidget(row, 2).text().strip()
+            if not field:
+                continue
+            value = canonical_loads('{"value":' + (text or "null") + '}')["value"]
+            conditions.append({field: value if operator == "$eq" else {operator: value}})
+        if self.combinator.currentData() == "or" and len(conditions) > 1:
+            return {"$or": conditions}
+        result = {}
+        for condition in conditions:
+            result.update(condition)
+        return result
 
 
 class MongoPipelineSaveDialog(QDialog):
@@ -85,6 +280,7 @@ class MongoPipelinePage(QWidget):
         self.running = False
         self.suppress_save_preview = False
         self._invalid = None
+        self._loading_mode = False
         self._preview = None
         self._sources = []
         self.last_rows = []
@@ -156,13 +352,23 @@ class MongoPipelinePage(QWidget):
         self.operator_combo.addItems(STAGE_NAMES)
         stage_header.addWidget(self.operator_combo)
         stage_header.addStretch()
+        self.stage_mode = QComboBox()
+        self.stage_mode.setObjectName("mongoPipelineStageMode")
+        self.stage_mode.addItem("创建工具", "create")
+        self.stage_mode.addItem("编辑器", "editor")
+        self.stage_mode.setMinimumWidth(115)
+        stage_header.addWidget(self.stage_mode)
         self.enabled_check = QCheckBox("启用")
         self.enabled_check.setChecked(True)
         stage_header.addWidget(self.enabled_check)
         editor_layout.addLayout(stage_header)
+        self.stage_stack = QStackedWidget()
+        self.match_tool = MongoPipelineMatchTool()
         self.stage_editor = QPlainTextEdit()
         self.stage_editor.setObjectName("mongoPipelineStageEditor")
-        editor_layout.addWidget(self.stage_editor, 1)
+        self.stage_stack.addWidget(self.match_tool)
+        self.stage_stack.addWidget(self.stage_editor)
+        editor_layout.addWidget(self.stage_stack, 1)
         stage_actions = QHBoxLayout()
         self.add_stage_button = QPushButton("添加阶段")
         self.stage_preview_button = QPushButton("预览")
@@ -211,6 +417,8 @@ class MongoPipelinePage(QWidget):
 
         self.operator_combo.currentTextChanged.connect(self._operator_changed)
         self.stage_editor.textChanged.connect(self._body_changed)
+        self.match_tool.changed.connect(self._match_tool_changed)
+        self.stage_mode.currentIndexChanged.connect(self._mode_changed)
         self.enabled_check.toggled.connect(self._enabled_changed)
         self.add_stage_button.clicked.connect(self.add_stage)
         self.stage_preview_button.clicked.connect(self.request_preview_all)
@@ -346,12 +554,15 @@ class MongoPipelinePage(QWidget):
         self.graph_row.addWidget(source)
         for index, stage in enumerate(self.definition.stages):
             self.graph_row.addWidget(QLabel("→"))
-            card = QPushButton(f"阶段 {index + 1}\n{stage.operator}")
+            card = _PipelineStageCard(self, index, f"阶段 {index + 1}\n{stage.operator}")
             card.setObjectName(f"mongoPipelineStageCard{index}")
             card.setCheckable(True)
             card.setChecked(index == self.definition.selected_stage)
             card.setFixedSize(115, 105)
+            card.setStyleSheet(
+                "QPushButton[dropTarget='true'] { border: 2px solid #8ab4f8; }")
             card.clicked.connect(lambda checked=False, value=index: self.select_stage(value))
+            card.dropRequested.connect(self.move_stage_to)
             self.graph_row.addWidget(card)
             plus = QPushButton("+")
             plus.setObjectName(f"mongoPipelineAddAfter{index}")
@@ -383,6 +594,13 @@ class MongoPipelinePage(QWidget):
         self.stage_editor.blockSignals(True)
         self.stage_editor.setPlainText(canonical_dumps(stage.body))
         self.stage_editor.blockSignals(False)
+        self.match_tool.load(stage.body)
+        can_create = stage.operator == "$match" and self.match_tool.isEnabled()
+        self.stage_mode.setEnabled(can_create)
+        self.stage_mode.blockSignals(True)
+        self.stage_mode.setCurrentIndex(self.stage_mode.findData("create" if can_create else "editor"))
+        self.stage_mode.blockSignals(False)
+        self.stage_stack.setCurrentWidget(self.match_tool if can_create else self.stage_editor)
 
     def _render_script(self):
         try:
@@ -407,8 +625,13 @@ class MongoPipelinePage(QWidget):
         if index is None or not 0 <= index < len(self.definition.stages):
             return
         try:
-            body = canonical_loads(self.stage_editor.toPlainText())
-            canonical_dumps(body)
+            if self.stage_stack.currentWidget() is self.match_tool:
+                body = self.match_tool.document()
+                if not isinstance(body, dict):
+                    raise ValueError("Match criteria must be a document")
+            else:
+                body = canonical_loads(self.stage_editor.toPlainText())
+                canonical_dumps(body)
         except Exception as error:
             self._invalid = "Stage body is not valid Canonical Extended JSON: " + str(error)
             return
@@ -423,6 +646,20 @@ class MongoPipelinePage(QWidget):
             return
         self.definition.stages[index].operator = value
         self._render_graph()
+        self._render_stage_editor()
+        self._edited()
+
+    def _mode_changed(self, _index):
+        self.stage_stack.setCurrentWidget(
+            self.match_tool if self.stage_mode.currentData() == "create" else self.stage_editor)
+
+    def _match_tool_changed(self):
+        if self._loading_mode:
+            return
+        self._commit_stage_editor()
+        if self._invalid:
+            self.messages.setPlainText(self._invalid)
+            return
         self._edited()
 
     def _body_changed(self):
@@ -492,6 +729,21 @@ class MongoPipelinePage(QWidget):
         self._commit_stage_editor()
         self.definition.stages[index], self.definition.stages[target] = (
             self.definition.stages[target], self.definition.stages[index])
+        self.definition.selected_stage = target
+        self._render_graph()
+        self._render_stage_editor()
+        self._edited()
+
+    def drag_threshold(self):
+        return QApplication.startDragDistance()
+
+    def move_stage_to(self, source, target):
+        if (not 0 <= source < len(self.definition.stages)
+                or not 0 <= target < len(self.definition.stages) or source == target):
+            return
+        self._commit_stage_editor()
+        stage = self.definition.stages.pop(source)
+        self.definition.stages.insert(target, stage)
         self.definition.selected_stage = target
         self._render_graph()
         self._render_stage_editor()

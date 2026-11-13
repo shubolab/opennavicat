@@ -12,7 +12,7 @@ import re
 from urllib.parse import parse_qsl, unquote, urlsplit
 
 from PySide6.QtCore import QRect, QSize, Qt, Signal
-from PySide6.QtGui import QFontMetrics, QPalette
+from PySide6.QtGui import QFont, QFontMetrics, QIcon, QPalette
 from PySide6.QtWidgets import (
     QAbstractItemView, QButtonGroup, QDialog, QDialogButtonBox, QHBoxLayout,
     QLabel, QLineEdit, QListView, QListWidget, QListWidgetItem, QPushButton,
@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
 )
 
 from .. import database
-from .icons import NAMES, icon
+from .icons import icon, provider_icon, toggle_icon
 
 
 DRIVER_LABELS = {
@@ -80,6 +80,19 @@ VENDOR_ALIASES = {
         ("Oracle Database Cloud Services", "oracle"), ("Oracle MySQL Cloud Service", "mysql"),
     ),
     "Redis Enterprise Cloud": (("Redis Enterprise Cloud", "redis"),),
+}
+
+
+# These are independently drawn provider identities, not backend compatibility.
+# No observed standalone Redis Enterprise provider glyph is available yet.
+_PROVIDER_GLYPHS = {
+    "Alibaba Cloud": "provider_alibaba", "Huawei": "provider_huawei",
+    "Tencent Cloud": "provider_tencent", "Kingbase": "provider_kingbase",
+    "PingCAP": "provider_pingcap", "HighGo": "provider_highgo",
+    "OceanBase": "provider_oceanbase", "AWS": "provider_aws",
+    "Fujitsu": "provider_fujitsu", "Google Cloud": "provider_google",
+    "Microsoft": "provider_microsoft", "MongoDB Atlas": "provider_mongodb_atlas",
+    "Oracle": "provider_oracle_cloud",
 }
 
 
@@ -361,7 +374,36 @@ def parse_connection_uri(uri: str) -> dict:
 
 
 class _ConnectionDelegate(QStyledItemDelegate):
-    """Native selection/focus painting with original icons and readable status."""
+    """Compact connection rows and separately sized driver tiles."""
+
+    GRID_WIDTH = 126
+    GRID_MIN_HEIGHT = 96
+    GRID_ICON_SIZE = 50
+    LIST_ROW_HEIGHT = 26
+    LIST_ICON_SIZE = 16
+    LABEL_PIXEL_SIZE = 14
+
+    @classmethod
+    def label_font(cls, font):
+        result = QFont(font)
+        result.setPixelSize(cls.LABEL_PIXEL_SIZE)
+        return result
+
+    @classmethod
+    def grid_height(cls, font, labels):
+        metrics = QFontMetrics(cls.label_font(font))
+        width = cls.GRID_WIDTH - 12
+        text_height = max((metrics.boundingRect(
+            QRect(0, 0, width, 4096), int(Qt.TextFlag.TextWordWrap), label).height()
+            for label in labels), default=0)
+        # Keep two label lines available. Longer cloud names grow the row
+        # rather than clipping their identity or shrinking the observed font.
+        return max(cls.GRID_MIN_HEIGHT, 4 + cls.GRID_ICON_SIZE + 5
+                   + max(metrics.height()*2, text_height) + 3)
+
+    @staticmethod
+    def _paint_icon(painter, artwork, rect, mode):
+        artwork.paint(painter, rect, Qt.AlignmentFlag.AlignCenter, mode, QIcon.State.Off)
 
     def paint(self, painter, option, index):
         view = option.widget
@@ -369,40 +411,43 @@ class _ConnectionDelegate(QStyledItemDelegate):
         styled = QStyleOptionViewItem(option)
         self.initStyleOption(styled, index)
         styled.text = ""
-        styled.icon = type(styled.icon)()
+        styled.icon = QIcon()
         painter.save()
-        style = view.style() if view else QStyle()
-        style.drawControl(QStyle.ControlElement.CE_ItemViewItem, styled, painter, view)
-        bounds = option.rect.adjusted(10, 7, -10, -7)
-        selected = bool(option.state & QStyle.StateFlag.State_Selected)
-        fg = option.palette.color(QPalette.ColorRole.HighlightedText if selected else QPalette.ColorRole.Text)
-        muted = option.palette.color(QPalette.ColorRole.HighlightedText if selected else QPalette.ColorRole.PlaceholderText)
-        item_icon = index.data(Qt.ItemDataRole.DecorationRole)
-        if grid:
-            icon_rect = QRect(bounds.center().x() - 22, bounds.y() + 2, 44, 44)
-            title_rect = QRect(bounds.x(), icon_rect.bottom() + 5, bounds.width(), 36)
-            status_rect = QRect(bounds.x(), title_rect.bottom() + 2, bounds.width(), 18)
-            alignment = Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop
-        else:
-            icon_rect = QRect(bounds.x(), bounds.center().y() - 18, 36, 36)
-            title_rect = QRect(icon_rect.right() + 12, bounds.y() + 1, bounds.width() - 48, 23)
-            status_rect = QRect(title_rect.x(), title_rect.bottom() + 1, title_rect.width(), 20)
-            alignment = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
-        if item_icon:
-            item_icon.paint(painter, icon_rect)
-        painter.setPen(fg)
-        painter.setFont(option.font)
-        title = index.data(Qt.ItemDataRole.DisplayRole)
-        if grid:
-            painter.drawText(title_rect, int(alignment | Qt.TextFlag.TextWordWrap), title)
-        else:
-            painter.drawText(title_rect, int(alignment), QFontMetrics(option.font).elidedText(title, Qt.TextElideMode.ElideRight, title_rect.width()))
-        painter.setPen(muted)
-        status_font = option.font
-        status_font.setPointSizeF(max(8, status_font.pointSizeF() - 1))
-        painter.setFont(status_font)
-        painter.drawText(status_rect, int(alignment), QFontMetrics(status_font).elidedText(index.data(Qt.ItemDataRole.UserRole + 1), Qt.TextElideMode.ElideRight, status_rect.width()))
-        painter.restore()
+        try:
+            style = view.style() if view else QStyle()
+            style.drawControl(QStyle.ControlElement.CE_ItemViewItem, styled, painter, view)
+            selected = bool(option.state & QStyle.StateFlag.State_Selected)
+            enabled = bool(option.state & QStyle.StateFlag.State_Enabled)
+            fg = option.palette.color(option.palette.currentColorGroup() if enabled else QPalette.ColorGroup.Disabled,
+                QPalette.ColorRole.HighlightedText if selected else QPalette.ColorRole.Text)
+            item_icon = index.data(Qt.ItemDataRole.DecorationRole)
+            bounds = option.rect
+            if grid:
+                icon_rect = QRect(bounds.x() + (bounds.width() - self.GRID_ICON_SIZE)//2,
+                                  bounds.y() + 4, self.GRID_ICON_SIZE, self.GRID_ICON_SIZE)
+                title_rect = bounds.adjusted(6, 4 + self.GRID_ICON_SIZE + 5, -6, -3)
+                alignment = Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop
+            else:
+                icon_rect = QRect(bounds.x() + 6, bounds.y() + (bounds.height() - self.LIST_ICON_SIZE)//2,
+                                  self.LIST_ICON_SIZE, self.LIST_ICON_SIZE)
+                title_rect = QRect(icon_rect.right() + 8, bounds.y(),
+                                   max(0, bounds.right() - icon_rect.right() - 12), bounds.height())
+                alignment = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+            if item_icon and not item_icon.isNull():
+                mode = (QIcon.Mode.Disabled if not enabled else
+                        QIcon.Mode.Selected if selected else QIcon.Mode.Normal)
+                self._paint_icon(painter, item_icon, icon_rect, mode)
+            font = self.label_font(option.font)
+            painter.setPen(fg)
+            painter.setFont(font)
+            title = index.data(Qt.ItemDataRole.DisplayRole)
+            if grid:
+                painter.drawText(title_rect, int(alignment | Qt.TextFlag.TextWordWrap), title)
+            else:
+                painter.drawText(title_rect, int(alignment),
+                    QFontMetrics(font).elidedText(title, Qt.TextElideMode.ElideRight, title_rect.width()))
+        finally:
+            painter.restore()
 
 
 class ConnectionUriDialog(QDialog):
@@ -485,7 +530,7 @@ class ConnectionManagerDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("新建连接")
         self.setObjectName("connectionManager")
-        self.resize(960, 660)
+        self.resize(900, 700)
         self.setMinimumSize(760, 520)
         self._supported = frozenset(supported_kinds) if supported_kinds is not None else supported_driver_kinds()
         self._catalog = tuple(ConnectionPreset(name, kind) for kind, name in DRIVER_LABELS.items()) + tuple(
@@ -514,6 +559,7 @@ class ConnectionManagerDialog(QDialog):
         self.filter_tree.setHeaderHidden(True)
         self.filter_tree.setFixedWidth(205)
         self.filter_tree.setIndentation(15)
+        self.filter_tree.setIconSize(QSize(16, 16))
         self.filter_tree.setAccessibleName("连接类型及供应商筛选")
         self.all_item = QTreeWidgetItem(self.filter_tree, ["全部连接类型"])
         self.all_item.setData(0, Qt.ItemDataRole.UserRole, ("all", ""))
@@ -523,6 +569,7 @@ class ConnectionManagerDialog(QDialog):
         for kind, name in DRIVER_LABELS.items():
             item = QTreeWidgetItem(types, [name])
             item.setData(0, Qt.ItemDataRole.UserRole, ("driver", kind))
+            item.setIcon(0, icon(kind, 16))
             self.driver_items[kind] = item
         vendors = QTreeWidgetItem(self.filter_tree, ["供应商"])
         vendors.setFlags(vendors.flags() & ~Qt.ItemFlag.ItemIsSelectable)
@@ -530,6 +577,11 @@ class ConnectionManagerDialog(QDialog):
         for vendor in VENDOR_ALIASES:
             item = QTreeWidgetItem(vendors, [vendor])
             item.setData(0, Qt.ItemDataRole.UserRole, ("vendor", vendor))
+            provider_name = _PROVIDER_GLYPHS.get(vendor)
+            artwork = provider_icon(provider_name, 16) if provider_name else QIcon()
+            item.setIcon(0, artwork)
+            if artwork.isNull():
+                item.setToolTip(0, "供应商图标待对齐。")
             self.vendor_items[vendor] = item
         types.setExpanded(True)
         vendors.setExpanded(True)
@@ -543,11 +595,17 @@ class ConnectionManagerDialog(QDialog):
         self.search_edit.setAccessibleName("搜索连接类型或供应商")
         search_bar.addWidget(self.search_edit, 1)
         self.grid_button = QToolButton()
-        self.grid_button.setText("图标")
+        self.grid_button.setIcon(toggle_icon("grid", 18))
+        self.grid_button.setIconSize(QSize(18, 18))
+        self.grid_button.setFixedSize(26, 26)
+        self.grid_button.setAccessibleName("图标视图")
         self.grid_button.setToolTip("图标视图")
         self.grid_button.setCheckable(True)
         self.list_button = QToolButton()
-        self.list_button.setText("列表")
+        self.list_button.setIcon(toggle_icon("list", 18))
+        self.list_button.setIconSize(QSize(18, 18))
+        self.list_button.setFixedSize(26, 26)
+        self.list_button.setAccessibleName("列表视图")
         self.list_button.setToolTip("列表视图")
         self.list_button.setCheckable(True)
         self.view_buttons = QButtonGroup(self)
@@ -564,7 +622,8 @@ class ConnectionManagerDialog(QDialog):
         self.connection_list.setItemDelegate(_ConnectionDelegate(self.connection_list))
         self.connection_list.setResizeMode(QListView.ResizeMode.Adjust)
         self.connection_list.setMovement(QListView.Movement.Static)
-        self.connection_list.setSpacing(4)
+        self.connection_list.setSpacing(0)
+        self.connection_list.setStyleSheet("QListWidget#connectionTypeList::item { padding: 0; }")
         self.connection_list.setWordWrap(True)
         content.addWidget(self.connection_list, 1)
         self.empty_label = QLabel("未找到匹配的连接类型。")
@@ -610,14 +669,42 @@ class ConnectionManagerDialog(QDialog):
             self.uri_dialog._supported = self._supported
         self._refresh()
 
+    def _apply_item_geometry(self):
+        grid = self.grid_button.isChecked()
+        labels = [self.connection_list.item(row).text() for row in range(self.connection_list.count())]
+        height = _ConnectionDelegate.grid_height(self.connection_list.font(), labels)
+        size = QSize(_ConnectionDelegate.GRID_WIDTH, height) if grid else QSize(0, _ConnectionDelegate.LIST_ROW_HEIGHT)
+        self.connection_list.setGridSize(size if grid else QSize())
+        self.connection_list.setIconSize(QSize(50, 50) if grid else QSize(16, 16))
+        for row in range(self.connection_list.count()):
+            item = self.connection_list.item(row)
+            item.setSizeHint(size)
+            preset = item.data(Qt.ItemDataRole.UserRole)
+            artwork = self._preset_artwork(preset, 50 if grid else 16)
+            item.setIcon(artwork)
+            missing = bool(preset.vendor and artwork.isNull())
+            item.setData(Qt.ItemDataRole.UserRole + 2, missing)
+            status = item.data(Qt.ItemDataRole.UserRole + 1)
+            note = "\n供应商图标待对齐。" if missing else ""
+            item.setToolTip(f"{preset.label}\n{preset.vendor + ' · ' if preset.vendor else ''}{status}{note}")
+            item.setData(Qt.ItemDataRole.AccessibleTextRole,
+                f"{preset.label}，{preset.vendor}，{status}" + ("，供应商图标待对齐" if missing else ""))
+
+    @staticmethod
+    def _preset_artwork(preset, size):
+        if not preset.vendor:
+            return icon(preset.kind, size)
+        provider_name = _PROVIDER_GLYPHS.get(preset.vendor)
+        if provider_name is None:
+            return QIcon()
+        return provider_icon(provider_name, size, driver=preset.kind)
+
     def _set_view(self, grid: bool):
         self.connection_list.setViewMode(QListView.ViewMode.IconMode if grid else QListView.ViewMode.ListMode)
-        self.connection_list.setGridSize(QSize(204, 128) if grid else QSize())
-        for row in range(self.connection_list.count()):
-            self.connection_list.item(row).setSizeHint(QSize(204, 128) if grid else QSize(0, 66))
         self.connection_list.setWrapping(grid)
         self.grid_button.setChecked(grid)
         self.list_button.setChecked(not grid)
+        self._apply_item_geometry()
         self.connection_list.viewport().update()
 
     def _refresh(self, *_):
@@ -644,15 +731,13 @@ class ConnectionManagerDialog(QDialog):
             status = ("兼容驱动设置 · 专属功能未验证" if preset.vendor else "可配置连接") if available else "尚未实现"
             if preset.kind is None:
                 status = "驱动兼容性待确认 · 尚未实现"
-            row = QListWidgetItem(icon(preset.kind if preset.kind in NAMES else "database", 48), preset.label)
+            row = QListWidgetItem(preset.label)
             row.setData(Qt.ItemDataRole.UserRole, preset)
             row.setData(Qt.ItemDataRole.UserRole + 1, status)
-            row.setData(Qt.ItemDataRole.AccessibleTextRole, f"{preset.label}，{preset.vendor}，{status}")
-            row.setToolTip(f"{preset.label}\n{preset.vendor + ' · ' if preset.vendor else ''}{status}")
-            row.setSizeHint(QSize(204, 128) if self.grid_button.isChecked() else QSize(0, 66))
             self.connection_list.addItem(row)
             if preset == selected:
                 self.connection_list.setCurrentItem(row)
+        self._apply_item_geometry()
         count = self.connection_list.count()
         self.count_label.setText(f"{count} 个连接类型")
         self.empty_label.setVisible(not count)

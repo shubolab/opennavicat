@@ -87,16 +87,22 @@ def main():
     receipt = {"base_revision": revision, "source_before": before, "python": platform.python_version(),
                "platform": platform.platform(), "module": TARGET, "passed": False}
     try:
+        receipt["phase"] = "collect"
         collect = subprocess.run([sys.executable, "-m", "pytest", "--collect-only", "-q", TARGET],
                                  cwd=ROOT, capture_output=True, text=True, timeout=30)
+        receipt["collection_exit_code"] = collect.returncode
+        (out / "collect.log").write_text(redact_output(collect.stdout + collect.stderr,
+            (fixture.admin_password, fixture.app_password, fixture.denied_password))[-32768:])
         nodeids = [line for line in collect.stdout.splitlines() if line.startswith(TARGET + "::")]
         if collect.returncode or not nodeids:
             raise RuntimeError("Oracle scope collection failed")
         receipt["expected_cases"] = nodeids
+        receipt["phase"] = "fixture_start"
         fixture.start(pull=args.pull_image)
         env = {key: value for key, value in os.environ.items() if not key.startswith("OPENNAVICAT_TEST_ORACLE_")}
         env.update(fixture.environment())
         env["QT_QPA_PLATFORM"] = "offscreen"
+        receipt["phase"] = "actual_tests"
         completed = subprocess.run([sys.executable, "-m", "pytest", "-q", TARGET,
             "--junitxml=" + str(out / "results.xml")], cwd=ROOT, env=env, text=True,
             capture_output=True, timeout=300)

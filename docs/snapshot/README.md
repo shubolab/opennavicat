@@ -1,6 +1,6 @@
 # OpenNavicat 交接快照
 
-当前恢复入口：**[2026-11-13：0.12已发布，继续stream变体、Oracle及完整goal](2026-11-13-goal-resume.md)**。
+当前恢复入口：**[2026-11-13：0.12已发布，images六原生CI通过，Oracle开发中](2026-11-13-goal-resume.md)**。
 
 恢复当前 goal 时先读这份快照，再核对其中的分支、提交和 CI 当前状态。
 当前机器可读索引见 [2026-11-13-state.json](2026-11-13-state.json)。

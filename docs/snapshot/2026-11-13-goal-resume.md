@@ -47,7 +47,13 @@ normalQuit后4idle/0active，exactCID/两卷清除，不复制遗留行为。不
 后续未发布源码`b53f60e`已实际补六种toolbar/serial-owner回归，并只给已观察的两种required-image getMore47显示typed 0/0哨兵；真实script_location仍None，安全errmsg/状态优先及正坐标校验未松。
 backend74/0、Window25/0分别在fresh auth nativeARM64 RS严格执行，默认2243/645、94.07秒/2888 exact cases和296源前后相同且绑定b53。
 源检查点与JS仅测试预算修正合为`53cce32`，11份声明源/全部runtime和native源未变；默认全源未在合流测试预算下重跑，七native错误case资格另记，不冒称同轮。
-独立审查另核4CID/8卷absence。新main CI尚需推送后的exact source资格；版本/GIF/tag/公开0.12安装器保持不变。
+独立审查另核4CID/8卷absence。合流后以`fab0419fd47ad49378f3c2481bee0dca46fe7a43`推送，新main CI
+[43399815386](https://github.com/shubolab/opennavicat/actions/runs/43399815386)已completed/success：六native+security成功、publisher按main规则skipped。
+13artifact inventory已绑定exactrun/source，独立下载七validation小包核六目标native build/packaged/installed launch/uninstall/helper收据；
+未下载/重hash本轮六安装器或ZIP字节，不算新公开安装器资格。各Linux2224/646、Mac2242/646、Win2134/772，均零fail/error；
+七native语义诊断case在每目标真执行通过。security独立核backend74/Window25/TLS24/streamTLS2/cleanup13/collections511各自0skip和exactsource/owner/cleanup。
+本机exactfab另actualCocoa Window25/0、36.43秒、11源匹配Gitblob、fresh auth nativeARM64 RS，两个错误0/0像素已看，exactCID/两卷独立absent。
+版本/GIF/tag/公开0.12安装器保持不变，这是未发布源码进展；完整ON Output/Preview/恢复/平台参考等门禁不关闭。
 详见[image验证与集成](../validation-mongodb-image-modes.md)。
 
 非Mongo源码审计确认Oracle/Snowflake适配器缺失，而九族/14供应商选择器及SQLite七页设计器已存在。
@@ -57,6 +63,12 @@ backend74/0、Window25/0分别在fresh auth nativeARM64 RS严格执行，默认2
 只新profile Off/0后Quitfalse，三轮研究/参考CID逐ID清除、零数据卷、DB/secret bridge均端口拒绝。
 另行oracledb26.1六目标wheel实际字节/架构与ownedThin/service/TNS/SID/SYSDBA研究不等于OpenNavadapter或六平台执行。
 完整Oracle工具/设置/安全/事务/类型、Snowflake及三平台UI/功能门禁保持开放。
+
+下一段已在独立工作树开始：`codex_oracle_basic_backend`负责专属session/config/deps/owned测试，
+`codex_oracle_connection_ui`负责五页连接、密码状态、Store和schema/table/view窗口路由。
+二者均从fab开始，唯一配置契约以backend的`7eb42ed`为基础，service identifier与schema分离；
+这些开发中源码尚未合入main，也没有Oracle产品或安装器验收。合流前继续审查lossless NUMBER/LOB、精确cancel token、
+stale form/session绑定、无明文secret、unsupported active选项failclosed、PK/冲突/DDL边界；不得把专属连接成功当完整Oracle工具完成。
 
 ### 历史0.11基线
 

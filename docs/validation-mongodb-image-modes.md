@@ -112,8 +112,8 @@ Ignored receipts are under `artifacts/image-modes/`, including
 `red-six-r1/`, `backend-final-r1/`, `window-final-r1/`, `full-final-r1/` and
 `final-verification.json`. The latter binds source hashes and exact owned
 resource identities. No raw reference evidence or credentials are packaged.
-No native Cocoa run, six-target CI, installer or release qualification is
-claimed for this slice. Retention expiry, deleted/concurrent images, other
+At this branch checkpoint, no native Cocoa run, six-target CI, installer or
+release qualification had been obtained. Retention expiry, deleted/concurrent images, other
 topologies and permissions, broader recovery, successful Preview/Explain and
 complete reference-backed parity remain open.
 
@@ -133,10 +133,57 @@ earlier tracked files differ: five documentation records and the independently
 qualified `test_js_engine.py` budget correction. The 2243/645 full-source result
 belongs to the image checkpoint; it was not rerun under the merged test budget.
 The seven actual delayed-native semantic-error cases separately qualify that
-test change. The new main CI must bind to the combined source; neither earlier
-failed CI run nor the published v0.12.0 tag supplies that qualification.
+test change. Qualification of the combined source is recorded separately below;
+neither earlier failed CI run nor the published v0.12.0 tag supplies it.
 
 The version, README GIF, public tag and eight release assets remain unchanged.
 This is unreleased development. Private integration binding is
 `artifacts/stream-variants/image-integration/source-binding.json` in the
 `mongodb-stream-variants` tree. The complete parity goal remains active.
+
+## Combined main CI and actual Cocoa
+
+The combined source was pushed to main as
+`fab0419fd47ad49378f3c2481bee0dca46fe7a43`.
+[Run 43399815386](https://github.com/shubolab/opennavicat/actions/runs/43399815386)
+completed successfully: six native-target jobs plus database security passed;
+the main-branch publisher was skipped. Independent review bound all thirteen
+artifact inventory entries to this run/source and downloaded the seven
+validation artifacts. Native build, architecture, bundled helper, packaged
+smoke and installed launch/uninstall receipts passed for all six targets.
+
+| Native source suite | Passed | Conditional skips | Failures/errors |
+| --- | ---: | ---: | ---: |
+| Linux amd64 and arm64, each | 2224 | 646 | 0 |
+| macOS amd64 and arm64, each | 2242 | 646 | 0 |
+| Windows amd64 and arm64, each | 2134 | 772 | 0 |
+
+The seven native semantic-error cases from the separate JS-test correction
+actually passed on every target. Each target also passed native VM 103/0 and
+Qt/helper 4/0 scopes. Security separately qualified backend **74/0**, Window
+**25/0**, ordinary TLS **24/0**, stream TLS **2/0**, cleanup **13/0** and
+collections **511/0** against exact source/AST/collected nodes/JUnit and owned
+fixture receipts. These overlapping scopes are not added together.
+
+This audit did **not** independently download/rehash the six installer bytes or
+artifact ZIP bytes; it is a CI-receipt audit, not a new published-installer
+qualification. CI database scopes ran on owned Linux amd64 fixtures. The two
+earlier failed runs and their actual failures remain in the variant validation
+record. No tag, version or public release changed. Private CI audit is
+`artifacts/stream-variants/main-ci-43399815386/verification.json` in the
+`mongodb-finite-stream` tree.
+
+The exact combined source was then tested locally through actual **Cocoa** on
+Darwin ARM64: the complete Window module passed **25/0** in **36.43 s** against
+another fresh authenticated native ARM64 MongoDB 8.0.34 replica set. The runner
+observed `QApplication.platformName() == "cocoa"` during the test calls, verified
+all eleven declared source paths against the `fab0419` Git blobs and matched
+the exact collected/JUnit case multiset. Six captures came from the new image
+cases; visual review of both OFF-required cases confirmed the static `0/0`
+line, the correct frozen script and three tabs without Output. The exact
+container and two anonymous volumes were independently confirmed absent.
+Receipt and independent check are under
+`artifacts/stream-variants/image-integration/native-cocoa-window/` in the
+`mongodb-stream-variants` tree. No personal workspace or reference screenshots
+were used. This remains bounded macOS source execution, not complete UI parity
+or Windows/Linux human/reference acceptance.

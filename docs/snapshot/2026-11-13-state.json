@@ -21,12 +21,16 @@
   },
   "repository": {
     "remote": "git@github.com:shubolab/opennavicat.git",
-    "synced_origin_main_sha": "c5f4c7467f8d3296ba282bd43168a05089b987ad",
+    "synced_origin_main_sha": "87df5cd70f9293c4585637b1eab6e00e37810097",
     "working_branch": "codex_mongodb_pipeline_tasks",
     "working_branch_base_sha": "c5f4c7467f8d3296ba282bd43168a05089b987ad",
     "workspace": "/Users/wangshubo/.codex/worktrees/release-0-10/opennavicat",
     "original_main_workspace": "/Users/wangshubo/develop/opennavicat",
-    "other_branches_or_unmerged_work_removed": false
+    "other_branches_or_unmerged_work_removed": false,
+    "application_release_source_sha": "87df5cd70f9293c4585637b1eab6e00e37810097",
+    "documentation_receipt_scope": "Documentation-only receipt commit follows application source87df; use git log for current document revision",
+    "next_working_branch": "codex_mongodb_finite_stream",
+    "next_workspace": "/Users/wangshubo/.codex/worktrees/mongodb-finite-stream/opennavicat"
   },
   "reference": {
     "path": "/Users/wangshubo/Downloads/Navicat Premium.app",
@@ -38,193 +42,143 @@
     "reference_operations_executed_by_snapshot_audit": false
   },
   "published": {
-    "tag": "v0.10.0",
-    "source_sha": "711a458a873a96034f865d36f46d4919fce39359",
+    "tag": "v0.11.0",
+    "source_sha": "87df5cd70f9293c4585637b1eab6e00e37810097",
     "draft": false,
     "prerelease": true,
-    "published_at_utc": "2026-11-12T00:59:08Z",
-    "url": "https://github.com/shubolab/opennavicat/releases/tag/v0.10.0",
+    "published_at_utc": "2026-11-13T05:07:54Z",
+    "url": "https://github.com/shubolab/opennavicat/releases/tag/v0.11.0",
     "native_installers": 6,
     "public_assets": 8,
-    "metadata_rechecked_this_resume": true,
     "all_asset_metadata_uploaded": true,
-    "asset_bytes_redownloaded_this_resume": false,
-    "asset_bytes_rehashed_this_resume": false,
-    "previous_anonymous_byte_audit_reported": true,
-    "previous_byte_audit_document": "../validation-0.10.md",
-    "formal_run": {
-      "databaseId": 43129758054,
-      "headSha": "711a458a873a96034f865d36f46d4919fce39359",
-      "status": "completed",
-      "conclusion": "success",
-      "event": "push",
-      "url": "https://github.com/shubolab/opennavicat/actions/runs/43129758054",
-      "jobs": [
-        {
-          "name": "Real database TLS and SSH",
-          "status": "completed",
-          "conclusion": "success"
-        },
-        {
-          "name": "linux-arm64",
-          "status": "completed",
-          "conclusion": "success"
-        },
-        {
-          "name": "macos-amd64",
-          "status": "completed",
-          "conclusion": "success"
-        },
-        {
-          "name": "windows-amd64",
-          "status": "completed",
-          "conclusion": "success"
-        },
-        {
-          "name": "linux-amd64",
-          "status": "completed",
-          "conclusion": "success"
-        },
-        {
-          "name": "windows-arm64",
-          "status": "completed",
-          "conclusion": "success"
-        },
-        {
-          "name": "macos-arm64",
-          "status": "completed",
-          "conclusion": "success"
-        },
-        {
-          "name": "Publish complete six-target release",
-          "status": "completed",
-          "conclusion": "success"
-        }
-      ]
-    },
+    "asset_bytes_redownloaded_this_resume": true,
+    "asset_bytes_rehashed_this_resume": true,
+    "anonymous_download_verified": true,
+    "api_digest_checksums_combined_manifest_formal_ci_bytes_match": true,
+    "tag_resolves_to_source_sha": true,
+    "formal_run_id": 43368650962,
+    "formal_jobs_successful": 8,
     "assets": [
       {
         "name": "build-manifests.json",
-        "bytes": 205707,
-        "digest": "sha256:f804330f329ae6925696aaf897560adbc53c3c7a1678feb05e1f72f68450ae28",
-        "state": "uploaded"
+        "size": 205707,
+        "state": "uploaded",
+        "digest": "sha256:630121c8710a916ad29f438393c010ad4f5b9469b54b460183e1416a0180c2f7",
+        "browser_download_url": "https://github.com/shubolab/opennavicat/releases/download/v0.11.0/build-manifests.json"
       },
       {
-        "name": "OpenNavicat-0.10.0-linux-amd64.deb",
-        "bytes": 76242660,
-        "digest": "sha256:63c31782d4292d4065425b009387755966c3273f56af4b24bfbdea5ae769462d",
-        "state": "uploaded"
+        "name": "OpenNavicat-0.11.0-linux-amd64.deb",
+        "size": 76479582,
+        "state": "uploaded",
+        "digest": "sha256:c330f4e145d61730fbfe797afef1d6c4acfbf1bea48494c20e3ffb422c9f1b9b",
+        "browser_download_url": "https://github.com/shubolab/opennavicat/releases/download/v0.11.0/OpenNavicat-0.11.0-linux-amd64.deb"
       },
       {
-        "name": "OpenNavicat-0.10.0-linux-arm64.deb",
-        "bytes": 74932206,
-        "digest": "sha256:d4b21e8dce628946e0209269690c4ef86f2792921144df2744e44dc564d72c29",
-        "state": "uploaded"
+        "name": "OpenNavicat-0.11.0-linux-arm64.deb",
+        "size": 75119980,
+        "state": "uploaded",
+        "digest": "sha256:c653f9d89edc7133375b1810f85842f3395af9453e9410bbb63dde438d098982",
+        "browser_download_url": "https://github.com/shubolab/opennavicat/releases/download/v0.11.0/OpenNavicat-0.11.0-linux-arm64.deb"
       },
       {
-        "name": "OpenNavicat-0.10.0-macos-amd64.dmg",
-        "bytes": 50141816,
-        "digest": "sha256:3ecd9b5bcfba61bbf99909114be214bab0d81e75405e79fa4b61a6d791eb60a3",
-        "state": "uploaded"
+        "name": "OpenNavicat-0.11.0-macos-amd64.dmg",
+        "size": 50440632,
+        "state": "uploaded",
+        "digest": "sha256:c4b2c6f4d180f913dc45e4d22cf3b159338bed2bb09231d0262fe66ff19884e8",
+        "browser_download_url": "https://github.com/shubolab/opennavicat/releases/download/v0.11.0/OpenNavicat-0.11.0-macos-amd64.dmg"
       },
       {
-        "name": "OpenNavicat-0.10.0-macos-arm64.dmg",
-        "bytes": 49574732,
-        "digest": "sha256:eac5ad1c2c6822bfa6bb56199c48e8f1bdc47b9e906516894fad95e35484903b",
-        "state": "uploaded"
+        "name": "OpenNavicat-0.11.0-macos-arm64.dmg",
+        "size": 49775097,
+        "state": "uploaded",
+        "digest": "sha256:4de99c14fa3000ce5f0ced288f6e80ddd1f92061c21cf87feb796864d0ac20e8",
+        "browser_download_url": "https://github.com/shubolab/opennavicat/releases/download/v0.11.0/OpenNavicat-0.11.0-macos-arm64.dmg"
       },
       {
-        "name": "OpenNavicat-0.10.0-windows-amd64-setup.exe",
-        "bytes": 43580460,
-        "digest": "sha256:b27d34a6d4ca19ae769dd960ee47f0e40caf66cccb7062730d3af9e7216c2338",
-        "state": "uploaded"
+        "name": "OpenNavicat-0.11.0-windows-amd64-setup.exe",
+        "size": 43769396,
+        "state": "uploaded",
+        "digest": "sha256:b41c083c6c6b6363f26b5f549da47c40c8da3ed1ea79da51be3f2ed8e721e6d4",
+        "browser_download_url": "https://github.com/shubolab/opennavicat/releases/download/v0.11.0/OpenNavicat-0.11.0-windows-amd64-setup.exe"
       },
       {
-        "name": "OpenNavicat-0.10.0-windows-arm64-setup.exe",
-        "bytes": 34540723,
-        "digest": "sha256:550711108a109d4574d0570bb3c617049c39ecbee85ccb96366f6b6e4a454467",
-        "state": "uploaded"
+        "name": "OpenNavicat-0.11.0-windows-arm64-setup.exe",
+        "size": 34715740,
+        "state": "uploaded",
+        "digest": "sha256:63d607d0331899c305c5d0466a163fe619224253a34a8f25e8e09829b9835ea2",
+        "browser_download_url": "https://github.com/shubolab/opennavicat/releases/download/v0.11.0/OpenNavicat-0.11.0-windows-arm64-setup.exe"
       },
       {
         "name": "SHA256SUMS",
-        "bytes": 622,
-        "digest": "sha256:1a6da5bbd46be3af21ef58b8dcfa82ef669a9f94d557a366fcd8fa961dfbbe81",
-        "state": "uploaded"
+        "size": 622,
+        "state": "uploaded",
+        "digest": "sha256:eef2f190fd0b5bd280676108470d8e55d904d31c8e6fd9d38fe92100def4c7bb",
+        "browser_download_url": "https://github.com/shubolab/opennavicat/releases/download/v0.11.0/SHA256SUMS"
       }
-    ]
+    ],
+    "formal_audit_receipt": "artifacts/release-011/tag-audit-43368650962/verification.json",
+    "public_audit_receipt": "artifacts/release-011/public-43368650962/verification.json",
+    "public_native_mac_arm64_smoke": {
+      "passed": true,
+      "rows": 6,
+      "columns": 4,
+      "qt_platform": "cocoa",
+      "all_driver_crypto_native_js_probes": true,
+      "isolated_workspace": true,
+      "reference_profiles_accessed": false,
+      "dmg_detached": true,
+      "receipt": "artifacts/release-011/public-macos-arm64-smoke/verification.json"
+    }
   },
   "ci_current": {
-    "databaseId": 43214308990,
-    "headSha": "c5f4c7467f8d3296ba282bd43168a05089b987ad",
+    "databaseId": 43368650962,
+    "headSha": "87df5cd70f9293c4585637b1eab6e00e37810097",
     "status": "completed",
     "conclusion": "success",
     "event": "push",
-    "url": "https://github.com/shubolab/opennavicat/actions/runs/43214308990",
-    "jobs": [
-      {
-        "name": "Real database TLS and SSH",
-        "status": "completed",
-        "conclusion": "success"
-      },
-      {
-        "name": "windows-amd64",
-        "status": "completed",
-        "conclusion": "success"
-      },
-      {
-        "name": "macos-amd64",
-        "status": "completed",
-        "conclusion": "success"
-      },
-      {
-        "name": "linux-arm64",
-        "status": "completed",
-        "conclusion": "success"
-      },
-      {
-        "name": "macos-arm64",
-        "status": "completed",
-        "conclusion": "success"
-      },
-      {
-        "name": "windows-arm64",
-        "status": "completed",
-        "conclusion": "success"
-      },
-      {
-        "name": "linux-amd64",
-        "status": "completed",
-        "conclusion": "success"
-      },
-      {
-        "name": "Publish complete six-target release",
-        "status": "completed",
-        "conclusion": "skipped"
-      }
-    ],
+    "ref": "v0.11.0",
+    "url": "https://github.com/shubolab/opennavicat/actions/runs/43368650962",
+    "jobs": {
+      "linux-amd64": "success",
+      "linux-arm64": "success",
+      "windows-amd64": "success",
+      "windows-arm64": "success",
+      "Real database TLS and SSH": "success",
+      "macos-amd64": "success",
+      "macos-arm64": "success",
+      "Publish complete six-target release": "success"
+    },
     "six_native_desktop_jobs_successful": 6,
     "security_successful": true,
-    "publisher": "skipped",
-    "new_public_release": false,
-    "artifacts_downloaded_or_independently_audited_this_resume": false,
-    "junit_counts_recomputed_this_resume": false,
-    "qualification_scope": "Exactc5f4c74 GitHub run status/job conclusions only; no renewed artifact, public-download, human or full-parity audit"
+    "publisher": "success",
+    "new_public_release": true,
+    "artifacts_downloaded_or_independently_audited_this_resume": true,
+    "junit_counts_recomputed_this_resume": true,
+    "qualification_scope": "Exact87df5cd formal six-native-target source/build/packaged/install/launch/uninstall/helper/protocol receipts and public installer bytes; full reference UI/function gates stay open"
   },
   "latest_reported_local_validation": {
-    "source": "2026-11-12-goal-resume.md and mongodb-validator-ui.md",
-    "source_checkpoint": "bcf91edf0e8c9d5a3d09cc2b6ac20a8d9d42b426",
-    "executed_this_resume": false,
+    "source_checkpoint": "87df5cd70f9293c4585637b1eab6e00e37810097",
+    "measurement_scope": "post-fix local application/test working tree before source87df commit; overlapping scopes not added",
+    "executed_this_resume": true,
     "full_source": {
-      "passed": 1821,
-      "conditionally_skipped": 563
+      "passed": 2051,
+      "conditionally_skipped": 590
     },
     "collection_runner": {
-      "passed": 290,
+      "passed": 498,
       "skipped": 0,
-      "owned_fixture_count": 8
+      "owned_fixture_count": 8,
+      "source_hashes_matched": 48,
+      "exact_ids_independently_absent": true
     },
-    "cocoa_collection_designer_passed": 34,
-    "cocoa_pipeline_passed": 14,
+    "native_cocoa": {
+      "passed": 56,
+      "skipped": 0
+    },
+    "mongodb_security": {
+      "passed": 24,
+      "skipped": 0
+    },
     "source_smoke": {
       "rows": 6,
       "columns": 4
@@ -234,18 +188,18 @@
   "latest_main_demo": {
     "receipt": "../assets/opennavicat-demo.json",
     "gif": "../assets/opennavicat-demo.gif",
-    "scope": "Currentmain development after public0.10; not a claim of all demonstrated features in the public installer",
-    "phases": 25,
-    "frames": 326,
-    "duration_seconds": 54.34,
-    "bytes": 1438344,
-    "sha256": "56d3f7add673e20c7e4e6caab5b9ee6b10d725223dab0129edcaaffb8127caa6",
+    "scope": "Actual0.11nativeCocoa isolated application workflow; UI unchanged by later budget/cancel repair",
+    "phases": 28,
+    "frames": 371,
+    "duration_seconds": 61.84,
+    "bytes": 1631603,
+    "sha256": "5f46313db93fbc3e1bd9b9cc6ffb8a0d89cda748b10c23e434ebf223582b2b4e",
     "gif_bytes_match_receipt_this_resume": true,
     "recorded_each_phase_privacy_frame_count_matches": true,
-    "prior_visual_privacy_review_reported": true,
-    "new_recording_this_resume": false,
-    "new_visual_privacy_review_this_resume": false,
-    "reference_screenshots_used": false
+    "new_recording_this_resume": true,
+    "new_visual_privacy_review_this_resume": true,
+    "reference_screenshots_used": false,
+    "single_gif_only": true
   },
   "current_implementation": {
     "embedded_index_editor": true,
@@ -270,21 +224,25 @@
     "untouched_mql_comments_preserved": true,
     "visual_explain_canvas": true,
     "nonprojectable_schema_raw_query_preservation": true,
-    "full_tools_or_ui_final_gates_closed": false
+    "full_tools_or_ui_final_gates_closed": false,
+    "saved_mongodb_pipeline_batch_jobs": true,
+    "batch_four_tabs_and_persistent_per_job_history": true,
+    "pipeline_positive_server_budget_preserved": true,
+    "window_startup_cancel_event_and_exact_marker_retry": true
   },
   "next_steps": [
-    "Observe actual pipeline automatic-task references and change-stream UI with fresh exact-owned fixtures before claiming behavior",
-    "Implement and verify observed complete workflows; retain safety, cancellation and lossless local-state contracts",
+    "Continue finite change-stream native UI/partial-error acceptance against AP18-10; source branch codex_mongodb_finite_stream is not in0.11",
+    "Finish helper-qualified fullsource and precise new stream protocol/security CI; do not borrow0.11 six-installer qualification",
+    "Keep stream previews and normal event presentation open after two owned reference crashes; do not reproduce crashes or invent continuouswatch applicability",
     "Qualify larger branched/sharded/replica Explain shapes and exact cost highlighting formula",
-    "Continue validator external conversion and unknown/root-schema combinations",
-    "Continue all remaining MongoDB and other driver, authentication, object, query, wizard, AI, model, BI, backup and automation gates",
-    "For the next usable release, require exact-source six-native-target build/install/smoke and complete installer/checksum verification; refresh the single generated demo when changed"
+    "Continue validator external conversion/unknown-root-schema and all remaining MongoDB/otherdriver/authentication/object/query/wizard/AI/model/BI/backup/automation gates",
+    "Every next usable milestone still requires six native installers and exact checksums; refresh the single actual app GIF when the demonstrated UI changes"
   ],
-  "new_reference_or_implementation_work_claimed_by_this_snapshot": false,
+  "new_reference_or_implementation_work_claimed_by_this_snapshot": true,
   "limits": [
-    "Public metadata and CI job conclusions were refreshed; no public asset bytes or CI installer artifacts were downloaded in this audit",
-    "Prior local counts and fixture cleanup retain their original provenance and are not new executions",
-    "Reference observation, source tests, CI, installer smoke, public asset checks and complete cross-platform parity remain separate gates"
+    "0.11 formal and public qualification is bound to87df5cd; nextbranch backend checks are unpublished and cannot borrow those installers",
+    "Local source/default skipped cases, owned protocol, native installers, public bytes and actual reference UI are separate evidence; overlapping scopes are not added",
+    "No complete database-tool or1:1UI gate was closed; Windows/Linux actual reference acceptance remains open"
   ],
   "current_resume_validation": {
     "baseline_sha": "c5f4c7467f8d3296ba282bd43168a05089b987ad",
@@ -314,17 +272,17 @@
     "overlapping_scopes_not_added": true
   },
   "current_work": {
-    "pipeline_safety_and_navigation": "implemented_scoped_tests_passed_not_released",
-    "batch_job_workflow": "implemented_owned_source_and_cocoa_checks_passed; installer_and_full_parity_gates_open",
-    "change_stream": "AP18-10 bounded_reference_observation_complete; runtime_and_full_ui_gates_open"
+    "pipeline_safety_and_navigation": "released0.11; fullparityopen",
+    "batch_job_workflow": "released0.11 savedMongoPipeline slice; other15categories/scheduler/SMTP/fullUIopen",
+    "change_stream": "unreleased codex_mongodb_finite_stream; ownedRS26zero-skip backend runner and separateTLS2zero-skip; normalUI/preview/platformgatesopen"
   },
   "candidate_release": {
     "version": "0.11.0",
-    "status": "local_budget_and_startup_cancellation_checks_passed_waiting_final_main_precheck",
-    "frozen_source_sha": null,
+    "status": "published_verified",
+    "frozen_source_sha": "87df5cd70f9293c4585637b1eab6e00e37810097",
     "six_target_ci_started": true,
-    "tag_created": false,
-    "public_release_created": false,
+    "tag_created": true,
+    "public_release_created": true,
     "final_local_source": {
       "passed": 2011,
       "skipped": 567,
@@ -374,7 +332,7 @@
       "reason": "subsequent_owned_wire_and_profiler_reproduction_found_positive_maxTimeMS_replaced_by_CSOT; final_fix_requires_new_source_and_run"
     },
     "pipeline_budget_fix": {
-      "status": "implemented_owned_wire_profile_tls_ssh_cold_client_and_window_startup_cancel_checks_passed",
+      "status": "released0.11; positive1_10_5000_wire_and_cold_and_window_cancel_regression_passed",
       "wire_receipt": "artifacts/pipeline-maxtime-fixed-wire-20261113/receipt.json",
       "security_receipt": "artifacts/pipeline-budget-security-final/verification.json",
       "positive_max_time_ms": [
@@ -418,6 +376,249 @@
       "skipped": 0,
       "seconds": 13.77,
       "receipt": "artifacts/release-011/budget-final-cocoa.xml"
+    },
+    "main_precheck_run": 43367059557,
+    "formal_run": 43368650962,
+    "formal_native_audit_passed": true,
+    "anonymous_public_eight_assets_verified": true
+  },
+  "resume_baseline": {
+    "published": {
+      "tag": "v0.10.0",
+      "source_sha": "711a458a873a96034f865d36f46d4919fce39359",
+      "draft": false,
+      "prerelease": true,
+      "published_at_utc": "2026-11-12T00:59:08Z",
+      "url": "https://github.com/shubolab/opennavicat/releases/tag/v0.10.0",
+      "native_installers": 6,
+      "public_assets": 8,
+      "metadata_rechecked_this_resume": true,
+      "all_asset_metadata_uploaded": true,
+      "asset_bytes_redownloaded_this_resume": false,
+      "asset_bytes_rehashed_this_resume": false,
+      "previous_anonymous_byte_audit_reported": true,
+      "previous_byte_audit_document": "../validation-0.10.md",
+      "formal_run": {
+        "databaseId": 43129758054,
+        "headSha": "711a458a873a96034f865d36f46d4919fce39359",
+        "status": "completed",
+        "conclusion": "success",
+        "event": "push",
+        "url": "https://github.com/shubolab/opennavicat/actions/runs/43129758054",
+        "jobs": [
+          {
+            "name": "Real database TLS and SSH",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "name": "linux-arm64",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "name": "macos-amd64",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "name": "windows-amd64",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "name": "linux-amd64",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "name": "windows-arm64",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "name": "macos-arm64",
+            "status": "completed",
+            "conclusion": "success"
+          },
+          {
+            "name": "Publish complete six-target release",
+            "status": "completed",
+            "conclusion": "success"
+          }
+        ]
+      },
+      "assets": [
+        {
+          "name": "build-manifests.json",
+          "bytes": 205707,
+          "digest": "sha256:f804330f329ae6925696aaf897560adbc53c3c7a1678feb05e1f72f68450ae28",
+          "state": "uploaded"
+        },
+        {
+          "name": "OpenNavicat-0.10.0-linux-amd64.deb",
+          "bytes": 76242660,
+          "digest": "sha256:63c31782d4292d4065425b009387755966c3273f56af4b24bfbdea5ae769462d",
+          "state": "uploaded"
+        },
+        {
+          "name": "OpenNavicat-0.10.0-linux-arm64.deb",
+          "bytes": 74932206,
+          "digest": "sha256:d4b21e8dce628946e0209269690c4ef86f2792921144df2744e44dc564d72c29",
+          "state": "uploaded"
+        },
+        {
+          "name": "OpenNavicat-0.10.0-macos-amd64.dmg",
+          "bytes": 50141816,
+          "digest": "sha256:3ecd9b5bcfba61bbf99909114be214bab0d81e75405e79fa4b61a6d791eb60a3",
+          "state": "uploaded"
+        },
+        {
+          "name": "OpenNavicat-0.10.0-macos-arm64.dmg",
+          "bytes": 49574732,
+          "digest": "sha256:eac5ad1c2c6822bfa6bb56199c48e8f1bdc47b9e906516894fad95e35484903b",
+          "state": "uploaded"
+        },
+        {
+          "name": "OpenNavicat-0.10.0-windows-amd64-setup.exe",
+          "bytes": 43580460,
+          "digest": "sha256:b27d34a6d4ca19ae769dd960ee47f0e40caf66cccb7062730d3af9e7216c2338",
+          "state": "uploaded"
+        },
+        {
+          "name": "OpenNavicat-0.10.0-windows-arm64-setup.exe",
+          "bytes": 34540723,
+          "digest": "sha256:550711108a109d4574d0570bb3c617049c39ecbee85ccb96366f6b6e4a454467",
+          "state": "uploaded"
+        },
+        {
+          "name": "SHA256SUMS",
+          "bytes": 622,
+          "digest": "sha256:1a6da5bbd46be3af21ef58b8dcfa82ef669a9f94d557a366fcd8fa961dfbbe81",
+          "state": "uploaded"
+        }
+      ]
+    },
+    "ci_current": {
+      "databaseId": 43214308990,
+      "headSha": "c5f4c7467f8d3296ba282bd43168a05089b987ad",
+      "status": "completed",
+      "conclusion": "success",
+      "event": "push",
+      "url": "https://github.com/shubolab/opennavicat/actions/runs/43214308990",
+      "jobs": [
+        {
+          "name": "Real database TLS and SSH",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "windows-amd64",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "macos-amd64",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "linux-arm64",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "macos-arm64",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "windows-arm64",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "linux-amd64",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Publish complete six-target release",
+          "status": "completed",
+          "conclusion": "skipped"
+        }
+      ],
+      "six_native_desktop_jobs_successful": 6,
+      "security_successful": true,
+      "publisher": "skipped",
+      "new_public_release": false,
+      "artifacts_downloaded_or_independently_audited_this_resume": false,
+      "junit_counts_recomputed_this_resume": false,
+      "qualification_scope": "Exactc5f4c74 GitHub run status/job conclusions only; no renewed artifact, public-download, human or full-parity audit"
+    },
+    "latest_reported_local_validation": {
+      "source": "2026-11-12-goal-resume.md and mongodb-validator-ui.md",
+      "source_checkpoint": "bcf91edf0e8c9d5a3d09cc2b6ac20a8d9d42b426",
+      "executed_this_resume": false,
+      "full_source": {
+        "passed": 1821,
+        "conditionally_skipped": 563
+      },
+      "collection_runner": {
+        "passed": 290,
+        "skipped": 0,
+        "owned_fixture_count": 8
+      },
+      "cocoa_collection_designer_passed": 34,
+      "cocoa_pipeline_passed": 14,
+      "source_smoke": {
+        "rows": 6,
+        "columns": 4
+      },
+      "overlapping_scopes_not_added": true
+    },
+    "latest_main_demo": {
+      "receipt": "../assets/opennavicat-demo.json",
+      "gif": "../assets/opennavicat-demo.gif",
+      "scope": "Currentmain development after public0.10; not a claim of all demonstrated features in the public installer",
+      "phases": 25,
+      "frames": 326,
+      "duration_seconds": 54.34,
+      "bytes": 1438344,
+      "sha256": "56d3f7add673e20c7e4e6caab5b9ee6b10d725223dab0129edcaaffb8127caa6",
+      "gif_bytes_match_receipt_this_resume": true,
+      "recorded_each_phase_privacy_frame_count_matches": true,
+      "prior_visual_privacy_review_reported": true,
+      "new_recording_this_resume": false,
+      "new_visual_privacy_review_this_resume": false,
+      "reference_screenshots_used": false
     }
+  },
+  "main_precheck": {
+    "run_id": 43367059557,
+    "source_sha": "87df5cd70f9293c4585637b1eab6e00e37810097",
+    "successful_jobs": 7,
+    "publisher": "skipped",
+    "independent_artifact_audit_passed": true,
+    "receipt": "artifacts/release-011/main-audit-43367059557/verification.json"
+  },
+  "next_unreleased_checkpoint": {
+    "branch": "codex_mongodb_finite_stream",
+    "base_source_sha": "87df5cd70f9293c4585637b1eab6e00e37810097",
+    "owned_rs_runner": {
+      "passed": 26,
+      "skipped": 0,
+      "receipt": "artifacts/finite-stream-runner-20261113/summary.json",
+      "exact_container_and_two_volumes_independently_absent": true,
+      "pure_contract_cases": 12,
+      "owned_replica_set_cases": 14
+    },
+    "stream_tls_transport": {
+      "passed": 2,
+      "skipped": 0,
+      "replica_set_event_acceptance": false
+    },
+    "ui_and_native_six_installer_acceptance_complete": false,
+    "reference_followup": "Run after wire event remains script+OK/time; stagePreview/PreviewAll each referencecrash after independent sample+stream; appquit and fixture/volumescleaned; followup docs in nextbranch"
   }
 }

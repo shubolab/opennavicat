@@ -45,6 +45,7 @@
 | S-M | [diagram.py](../opennavicat/ui/diagram.py) | 只读 metadata 关系图、布局和 PNG/SVG 输出。 |
 | V | [早期验证记录](validation.md)、`tests/` | 早期97/1及后续回归验证各自版本的实现；测试数量不等于参考UI或完整工具覆盖。 |
 | R03 | [0.3 原生安装与连接安全验证](validation-0.3.md)、[v0.3.0 Release](https://github.com/shubolab/opennavicat/releases/tag/v0.3.0) | 六个目标的原生安装/运行/卸载、架构及加密依赖检查，以及独立真实数据库 TLS/SSH 测试；不关闭任何完整工具或 1:1 UI 门禁。 |
+| R11 | [0.11验证与公开安装器](validation-0.11.md)、[v0.11.0 Release](https://github.com/shubolab/opennavicat/releases/tag/v0.11.0) | 87df5cd的正式tag8/8成功，六原生安装/运行/卸载、八个公开匿名下载字节及本机公开ARM64 DMG隔离smoke通过；仅saved MongoDB Pipeline Batch里程碑和预算/取消修复，不关闭完整工具、参考UI或三平台对齐门禁。 |
 
 旧16工具栏顺序仅为历史记录。新版已实际看到BI和信息/AI切换，连接入口也已变成新的选择窗口，不能继续将旧dropdown视为当前目标。九数据库族为 **MySQL、PostgreSQL、Oracle、SQLite、SQL Server、MariaDB、MongoDB、Snowflake、Redis**。L18-04展开的14供应商节点为Alibaba、Huawei、Tencent、Kingbase、PingCAP、HighGo、OceanBase、AWS、Fujitsu、Google、Microsoft、MongoAtlas、Oracle、RedisEnterprise；具体别名以root的新运行档为准，不从供应商名称推定协议兼容或认证支持。
 

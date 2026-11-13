@@ -1,9 +1,11 @@
-# Finite MongoDB change-stream backend: development checkpoint
+# Finite MongoDB change-stream: released milestone and open gates
 
-This 2026-11-13 checkpoint describes the development branch's internal finite
-stream backend. **The published v0.11.0 release does not contain it.** It is
-not a completed stream workspace, a new release acceptance record or closure of
-the UI/function gates in the [parity matrix](parity-matrix.md).
+This 2026-11-13 record describes the bounded backend and Qt text path shipped in
+[**v0.12.0 prerelease**](https://github.com/shubolab/opennavicat/releases/tag/v0.12.0),
+source `b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7`. The six native installers and
+eight public assets passed their formal-CI and anonymous-byte audits. The older
+v0.11.0 did not contain this path. Publication does not close the complete stream
+workspace or UI/function gates in the [parity matrix](parity-matrix.md).
 
 The reference basis is [AP18-10 and its follow-up](ui-reference-18-mongodb-pipeline.md#ap18-10-follow-up-event-presentation-and-preview-actions)
 and the later same-tab [AP18-11 observation](ui-reference-18-mongodb-pipeline.md#ap18-11-same-tab-run-presentation-and-busy-controls).
@@ -36,7 +38,7 @@ are rejected where a numeric limit is required. These are implementation
 bounds, not complete reference specifications or guarantees about server memory
 and execution work.
 
-An enabled `$changeStream` is required. The development branch's ordinary
+An enabled `$changeStream` is required. The released ordinary
 `execute_pipeline` entry routes enabled stream stages to this backend. A lone
 `$changeStreamSplitLargeEvent` without `$changeStream` is not a valid finite
 stream request. Server-invalid operator ordering or options still produce an
@@ -203,7 +205,7 @@ those volumes are not included in the independent-ID count. These are local
 working-tree measurements before the WIP commit, not six native installers,
 published behavior or complete reference acceptance.
 
-## 0.12 candidate Qt and Window checkpoint
+## 0.12 released Qt and Window checkpoint
 
 The later candidate implements the observed finite text path. Busy stream
 execution leaves two tabs (`管道`, `脚本预览`). Completion shows three tabs for
@@ -276,9 +278,17 @@ and sidecar checks; root rehashed all six installers. Both CI DMGs were created
 on their first attempt. Annotated tag `v0.12.0` now points exactly to `b6e1da4`;
 the formal push/tag run
 [43390347592](https://github.com/shubolab/opennavicat/actions/runs/43390347592)
-is in progress. No 0.12 public release or anonymous public-byte verification has
-completed. Formal rebuilt bytes must be audited separately, not assumed equal
-to the precheck; later documentation-only commits do not change tagged source.
+completed success **8/8**. Its independent 13-artifact/six-installer audit passed;
+all six formal installer hashes differ from the main precheck and were checked
+independently. v0.12.0 was published at **2026-11-13 08:17:20 UTC** as a
+non-draft prerelease. All eight public assets were anonymously downloaded and
+matched API size/digest, SHA256SUMS, merged manifests and exact formal CI bytes;
+an independent second check rehashed all eight. The public ARM64 DMG also passed
+an isolated native Cocoa 6×4/all-driver/crypto/native-JS smoke with bundled
+helper, read-only mount and final detach; no real profiles were accessed.
+Formal/public receipts are indexed in the [0.12 record](validation-0.12.md).
+Later documentation-only commits do not change tagged source or imply complete
+reference/tool/platform-human acceptance.
 
 The packaging-only repair passed **79 installer contracts / zero skips**, including
 11 new cases. Each command retains a 600-second timeout; at most three CREATE
@@ -289,7 +299,7 @@ read-only DMG mount and isolated install/launch/uninstall passed; all eight
 image directories are absent. CREATE succeeded first attempt, so this does not
 claim live busy recovery or Intel CI acceptance. UI/DB/recorder scopes retain
 their actual execution provenance and are rebound only through unchanged declared
-bytes. The main pre-tag six-installer audit passed; formal artifacts and public-download verification remain open.
+bytes. The main and formal six-installer audits and anonymous eight-public-asset verification passed; complete UI/tool/reference-human gates remain open.
 
 An initial parallel collection run ended in SIGSEGV; the separate fresh serial
 retry passed 507 cases with eight containers and sixteen volumes independently
@@ -314,3 +324,14 @@ supported refresh/resume recovery, remaining raw stage/options variants, other
 permissions/topologies and all three platforms' full reference UI acceptance
 remain open. No exact-source six-installer or published 0.12 qualification is
 claimed. The full [original parity scope](parity-matrix.md) remains unchanged.
+
+## Work after the 0.12 tag
+
+The reference-only AP18-12 document addition at a189508 does not change release
+source. Its per-observed-cursor update/default/updateLookup comparison is useful,
+but exhaustive initial-call cardinality remains unknown and overall results
+remain inconclusive. Independent-client typed BSON is not Navicat private BSON.
+The separate `codex_mongodb_stream_variants` branch at
+`94de386259a443fd8a2ce3e711ade58b93dfe58d` has local 19 Window and 46 backend
+checks; these are later branch evidence, not new v0.12-tag qualification or a
+claim that the complete variant/recovery/preview/platform gates have closed.

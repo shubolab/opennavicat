@@ -14,14 +14,14 @@ Python + Qt Widgets（PySide6），数据库连接、SQL 和结果均在本机�
 再运行两次已保存管线引用，查看批处理消息与持久历史，
 最后执行有限 change-stream Run，查看忙时状态、消息与输出。
 连接名、客户、邮箱、日期、订单、商品、BSON、SQL 和图像均由隔离演示工作区生成，
-不读取本机真实连接或业务数据库。单段 GIF 对应 **0.12.0 候选源码**的实际 Qt 界面，
+不读取本机真实连接或业务数据库。单段 GIF 对应 **0.12.0** 的实际 Qt 界面，
 31 个阶段、411 帧、68.5 秒；
-最新公开安装器为 **v0.11.0**；
+最新公开安装器为 **v0.12.0（预发布）**；
 SQLite 结构和 MongoDB 索引部分展示预览，集合选项、存储与排序规则实际保存并独立核验服务器配置后重新打开；
 聚合管线的阶段模板、选项、分阶段预览、脚本、Explain 和最终结果均由隔离 MongoDB 实际执行或返回。
 批处理使用两个独立会话真实执行，历史实际落盘，独立客户端确认源文档的精确 BSON 与集合 UUID 未变。
 有限 stream 通过独立生产者取得两个精确 BSON 事件，owner 完成游标清理；界面按实际参考显示脚本、状态和耗时。
-候选验证范围见 [0.12 验证记录](docs/validation-0.12.md)，尚不代表公开安装器已更新。
+录制与发布源码的兼容范围、六目标及公开下载验证见 [0.12 验证记录](docs/validation-0.12.md)。
 
 ![OpenNavicat 示例数据工作流演示](docs/assets/opennavicat-demo.gif)
 
@@ -33,32 +33,35 @@ SQLite 结构和 MongoDB 索引部分展示预览，集合选项、存储与排�
 **v0.11.0** 已发布，加入聚合管线批处理引用、独立会话串行执行、错误继续/跳过和持久历史，
 并修复管线脚本 BSON/参数、预览、连接树入口、正执行时限和启动取消。正式流水线8/8成功，
 六个原生安装器及校验和已核验，八个公开资产已匿名下载并与正式CI字节逐项核对。
+**v0.12.0** 已预发布，加入有限 change-stream Run、按实际参考切换的消息/输出页、当前页 Stop、
+Batch 边界状态和两处后台任务信号生命周期修复。正式流水线8/8成功；六个原生安装器、
+八个匿名公开下载及本机公开 ARM64 DMG 的隔离运行验证均通过。
 当前验证、复现 fixture 和剩余差距见 [持续开发快照](docs/snapshot/2026-11-13-goal-resume.md)、
-[0.11 验证记录](docs/validation-0.11.md)、
+[0.12 验证记录](docs/validation-0.12.md)、[0.11 验证记录](docs/validation-0.11.md)、
 [0.10 验证记录](docs/validation-0.10.md)、[集合存储页记录](docs/mongodb-collection-storage.md)和
 [验证器 UI 记录](docs/mongodb-validator-ui.md)。
 
-最新可用里程碑为 **v0.11.0**，提供三个操作系统、两种架构的六份安装包。
+最新可用里程碑为 **v0.12.0（预发布）**，提供三个操作系统、两种架构的六份安装包。
 现有 **SQLite、PostgreSQL、MySQL、MariaDB、SQL Server、Redis、MongoDB** 七种核心驱动，
 使用隔离数据库进行了真实协议、读写及界面集成验证。本版保留 Linux 历史连接及分组发现、
 MongoDB 六页索引设计器、随包提供的原生 JavaScript 查询，以及 BSON 网格/树、GridFS、
 Windows 连接候选发现、SQLite 独立索引/触发器设计和 macOS 历史连接自动加载。
 完整 Navicat Premium 能力和 1:1 界面仍在持续实现中，
-详细范围见 [功能路线图](docs/roadmap.md) 和 [0.11 验证记录](docs/validation-0.11.md)。
+详细范围见 [功能路线图](docs/roadmap.md) 和 [0.12 验证记录](docs/validation-0.12.md)。
 
 | 安装包 | amd64 / Intel、x64 | arm64 / Apple Silicon、Windows ARM |
 | --- | --- | --- |
-| macOS | [DMG](https://github.com/shubolab/opennavicat/releases/download/v0.11.0/OpenNavicat-0.11.0-macos-amd64.dmg) | [DMG](https://github.com/shubolab/opennavicat/releases/download/v0.11.0/OpenNavicat-0.11.0-macos-arm64.dmg) |
-| Windows | [Setup EXE](https://github.com/shubolab/opennavicat/releases/download/v0.11.0/OpenNavicat-0.11.0-windows-amd64-setup.exe) | [Setup EXE](https://github.com/shubolab/opennavicat/releases/download/v0.11.0/OpenNavicat-0.11.0-windows-arm64-setup.exe) |
-| Linux（Debian/Ubuntu） | [DEB](https://github.com/shubolab/opennavicat/releases/download/v0.11.0/OpenNavicat-0.11.0-linux-amd64.deb) | [DEB](https://github.com/shubolab/opennavicat/releases/download/v0.11.0/OpenNavicat-0.11.0-linux-arm64.deb) |
+| macOS | [DMG](https://github.com/shubolab/opennavicat/releases/download/v0.12.0/OpenNavicat-0.12.0-macos-amd64.dmg) | [DMG](https://github.com/shubolab/opennavicat/releases/download/v0.12.0/OpenNavicat-0.12.0-macos-arm64.dmg) |
+| Windows | [Setup EXE](https://github.com/shubolab/opennavicat/releases/download/v0.12.0/OpenNavicat-0.12.0-windows-amd64-setup.exe) | [Setup EXE](https://github.com/shubolab/opennavicat/releases/download/v0.12.0/OpenNavicat-0.12.0-windows-arm64-setup.exe) |
+| Linux（Debian/Ubuntu） | [DEB](https://github.com/shubolab/opennavicat/releases/download/v0.12.0/OpenNavicat-0.12.0-linux-amd64.deb) | [DEB](https://github.com/shubolab/opennavicat/releases/download/v0.12.0/OpenNavicat-0.12.0-linux-arm64.deb) |
 
-[SHA256SUMS](https://github.com/shubolab/opennavicat/releases/download/v0.11.0/SHA256SUMS)
-和 [构建与安装验证清单](https://github.com/shubolab/opennavicat/releases/download/v0.11.0/build-manifests.json)
+[SHA256SUMS](https://github.com/shubolab/opennavicat/releases/download/v0.12.0/SHA256SUMS)
+和 [构建与安装验证清单](https://github.com/shubolab/opennavicat/releases/download/v0.12.0/build-manifests.json)
 随版本发布。当前安装包没有发布者签名或 Apple 公证；Windows ARM64 安装引导器使用 x86，
 安装后的应用、Python、Qt 及原生库为 ARM64。实际系统验证范围和功能边界见
-[0.11 验证记录](docs/validation-0.11.md)。本版六个原生 CI 目标均实际完成测试、安装、运行和卸载，
-八个公开资产（六安装器、校验和及合并清单）已匿名下载并核对摘要。正式 `v0.11.0` tag run
-43368650962 为 8/8 job 成功，六安装器各自完成测试、打包、安装、启动和卸载。公开ARM64 DMG另在本机完成
+[0.12 验证记录](docs/validation-0.12.md)。本版六个原生 CI 目标均实际完成测试、安装、运行和卸载，
+八个公开资产（六安装器、校验和及合并清单）已匿名下载并核对摘要。正式 `v0.12.0` tag run
+43390347592 为 8/8 job 成功，六安装器各自完成测试、打包、安装、启动和卸载。公开ARM64 DMG另在本机完成
 原生Cocoa隔离6×4查询与全部驱动、加密、native-JS探针；完整参考UI和功能仍见矩阵。Linux DEB 基于 Ubuntu 24.04，
 要求 glibc 2.39 或更新版本，通过包管理器安装声明的 Qt 图形库及 Noto CJK 字体。
 0.5 公开版本另完成 macOS ARM64、干净 Ubuntu ARM64 XCB 及 Windows AMD64 RDP 的 6×4 示例查询，

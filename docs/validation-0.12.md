@@ -1,8 +1,10 @@
-# 0.12 候选验证记录
+# 0.12 预发布验证记录
 
-日期：2026-11-13，Asia/Shanghai。**0.12.0 尚未发布**。当前公开版本是
-[v0.11.0](https://github.com/shubolab/opennavicat/releases/tag/v0.11.0)，源码87df5cd；
-本分支的新功能不能借用该版本的六安装器或公开下载资格。
+日期：2026-11-13，Asia/Shanghai。[**v0.12.0预发布已公开**](https://github.com/shubolab/opennavicat/releases/tag/v0.12.0)，
+非draft、prerelease=true，发布时间**2026-11-13 16:17:20（北京时间；08:17:20 UTC）**。
+annotated tag精确绑定源码`b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7`。
+正式六安装器、校验和/manifest八资产已匿名下载核验；这不是完整Navicat UI/功能完成，goal继续active。
+[v0.11验证记录](validation-0.11.md)保留上一发布历史，不替代本版资格。
 
 ## 源码与实际参考
 
@@ -10,15 +12,16 @@
 本轮接入原生Qt stream消息/输出、当前页Stop、typed结果和结构化安全错误路由，以及Batch边界状态。
 版本元数据已调整0.12.0。有限UI/GIF检查点为`979d052`，`479a811`修复MainWindow调用点，
 `d9bee66`另修复实际ConnectionDialog Test按钮的TaskSignals生命周期；`1a6eeed`只修正测试子进程ready握手。
-当前完整候选源码已冻结为**`b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7`**：
-只新增限定`hdiutil CREATE Resource busy`的打包修复及合同测试，应用产品字节仍与`d9bee66`相同。
+本版完整发布源码冻结为**`b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7`**：
+只新增限定`hdiutil CREATE Resource busy`的打包修复及合同测试，应用源码字节仍与`d9bee66`相同。
 默认全源2197通过/636条件跳过，201份文件前后相同并逐Git blob匹配`b6e1da4`。
 main预检[43388068691](https://github.com/shubolab/opennavicat/actions/runs/43388068691)
 已**completed/success，7/7**（六原生目标＋DB security，publisher skipped），同SHA的独立安装器审查通过。
 据此已创建并推送annotated tag **v0.12.0**，精确指向`b6e1da4`。
 正式tag流水线[43390347592](https://github.com/shubolab/opennavicat/actions/runs/43390347592)
-为`push / v0.12.0 / b6e1da4`，当前**in_progress**。
-公开0.12尚未创建或匿名下载验证；正式重建产物须另行核验，不能预设与main预检bytes相同。后续doc-only提交不改tag源码。
+为`push / v0.12.0 / b6e1da4`，已**completed/success，8/8**。
+正式独立13 artifact/六安装器审查与八个公开资产匿名下载核验均通过；正式六SHA全部不同于main预检，
+下方正式表来自tag产物及公开实字节，不以main产物替代。后续doc-only提交不改tag源码。
 旧`1a6eeed`预检[43384833779](https://github.com/shubolab/opennavicat/actions/runs/43384833779)
 保持**completed/failure**：五原生目标和DB security成功，macOS amd64的hdiutil CREATE报Resource busy，
 未到安装后launch，publisher skipped；其2186本机结果不替代新打包源码资格。
@@ -33,7 +36,38 @@ main预检[43388068691](https://github.com/shubolab/opennavicat/actions/runs/433
 源、采样、数量和operator在忙时禁用；其它未执行的状态继续开放。
 原版退出与临时服务/卷清理有独立证据，原版遗留idle游标不作为期望产品行为复制。
 
-## 已通过的main预检与正式tag进度
+## 正式tag与公开资产审计
+
+正式run六个原生目标、安全专项、publisher共8个job全部成功。独立下载13个artifact并审查六安装器的实际字节、
+native/installed双manifest、sidecar、原生架构、构建/包内smoke/安装/launch/卸载收据。
+正式报告为`artifacts/release-012/tag-ci-audit-43390347592/verification.json`。
+两个正式CI DMG均首试create成功，不声称实际busy重试恢复。
+
+Root使用禁用curl配置、无Authorization的匿名下载取得全部八公开资产，全部HTTP200，
+API size/digest、SHA256SUMS、合并manifest及正式CI字节一致；public tag也核对到b6。
+回执为`artifacts/release-012/public-43390347592/verification.json`及`public-release-api.json`。
+
+| 正式目标 | 字节数 | 正式及公开安装器SHA256 |
+| --- | ---: | --- |
+| linux-amd64 | 76484848 | `8ffde47fd6d8b06043ab14bafdd584bc416ff19972acab331c84f3f803369da1` |
+| linux-arm64 | 75128210 | `21a07643ddae14e167e631225d2f80f632c660b5769ddf3b2570a939bf27cf89` |
+| macos-amd64 | 50457997 | `f08d3efb31e784ac1108e8d1528ffbed13b4785c4d504ddb7928fbf71be27988` |
+| macos-arm64 | 49791328 | `8a37a8abd41fcf949a54a042449dd00ad6f2f76cf8a0ec3ee40e3067e2975c17` |
+| windows-amd64 | 43802062 | `15b08840d89f7ad3ad247a6a1c37d8edecba524da38619e80c9556d536c3a662` |
+| windows-arm64 | 34745994 | `8151d2401e63cc003829c09e2f250fa702b02e3f4191d6738882fe8083ed2fa7` |
+
+`build-manifests.json`为205,707字节，SHA256 `d7dd33b72b4fbfccf29a2307c6ef7fa81758730271f0d6faeee71dc8c53e2f65`；
+`SHA256SUMS`为622字节，SHA256 `89cd9ac515f0161a8f807557ffae33a97445c4e17924f550561d0d67e7266c71`。
+正式数据库安全job的collection511、stream backend46、stream Window16、regular TLS24、stream TLS2与stopped13
+各自exact manifest/source hash/零skip及已有清理回执已审查，彼此不相加；这些stream执行范围在Linux amd64安全job，
+不能写成六平台stream功能或完整UI验收。CI服务清理按回执离线审查，不冒充本机重新inspect CI旧资源。
+
+匿名公开ARM64 DMG另经只读mount后的实际native Cocoa/arm64/version0.12隔离6×4 smoke，
+全部driver/crypto/native-JS探针、bundled helper及arm64 image架构通过；未读真实profile，最终detached且未挂载。
+证据为`artifacts/release-012/public-macos-arm64-smoke/{verification,runtime}.json`。
+这仍不是Windows/Linux人工参考或完整工具验收。
+
+## 已通过的main预检（历史，非正式资产字节）
 
 同SHA预检下载13个artifact；六个提取安装器的实际字节与native/installed两份manifest及sidecar SHA一致，
 原生架构及各目标CI的构建、smoke、安装/launch/卸载收据通过。Root另重新hash六安装器，
@@ -50,7 +84,7 @@ main预检[43388068691](https://github.com/shubolab/opennavicat/actions/runs/433
 | windows-amd64 | 43804383 | `ec2f50af307dd732b7f1365f2189a4047a79466e7f75ee6c537bfcebe264c6b5` |
 | windows-arm64 | 34749256 | `af9ca674b8e52bdb8449c6c5e2f67d4898b6dfb87603eef750403844485ff8f4` |
 
-正式run进行中，正式六目标产物、正式发布/八公开资产和匿名字节下载均待另行审查。
+后续正式run、独立正式产物及匿名八资产核验已完成，见上节；本表仍只表示历史main预检字节。
 源码/安装器CI不关闭完整参考UI、全部工具功能或三平台人工验收；goal仍active。
 
 ## 当前打包修复检查点（b6e1da4）
@@ -196,10 +230,10 @@ codeName或事件文档。有效aggregate位置必须对应本次冻结脚本；
 不进入普通结果网格、`last_rows`或未验收的事件导出。Batch不把部分/行/时间边界记为无条件成功，
 历史日志不读取新服务器errmsg。正常stream预览仍保留安全拒绝；参考Preview故障不被复制为期望行为。
 
-## 待完成的交付门禁
+## 已完成的里程碑交付与继续开放门禁
 
-旧main预检43384833779已失败；b6e1da4的main预检43388068691及独立六安装器审查已通过，tag已创建，正式run43390347592进行中；正式产物和公开下载仍待验。
-唯一GIF已刷新为实际0.12候选应用的31阶段、411帧、68.5秒，1,712,746字节，
+旧main预检43384833779已失败并保留历史；b6e1da4的main/正式CI、独立六安装器及匿名八公开资产核验已完成，v0.12.0预发布已公开。
+唯一0.12兼容实际应用GIF为31阶段、411帧、68.5秒，1,712,746字节，
 SHA256 `d1ec33dd15e03fa38e5749f0ff0efe01051e5b40116c12229a7113d847e33c9e`。
 31阶段均检查首/中/尾编码帧（93帧）并补充全尺寸视觉检查，自动逐帧guard为411/411；
 未见真实连接/路径/凭据/业务内容，无原版截图。录制使用新认证RS，实际取得2个typed事件、
@@ -207,9 +241,16 @@ SHA256 `d1ec33dd15e03fa38e5749f0ff0efe01051e5b40116c12229a7113d847e33c9e`。
 GIF与receipt已复制到`docs/assets/`，录制源码属于`979d052`：77份capture源逐Git blob匹配该提交。
 与当前产品`d9bee66`相比，演示运行源码仅Window/Dialog各两行ownership不同；pipeline widgets及recorder未变，
 新的两调用点79＋1专项验证修后工作流，兼容回执在`final-recorder-two-callers-compatibility-20261113T071112Z-222717.json`。
-`1a6eeed`额外只改测试握手。保留已审GIF，没有冒称当前SHA重新录制或旧capture哈希等于新Window/Dialog；仍不是公开0.12安装器验收。
-main预检的六目标源码/构建/包内smoke/安装运行卸载及独立审查已通过，正式tag已创建；
-正式run须另核其六安装器/校验和与八个公开资产的匿名下载，不能把预检产物资格当正式公开下载验收。
+`1a6eeed`额外只改测试握手。保留已审GIF，没有冒称当前SHA重新录制或旧capture哈希等于新Window/Dialog；GIF本身不替代安装器或完整参考验收。
+main与正式run各自六目标源码/构建/包内smoke/安装运行卸载、独立安装器及公开八资产均按本身字节完成验收，未把预检产物当正式公开资产。
 
 完整UI/工具功能、正常stream预览、全部选项/拓扑/权限、Windows/Linux实际参考和其它矩阵门禁
 继续开放。原版故障不取消这些要求；可用里程碑、源码或打包成功均不表示完整goal完成。
+
+## 发布后的独立开发边界
+
+AP18-12参考文档在doc-only提交a189508补充，不改变0.12 tag源码。后续variant工作位于独立分支
+`codex_mongodb_stream_variants`、源码`94de386259a443fd8a2ce3e711ade58b93dfe58d`；
+19项实际Window及46项backend只是该分支的本地后续范围，未进入b6/0.12安装器或正式资格。
+AP18-12的每个已观察游标有2/1/2语义对照，但完整初始调用基数未知、overall仍inconclusive；
+不据此关闭完整resume/image/拓扑/权限、成功Preview/Explain、有效事件呈现或Windows/Linux参考门禁。

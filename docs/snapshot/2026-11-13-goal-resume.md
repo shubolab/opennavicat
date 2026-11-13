@@ -6,6 +6,18 @@ Windows/Linux/macOS 的 1:1 保留 UI；本次同步、既有 Release 或下一�
 
 ## 当前已完成的发布与继续入口
 
+**最新公开版本为[v0.12.0预发布](https://github.com/shubolab/opennavicat/releases/tag/v0.12.0)**，非draft、prerelease=true，
+发布于2026-11-13 **16:17:20（北京时间；08:17:20 UTC）**，annotated tag精确绑定
+`b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7`。
+main预检43388068691为7/7，正式tag run43390347592为8/8；两轮各自13 artifact/六安装器已独立审查，
+正式六SHA全部不同于预检，未拿main字节代替正式产物。八个公开资产已匿名HTTP200下载，API size/digest、
+SUMS/合并manifest/正式CI字节全部匹配，并完成第二次独立八文件重hash。
+公开ARM64 DMG另已只读mount后实际native Cocoa/arm64/0.12隔离6×4及全部驱动/加密/native-JS探针，
+helper bundled/image arch通过、未读真实profile，最终detached且不再挂载。正式摘要与SHA见[0.12验证](../validation-0.12.md)。
+这是有限stream及生命周期/打包修复里程碑，完整UI、所有工具和三平台参考/人工门禁继续开放，goal仍active。
+
+### 历史0.11基线
+
 **v0.11.0已公开**，源码`87df5cd70f9293c4585637b1eab6e00e37810097`，
 北京时间2026-11-13 **13:07:54**。修复后的main预检
 [43367059557](https://github.com/shubolab/opennavicat/actions/runs/43367059557)7/7成功并独立审查六安装器后，
@@ -18,18 +30,21 @@ Windows/Linux/macOS 的 1:1 保留 UI；本次同步、既有 Release 或下一�
 本次发布加入已保存MongoDB Pipeline的四页Batch/独立会话/错误策略/持久历史，并修复正时限和启动取消。
 完整工具、其余Batch类别/Scheduler/SMTP、参考UI和三平台门禁仍开放，goal保持active。
 
-当前工作在独立工作树 `/Users/wangshubo/.codex/worktrees/mongodb-finite-stream/opennavicat`、
-分支`codex_mongodb_finite_stream`继续，候选元数据为**0.12.0，尚未发布**。
-公开安装器仍是0.11，不能借用其六目标资格。有限UI/GIF检查点为`979d052`，
+### 已发布0.12源码与后续入口
+
+本轮发布文档收尾在独立工作树 `/Users/wangshubo/.codex/worktrees/mongodb-finite-stream/opennavicat`、
+分支`codex_mongodb_finite_stream`，**0.12.0预发布已完成**，以其正式产物资格独立记录。有限UI/GIF检查点为`979d052`，
 MainWindow调用点修复为`479a811`，实际Dialog Test按钮同类局部修复为`d9bee66`，
-仅测试子进程ready握手修正为`1a6eeed`。当前限定DMG CREATE busy重试修复后的完整候选源码为
+仅测试子进程ready握手修正为`1a6eeed`。本版限定DMG CREATE busy重试修复后的完整发布源码为
 `b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7`；默认全源2197/636，201份文件前后相同并逐Git blob匹配，产品字节仍与`d9bee66`相同。
 main预检[43388068691](https://github.com/shubolab/opennavicat/actions/runs/43388068691)已completed/success 7/7、publisher skipped；
 13 artifact/六安装器的实际字节、native/installed双manifest、sidecar和原生/安装执行收据独立审查通过，root另重新hash六文件。
 两个CI DMG均首试create成功，不冒称实际busy恢复。主回执在`artifacts/release-012/main-ci-audit-43388068691/`。
 据此annotated tag **v0.12.0**已创建并push，精确绑定b6e1da4；正式run
-[43390347592](https://github.com/shubolab/opennavicat/actions/runs/43390347592)为push/v0.12.0，同SHA，当前in_progress。
-公开0.12仍未创建/匿名下载验收；正式重建bytes须另核，不能预设与main预检相同。doc-only提交不改tag源码。
+[43390347592](https://github.com/shubolab/opennavicat/actions/runs/43390347592)为push/v0.12.0，同SHA，已completed/success 8/8。
+正式与公开字节均已按各自真实产物验收，正式六SHA与main六SHA不同；doc-only提交不改tag源码。
+正式、公开及公开ARM smoke回执分别在`artifacts/release-012/tag-ci-audit-43390347592/`、
+`public-43390347592/`和`public-macos-arm64-smoke/`。
 旧`1a6eeed`的main预检[43384833779](https://github.com/shubolab/opennavicat/actions/runs/43384833779)
 保持completed/failure：五原生目标和DB security成功，macOS amd64在hdiutil CREATE报Resource busy，安装后launch未到、publisher skipped；不是六目标资格。
 修复前`f0b558e`预检[43383205925](https://github.com/shubolab/opennavicat/actions/runs/43383205925)
@@ -69,15 +84,18 @@ MainWindow单调用点修后2184/636、Cocoa98属于479历史；更早2180/636�
 `d9bee66`首轮默认全源另有2185通过/1失败/636跳过（慢child缺finalizer），原node独立重跑通过仍保留失败；
 受控file-gate证明ready在try前可绕过finalizer，移入try则执行且进程回收，不证明该次失败的具体时序。
 `1a6eeed`仅修测试握手、未改生产stop或放宽断言，独立offline10项及fresh默认全源均通过。
-唯一候选GIF已完成31阶段/411帧/68.5秒、1,712,746字节并复制到`docs/assets/`。
+唯一0.12兼容GIF已完成31阶段/411帧/68.5秒、1,712,746字节并复制到`docs/assets/`。
 31阶段首/中/尾93帧及额外全尺寸视觉检查完成，自动逐帧guard411/411通过；
 SHA256为`d1ec33dd15e03fa38e5749f0ff0efe01051e5b40116c12229a7113d847e33c9e`。
-录制为新认证RS的真实工作流，不渲染事件payload，不代表0.12已公开。
+录制为新认证RS的真实工作流，不渲染事件payload；演示本身不替代安装器或完整参考验收。
 GIF capture源码归属`979d052`，77份源逐Git blob核定；当前产品Window/Dialog各两行ownership不同，
 widgets及recorder未变并有两调用点后的新79＋1工作流资格，握手修正仅改测试。保留已审capture，不冒称当前SHA重新录制。
 
-当前继续顺序是推进已tag的b6e1da4正式run43390347592，独立核验该run六安装器及正式八资产/匿名公开下载，
-全部交付门禁通过才可决定里程碑发布；原始崩溃因果未知与完整资源门禁保持记录。
+本轮0.12交付已完成。下一开发入口为独立工作树`/Users/wangshubo/.codex/worktrees/mongodb-stream-variants/opennavicat`、
+分支`codex_mongodb_stream_variants`，源码`94de386259a443fd8a2ce3e711ade58b93dfe58d`；
+实际19 Window/46 backend仅为后续本地范围，不进入已发布b6或本版正式资格。
+AP18-12参考文档提交a189508保留已观察游标语义及整体inconclusive/初始调用基数未知边界；继续variant/完整工作流和全部矩阵门禁。
+原始崩溃因果未知与完整资源门禁仍保留。
 正常stream预览、完整partial/恢复/options/拓扑、其它工具与三平台参考门禁继续开放，goal保持active。
 
 以下各节保留本轮恢复、初次预检和修复的时间顺序；其中0.10仍为最新/0.11待发布等

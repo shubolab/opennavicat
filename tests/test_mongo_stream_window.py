@@ -811,3 +811,160 @@ def test_real_bad_limit_toolbar_run_preserves_bounded_server_error_and_aggregate
     assert len(aggregate) == 1 and aggregate[0]['pipeline'] == [{'$changeStream': {}}, {'$limit': 1}]
     assert not [command for command in wire.commands if 'getMore' in command]
     assert_no_cursors(qtbot, stream_window)
+
+
+@pytest.mark.parametrize('stream_window', ['read-role'], indirect=True)
+@pytest.mark.parametrize('mode,images_enabled,expected_count', [
+    pytest.param('when_available', False, 1, id='when-available-images-off'),
+    pytest.param('when_available', True, 2, id='when-available-images-on'),
+    pytest.param('pre_required', False, None, id='required-pre-image-off'),
+    pytest.param('pre_required', True, 2, id='required-pre-image-on'),
+    pytest.param('post_required', False, None, id='required-post-image-off'),
+    pytest.param('post_required', True, 2, id='required-post-image-on'),
+])
+def test_real_toolbar_image_modes_preserve_typed_results_and_missing_image_diagnostics(
+        qtbot, stream_window, monkeypatch, mode, images_enabled, expected_count):
+    window, config, native, executor, wire, errors, owners, _cancels = stream_window
+    session = window.sessions[config.id]
+    target_id, barrier_id = ObjectId(), 'generated_image_barrier_' + uuid.uuid4().hex
+    private = 'generated_image_payload_' + uuid.uuid4().hex
+    before = {'_id': target_id, 'counter': Int64(9007199254740993), 'd': Decimal128('1.250'),
+        'b': Binary(b'\x00\xff', 128), 't': Timestamp(9, 2), 'private': private,
+        'transient': 'generated-before', 'padding': 'generated ' * 128}
+    after = dict(before, counter=Int64(9007199254740994), d=Decimal128('2.500'))
+    del after['transient']
+    barrier = {'_id': barrier_id, 'barrier': True, 'private': private, 'target': target_id,
+        'n': Int64(9007199254740995), 'd': Decimal128('3.750'),
+        'b': Binary(b'\xff\x00', 128), 't': Timestamp(10, 3)}
+
+    def prepare():
+        database = native.get_database(config.database, codec_options=BSON_CODEC)
+        database.command({'collMod': 'sales', 'changeStreamPreAndPostImages': {'enabled': images_enabled}})
+        catalog, = database.list_collections(filter={'name': 'sales'})
+        assert catalog['options'].get('changeStreamPreAndPostImages', {}).get('enabled', False) is images_enabled
+        database.sales.insert_one(before)
+        return database.sales.find_one({'_id': 0}), catalog['info']['uuid']
+
+    control, collection_uuid = owned_read(qtbot, executor, prepare)
+    body = ({'fullDocumentBeforeChange': 'whenAvailable', 'fullDocument': 'whenAvailable'}
+        if mode == 'when_available' else {'fullDocumentBeforeChange': 'required'}
+        if mode == 'pre_required' else {'fullDocument': 'required'})
+    fields = (['fullDocumentBeforeChange', 'fullDocument'] if mode == 'when_available'
+        else ['fullDocumentBeforeChange'] if mode == 'pre_required' else ['fullDocument'])
+    update_match = {'operationType': 'update', 'documentKey._id': target_id}
+    if expected_count is not None:
+        update_match.update({field + '.counter': {'$exists': True} for field in fields})
+    match = {'$or': [update_match, {'operationType': 'insert', 'documentKey._id': barrier_id}]}
+    comment = 'generated_images_' + uuid.uuid4().hex
+    page = page_for(qtbot, stream_window)
+    page.load_definition(PipelineDefinition(source='sales', stages=[
+        PipelineStage('$changeStream', body), PipelineStage('$match', match)],
+        reference_options={'cursorBatchSize': 0, 'maxTimeMS': 5000, 'comment': comment}))
+    frozen, script = to_nagg(page.draft()), pipeline_script(page.draft())
+    failures, present = [], page.show_stream_error
+
+    def show_failure(error, captured_script):
+        assert threading.get_ident() == threading.main_thread().ident
+        assert captured_script == script
+        failures.append(error)
+        present(error, captured_script)
+
+    monkeypatch.setattr(page, 'show_stream_error', show_failure)
+    wire.commands.clear()
+
+    def produce():
+        deadline = time.monotonic() + 8
+        while time.monotonic() < deadline:
+            marker = session.cancellation_marker()
+            if isinstance(marker, dict) and marker.get('userComment') == comment:
+                with native.admin.aggregate([{'$currentOp': {'allUsers': True}},
+                    {'$match': {'active': True, 'ns': config.database + '.sales',
+                        'command.getMore': {'$exists': True}, 'command.comment': marker}}]) as cursor:
+                    if tuple(cursor):
+                        break
+            time.sleep(.005)
+        else:
+            raise AssertionError('The image-mode toolbar Run did not reach its exact owned getMore')
+        collection = native.get_database(config.database, codec_options=BSON_CODEC).get_collection(
+            'sales', write_concern=WriteConcern(w='majority', wtimeout=3000))
+        changed = collection.update_one({'_id': target_id, 'counter': before['counter']},
+            {'$set': {'counter': after['counter'], 'd': after['d']}, '$unset': {'transient': ''}})
+        assert changed.matched_count == changed.modified_count == 1
+        assert collection.insert_one(barrier).inserted_id == barrier_id
+        return marker
+
+    producer = executor.submit(produce)
+    button = page.toolbar.widgetForAction(page.run_action)
+    assert button.isVisible() and button.isEnabled()
+    with qtbot.waitSignal(page.runRequested, timeout=1000) as request:
+        qtbot.mouseClick(button, Qt.MouseButton.LeftButton)
+    assert to_nagg(request.args[0]) == frozen
+    finish(qtbot, window, page)
+    marker = producer.result(2)
+    result, text = page._last_stream_result, page.messages.toPlainText()
+    assert script in text and '> 查询时间:' in text and to_nagg(page.draft()) == frozen
+    assert page.tabs.currentWidget() is page.messages
+    if expected_count is None:
+        failure, = failures
+        image = 'pre-image' if mode == 'pre_required' else 'post-image'
+        assert isinstance(failure, StreamExecutionError) and failure.__cause__.code == 47
+        assert failure.error_phase == 'get_more' and failure.script_location is None
+        assert 'configured to require a ' + image in failure.server_message
+        assert 'but the ' + image + ' was not found for event:' in failure.server_message
+        assert '> [Error] ' + failure.server_message in text and '> OK' not in text
+        assert '\nat line 0, column 0\n' in text
+        assert failure.reference_sentinel.value == ('missing_required_pre_image'
+            if mode == 'pre_required' else 'missing_required_post_image')
+        assert result.completion == 'error' and not result.events
+        assert not page.tabs.isTabVisible(page.tabs.indexOf(page.stream_output))
+    else:
+        assert not failures and result.completion == 'empty_batch' and '> OK' in text
+        events = [canonical_loads(event.canonical_json) for event in result.events]
+        assert len(events) == expected_count
+        assert [event['operationType'] for event in events] == (
+            ['insert'] if expected_count == 1 else ['update', 'insert'])
+        assert BSON.encode(events[-1]['fullDocument'], codec_options=BSON_CODEC) == BSON.encode(barrier, codec_options=BSON_CODEC)
+        if images_enabled:
+            for field in fields:
+                expected = before if field == 'fullDocumentBeforeChange' else after
+                assert BSON.encode(events[0][field], codec_options=BSON_CODEC) == BSON.encode(expected, codec_options=BSON_CODEC)
+        assert all(BSON.encode(canonical_loads(event.canonical_json), codec_options=BSON_CODEC) == event.raw_bson
+                   for event in result.events)
+        # AP18-13's successful ON Output blank has unresolved cause. Do not
+        # rewrite or claim acceptance of that presentation in this regression.
+    assert private not in text and private not in page.stream_output.toPlainText()
+    assert config.password not in text
+    assert page.last_rows == [] and page.results.rowCount() == 0 and not page.export_action.isEnabled()
+    aggregates = [command for command in wire.commands if command.get('aggregate') == 'sales']
+    assert len(aggregates) == 1 and aggregates[0]['pipeline'] == [{'$changeStream': body}, {'$match': match}]
+    assert aggregates[0]['cursor']['batchSize'] == 0 and 0 < aggregates[0]['maxTimeMS'] <= 5000
+    assert aggregates[0]['comment'] == marker
+    assert any('getMore' in command for command in wire.commands)
+    assert all(command['comment'] == marker for command in wire.commands if 'getMore' in command)
+
+    followup = []
+
+    def read_original():
+        assert threading.get_ident() == owners[id(session)]
+        assert session.connection.admin.command('connectionStatus')['authInfo']['authenticatedUserRoles'] == [
+            {'role': 'read', 'db': config.database}]
+        return session.connection.get_database(config.database, codec_options=BSON_CODEC).sales.find_one({'_id': target_id})
+
+    window.submit(read_original, followup.append, label='Generated image-mode original-session read')
+    idle(qtbot, window)
+    assert window.sessions[config.id] is session and followup == [after] and not errors
+
+    def independent_readback():
+        database = native.get_database(config.database, codec_options=BSON_CODEC)
+        catalog, = database.list_collections(filter={'name': 'sales'})
+        assert catalog['info']['uuid'] == collection_uuid
+        assert catalog['options'].get('changeStreamPreAndPostImages', {}).get('enabled', False) is images_enabled
+        assert BSON.encode(database.sales.find_one({'_id': target_id}), codec_options=BSON_CODEC) == BSON.encode(after, codec_options=BSON_CODEC)
+        assert database.sales.find_one({'_id': barrier_id}) == barrier
+        assert database.sales.find_one({'_id': 0}) == control and database.sales.count_documents({}) == 3
+        with native.admin.aggregate([{'$currentOp': {'allUsers': True, 'idleCursors': True}},
+            {'$match': {'$or': [{'ns': config.database + '.sales'}, {'command.comment': marker},
+                {'cursor.originatingCommand.comment': marker}, {'originatingCommand.comment': marker}]}}]) as cursor:
+            assert not tuple(cursor)
+
+    owned_read(qtbot, executor, independent_readback)

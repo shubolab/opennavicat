@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from contextlib import contextmanager
 from collections.abc import Mapping
+from enum import Enum
 import re
 import time
 import unicodedata
@@ -22,6 +23,48 @@ MAX_STREAM_SECONDS = 120
 MAX_AWAIT_MS = 1000
 CLEANUP_SECONDS = 3
 MAX_STREAM_SERVER_MESSAGE_CHARS = 2048
+
+
+class StreamReferenceSentinel(Enum):
+    """Observed reference display markers, never real script coordinates."""
+
+    MISSING_REQUIRED_PRE_IMAGE = 'missing_required_pre_image'
+    MISSING_REQUIRED_POST_IMAGE = 'missing_required_post_image'
+
+    @property
+    def server_prefix(self):
+        if self is StreamReferenceSentinel.MISSING_REQUIRED_PRE_IMAGE:
+            description = 'pre-image for all update, delete and replace events, but the pre-image'
+        else:
+            description = 'post-image for all update events, but the post-image'
+        return ('Executor error during getMore :: caused by :: Change stream was configured to require a '
+                + description + ' was not found for event:')
+
+    def matches_message(self, message):
+        # AP18-13 exercised update events. Missing images on delete/replace
+        # have no qualified reference-position display contract yet.
+        return (is_bounded_stream_message(message) and message.startswith(self.server_prefix)
+                and re.match(r' \{operationType: "update"(?:,|\})',
+                             message[len(self.server_prefix):]) is not None)
+
+
+def _required_image_sentinel(error, documents, phase, message):
+    if (phase != 'get_more' or not isinstance(error, OperationFailure)
+            or type(error.code) is not int or error.code != 47
+            or not isinstance(error.details, Mapping)
+            or type(error.details.get('code')) is not int or error.details['code'] != 47
+            or not is_bounded_stream_message(message)):
+        return None
+    body = documents[0].get('$changeStream', {}) if documents else {}
+    if not isinstance(body, Mapping):
+        return None
+    for option, sentinel in (
+            ('fullDocumentBeforeChange', StreamReferenceSentinel.MISSING_REQUIRED_PRE_IMAGE),
+            ('fullDocument', StreamReferenceSentinel.MISSING_REQUIRED_POST_IMAGE)):
+        if (type(body.get(option)) is str and body[option] == 'required'
+                and sentinel.matches_message(message)):
+            return sentinel
+    return None
 
 
 def is_bounded_stream_message(value):
@@ -101,7 +144,8 @@ class FiniteStreamResult:
 
 class StreamExecutionError(DatabaseError):
     def __init__(self, message, result, *, authentication_required=False,
-                 server_message=None, error_phase=None, script_location=None):
+                 server_message=None, error_phase=None, script_location=None,
+                 reference_sentinel: StreamReferenceSentinel | None = None):
         super().__init__(message, authentication_required=authentication_required)
         self.partial_result = result
         is_server_error = isinstance(result, FiniteStreamResult) and result.completion == 'error' and not authentication_required
@@ -110,6 +154,10 @@ class StreamExecutionError(DatabaseError):
         self.script_location = script_location if (
             is_server_error and type(script_location) is tuple and len(script_location) == 2
             and all(type(value) is int and 1 <= value < 2**31 for value in script_location)) else None
+        self.reference_sentinel = reference_sentinel if (
+            self.error_phase == 'get_more' and self.server_message is not None and script_location is None
+            and type(reference_sentinel) is StreamReferenceSentinel
+            and reference_sentinel.matches_message(self.server_message)) else None
 
 
 def _marked_operations(control, marker):
@@ -311,10 +359,12 @@ def execute_finite_stream(session, database, definition, *, limit=MAX_STREAM_ROW
                 message = "Finite stream execution failed (server code " + str(error.code) + ")"
             else:
                 message = "Finite stream execution failed"
+            server_message = _server_message(error, session) if completion == 'error' else None
             raise StreamExecutionError(message, result(), authentication_required=(
                 isinstance(error, OperationFailure) and error.code == 18),
-                server_message=_server_message(error, session) if completion == 'error' else None,
-                error_phase=phase if isinstance(error, OperationFailure) else None) from error
+                server_message=server_message,
+                error_phase=phase if isinstance(error, OperationFailure) else None,
+                reference_sentinel=_required_image_sentinel(error, documents, phase, server_message)) from error
         finally:
             try:
                 if dispatched:

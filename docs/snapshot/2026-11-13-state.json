@@ -1919,14 +1919,118 @@
       "source_sha256": "9ec521d915acec8c4ad473a491886680f5e213d00c0154b15126d0b5123af8a7",
       "receipt_tree": "mongodb-stream-variants/opennavicat",
       "receipt": "artifacts/stream-variants/cleanup-order-fix/full-cleanup/summary.json",
+      "new_main_ci": {
+        "run_id": 43397137741,
+        "source_sha": "5fcf99ceb9cb2c66e350c24e2d64eb070cd093e5",
+        "status": "completed",
+        "conclusion": "failure",
+        "successful_native_jobs": 5,
+        "database_security_job": "success",
+        "failure_platform": "macos-amd64",
+        "failure_node": "tests/test_js_engine.py::test_actual_native_failure_limits_and_cleanup[new Promise(()=>{})-pending]",
+        "source_outcome": {
+          "passed": 2195,
+          "failed": 1,
+          "skipped": 640
+        },
+        "failure": "pending diagnostic expected under100ms total startup/execution budget; safe cancellation observed",
+        "strict_security_scopes_verified": {
+          "window": 19,
+          "backend": 46,
+          "tls": 24,
+          "stream_tls": 2,
+          "stopped_cleanup": 13,
+          "ordinary_collections": 511
+        },
+        "receipt_tree": "mongodb-finite-stream/opennavicat",
+        "receipt": "artifacts/stream-variants/main-ci-43397137741/failure-review.json",
+        "new_release": false
+      }
+    },
+    "js_semantic_test_budget_correction": {
+      "runtime_and_helper_unchanged": true,
+      "semantic_diagnostic_total_ms": 1500,
+      "infinite_loop_and_dedicated_watchdog_ms": 100,
+      "elapsed_cleanup_memory_assertions_retained": true,
+      "controlled_native_start_delay_ms": 180,
+      "old_pending_failed": true,
+      "new_pending_passed": true,
+      "all_delayed_error_cases_passed": 7,
+      "separate_native_vm_passed": 103,
+      "separate_vm_does_not_include_modified_module": true,
+      "original_ci_slow_phase_unknown": true,
+      "source_sha256": "c98081190bbc0ce791d497c53214fd712417b39803e53c9022c8ad25d383f71e",
+      "receipt_tree": "mongodb-stream-variants/opennavicat",
+      "receipt": "artifacts/stream-variants/js-diagnostic-budget-fix/root-independent-check.json",
       "new_main_ci": "required_after_push"
     }
   },
   "parallel_next_major_scope": {
     "audit": "Oracle and Snowflake dedicated adapters missing; existing nine-family chooser and SQLite seven-page designer must not be recreated",
     "selected_slice": "Oracle Basic password/service connection, actual reference settings/Test/save-reopen and dedicated owned schema/table/view browsing",
-    "reference_live_verified": false,
-    "fixture_and_six_native_dependency_research": "in_progress; official primary source declarations are not runtime acceptance",
+    "reference_live_verified": {
+      "observation": "OR18-01",
+      "platform": "macos",
+      "version": "18.0.5 build321",
+      "observed_form_pages": 5,
+      "named_character_set_options": 247,
+      "other_object_categories": 15,
+      "table_list_columns": 28,
+      "view_list_columns": 13,
+      "actual_basic_default_password_test_save_reopen": true,
+      "actual_own_schema_table_view_read": true,
+      "reference_private_numeric_types_not_observed": true,
+      "ora12545_warning_source": "unknown; On/schema/grid succeeded, server not changed",
+      "profile_off_sessions_zero_and_normal_quit_not_running": true,
+      "research_reference_containers_independently_absent": 3,
+      "data_volumes": 0,
+      "receipt_tree": "mongodb-finite-stream/opennavicat",
+      "receipt": "artifacts/next-oracle-reference-prep/actual-form-r1/verification.json"
+    },
+    "fixture_and_six_native_dependency_research": {
+      "driver": "oracledb26.1.0",
+      "cp313_all_six_target_wheels_available": true,
+      "distinct_wheel_payloads_verified": 5,
+      "native_extension_headers": 20,
+      "six_native_import_package_or_runtime_qualified": false,
+      "public_publisher_image": "gvenzl/oracle-free23.26.3-slim-faststart; notOracleofficial",
+      "native_service_arch": "linux-arm64",
+      "separate_thin_driver_cases": [
+        "Basic password/service with generatedschema/table/view",
+        "new ownedTNSalias",
+        "SID SYSTEM",
+        "password SYSDBA to CDB"
+      ],
+      "decimal_generic_fidelity": false,
+      "product_adapter_implemented": false,
+      "receipt_tree": "mongodb-finite-stream/opennavicat",
+      "cleanup_receipt": "artifacts/next-oracle-reference-prep/independent-cleanup.json"
+    },
     "full_scope_retained": true
+  },
+  "reference_image_modes_ap18_13": {
+    "reference_version": "18.0.5 build321",
+    "actual_runs": 6,
+    "when_available_off_on_cursor_events": [
+      1,
+      2
+    ],
+    "required_pre_on_events": 2,
+    "required_post_on_events": 2,
+    "required_pre_off_getmore_code": 47,
+    "required_post_off_getmore_code": 47,
+    "off_required_ui_sentinel": "at line0,column0; not a real script position",
+    "three_on_success_outputs": "visually blank; causeunknown; not generalized",
+    "first_wa_off_output": "own script+OK",
+    "initial_call_cardinality": "unknown",
+    "overall_collector": "inconclusive",
+    "private_reference_bson_observed": false,
+    "post_quit_idle_cursors": 4,
+    "post_quit_active": 0,
+    "normal_quit_not_running": true,
+    "owned_container_and_two_volumes_absent": true,
+    "receipt_tree": "mongodb-finite-stream/opennavicat",
+    "receipt": "artifacts/next-stream-image-reference/actual-r1/final-verification.json",
+    "full_parity_open": true
   }
 }

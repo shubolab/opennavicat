@@ -32,10 +32,26 @@ helper bundled/image arch通过、未读真实profile，最终detached且不再�
 此修正需新CI资格，原失败保留，不能沿用0.12 tag的六安装器证据；此变更不构成新发布。
 详见[variant验证记录](../validation-mongodb-stream-variants.md)。
 
-下一实际参考观察在自有pre/post-images OFF/ON集合上核whenAvailable/required，尚在进行中，不能预写成功。
-非Mongo源码审计确认Oracle/Snowflake适配器缺失，而九族/14供应商选择器及SQLite七页设计器已存在；
-正准备独立Oracle Basic连接/设置/专属catalog工作流的实际参考与owned fixture，不用通用SQL框代替缺失工具。
-Basic/TNS、service/SID、角色、OS认证及SSH等官方声明仍需18.0.5实际观察；三平台完整UI/功能门禁保持开放。
+修正推送`5fcf99c`的独立新CI[43397137741](https://github.com/shubolab/opennavicat/actions/runs/43397137741)
+仍失败：security和五native job成功，Mac Intel fullsource为2195通过/1失败/640条件跳过，
+pending Promise语义断言与100ms总启动/执行预算竞争；产品parent deadline确在spawn/bootstrap之前。
+受控180ms启动延迟使旧pending测试红、新测试绿，实际七错误case绿、独立VM103/0（不含修改模块）。
+只给语义诊断1500ms，infinite/独立watchdog100ms及elapsed/cleanup/memory断言不变，runtime不放宽。
+本轮security artifact另独立核Window19/backend46/TLS24/streamTLS2/cleanup13/collections511各scope exact source/node/cleanup，
+局部通过不算整轮成功；新测试源仍需新CI。两次失败与各自归因均保留。
+
+[AP18-13](../ui-reference-18-mongodb-pipeline.md#ap18-13-collection-images-offon-and-required-image-errors)
+已在自有pre/post-images OFF/ON集合完成六次实际Run：WA1/2、required-pre/post ON各2、OFF各getMore47＋0/0 UI哨兵。
+三个成功ON的Output像素确为空、原因unknown，首WA_OFF仍script+OK；完整initialcallunknown/overallinconclusive，
+normalQuit后4idle/0active，exactCID/两卷清除，不复制遗留行为。不是完整image/resume/Preview/三平台通过。
+
+非Mongo源码审计确认Oracle/Snowflake适配器缺失，而九族/14供应商选择器及SQLite七页设计器已存在。
+[OR18-01](../ui-reference-18-oracle.md)已实际枚举Oracle五页、Basic/TNS/service/SID/三角色/OS认证切换、
+247字符集、三SSH方法及Oracle工具栏/15Other和28/13对象列；仅Basic/Default密码路径实际Test成功、保存重开、
+新schema/table/view实际读出合成数据；一次ORA12545来源unknown，之后On及grid成功，不改server掩盖。
+只新profile Off/0后Quitfalse，三轮研究/参考CID逐ID清除、零数据卷、DB/secret bridge均端口拒绝。
+另行oracledb26.1六目标wheel实际字节/架构与ownedThin/service/TNS/SID/SYSDBA研究不等于OpenNavadapter或六平台执行。
+完整Oracle工具/设置/安全/事务/类型、Snowflake及三平台UI/功能门禁保持开放。
 
 ### 历史0.11基线
 

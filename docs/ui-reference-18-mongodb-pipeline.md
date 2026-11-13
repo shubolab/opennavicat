@@ -661,3 +661,124 @@ its release evidence. `fullDocumentBeforeChange`, `whenAvailable`/`required`
 image modes, resume persistence/recovery, exhaustive request cardinality,
 negative permission cases, other topologies, successful Preview/Explain and
 Windows/Linux reference acceptance remain open.
+
+## AP18-13 Collection images OFF/ON and required-image errors
+
+On 2026-11-13, reference **18.0.5 build 321** was observed through CUA with
+another new native ARM64 MongoDB **8.0.34** authenticated single-member replica
+set. A new generated profile used a SCRAM-SHA-256 user whose only role was
+`read` on this generated database; password saving remained unchecked. Existing
+profiles and databases were not opened or edited. The reference's connection
+control still showed `Standalone`, so this is not topology-discovery acceptance.
+
+The preparation followed the official MongoDB 8
+[`$changeStream` option documentation](https://www.mongodb.com/docs/v8.0/reference/operator/aggregation/changestream/)
+and [collection image enablement documentation](https://www.mongodb.com/docs/v8.0/reference/command/collmod/).
+Six separate generated source collections were prepared on one connection and
+port. Their actual catalog records were saved before and after setup: ON
+collections reported `changeStreamPreAndPostImages.enabled: true`; OFF
+collections omitted that option after creation with `enabled: false`. Only
+these generated collections were configured. No cluster-wide image-retention
+parameter was changed. These fresh tests do not cover expired images.
+
+One unsaved Pipeline tab was reused. Before each actual graph-toolbar Run,
+Script Preview was checked for that case's exact source, stream body, match,
+unique comment, `cursor.batchSize: 0` and `maxTimeMS: 5000`. A raw-editor edit
+that still left its Help template in Script Preview was corrected before Run;
+no execution was attributed to an unverified editor value. Stage Preview,
+Preview All and Explain were not executed, and the known Preview crashes were
+not replayed.
+
+As in AP18-12, an independent producer waited for this case's exact namespace,
+comment and active reference `getMore`, then made one majority-acknowledged
+update and a separate ordered barrier insert. Every match allowed that unique
+barrier insert. The update branches and actual observations were:
+
+| Case | Collection images | `$changeStream` body | Update branch of `$match` | Exact observed cursor outcome | Stable Messages |
+| --- | --- | --- | --- | --- | --- |
+| WA_OFF | OFF | Both `fullDocumentBeforeChange` and `fullDocument`: `"whenAvailable"` | Require both image documents' `counter` fields to exist | `getMore` returns **1, 0**: **1** event | `> OK`, **1.034 s** |
+| WA_ON | ON | Same as WA_OFF | Same joint field-presence condition | **1, 1, 0**: **2** events | `> OK`, **1.038 s** |
+| PRE_REQ_OFF | OFF | `{fullDocumentBeforeChange: "required"}` | Any update | `getMore` **error 47**, missing pre-image | `[Error]`, **0.036 s** |
+| PRE_REQ_ON | ON | Same as PRE_REQ_OFF | Require `fullDocumentBeforeChange.counter` | **1, 1, 0**: **2** events | `> OK`, **1.037 s** |
+| POST_REQ_OFF | OFF | `{fullDocument: "required"}` | Any update | `getMore` **error 47**, missing post-image | `[Error]`, **0.023 s** |
+| POST_REQ_ON | ON | Same as POST_REQ_OFF | Require `fullDocument.counter` | **1, 1, 0**: **2** events | `> OK`, **1.038 s** |
+
+For each observed cursor, the retained server origin matched the checked source,
+comment and complete pipeline. Each successful cursor reached an empty
+continuation batch with no active `getMore`. WA_OFF demonstrates that its update
+did not satisfy **simultaneous** pre- and post-image field presence; it does not
+individually distinguish either field's absence from a null value. WA_ON and
+the ON required-image cases retained the update and barrier through their
+stated field-presence predicates. This is a filter/cursor observation, not a
+capture of Navicat's private event documents or their BSON representation.
+
+Both OFF required-image failures had a correlated `getMore` error record and
+an independently verified update and barrier. Their error records did not
+retain `nreturned`; no numeric returned-event count is inferred from that
+missing field. Stable Messages contained the correct current script, the server
+message describing the corresponding missing pre-image or post-image, then a
+separate line **`at line 0, column 0`**, followed by the elapsed time. The zero
+coordinates are an **observed UI sentinel**, not evidence of a real script
+location or a one-based source mapping. This observation applies to these two
+`getMore` code-47 cases; it is not generalized to other continuation errors.
+Generated namespaces and server event identifiers in the diagnostics are
+omitted from this document.
+
+All four successful Runs exposed `管道`, `脚本预览`, `消息` and `输出`.
+The first successful Run, WA_OFF, showed its own script, OK and time when Output
+was explicitly selected. For **WA_ON, PRE_REQ_ON and POST_REQ_ON**, the stable
+Messages page showed that case's own script, OK and time, while explicitly
+selected Output was **visually blank** in the saved screenshots and had an empty
+AX text entry. WA_ON was selected again after confirming its current Messages;
+Output remained blank. These are separate observed states. Their cause and
+relationship to options, result count or repeated execution are unknown; no
+extra Run was made to force a preferred presentation. The two OFF error cases
+had only `管道`, `脚本预览` and `消息`, without Output. No event grid was observed.
+Earlier AP18-11/AP18-12 Output observations retain their original state and
+scope. Initial reads containing a preceding Run's script/time were excluded
+from the stable current-case evidence.
+
+A separate unfiltered default observer confirmed the actual ordered update and
+barrier in every case. Its raw BSON roundtripped exactly through Canonical
+Extended JSON; a new majority read verified the expected Int64, Decimal128,
+Binary, Timestamp and ObjectId data and unchanged control data. Separate
+headless controller qualification also checked the ON image documents as BSON.
+All such payload checks belong to **independent controlled clients**, not to
+Navicat's private payload or a typed-data display in its UI.
+
+Profiler/currentOp records again did not provide separate initial-aggregate
+profiles. One originating cursor was observed per case, but an aggregate
+closed before `getMore` could remain unobserved. Complete initial-call
+cardinality therefore stays **unknown**, and every overall collector result
+stays **inconclusive**. Successful per-cursor semantics and the two correlated
+server-error outcomes are recorded as separate bounded findings. Extra command
+and origin records were preserved before classification rather than removed to
+obtain a desired count. No no-retry or automatic-resume conclusion follows.
+
+The unsaved tab was closed with `不保存`, leaving zero generated Pipeline
+objects. Only the new generated profile was disconnected and observed `Off`.
+Normal Quit completed; application inventory confirmed **not running**, followed
+immediately by the CUA completion summary. Exact post-Quit checkpoints still
+found one idle reference cursor for each successful case: **four idle cursors
+and no active operation** in total. Neither error case retained a cursor. This
+is not a reference cursor-release guarantee or desired retention behavior to
+copy. The exact owned container and its two exclusive anonymous volumes were
+then removed and independently inspected as absent.
+
+AP18-13 maps the private actual observation `PROVISIONAL-IMAGES-01` to this
+custom CUA observation ID; it is not a REA Evidence ID. The new controller's
+source hashes matched before and after the actual group. Its separate six-case
+headless qualification is tooling evidence, not six additional reference Runs.
+The earlier catalog-shape preparation failure remains retained with its own
+cleanup and is not relabelled as a successful observation. Raw screenshots,
+profiler records, generated scripts/data and credentials remain excluded from
+tracked documentation and application packages.
+
+This reference addition changes no released runtime or installer. Image-mode
+busy/Stop behavior was not separately exercised here. Individual unavailable
+image field values, retention expiry, concurrent/deleted-image behavior,
+invalidation and broader resume recovery, permission failures, other
+topologies, successful Preview/Explain and Windows/Linux acceptance remain
+open. The blank Output states need a separate narrow diagnosis before changing
+presentation behavior; the two zero-position error sentinels do not justify
+inventing a valid script location.

@@ -1,15 +1,16 @@
-# 0.11 候选验证记录
+# 0.11 验证记录
 
-日期：2026-11-13，Asia/Shanghai。**0.11.0 尚未发布，最终源码、六目标 CI、正式 tag 和公开资产验收均待完成。**
-当前公开安装器仍为 [v0.10.0](https://github.com/shubolab/opennavicat/releases/tag/v0.10.0)。
-本文记录已经执行的局部验证及其归属，不能用这些结果预先替代最终候选的原生安装器门禁。
+日期：2026-11-13，Asia/Shanghai。**[v0.11.0](https://github.com/shubolab/opennavicat/releases/tag/v0.11.0)
+已于北京时间13:07:54公开发布为prerelease**，源码`87df5cd70f9293c4585637b1eab6e00e37810097`。
+正式tag流水线8/8成功，六安装器、八个匿名公开下载资产及本机公开ARM64 DMG的Cocoa smoke均已通过；见末节。
+本文保留开发、初次预检失败归因及修复后的证据归属。完整参考UI和数据库工具门禁仍开放。
 
 ## 候选范围与源码归属
 
 本轮从远端 `main` **`c5f4c7467f8d3296ba282bd43168a05089b987ad`** 恢复，
 随后提交 **`3bc020f`** 修复管线脚本、预览安全和连接树导航。
 Batch模型/运行层已提交为`9a8ce1a`，Qt、Store/历史与主窗口整合为`f45b7e4`。
-包版本元数据已调整为 **0.11.0**，最终候选还包含本版实际GIF和录制扩展；六目标按后续冻结SHA独立验证。
+包版本元数据为 **0.11.0**，最终冻结源码87df5cd还包含本版实际GIF、录制扩展及预算/取消修复；六目标按该SHA独立验证。
 
 0.10 公开源码之后已经进入 main 的集合行内索引、结构化排序规则/152项 locale、集合选项、
 可视管线、`.nagg`、Options 和视觉 Explain 工作片段也属于本候选的继承范围。
@@ -82,7 +83,7 @@ AU18 尚未核实原版 Batch 的取消动作；当前取消合同是已测试�
 | 真实 Batch MainWindow | **3 passed，零跳过，7.22秒** | 一份全新、认证、loopback、原生 ARM64 MongoDB 8.0.34 fixture；单独完整 ID 检查确认已不存在。 |
 | Batch整合工作树全源 | **1986 passed / 566条件跳过，零失败/错误，81.60秒** | 测量早于最终0.11元数据及下一轮录制扩展；条件跳过不算真实服务，不能写成最终冻结源码资格。 |
 | 本轮完整集合 runner | **458 passed / 0 skipped，零失败/错误，52.91秒** | 8份新 exact-owned、原生ARM64 MongoDB 8.0.34 fixture；完整ID独立检查均不存在，runner所列源码哈希匹配该次工作树。 |
-| 本版 GIF | **已完成录制和隐私审核** | 28阶段、371帧、61.84秒，详见末节；六安装器与正式发布仍待完成。 |
+| 本版 GIF | **已完成录制和隐私审核** | 28阶段、371帧、61.84秒，详见下文；六安装器与正式发布另见末节。 |
 
 三项真实主窗口用例分别验证：
 
@@ -108,13 +109,13 @@ Batch整合全源证据为 `artifacts/resume-20261113/batch-full-source.xml`，
 
 ## 0.11 发布门禁与剩余范围
 
-Native Cocoa和新单GIF的实际结果见末节；最终冻结SHA与对应的原生安装器资格仍待CI补齐。
+Native Cocoa和新单GIF的实际结果见下文；最终冻结SHA与原生安装器资格已在末节补齐。
 版本元数据、发布说明和实际演示必须与最终里程碑一致；旧的25阶段演示不充当新增 Batch 功能实录。
 
 六原生目标 **Windows/Linux/macOS × amd64/arm64** 的首次预检已完成，具体归属及未通过发布门禁的原因见下节；
-修复后最终源码的构建、包内 smoke、真实安装/运行/卸载和独立资产审查仍需重新取得。
+修复后最终源码的构建、包内 smoke、真实安装/运行/卸载和独立资产审查已按新main预检及正式tag重新取得，详见末节。
 Windows EXE、Linux DEB、macOS DMG 各两架构全部就绪并核对摘要后才可正式发布。
-随后仍需核对 `SHA256SUMS`、`build-manifests.json` 和八个公开资产的实际匿名下载字节。
+`SHA256SUMS`、`build-manifests.json` 和八个公开资产的实际匿名下载字节也已按正式tag另行核对。
 现有分发尚无发布者签名或 Apple 公证；Windows ARM64 安装引导器为x86，应用及原生依赖仍须为ARM64，不能用模拟x64替代。
 
 当前只覆盖16种 Batch 类别中的已保存 MongoDB Pipeline 片段。
@@ -197,4 +198,51 @@ Explain内层不再携带该正限制。1毫秒真实出现服务器code50，且
 runner首次声明无参数化后缀的新增case被严格清单检查拒绝，未进入数据库执行；
 保留 `budget-final-collections/` 失败记录，改为preview/run/explain三个明确case后在新r2目录通过，未弱化校验。
 本轮执行预算/取消修复没有改变所示控件或演示工作流，保留前述已审查的28阶段唯一真实GIF。
-新六目标CI、安装器独立字节审查、正式tag和公开下载资格仍须绑定后续冻结SHA，不能借用4111d33结果。
+后续六目标CI、安装器独立字节审查、正式tag和公开下载均已绑定新冻结87df5cd，不能借用4111d33结果；见下节。
+
+## 正式0.11发布、六安装器与公开字节
+
+修复后 `87df5cd70f9293c4585637b1eab6e00e37810097` 已提交、推送并快进合入main。
+[main预检43367059557](https://github.com/shubolab/opennavicat/actions/runs/43367059557) **7/7成功**，
+13份产物独立下载、六个实际安装器、两份manifest、sidecar、原生映像和helper链核验通过后，
+才对同一源码创建 `v0.11.0`。
+[正式tag43368650962](https://github.com/shubolab/opennavicat/actions/runs/43368650962) **8/8成功**，
+六个目标均在自己的OS/架构构建，包内smoke及真实安装/启动/卸载通过；安全专项和发布任务成功。
+正式产物另在全新目录审查，没有用main安装器摘要替代正式tag字节。
+
+| 原生目标 | 默认源码通过 / 条件跳过 | 正式安装器字节 | SHA256 |
+| --- | --- | ---: | --- |
+| linux-amd64 | 2032 / 591 | 76,479,582 | `c330f4e145d61730fbfe797afef1d6c4acfbf1bea48494c20e3ffb422c9f1b9b` |
+| linux-arm64 | 2032 / 591 | 75,119,980 | `c653f9d89edc7133375b1810f85842f3395af9453e9410bbb63dde438d098982` |
+| macos-amd64 | 2050 / 591 | 50,440,632 | `c4b2c6f4d180f913dc45e4d22cf3b159338bed2bb09231d0262fe66ff19884e8` |
+| macos-arm64 | 2050 / 591 | 49,775,097 | `4de99c14fa3000ce5f0ced288f6e80ddd1f92061c21cf87feb796864d0ac20e8` |
+| windows-amd64 | 1943 / 716 | 43,769,396 | `b41c083c6c6b6363f26b5f549da47c40c8da3ed1ea79da51be3f2ed8e721e6d4` |
+| windows-arm64 | 1943 / 716 | 34,715,740 | `63d607d0331899c305c5d0466a163fe619224253a34a8f25e8e09829b9835ea2` |
+
+正式tag的集合/管线/Batch精确声明runner为 **498 passed / zero skips**，
+8份owned原生fixture的清理及48项源码哈希匹配该SHA。实际native JS VM/Qt、
+JS/Mongo协议及TLS/SSH等分项按各自精确scope核验；默认源码条件跳过不算实际服务验收。
+source/build/processed/frozen/installed helper的架构、源码摘要、固定pin和运行探针均分别核对。
+
+Release于 **2026-11-13 05:07:54 UTC / 北京时间13:07:54** 公开，非draft、prerelease。
+六安装器及 `SHA256SUMS`、`build-manifests.json` 共八资产均用不带Authorization、
+禁用curl配置的匿名请求实际下载，大小、GitHub digest、校验文件、合并完整manifest与正式CI
+六安装器字节逐项一致；公开annotated tag也解析到87df5cd。
+两份DMG的helper字节另从只读挂载实际提取，审查挂载均确认卸载。
+
+公开macOS ARM64 DMG另在本机只读挂载并直接执行实际app的 `--smoke-test`，
+原生Cocoa隔离样例返回 **6行×4列**，版本0.11.0、Darwin/arm64和全部驱动、
+加密及随包native-JS探针通过；没有读取参考profile或用户工作区，完成后DMG确认卸载。
+这不替代完整业务工作流或参考UI对照。
+
+私有审计回执（ignored，不随clone或安装包分发）：
+
+- `artifacts/release-011/main-audit-43367059557/{verification,independent-audit-check}.json`
+- `artifacts/release-011/tag-audit-43368650962/verification.json`
+- `artifacts/release-011/public-43368650962/{verification,independent-public-check}.json`
+- `artifacts/release-011/public-macos-arm64-smoke/{verification,runtime}.json`
+
+本版只交付上述已实现里程碑，完整工具、1:1 UI和Windows/Linux实际参考等门禁继续开放。
+后续 `codex_mongodb_finite_stream` 的后端26项（12纯合同、14真实RS）及独立TLS/SSH两项属于
+**未发布开发分支**，不在0.11安装器中，也不借用本版六安装器资格。
+本里程碑发布后完整goal继续active。

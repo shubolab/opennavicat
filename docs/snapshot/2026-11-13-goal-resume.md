@@ -4,6 +4,31 @@
 Windows/Linux/macOS 的 1:1 保留 UI；本次同步、既有 Release 或下一个里程碑均不表示完成。
 全部门禁继续以 [parity matrix](../parity-matrix.md) 为准。
 
+## 当前已完成的发布与继续入口
+
+**v0.11.0已公开**，源码`87df5cd70f9293c4585637b1eab6e00e37810097`，
+北京时间2026-11-13 **13:07:54**。修复后的main预检
+[43367059557](https://github.com/shubolab/opennavicat/actions/runs/43367059557)7/7成功并独立审查六安装器后，
+才创建正式tag；[43368650962](https://github.com/shubolab/opennavicat/actions/runs/43368650962)8/8成功。
+八个公开资产已匿名下载，GitHub大小/digest、SHA256SUMS、合并manifest及正式CI六个实际安装器字节一致。
+公开ARM64 DMG另完成本机原生Cocoa隔离6×4查询和全部驱动/加密/native-JS探针，未读真实profile，挂载已卸载。
+正式摘要、证据限制和私有回执索引见 [0.11验证记录](../validation-0.11.md)。
+
+唯一真实GIF已更新为0.11的28阶段、371帧、61.84秒，逐阶段隐私审核通过。
+本次发布加入已保存MongoDB Pipeline的四页Batch/独立会话/错误策略/持久历史，并修复正时限和启动取消。
+完整工具、其余Batch类别/Scheduler/SMTP、参考UI和三平台门禁仍开放，goal保持active。
+
+下一条工作已在独立工作树 `/Users/wangshubo/.codex/worktrees/mongodb-finite-stream/opennavicat`、
+分支`codex_mongodb_finite_stream`继续：有限stream后端的独立认证RS runner26项零跳过
+（12纯合同、14真实RS）、独立TLS/SSH transport两项零跳过，临时服务及卷均确认清理；
+正常UI/partial错误呈现、Preview和平台验收仍开放，尚未提交为可用发布。
+参考后续实测已确认Run实际事件wire后仅显示script+OK/time；阶段Preview和PreviewAll各自
+独立sample后运行stream均出现一次原版崩溃。原版已正常退出，自有fixture及两卷逐ID清理，
+正常预览门禁保留；完整观察文档位于该新分支，不把generic网格或参考故障当UI对齐。
+
+以下各节保留本轮恢复、初次预检和修复的时间顺序；其中0.10仍为最新/0.11待发布等
+**恢复时描述已被本节及新state覆盖**，不能重复当作当前状态。
+
 ## 已核对的恢复基线
 
 - 远端：`git@github.com:shubolab/opennavicat.git`。
@@ -21,7 +46,7 @@ Windows/Linux/macOS 的 1:1 保留 UI；本次同步、既有 Release 或下一�
 `public_release_created=false` 均不能作为当前状态。新的机器索引是
 [2026-11-13-state.json](2026-11-13-state.json)；旧文件保留历史，不把其重叠测试数量相加。
 
-## 公开版本与当前 main 分别核实
+## 恢复时的公开版本与main核实（历史起点）
 
 最新公开版本仍为 [v0.10.0](https://github.com/shubolab/opennavicat/releases/tag/v0.10.0)，
 本轮 GitHub 元数据核对为非 draft、prerelease，发布于 **2026-11-12 08:59:08（北京时间）**。

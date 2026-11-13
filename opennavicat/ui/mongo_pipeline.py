@@ -28,7 +28,7 @@ from opennavicat.mongodb_pipeline import (
 )
 from opennavicat.mongodb_session import BSON_CODEC, canonical_dumps, canonical_loads
 from opennavicat.mongodb_pipeline_stream import (
-    FiniteStreamResult, StreamExecutionError, is_bounded_stream_message,
+    FiniteStreamResult, StreamExecutionError, StreamReferenceSentinel, is_bounded_stream_message,
 )
 from opennavicat.mongodb_stage_templates import CREATE_TOOL_STAGES, STAGE_EDITOR_TEMPLATES
 
@@ -2094,7 +2094,8 @@ class MongoPipelinePage(QWidget):
             return "[Error] Finite stream execution failed"
         return "OK"
 
-    def _present_stream(self, result, script, status, *, output_available=False, location=None):
+    def _present_stream(self, result, script, status, *, output_available=False, location=None,
+                        reference_sentinel=None):
         self._enter_stream_mode()
         self.options_button.setChecked(False)
         self._last_stream_result = result if isinstance(result, FiniteStreamResult) else None
@@ -2104,6 +2105,8 @@ class MongoPipelinePage(QWidget):
         lines = ["> " + status]
         if location is not None:
             lines.append(f"at line {location[0]}, column {location[1]}")
+        elif type(reference_sentinel) is StreamReferenceSentinel:
+            lines.append("at line 0, column 0")
         if (isinstance(result, FiniteStreamResult)
                 and isinstance(result.elapsed_seconds, (int, float))
                 and not isinstance(result.elapsed_seconds, bool)
@@ -2127,7 +2130,15 @@ class MongoPipelinePage(QWidget):
         diagnostic = self._stream_diagnostic(error, script)
         if diagnostic is not None:
             message, location = diagnostic
-            self._present_stream(result, script, "[Error] " + message, location=location)
+            sentinel = getattr(error, 'reference_sentinel', None)
+            failure = server_failure(error)
+            if (error.error_phase != 'get_more' or location is not None
+                    or type(sentinel) is not StreamReferenceSentinel
+                    or not sentinel.matches_message(message)
+                    or failure is None or type(failure.code) is not int or failure.code != 47):
+                sentinel = None
+            self._present_stream(result, script, "[Error] " + message, location=location,
+                                 reference_sentinel=sentinel)
         else:
             failure = server_failure(error)
             self._present_stream(result, script, self._stream_status(

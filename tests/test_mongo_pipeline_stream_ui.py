@@ -465,3 +465,51 @@ def test_stream_component_entry_points_reject_worker_thread_before_widget_access
     assert not thread.is_alive() and len(errors) == len(calls)
     assert all("GUI thread" in message for message in errors)
     assert not page.running and not page._stream_mode and page._last_stream_result is None
+
+
+def required_image_error(image='pre'):
+    from opennavicat.mongodb_pipeline_stream import StreamReferenceSentinel
+    sentinel = (StreamReferenceSentinel.MISSING_REQUIRED_PRE_IMAGE if image == 'pre'
+                else StreamReferenceSentinel.MISSING_REQUIRED_POST_IMAGE)
+    message = sentinel.server_prefix + ' {operationType: "update"}'
+    error = StreamExecutionError('safe code 47 classification', stream_result('error', elapsed=.023),
+        server_message=message, error_phase='get_more', reference_sentinel=sentinel)
+    error.__cause__ = OperationFailure(PRIVATE_CAUSE, 47, {'ok': 0, 'code': 47, 'errmsg': message})
+    return error
+
+
+@pytest.mark.parametrize('image', ['pre', 'post'])
+def test_required_image_getmore_sentinel_is_static_display_without_real_location(page, image):
+    error = required_image_error(image)
+    page.show_stream_error(error, SCRIPT)
+    assert error.script_location is None
+    assert page.messages.toPlainText() == (SCRIPT + '> [Error] ' + error.server_message
+        + '\nat line 0, column 0\n> 查询时间: 0.023s\n')
+    assert visible_tabs(page) == ['管道', '脚本预览', '消息']
+    assert PRIVATE_CAUSE not in page.messages.toPlainText()
+    assert_no_event_presentation(page)
+
+
+@pytest.mark.parametrize('mutation', ['string', 'wrong-kind', 'aggregate', 'different-code',
+    'unknown-cause', 'zero-coordinates', 'positive-coordinates', 'different-message',
+    'cancelled', 'cleanup_failed', 'byte_limit', 'row_limit', 'deadline', 'auth', 'oversized', 'bidi'])
+def test_forged_or_lower_priority_image_metadata_cannot_add_zero_position_line(page, mutation):
+    from opennavicat.mongodb_pipeline_stream import StreamReferenceSentinel
+    error = required_image_error()
+    if mutation == 'string': error.reference_sentinel = 'missing_required_pre_image'
+    elif mutation == 'wrong-kind': error.reference_sentinel = StreamReferenceSentinel.MISSING_REQUIRED_POST_IMAGE
+    elif mutation == 'aggregate': error.error_phase = 'aggregate'
+    elif mutation == 'different-code': error.__cause__ = OperationFailure(PRIVATE_CAUSE, 20)
+    elif mutation == 'unknown-cause': error.__cause__ = None
+    elif mutation == 'zero-coordinates': error.script_location = (0, 0)
+    elif mutation == 'positive-coordinates': error.script_location = (1, 1)
+    elif mutation == 'different-message': error.server_message = 'Another valid code-47 server rejection'
+    elif mutation == 'auth': error.authentication_required = True
+    elif mutation == 'oversized': error.server_message = error.server_message + 'x' * 2049
+    elif mutation == 'bidi': error.server_message += '\u202e'
+    else: error.partial_result = replace(error.partial_result, completion=mutation)
+    page.show_stream_error(error, SCRIPT)
+    text = page.messages.toPlainText()
+    assert 'at line' not in text and PRIVATE_CAUSE not in text
+    assert visible_tabs(page) == ['管道', '脚本预览', '消息']
+    assert_no_event_presentation(page)

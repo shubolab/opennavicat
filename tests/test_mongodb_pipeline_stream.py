@@ -755,3 +755,121 @@ def test_real_database_read_role_can_stream_and_clean_its_own_cursor(stream_sess
     finally:
         reader.close()
         owner._control.admin.command({"dropUser": "generated_reader"})
+
+
+def image_failure_session(*, image='pre', requested='required', code=47, details_code=47,
+                          aggregate=False, message=None):
+    from opennavicat.mongodb_pipeline_stream import StreamReferenceSentinel
+    sentinel = (StreamReferenceSentinel.MISSING_REQUIRED_PRE_IMAGE if image == 'pre'
+                else StreamReferenceSentinel.MISSING_REQUIRED_POST_IMAGE)
+    message = message if message is not None else sentinel.server_prefix + ' {operationType: "update"}'
+    error = OperationFailure('private driver text is not a display source', code,
+        {'ok': 0, 'code': details_code, 'errmsg': message})
+    draft = definition()
+    option = 'fullDocumentBeforeChange' if image == 'pre' else 'fullDocument'
+    draft.stages[0].body = {option: requested}
+    if aggregate:
+        session = aggregate_failure(error)
+    else:
+        def failed():
+            raise error
+        session, _commands, _kills = fake_session(Cursor(on_more=failed))
+    return session, draft, error, sentinel
+
+
+@pytest.mark.parametrize('image', ['pre', 'post'])
+def test_required_image_getmore_error_has_typed_reference_sentinel_not_script_coordinates(image):
+    session, draft, cause, sentinel = image_failure_session(image=image)
+    with pytest.raises(StreamExecutionError) as caught:
+        execute_finite_stream(session, 'generated', draft)
+    failure = caught.value
+    assert failure.reference_sentinel is sentinel
+    assert failure.script_location is None and failure.error_phase == 'get_more'
+    assert failure.server_message == cause.details['errmsg'] and failure.__cause__ is cause
+
+
+@pytest.mark.parametrize('settings', [
+    {'requested': 'whenAvailable'}, {'requested': 'updateLookup'}, {'requested': None},
+    {'code': 20}, {'code': 18}, {'code': True}, {'details_code': 20}, {'details_code': True},
+    {'aggregate': True}, {'message': 'Another valid code-47 server rejection'},
+    {'message': 'x' * 2049}, {'message': 'first\nsecond'}, {'message': 'bidi\u202evalue'},
+], ids=['when-available', 'lookup', 'unspecified', 'different-code', 'auth', 'boolean-code',
+        'different-details-code', 'boolean-details-code', 'initial-aggregate', 'different-message',
+        'oversized', 'multiline', 'bidi'])
+def test_unobserved_image_error_variants_do_not_acquire_reference_sentinel(settings):
+    session, draft, _cause, _sentinel = image_failure_session(**settings)
+    with pytest.raises(StreamExecutionError) as caught:
+        execute_finite_stream(session, 'generated', draft)
+    assert caught.value.reference_sentinel is None and caught.value.script_location is None
+
+
+def test_required_option_must_belong_to_the_same_missing_image_and_enabled_stage():
+    for disabled in (False, True):
+        session, draft, _cause, _sentinel = image_failure_session(image='pre')
+        draft.stages[0].body = {'fullDocument': 'required'}
+        if disabled:
+            draft.stages.insert(0, PipelineStage('$changeStream', {'fullDocumentBeforeChange': 'required'}, enabled=False))
+        with pytest.raises(StreamExecutionError) as caught:
+            execute_finite_stream(session, 'generated', draft)
+        assert caught.value.reference_sentinel is None
+
+
+def test_image_sentinel_requires_safe_owner_redacted_message():
+    from opennavicat.mongodb_pipeline_stream import StreamReferenceSentinel
+    sentinel = StreamReferenceSentinel.MISSING_REQUIRED_PRE_IMAGE
+    secrets = ['generated password+', 'generated ssh/secret+', 'generated key/phrase+', 'generated tls/secret+']
+    echoed = [value for secret in secrets for value in (secret, quote(secret, safe=''), quote_plus(secret, safe=''))]
+    message = (sentinel.server_prefix + ' {operationType: "update", generated: "'
+               + ' | '.join(echoed) + ' mongodb://other:private@owned.invalid/db"}')
+    session, draft, _cause, _sentinel = image_failure_session(message=message)
+    for name, value in zip(('password', 'ssh_password', 'ssh_key_passphrase', 'ssl_key_password'), secrets):
+        setattr(session.config, name, value)
+    with pytest.raises(StreamExecutionError) as caught:
+        execute_finite_stream(session, 'generated', draft)
+    failure = caught.value
+    assert failure.reference_sentinel is sentinel
+    assert all(value not in failure.server_message for value in echoed)
+    assert 'mongodb://' not in failure.server_message and 'owned.invalid' not in failure.server_message
+    assert '[redacted]' in failure.server_message
+
+
+def test_image_sentinel_constructor_cannot_override_status_or_authentication():
+    from opennavicat.mongodb_pipeline_stream import StreamReferenceSentinel
+    sentinel = StreamReferenceSentinel.MISSING_REQUIRED_PRE_IMAGE
+    for completion, auth in [('cancelled', False), ('cleanup_failed', False), ('byte_limit', False),
+                             ('row_limit', False), ('deadline', False), ('error', True)]:
+        error = StreamExecutionError('static status', FiniteStreamResult((), completion, .01),
+            authentication_required=auth, server_message=sentinel.server_prefix + ' {operationType: "update"}',
+            error_phase='get_more', reference_sentinel=sentinel)
+        assert error.reference_sentinel is None
+        assert error.server_message is error.error_phase is error.script_location is None
+
+
+@pytest.mark.parametrize('operation', ['delete', 'replace', 'insert', 'unknown'])
+def test_unobserved_image_event_kinds_do_not_inherit_update_sentinel(operation):
+    from opennavicat.mongodb_pipeline_stream import StreamReferenceSentinel
+    prefix = StreamReferenceSentinel.MISSING_REQUIRED_PRE_IMAGE.server_prefix
+    session, draft, _cause, _sentinel = image_failure_session(
+        message=prefix + ' {operationType: "' + operation + '"}')
+    with pytest.raises(StreamExecutionError) as caught:
+        execute_finite_stream(session, 'generated', draft)
+    assert caught.value.reference_sentinel is None
+
+
+@pytest.mark.parametrize('location', [(0, 0), (1, 1), [0, 0], ('0', '0'), (True, False)])
+def test_image_sentinel_never_reinterprets_supplied_script_coordinates(location):
+    from opennavicat.mongodb_pipeline_stream import StreamReferenceSentinel
+    sentinel = StreamReferenceSentinel.MISSING_REQUIRED_PRE_IMAGE
+    error = StreamExecutionError('safe code 47 classification', FiniteStreamResult((), 'error', .01),
+        server_message=sentinel.server_prefix + ' {operationType: "update"}',
+        error_phase='get_more', script_location=location, reference_sentinel=sentinel)
+    assert error.reference_sentinel is None
+    assert error.script_location == ((1, 1) if location == (1, 1) else None)
+
+
+def test_bson_code_with_required_text_is_not_a_required_string_option():
+    from bson import Code
+    session, draft, _cause, _sentinel = image_failure_session(requested=Code('required'))
+    with pytest.raises(StreamExecutionError) as caught:
+        execute_finite_stream(session, 'generated', draft)
+    assert caught.value.reference_sentinel is None

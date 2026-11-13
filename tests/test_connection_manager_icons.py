@@ -44,7 +44,22 @@ def test_driver_grid_and_compact_list_use_real_50_and_16_pixel_delegate_targets(
     requested, paints = artwork_calls
     dialog = show_manager(qtbot, supported_kinds={'mysql'})
     assert dialog.size() == QSize(900, 700)
-    assert dialog.connection_list.gridSize() == QSize(126, 96)
+    grid_size = dialog.connection_list.gridSize()
+    assert grid_size.width() == 126 and grid_size.height() >= 96
+    # The two direct aliases also use this grid. Their complete names can wrap
+    # onto another line with the platform font; retain the 50px icon and fit
+    # the actual label instead of forcing every platform to the minimum row.
+    font = dialog.connection_list.itemDelegate().label_font(dialog.connection_list.font())
+    assert font.pixelSize() == 14
+    metrics = QFontMetrics(font)
+    for row in range(dialog.connection_list.count()):
+        item = dialog.connection_list.item(row)
+        bounds = dialog.connection_list.visualItemRect(item)
+        assert bounds.size() == grid_size
+        label_area = bounds.adjusted(6, 4 + 50 + 5, -6, -3)
+        natural = metrics.boundingRect(QRect(0, 0, label_area.width(), 4096),
+                                       int(Qt.TextFlag.TextWordWrap), item.text())
+        assert natural.height() <= label_area.height(), item.text()
     assert dialog.connection_list.iconSize() == QSize(50, 50)
     assert dialog.filter_tree.iconSize() == QSize(16, 16)
     dialog.grab()

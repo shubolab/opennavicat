@@ -1,101 +1,98 @@
-# 2026-11-14：图标专项合流，0.13 候选继续验收
+# 2026-11-14：图标与小控件合流，0.13.1 继续资格
 
-完整 goal 保持 **active**，没有暂停或完成。当前重点来自用户新增要求：尽可能对齐
-所有图标和小型视觉元素。完整数据库工具、1:1 UI 和 Windows/Linux/macOS 参考验收
-继续由 [parity-matrix.md](../parity-matrix.md) 追踪，不能将本轮图标或安装包视作产品完成。
+完整 goal 保持 **active**。当前用户重点是尽可能对齐全部图标和小型视觉元素；完整工具、
+1:1 保留 UI 和 Windows/Linux/macOS 实际参考门禁继续由 [完整矩阵](../parity-matrix.md)追踪。
+源码测试、应用包、安装器、演示和参考人工验收分别记录，不将其中一项当作产品完成。
 
 ## 当前恢复点
 
-**最新状态：正式 `v0.13.0` 尝试失败，尚未发布。** tag 固定在
-`81523aa4ff5b8734776f5bf0b6e7217ef0e192f7`，应用/测试/build 声明240源仍等同 Git211；
-[正式 run43487011620](https://github.com/shubolab/opennavicat/actions/runs/43487011620)
-最终八 required success、macOS Intel failure、publisher skipped。失败发生在真实 designer
-用例成功后的 fixture teardown，访问已被 Qt 销毁的 QThreadPool；不是发布成功。
-独立真实 pytest-qt 合法 close/deleteLater 后送达 DeferredDelete，复现相同错误；原 fixture
-把 cleanup 放在 yield 后，依赖删除落地时机。窄测试修正正在 `codex_qt_fixture_teardown_fix`
-中验证，把 cleanup 移至 before_close_func，不用 invalid guard 或修改产品/预算绕过。
-另有原 CI 的 SQLite unclosed warning，缺 allocation traceback，仍不作同因果结论。
-保留失败 tag/run；后续修正及小控件续作合流后，以新补丁版本重新资格，不改旧 tag。
+应用源码 `ca4d20a858c964d18eff53e97664e4b32d403cc9`、版本 **0.13.1 候选**已推 main 与
+`codex_oracle_basic_integration`。本地另有 `edbb58c` / `cb62a39` 两个选择器测试修正，尚未
+推送；其它隔离修正正在合流。工作目录为
+`/Users/wangshubo/.codex/worktrees/oracle-basic-integration/opennavicat`。
 
-原版新补充观察也已保存：Oracle General 端口为纯文本框，Up 不改1521，没有 stepper；
-配置栏开关是蓝/灰 pane 图形，新增 profile 是灰色圆圈加号。原型 `_PortSpinBox` 的额外
-箭头并非参考行为。`codex_small_controls_18` 正在隔离实现纯文本端口与专用图形。
-新证据已 export/close REA，未 Test/Save/连接任何数据库，pane/grid 状态还原后正常 Quit。
-以下 main 预检、本机/演示记录依旧有效，但不能抵消正式失败或冒充后续新源资格。
+**最新 main [run43511903905](https://github.com/shubolab/opennavicat/actions/runs/43511903905)
+失败，尚不能发布。** 三个必需 job 成功、六个失败、publisher skipped；没有把诊断 artifact
+或成功 job 当作完整安装器资格。失败范围与修正分别是：
 
-- 当前应用源码检查点：`211fef0ec0c7edbca2c016d0fd887e4acd977c90`，已推到 main 和
-  `codex_oracle_basic_integration`；工作目录为
-  `/Users/wangshubo/.codex/worktrees/oracle-basic-integration/opennavicat`。
-- 版本字段为未发布的 **0.13.0 候选**。最新公开版本仍为
-  [v0.12.0 预发布](https://github.com/shubolab/opennavicat/releases/tag/v0.12.0)，精确发布源码
-  `b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7`。不要修改旧 tag 或借用其安装器资格。
-- 前一完整历史见 [11月13日交接](2026-11-13-goal-resume.md)；其中后续工作、候选检查点、
-  GUI 与源码测试待办，以上述当前源码及本页的新证据为准。机器索引见
-  [2026-11-14-state.json](2026-11-14-state.json)。恢复时仍需重新 fetch 核对实际 refs。
+- Linux 两架构和 Windows ARM64 的选择器测试把行高写死96；两个直接别名在平台字体下
+  需要113或108。产品本来会增高以容纳文字；本地修正检查所有实际标签和50px图标可容纳，
+  并覆盖系统默认/等宽字体。没有压缩字或裁掉别名来迎合旧断言。
+- Windows AMD64 在小控件测试逐个给内部 QWidget 设置 QStyle 时访问冲突；改用由 Qt
+  拥有的公共样式传播，并完整恢复测试状态。新 Windows 结果仍须实际 CI 验证。
+- macOS Intel 的生命周期回归子进程在导入阶段遇到 OpenSSL legacy-provider warning，
+  被原有 `-Werror` 拒绝；原 designer 用例尚未开始。已独立证明既有 packaging hook 测试
+  在初始没有 OPENSSL_MODULES 时会泄漏临时路径，正修复环境恢复。不能据此提前宣布 Intel
+  问题全部解决，也不设置 NO_LEGACY 或屏蔽警告。
+- 原生 Linux Oracle ARM64 在 fixture_start 阶段失败，14用例已收集但未执行；Window专项
+  也未开始。已清除精确 owned CID/tmpfs且无数据卷。旧回执没有保留安全原因，readiness
+  超时只能推断；续作增加有限阶段/reason/code/State诊断，不抬360秒预算盲重跑。
 
-## 本轮图标与状态
+最新公开安装器仍是 [v0.12.0 预发布](https://github.com/shubolab/opennavicat/releases/tag/v0.12.0)，
+exact `b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7`。0.13.1 尚未创建 tag、发布安装器或验收
+公开下载。机器恢复索引见 [2026-11-14-state.json](2026-11-14-state.json)。
 
-独立重画主工具栏/对象、九驱动、十三个已观察供应商及常用动作，修正原型沿用的
-圆柱/四格占位、错误动作语义和尺寸。实际参考使用 Navicat 18.0.5 build 321 与生成的
-SQLite 连接，进入表、查询和连接选择器；退出前该连接 Off/会话 0，正常退出并清除临时
-SQLite 文件。原始参考图像只留忽略目录，未提交或进入产品。身份、Evidence IDs、
-颜色空间转换、未观察项与验证范围见 [图标专项](../validation-icons-navicat18.md)。
+## 已完成的图标与小控件实现
 
-主栏 28、树/页签 16、查询选择器 14、连接网格 50/列表与筛选 16 逻辑像素分别使用；
-连接状态、开关与禁用分开，高 DPI 重新绘制。七个页面的专注与 MongoDB/管线动作
-接入相应语义。原有未实现功能保持禁用。页签关闭符号改用灰叉，保留平台侧别和保存/
-执行保护，替换旧关闭按钮时明确释放，独立 100 次循环没有隐藏控件残留。
+按 Navicat 18.0.5 build321 实际主/查询/连接窗口，独立重画主栏、对象、九驱动、供应商及
+常用动作图形，分别使用28主栏、16树/页签、14查询选择器、50连接网格与16列表/筛选。
+连接状态、开关、禁用和DPI分别处理；修正灰叉页签关闭及旧按钮释放，未启用缺失工具。
 
-仍开放：全部小元素清点、未观察的 Redis Enterprise Cloud 供应商符号、失活主窗口
-工具栏变灰行为、完整主题/悬浮/焦点/禁用差异、Oracle 表单少数 Unicode 控件、全部
-对话框/向导及 Windows/Linux 参考。自绘近似形状和组件通过不能关闭 U15 或其余 UI 门禁。
+Oracle General 实际为纯端口框，没有上下箭头，Up不改1521；配置栏是蓝/灰pane图形，
+新增配置是灰圈加号。实现已合流，并保留非法端口草稿、TNS隐藏原值、原禁用功能和SSH
+现有stepper。表单按自然标签宽度居中，修正父布局裁掉300px字段右边缘的问题。通用连接
+页复用两个profile图形，不能冒充其它驱动参考页已经验收。
 
-## 当前源码的本机资格
+两次原版实际搜索确认 Atlas 用橙色Mongo叶、Redis Enterprise Cloud用粉色Redis R，供应商
+区均为空；空搜索全画面另确认12供应商筛选。旧“14供应商”是把两个直接数据库别名混入
+供应商的误分类；14组目录数据全部保留。Evidence IDs、限制和独立绘制边界见
+[图标专项](../validation-icons-navicat18.md)。原版证据未进Git或包，临时SQLite已清理，
+所有参考连接Off，正常Quit，REA全部export/close。
 
-- 默认全源：**2633 通过、662 条件跳过、零失败/错误**，139.274 秒；3295 个收集、执行和
-  JUnit 用例精确一致。240 个运行/测试/build/packaging/workflow 输入前后与 Git211 精确
-  匹配，原生 helper 前后相同。条件跳过不是实际数据库执行。
-- 图标工厂各 offscreen/Cocoa 104/0；连接选择器 72/0；七页动作 217/0，但明确排除 24 个
-  真库用例；实际窗口状态 Cocoa 5/0 与既有生命周期 45/0 是各自独立范围，不相加冒充全覆盖。
-- 当前源码 macOS ARM64 应用已构建，隔离 Cocoa 请求的 packaged smoke 退出 0，6×4
-  生成查询与 Oracle26.1 四项原生/thin 探针通过；静态 23 项通过，完整 79 应用模块与源码
-  一致、61 Mach-O 均 ARM64、95 链接有效。只构建本机 app，未将其称作安装器或六目标资格。
-- 当前源码 fresh owned Oracle 的实际 Cocoa 窗口专项 **3/0**，包含真实 Test/不保存密码/
-  保存重开/Open/schema/表/视图/精确 NUMBER，以及服务器计算视图 Stop、同会话复用、
-  Disconnect/Close 两条退出路径；24 份专项输入前后匹配 Git211。原 SLEEP 及时取消、
-  其它认证/安全/高级设置和完整 Oracle 类型、Query/写入/设计器仍开放。
-- 图标前的全源 `6af3109` 曾发生 GridFS 预览 15 秒超时；本轮最终全源通过，但原原因仍未
-  证明。测试 host 信号生命周期另有独立红绿证据，不据此推断历史超时已因它修复。
+## Git ca4 的本机资格
 
-私有证据分别在本树 `artifacts/icon-parity-18/default-source-211/`、`native-211/`、
-`oracle-cocoa-211/` 与 `oracle-cocoa-211-independent/`。原本 app 和真实数据库配置未被
-替换或导入；macOS 本机副本与用户正在运行的旧应用是不同交付状态。
+- 默认全源2693通过/662条件跳过，3355 collect/run/JUnit精确，零失败/错误；242声明源和
+  原生helper前后/Git相同，112.521秒，warnings=error。跳过不算真实数据库执行。
+- 合流实际Cocoa七模块249通过/3既有真库条件跳过；252清单精确、242源相同。生命周期
+  子pytest特意使用offscreen，未混称Cocoa。原pool删除修复在真实before_close_func中清理。
+- 本机ARM64 bundle构建及隔离smoke成功，样例6×4、Oracle26.1四项及另13探针true。
+  Cocoa为显式请求，smoke不自行报告Qt平台；独立源窗口报告为实际Cocoa。
+- 包内静态24项通过：79应用模块/入口与源/Git一致、61 Mach-O、4Oracle机器码、32driver
+  Python、55wheel payload/许可证、95包内链接分别核对。不是六目标或安装器验收。
+- fresh owned Oracle实际Cocoa3/0：Test/保存重开/临时密码/schema/表/视图/Decimal，计算
+  视图Stop/同会话复用/Disconnect与Shutdown；独立106结构/资源检查通过。runner声明24源，
+  不冒称全部242源；28阶段图/16种唯一画面目视记录另存。
+- 生成数据的实际Cocoa主栏/查询/表/选择器亮暗12图，加通用profile两驱动On/Off亮暗8图，
+  共20全尺寸画面均实际查看；完整主题、失活/悬浮/焦点、所有向导与三平台参考仍开放。
 
-## README 与 CI
+新源码须重新绑定其测试/录制/诊断范围；若复用ca4运行证据，必须明确证明对应运行源码
+字节一致，不能把其242输入或计数改名成下一版本资格。详见 [0.13.1记录](../validation-0.13.1.md)。
 
-新 GIF 使用冻结源码实际 Qt Cocoa 画面、隔离生成的 SQLite/MongoDB 数据和空 Oracle
-连接表单，34 阶段、457 帧、76.17 秒；只保留 README 的同一份 GIF。摘要及逐阶段隐私
-审查与复制状态见机器索引/演示回执，不将 Oracle 表单画面当作 Oracle 数据库执行证明。
+## GIF：已录制，颜色审查未通过
 
-当前 main 新 CI 为 [43473238808](https://github.com/shubolab/opennavicat/actions/runs/43473238808)，
-exact `211fef0`，启动于北京时间 2026-11-14 01:29:07；已完成：九个必需 job 成功、publisher 按 main 规则 skipped。
-六原生桌面 + security + 两原生 Linux Oracle 的实际 runner provenance 已核对。15 artifact
-已下载：六安装器、六桌面 validation、security、两个含后端/窗口子目录的 Oracle combined。
-六份安装器实际字节、两类 manifest、sidecar、native/installed/QuickJS 与 Oracle26.1 四项
-探针分别通过；两原生架构各 backend14/Window3 required/JUnit/source/cleanup 单独通过。
-两个只读 DMG 挂载均已 detach。详见 [0.13 验证](../validation-0.13.md)。这仍是 Git211 main
-预检，不能把其安装器摘要代替下一正式 tag 或公开下载。
+ca4实际Cocoa新35阶段、471帧、78.5秒、1944860字节，摘要
+`14e0d206f81e47873bf7af765ab944a11a8019dac7c5e37e38b25aedc6c79711`。
+全部帧通过可见文本保护和独立解码，35全尺寸中帧及35首/中/尾联系表已目视，无真实数据
+泄漏或缺glyph阻断；但Oracle卡片由原始own PNG的255,0,51变成GIF的205,99,77，颜色明显
+偏棕，**不适合README，未复制公开资产**。偏色具体发生点尚未证明；编码器正在做真实颜色、
+文字、帧序、时长和尺寸对照，再实际录制和审查。不能把离线重编码诊断产物冒充新演示。
 
-## 继续顺序
+README暂保留原Git211的34阶段/457帧同一份GIF。新录制的精确owned容器生命周期已独立
+核销毁/不存在；卷ID和temp路径未独立保留，仍只记producer断言。Oracle表单为空，不冒称
+Oracle数据库执行。私有新证据在 `artifacts/release-0131/`。
 
-1. 完成 `codex_qt_fixture_teardown_fix` 的实际 framework teardown 红绿与独立审查；
-   完成 `codex_small_controls_18` 的纯端口/profile 图形及实际 Cocoa/原版边界验证。
-2. 合流后采用新补丁版本，先冻结新源码、全源/Cocoa/本机 bundle 与变化后的同一份 GIF
-   各自资格，再做六原生目标和正式新 tag。`v0.13.0`/81523/43487011620 保留失败历史。
-3. 正式发布前重新核六安装器、checksums、合并 manifest、匿名八资产，另做公开 ARM64
-   安装器隔离 Cocoa smoke；不沿用旧main预检或失败正式tag的文件。
-4. 继续未对齐小元素与完整数据库工具。Oracle Query 后续要先处理窗口关闭前事务决策、
-   DDL 隐式提交等原有审查事项；不能把普通 SELECT 支持包装成完整查询/事务实现。
+## 必须保留的历史与继续顺序
 
-文档、图标、演示、本机 app、main CI、正式 tag、公开下载及完整参考人工验收分别记录。
-不清理未合并分支或带改动工作树，不在一个里程碑完成后再次暂停 goal。
+`v0.13.0` 保持在81523aa，正式43487011620因macOS Intel fixture teardown失败、publisher
+skipped，未发布。其真实framework DeferredDelete红/绿证明及原SQLite allocation原因未知
+分别保留；不要与本次OpenSSL导入故障混为一个原因。此前Git211 main43473238808的九必需
+成功、15artifact/六安装器字节资格也保留为历史，不抵消任一失败，不借给下一tag。
+
+1. 合流三平台测试修正、OpenSSL测试环境恢复和Oracle安全启动诊断；完成GIF颜色修复。
+2. 冻结新源，验证受影响测试，明确运行源码字节绑定；重新实际录制/审查同一份GIF。
+3. 新main九必需通过后实际核15artifact/六字节；新正式tag十job通过后另核六安装器、
+   checksums/manifest、匿名八资产及公开ARM64 DMG隔离Cocoa smoke，不改旧tag。
+4. 持续逐项对齐剩余小元素、完整Oracle和其它数据库工具。Query事务/DDL、及时取消
+   server SLEEP、所有认证/安全/类型及三平台实际参考仍开放，不在里程碑后暂停goal。
+
+不清理未合并分支或带改动工作树，不导入真实连接或操作用户数据库来验收。

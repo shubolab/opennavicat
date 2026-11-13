@@ -231,8 +231,44 @@ def build_macos(payload: Path, output: Path, version: str, architecture: str) ->
         (stage / "Install.txt").write_text(
             "Install OpenNavicat by dragging OpenNavicat.app to Applications.\n"
             "This distribution is not Developer ID signed or notarized.\n", "utf-8")
-        run(["/usr/bin/hdiutil", "create", "-volname", "OpenNavicat", "-srcfolder", stage,
-             "-format", "UDZO", "-fs", "HFS+", "-ov", target], timeout=600)
+        def output_text(value):
+            return value.decode('utf-8', errors='replace') if isinstance(value, bytes) else value or ''
+
+        def record(attempt, status, image, result, will_retry=False):
+            print(json.dumps({'stage': 'hdiutil-create', 'attempt': attempt, 'status': status,
+                'image': str(image), 'source_stage': str(stage), 'will_retry': will_retry,
+                'returncode': getattr(result, 'returncode', None),
+                'stdout': output_text(result.stdout), 'stderr': output_text(result.stderr)}), flush=True)
+
+        # Keep candidates beside the destination so promotion is an atomic
+        # same-filesystem rename. A failed create never overwrites an existing
+        # installer, and each retry receives its own private image path.
+        with tempfile.TemporaryDirectory(prefix='.opennavicat-dmg-images-', dir=output) as images:
+            for attempt in range(1, 4):
+                image = Path(images) / f'attempt-{attempt}.dmg'
+                try:
+                    result = run(["/usr/bin/hdiutil", "create", "-volname", "OpenNavicat", "-srcfolder", stage,
+                        "-format", "UDZO", "-fs", "HFS+", "-ov", image],
+                        capture_output=True, text=True, timeout=600)
+                except subprocess.TimeoutExpired as error:
+                    record(attempt, 'timeout', image, error)
+                    raise
+                except subprocess.CalledProcessError as error:
+                    busy = (error.returncode > 0 and 'hdiutil: create failed - Resource busy'
+                            in output_text(error.stderr).splitlines())
+                    retry = busy and attempt < 3
+                    record(attempt, 'busy' if busy else 'failed', image, error, retry)
+                    if not retry:
+                        raise
+                    image.unlink(missing_ok=True)
+                    time.sleep(attempt)
+                    continue
+                if image.is_symlink() or not image.is_file() or image.stat().st_size == 0:
+                    record(attempt, 'invalid-output', image, result)
+                    raise PackagingError('DMG create did not produce a nonempty regular image')
+                record(attempt, 'success', image, result)
+                os.replace(image, target)
+                break
     return target
 
 

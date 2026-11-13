@@ -5,6 +5,7 @@ from pathlib import Path
 import struct
 import subprocess
 import sys
+from types import SimpleNamespace
 
 import pytest
 
@@ -251,3 +252,144 @@ def test_macos_detach_does_not_retry_or_force_unrelated_errors(tmp_path, monkeyp
         installer.detach_verification_volume(tmp_path / "our-verification-volume")
     assert len(calls) == 1
     assert "-force" not in calls[0]
+
+
+@pytest.fixture
+def macos_dmg_case(tmp_path, monkeypatch):
+    payload, output = tmp_path / 'Payload.app', tmp_path / 'release-assets'
+    payload.mkdir(); output.mkdir()
+    (payload / 'owned-marker').write_bytes(b'generated application input')
+    case = SimpleNamespace(payload=payload, output=output, images=[], delays=[], create=None,
+        target=output / 'OpenNavicat-0.12.0-macos-arm64.dmg')
+    case.target.write_bytes(b'previous verified installer')
+    monkeypatch.setattr(installer.time, 'sleep', case.delays.append)
+
+    def applications_link(path, destination, **_kwargs):
+        # This portable unit test isolates image creation. The real macOS
+        # symlink and ditto behavior are covered by native install acceptance.
+        assert path.name == 'Applications' and destination == '/Applications'
+        path.write_text('generated Applications-link stand-in')
+
+    monkeypatch.setattr(installer.Path, 'symlink_to', applications_link)
+
+    def run(command, **kwargs):
+        if command[0] == '/usr/bin/ditto':
+            destination = Path(command[-1]); destination.mkdir()
+            (destination / 'owned-marker').write_bytes((payload / 'owned-marker').read_bytes())
+            return subprocess.CompletedProcess(command, 0)
+        assert command[:2] == ['/usr/bin/hdiutil', 'create']
+        assert command[command.index('-format') + 1] == 'UDZO'
+        assert command[command.index('-fs') + 1] == 'HFS+' and kwargs['timeout'] == 600
+        stage = Path(command[command.index('-srcfolder') + 1])
+        assert (stage / 'OpenNavicat.app/owned-marker').read_bytes() == b'generated application input'
+        image = Path(command[-1]); case.images.append(image)
+        return case.create(command, image)
+
+    monkeypatch.setattr(installer, 'run', run)
+    return case
+
+
+def dmg_attempts(capsys):
+    return [json.loads(line) for line in capsys.readouterr().out.splitlines() if line.startswith('{')]
+
+
+def test_macos_busy_create_retries_isolated_partial_images_and_only_promotes_success(macos_dmg_case, capsys):
+    case = macos_dmg_case
+
+    def create(command, image):
+        assert case.target.read_bytes() == b'previous verified installer'
+        assert all(not old.exists() for old in case.images[:-1])
+        if len(case.images) < 3:
+            image.write_bytes(b'partial image must never replace the target')
+            raise subprocess.CalledProcessError(1, command, output='owned busy output',
+                stderr='hdiutil: create failed - Resource busy\n')
+        image.write_bytes(b'complete generated DMG')
+        return subprocess.CompletedProcess(command, 0, stdout='created generated DMG', stderr='')
+
+    case.create = create
+    result = installer.build_macos(case.payload, case.output, '0.12.0', 'arm64')
+    assert result == case.target and result.read_bytes() == b'complete generated DMG'
+    assert len(set(case.images)) == 3 and all(image != case.target for image in case.images)
+    assert all(image.parent.parent == case.output for image in case.images)
+    assert all(not image.exists() for image in case.images)
+    assert list(case.output.iterdir()) == [case.target] and case.delays == [1, 2]
+    records = dmg_attempts(capsys)
+    assert [record['status'] for record in records] == ['busy', 'busy', 'success']
+    assert [record['attempt'] for record in records] == [1, 2, 3]
+    assert all(record['stage'] == 'hdiutil-create' for record in records)
+    assert records[0]['stdout'] == 'owned busy output'
+    assert records[0]['stderr'] == 'hdiutil: create failed - Resource busy\n'
+    assert records[-1]['stdout'] == 'created generated DMG' and records[-1]['returncode'] == 0
+
+
+def test_macos_busy_create_exhaustion_preserves_existing_target_and_cleans_partials(macos_dmg_case, capsys):
+    case = macos_dmg_case
+
+    def create(command, image):
+        assert case.target.read_bytes() == b'previous verified installer'
+        image.write_bytes(b'partial busy image')
+        raise subprocess.CalledProcessError(1, command, stderr='hdiutil: create failed - Resource busy\n')
+
+    case.create = create
+    with pytest.raises(subprocess.CalledProcessError):
+        installer.build_macos(case.payload, case.output, '0.12.0', 'arm64')
+    assert len(set(case.images)) == 3 and case.delays == [1, 2]
+    assert case.target.read_bytes() == b'previous verified installer'
+    assert list(case.output.iterdir()) == [case.target] and all(not image.exists() for image in case.images)
+    records = dmg_attempts(capsys)
+    assert len(records) == 3 and records[-1]['status'] == 'busy' and not records[-1]['will_retry']
+
+
+@pytest.mark.parametrize('stderr', ['hdiutil: create failed - Permission denied\n', 'Resource busy\n',
+    'warning: hdiutil: create failed - Resource busy\n', 'hdiutil: create failed - Resource busy elsewhere\n', ''])
+def test_macos_create_unrelated_error_or_stdout_busy_is_not_retried(macos_dmg_case, capsys, stderr):
+    case = macos_dmg_case
+
+    def create(command, image):
+        image.write_bytes(b'partial unrelated-error image')
+        raise subprocess.CalledProcessError(1, command,
+            output='hdiutil: create failed - Resource busy\n', stderr=stderr)
+
+    case.create = create
+    with pytest.raises(subprocess.CalledProcessError):
+        installer.build_macos(case.payload, case.output, '0.12.0', 'arm64')
+    assert len(case.images) == 1 and case.delays == []
+    assert case.target.read_bytes() == b'previous verified installer' and list(case.output.iterdir()) == [case.target]
+    assert dmg_attempts(capsys)[0]['status'] == 'failed'
+
+
+def test_macos_create_timeout_is_not_retried_even_with_busy_stderr(macos_dmg_case, capsys):
+    case = macos_dmg_case
+
+    def create(command, image):
+        image.write_bytes(b'partial timed-out image')
+        raise subprocess.TimeoutExpired(command, 600, output=b'owned timeout output \xff',
+            stderr=b'hdiutil: create failed - Resource busy\n')
+
+    case.create = create
+    with pytest.raises(subprocess.TimeoutExpired):
+        installer.build_macos(case.payload, case.output, '0.12.0', 'arm64')
+    assert len(case.images) == 1 and case.delays == []
+    assert case.target.read_bytes() == b'previous verified installer' and list(case.output.iterdir()) == [case.target]
+    record = dmg_attempts(capsys)[0]
+    assert record['status'] == 'timeout' and record['returncode'] is None
+    assert record['stdout'] == 'owned timeout output \ufffd'
+
+
+@pytest.mark.parametrize('image_type', ['missing', 'empty', 'directory'])
+def test_macos_zero_exit_without_nonempty_regular_image_is_not_promoted(macos_dmg_case, capsys, image_type):
+    case = macos_dmg_case
+
+    def create(command, image):
+        if image_type == 'empty':
+            image.write_bytes(b'')
+        elif image_type == 'directory':
+            image.mkdir()
+        return subprocess.CompletedProcess(command, 0, stdout='not a complete image', stderr='')
+
+    case.create = create
+    with pytest.raises(installer.PackagingError, match='nonempty regular'):
+        installer.build_macos(case.payload, case.output, '0.12.0', 'arm64')
+    assert len(case.images) == 1 and case.delays == []
+    assert case.target.read_bytes() == b'previous verified installer' and list(case.output.iterdir()) == [case.target]
+    assert dmg_attempts(capsys)[0]['status'] == 'invalid-output'

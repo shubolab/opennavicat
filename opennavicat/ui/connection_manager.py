@@ -97,6 +97,11 @@ def supported_driver_kinds() -> frozenset[str]:
     does not claim that selecting a catalog card implements a database adapter.
     """
     kinds = getattr(database, "SUPPORTED_DRIVERS", ("sqlite", "postgresql", "mysql", "mariadb"))
+    kinds = set(kinds)
+    if "oracle" in kinds:
+        from importlib.util import find_spec
+        if find_spec("oracledb") is None or find_spec("opennavicat.oracle_session") is None:
+            kinds.discard("oracle")
     return frozenset(kinds)
 
 
@@ -112,6 +117,9 @@ def _driver_preset(kind: str, label: str) -> dict:
     elif kind == "mongodb":
         result.update(database="", ssl_mode="disable", mongo_connection_type="standalone",
                       mongo_auth_source="admin", mongo_auth_mechanism="NONE")
+    elif kind == "oracle":
+        result.update(name="" if label == "Oracle" else label, host="", database="",
+                      ssl_mode="disable", oracle_service_identifier="ORCL")
     return result
 
 

@@ -69,6 +69,11 @@ from .batch_job_controller import BatchJobController
 
 DESIGNER_PAGES = (TableDesignerPage, IndexDesignerPage, TriggerDesignerPage, MongoIndexDesignerPage, MongoCollectionDesignerPage, MongoTimeSeriesDesignerPage, MongoViewDesignerPage)
 MONGO_PAGES = (MongoCollectionPage, MongoGridFSPage, MongoPipelinePage)
+ORACLE_CATEGORIES = (("表", "table", "table"), ("视图", "view", "view"),
+    ("实体化视图", "materialized_view", "view"), ("函数", "function", "function"),
+    ("查询", "query", "query"))
+ORACLE_OTHER_TOOLS = ("目录", "公用数据库链接", "公用同义词", "表空间", "数据库链接", "索引", "Java",
+    "实体化视图日志", "包", "回收站", "序列", "同义词", "触发器", "类型", "XML 架构")
 
 
 class _PipelineDispatchCancelled(DatabaseError):
@@ -133,6 +138,8 @@ class TablePage(QWidget):
         self.loading = False
         self.filter_value = ""
         self.model = None
+        self.total_known = True
+        self.has_more = False
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
@@ -148,13 +155,18 @@ class TablePage(QWidget):
                 action.triggered.connect(callback)
             self.toolbar.addAction(action)
             return action
-        tool("开始事务", "transaction_begin", lambda: window.transaction("BEGIN"))
-        tool("提交", "commit", lambda: window.transaction("COMMIT"))
-        tool("回滚", "rollback", lambda: window.transaction("ROLLBACK"))
+        oracle = window.configs[connection_id].driver == "oracle"
+        self.transaction_actions = [
+            tool("开始事务", "transaction_begin", lambda: window.transaction("BEGIN"), enabled=not oracle),
+            tool("提交", "commit", lambda: window.transaction("COMMIT"), enabled=not oracle),
+            tool("回滚", "rollback", lambda: window.transaction("ROLLBACK"), enabled=not oracle)]
         self.toolbar.addSeparator()
-        tool("编辑器", "design", self.edit_record)
+        self.record_editor_action = tool("编辑器", "design", self.edit_record, enabled=not oracle)
         self.filter_action = tool("筛选", "filter")
         self.filter_action.setCheckable(True)
+        if oracle:
+            self.filter_action.setEnabled(False)
+            self.filter_action.setToolTip("Oracle 值筛选尚未实现。")
         tool("排序", "sort", self.open_sort)
         tool("列", "table", self.open_columns)
         self.toolbar.addSeparator()
@@ -248,7 +260,7 @@ class TablePage(QWidget):
         bar.addWidget(self.sql_label, 1)
         self.count = QLabel(self)
         self.count.hide()
-        first = button("第一页", "first", lambda: self.go_page(0))
+        self.first = button("第一页", "first", lambda: self.go_page(0))
         self.previous = button("上一页", "previous", lambda: self.change_page(-1))
         self.page_number = QSpinBox()
         self.page_number.setRange(1, 1)
@@ -257,7 +269,7 @@ class TablePage(QWidget):
         self.page_number.editingFinished.connect(lambda: self.go_page(self.page_number.value() - 1))
         bar.addWidget(self.page_number)
         self.next = button("下一页", "next", lambda: self.change_page(1))
-        button("最后一页", "last", lambda: self.go_page(max(0, (self.total - 1) // int(self.page_size.currentText()))))
+        self.last = button("最后一页", "last", lambda: self.go_page(max(0, (self.total - 1) // int(self.page_size.currentText()))))
         self.page_size = QComboBox(self)
         self.page_size.addItems(["100", "200", "500", "1000"])
         self.page_size.setCurrentText("1000")
@@ -270,11 +282,24 @@ class TablePage(QWidget):
         layout.addWidget(self.footer)
         self.note = QLabel(self)
         self.note.hide()
+        if oracle:
+            self.insert_button.setEnabled(False)
+            self.delete_button.setEnabled(False)
+            self.last.setEnabled(False)
+            self.page_number.setReadOnly(True)
+            for widget in (self.indexes, self.foreign_keys, self.ddl):
+                self.subtabs.setTabEnabled(self.subtabs.indexOf(widget), False)
+                self.subtabs.setTabToolTip(self.subtabs.indexOf(widget), "此 Oracle 工具尚未实现，不表示对象不存在。")
+            self.ddl.setPlaceholderText("Oracle DDL 预览尚未实现。")
         QTimer.singleShot(0, self.refresh)
 
     def go_page(self, page):
         if self.loading or not self.can_discard():
             return
+        if self.window.configs[self.connection_id].driver == "oracle":
+            current = self.offset // int(self.page_size.currentText())
+            if page not in {0, max(0, current - 1), current + 1} or (page > current and not self.has_more):
+                return
         self.offset = max(0, page) * int(self.page_size.currentText())
         self.refresh(check=False)
 
@@ -304,6 +329,8 @@ class TablePage(QWidget):
         menu.exec(self.toolbar.mapToGlobal(self.toolbar.rect().bottomLeft()))
 
     def edit_record(self):
+        if self.window._oracle_unavailable(self.connection_id):
+            return
         if not self.model or not self.model.editable or not self.model.result.rows:
             return
         row = self.grid.currentIndex().row()
@@ -326,6 +353,9 @@ class TablePage(QWidget):
     def apply_filter(self, *_):
         if self.loading or not self.can_discard():
             return
+        if self.window.configs[self.connection_id].driver == "oracle" and self.filter.text():
+            self.window._oracle_unavailable(self.connection_id)
+            return
         self.filter_value = self.filter.text()
         self.offset = 0
         self.refresh(check=False)
@@ -344,6 +374,8 @@ class TablePage(QWidget):
     def change_page(self, delta):
         if self.loading or not self.can_discard():
             return
+        if self.window.configs[self.connection_id].driver == "oracle" and delta > 0 and not self.has_more:
+            return
         self.offset = max(0, self.offset + delta * int(self.page_size.currentText()))
         self.refresh(check=False)
 
@@ -356,6 +388,15 @@ class TablePage(QWidget):
         self.loading = True
         self.setEnabled(False)
         size = int(self.page_size.currentText())
+        schema, table = self.schema, self.table
+        offset, order_by, descending, filter_value = self.offset, self.order_by, self.descending, self.filter_value
+        oracle = session.config.driver == "oracle"
+        if oracle:
+            def read_oracle(cancel_event):
+                metadata = session.columns(schema, table, cancel_event=cancel_event)
+                result = session.fetch_table(schema, table, offset, size, order_by, descending,
+                    filter_value, cancel_event=cancel_event)
+                return metadata, "", result, None, [], []
         def work():
             metadata = session.columns(self.schema, self.table)
             ddl = session.table_ddl(self.schema, self.table)
@@ -365,8 +406,12 @@ class TablePage(QWidget):
             total = session.count_rows(self.schema, self.table, self.filter_value)
             return metadata, ddl, result, total, indexes, foreign_keys
         def done(data):
+            if oracle and (self.window.sessions.get(self.connection_id) is not session or self.window.tabs.indexOf(self) < 0):
+                return
             self.metadata, ddl, result, self.total, indexes, foreign_keys = data
-            writable = self.kind == "table" and not session.config.read_only
+            self.total_known = self.total is not None
+            self.has_more = bool(result.truncated)
+            writable = self.kind == "table" and not oracle and not session.config.read_only
             editable = writable and any(c["pk"] for c in self.metadata)
             self.model = DataModel(result, editable, self.grid, self.metadata)
             self.model.dirty_changed.connect(self.update_dirty)
@@ -392,30 +437,38 @@ class TablePage(QWidget):
             self.sql_label.setText(result.sql)
             self.sql_label.setToolTip(result.sql)
             self.page_number.blockSignals(True)
-            self.page_number.setRange(1, max(1, (self.total + size - 1) // size))
+            self.page_number.setRange(1, max(1, (self.total + size - 1) // size) if self.total_known
+                                      else offset // size + 1)
             self.page_number.setValue(self.offset // size + 1)
             self.page_number.blockSignals(False)
-            self.window.status.setText(f"{self.total} 条记录在第 {self.offset // size + 1} 页")
+            self.window.status.setText(f"{self.total} 条记录在第 {self.offset // size + 1} 页" if self.total_known
+                                      else f"本页 {len(result.rows)} 条记录 · 总数未知" + (" · 后续仍有记录" if self.has_more else ""))
             if self.window.tabs.currentWidget() is self:
                 self.window.inspector.show_object({"name": self.table, "schema": self.schema, "kind": self.kind}, session.config, ddl)
             self.insert_button.setEnabled(writable)
             self.delete_button.setEnabled(editable)
             self.update_dirty()
-            self.count.setText(f"{self.offset + 1 if self.total else 0}–{self.offset + len(result.rows)} of {self.total:,}")
+            self.count.setText(f"{self.offset + 1 if self.total else 0}–{self.offset + len(result.rows)} of {self.total:,}" if self.total_known
+                               else f"本页 {len(result.rows)} 条记录 · 总数未知")
             self.previous.setEnabled(self.offset > 0)
-            self.next.setEnabled(self.offset + len(result.rows) < self.total)
+            self.next.setEnabled(self.offset + len(result.rows) < self.total if self.total_known else self.has_more)
             self.note.setText("Double-click a cell to edit · Changes are saved only when applied" if editable else "Read-only grid · Editing requires a writable table with a primary key")
         def complete():
             self.loading = False
             self.setEnabled(True)
-        self.window.submit(work, done, label=f"Reading {self.table}", finished=complete)
+        if oracle:
+            self.window._submit_oracle_read(session, read_oracle, done, label=f"读取 {table}", finished=complete)
+        else:
+            self.window.submit(work, done, label=f"Reading {self.table}", finished=complete)
 
     def update_dirty(self):
         dirty = bool(self.model and self.model.pending)
-        self.save_button.setEnabled(dirty)
+        self.save_button.setEnabled(dirty and self.window.configs[self.connection_id].driver != "oracle")
         self.discard_button.setEnabled(dirty)
 
     def save_changes(self):
+        if self.window._oracle_unavailable(self.connection_id):
+            return
         if not self.model or not self.model.pending or self.loading:
             return
         session = self.window.sessions[self.connection_id]
@@ -445,6 +498,8 @@ class TablePage(QWidget):
         self.window.submit(work, done, failed, f"Saving {len(changes)} row(s)")
 
     def insert_row(self):
+        if self.window._oracle_unavailable(self.connection_id):
+            return
         if not self.can_discard():
             return
         dialog = RowDialog(self.metadata, parent=self)
@@ -455,6 +510,8 @@ class TablePage(QWidget):
         self.window.submit(lambda: session.insert_row(schema, table, values), lambda _: self.refresh(check=False), label="Inserting row")
 
     def delete_row(self):
+        if self.window._oracle_unavailable(self.connection_id):
+            return
         if not self.model or not self.can_discard():
             return
         rows = sorted({i.row() for i in self.grid.selectedIndexes()})
@@ -501,6 +558,8 @@ class MainWindow(QMainWindow):
         self.tasks = set()
         self.pool = QThreadPool(self)
         self.pool.setMaxThreadCount(1)
+        # Connected sessions retain one serial owner even after a long idle.
+        self.pool.setExpiryTimeout(-1)
         self.cancel_pool = QThreadPool(self)
         self.cancel_pool.setMaxThreadCount(1)
         self._cancelling = False
@@ -518,6 +577,7 @@ class MainWindow(QMainWindow):
         self._mongo_view_jobs = {}
         self._mongo_pipeline_jobs = {}
         self._mongo_pipeline_cancel_states = {}
+        self._oracle_jobs = {}
         self._mongo_index_delete_dialogs = {}
         self._mongo_collection_operation_dialogs = {}
         self._mongo_view_drop_dialogs = {}
@@ -602,6 +662,14 @@ class MainWindow(QMainWindow):
             toolbar.addAction(action)
             self.category_actions[kind] = action
         self.category_actions["table"].setChecked(True)
+        for label, kind, symbol, before in (("实体化视图", "materialized_view", "view", "function"),
+                                            ("数据泵", "data_pump", "backup", "backup")):
+            action = self.action(label, lambda checked=False: self._oracle_unavailable(), icon=symbol)
+            action.setEnabled(False)
+            action.setVisible(False)
+            action.setToolTip("此 Oracle 工具尚未实现。")
+            toolbar.insertAction(self.category_actions[before], action)
+            self.category_actions[kind] = action
         self.mongo_pipeline_action = self.action("管道", self.new_mongo_pipeline, icon="query")
         self.mongo_pipeline_action.setCheckable(True)
         self.mongo_pipeline_action.setEnabled(False)
@@ -746,11 +814,14 @@ class MainWindow(QMainWindow):
         query = self.menuBar().addMenu("查询")
         query.addAction(self.run_action)
         query.addAction(self.stop_action)
-        query.addAction(self.action("解释", self.explain_current))
+        self.explain_action = self.action("解释", self.explain_current)
+        query.addAction(self.explain_action)
         query.addSeparator()
-        query.addAction(self.action("开始事务", lambda: self.transaction("BEGIN")))
-        query.addAction(self.action("提交", lambda: self.transaction("COMMIT")))
-        query.addAction(self.action("回滚", lambda: self.transaction("ROLLBACK")))
+        self.transaction_actions = [self.action("开始事务", lambda: self.transaction("BEGIN")),
+                                    self.action("提交", lambda: self.transaction("COMMIT")),
+                                    self.action("回滚", lambda: self.transaction("ROLLBACK"))]
+        for action in self.transaction_actions:
+            query.addAction(action)
         query.addSeparator()
         query.addAction(self.action("美化 SQL", self.format_sql, "Ctrl+Shift+F"))
         favorites = self.menuBar().addMenu("收藏夹")
@@ -793,6 +864,9 @@ class MainWindow(QMainWindow):
             return self.batch_job_controller.show_list()
         if self.active_id not in self.sessions or self.active_id in self._closing_connections or self._closing_mongo:
             return
+        if self.configs[self.active_id].driver == "oracle" and kind not in {entry[1] for entry in ORACLE_CATEGORIES}:
+            self._oracle_unavailable()
+            return
         if self.configs[self.active_id].driver == "redis" and kind == "table":
             kind = "redis_data"
         if self.configs[self.active_id].driver == "mongodb":
@@ -812,6 +886,13 @@ class MainWindow(QMainWindow):
 
     def show_other_tools(self):
         menu = QMenu(self)
+        if self.configs.get(self.active_id) and self.configs[self.active_id].driver == "oracle":
+            for title in ORACLE_OTHER_TOOLS:
+                action = menu.addAction(title)
+                action.setEnabled(False)
+                action.setToolTip("此 Oracle 工具尚未实现。")
+            menu.exec(self.mapToGlobal(self.rect().center()))
+            return
         if self.configs.get(self.active_id) and self.configs[self.active_id].driver == "mongodb":
             for title, kind, available in [("索引", "mongo_index", True), ("MapReduce", "mongo_mapreduce", False),
                                            ("GridFS 存储桶", "mongo_bucket", True)]:
@@ -938,6 +1019,8 @@ class MainWindow(QMainWindow):
         return page
 
     def design_object(self, info):
+        if self._oracle_unavailable(info.get("id")):
+            return
         config = self.configs.get(info["id"])
         if config and config.driver == "mongodb":
             if info["kind"] == "mongo_index":
@@ -1058,6 +1141,8 @@ class MainWindow(QMainWindow):
         return schema_tools.load_table, schema_tools.plan_table, schema_tools.apply_plan
 
     def new_browser_object(self):
+        if self._oracle_unavailable(self.object_page.connection_id):
+            return
         if self.object_page.kind == "mongo_index":
             return self.open_mongo_index_designer(self.object_page.connection_id, self.object_page.schema)
         if self.object_page.kind == "mongo_collection":
@@ -2734,6 +2819,8 @@ class MainWindow(QMainWindow):
         return True
 
     def drop_object(self, info):
+        if self._oracle_unavailable(info.get("id")):
+            return
         if info.get("kind") == "mongo_index":
             return self.drop_mongo_index(info)
         name, ok = QInputDialog.getText(self, "删除对象", f"输入对象名称 {info['name']} 以确认删除：")
@@ -2783,6 +2870,67 @@ class MainWindow(QMainWindow):
         task.signals.finished.connect(task.signals.deleteLater)
         self.refresh_actions()
         (pool or self.pool).start(task)
+
+    def _oracle_unavailable(self, connection_id=None):
+        config = self.configs.get(connection_id or self.active_id)
+        if config and config.driver == "oracle":
+            self.statusBar().showMessage("此 Oracle 工具尚未实现。", 5000)
+            return True
+        return False
+
+    def _submit_oracle_read(self, session, function, success=None, failure=None, label="读取 Oracle", finished=None):
+        """Freeze one owner and cancellation event before entering the serial queue."""
+        if self._closed or not isValid(self):
+            return None
+        token, cancelled, owner_finished = object(), threading.Event(), threading.Event()
+        state = {"session": session, "cancelled": cancelled, "finished": owner_finished,
+                 "control_pending": False, "retry_scheduled": False}
+        self._oracle_jobs[token] = state
+
+        def work():
+            try:
+                if cancelled.is_set():
+                    raise DatabaseError("Oracle 操作已停止。")
+                return function(cancelled)
+            finally:
+                owner_finished.set()
+
+        def complete():
+            if self._oracle_jobs.get(token) is state:
+                self._oracle_jobs.pop(token)
+            if finished:
+                finished()
+
+        self.submit(work, success, failure, label, complete)
+        return token
+
+    def _cancel_oracle_job(self, token):
+        if self._closed or not isValid(self):
+            return
+        state = self._oracle_jobs.get(token)
+        if state is None or state["finished"].is_set():
+            return
+        state["cancelled"].set()
+        marker = state["session"].current_operation_marker
+        if marker is not None and not state["control_pending"]:
+            state["control_pending"] = True
+            session, finished = state["session"], state["finished"]
+
+            def cancel():
+                if not finished.is_set():
+                    session.cancel_current(marker)
+
+            def complete():
+                state["control_pending"] = False
+
+            self.submit(cancel, label="停止 Oracle 操作", finished=complete, pool=self.cancel_pool)
+        if not state["retry_scheduled"]:
+            state["retry_scheduled"] = True
+            def retry():
+                state["retry_scheduled"] = False
+                if self._oracle_jobs.get(token) is state and not state["finished"].is_set():
+                    self._cancel_oracle_job(token)
+            QTimer.singleShot(25, self, retry)
 
     def error(self, exc):
         QMessageBox.critical(self, "操作失败", str(exc))
@@ -3048,16 +3196,23 @@ class MainWindow(QMainWindow):
             manager.selectionRequested.connect(self.connection_type_selected)
             manager.open()
             return manager
-        dialog = ConnectionDialog(self, config)
+        if selected_driver == "oracle":
+            from .oracle_connection import OracleConnectionDialog
+            is_new = config is None or config.id not in self.configs
+            dialog = OracleConnectionDialog(self, config, is_new=is_new)
+        else:
+            dialog = ConnectionDialog(self, config)
         if driver:
             dialog.driver_combo.setCurrentIndex(max(0, dialog.driver_combo.findData(driver)))
-        if config:
+        if config and (selected_driver != "oracle" or not is_new):
             dialog.remember_check.setChecked(config.id in self.store.state["remembered_passwords"])
             remembered = self.store.state.get("remembered_secrets", {}).get(config.id, [])
             dialog.ssh_remember_check.setChecked("ssh_password" in remembered)
             dialog.ssh_key_remember_check.setChecked("ssh_key_passphrase" in remembered)
             dialog.ssl_remember_check.setChecked("ssl_key_password" in remembered)
         if dialog.exec() != QDialog.DialogCode.Accepted:
+            if selected_driver == "oracle" and is_new and getattr(dialog, "back_requested", False):
+                self.new_connection()
             return
         result = dialog.get_config()
         if result is None:
@@ -3155,6 +3310,8 @@ class MainWindow(QMainWindow):
     def _store_connection_edit(self, payload):
         result = payload.config()
         remember, remember_ssh, remember_ssh_key, remember_ssl = payload.remember
+        if result.driver == "oracle" and not remember:
+            result = replace(result, password="")
         try:
             self.store.save_connection(result, remember,
                 remember_ssh=remember_ssh, remember_ssh_key=remember_ssh_key, remember_ssl=remember_ssl)
@@ -3165,7 +3322,7 @@ class MainWindow(QMainWindow):
         self.active_id = result.id
         self.populate_connections()
         self.set_active(result.id)
-        if result.id not in self.store.state.get("navicat_imports", {}):
+        if result.driver != "oracle" and result.id not in self.store.state.get("navicat_imports", {}):
             self.connect_id(result.id)
 
     def connection_type_selected(self, driver, preset):
@@ -3207,20 +3364,52 @@ class MainWindow(QMainWindow):
         # Empty passwords can be intentional (certificate, local authentication,
         # or an account with an empty password). Try the configured method first.
         config = self.store.hydrate(self.configs[connection_id])
-        self.configs[connection_id] = config
-        self._connecting.add(connection_id)
-        session = DatabaseSession(config)
-        def work():
+        oracle = config.driver == "oracle"
+        if oracle:
             try:
+                from ..oracle_session import validate_oracle_execution
+                validate_oracle_execution(config, require_password=False)
+            except (DatabaseError, ValueError, ImportError) as error:
+                self.error(error)
+                return
+            if connection_id not in self.store.state["remembered_passwords"]:
+                # A temporary prompt belongs to this session, never the saved
+                # profile or Store's reusable process password cache.
+                self.store.passwords.pop(connection_id, None)
+                config = replace(config, password="")
+            if not config.password:
+                password, ok = QInputDialog.getText(self, "连接密码",
+                    f"{config.username}@{config.host} 的数据库密码", QLineEdit.EchoMode.Password)
+                if not ok:
+                    return
+                if not password:
+                    self.error("请输入数据库密码。")
+                    return
+                config = replace(config, password=password)
+            self.configs[connection_id] = replace(config, password="")
+        else:
+            self.configs[connection_id] = config
+        try:
+            session = DatabaseSession(config)
+        except DatabaseError as error:
+            self.error(error)
+            return
+        self._connecting.add(connection_id)
+        def work(cancel_event=None):
+            try:
+                if oracle:
+                    session.connect(cancel_event=cancel_event)
+                    return session.schemas(cancel_event=cancel_event), session._selected_schema
                 session.connect()
                 return session.schemas()
             except Exception:
                 session.close()
                 raise
-        def done(schemas):
+        def done(value):
+            schemas, selected = value if oracle else (value, None)
             self.sessions[connection_id] = session
             self.fill_schemas(connection_id, schemas)
-            self.set_active(connection_id)
+            self.set_active(connection_id, selected)
             for index in range(self.tabs.count()):
                 page = self.tabs.widget(index)
                 if (isinstance(page, MongoIndexDesignerPage) and page.connection_id == connection_id
@@ -3253,8 +3442,12 @@ class MainWindow(QMainWindow):
                 self.when_idle(lambda: self._request_connection_password(config, after))
             else:
                 self.error(error)
-        self.submit(work, done, failed, label=f"连接 {config.name}",
-                    finished=lambda: self._connecting.discard(connection_id))
+        if oracle:
+            self._submit_oracle_read(session, work, done, failed, label=f"连接 {config.name}",
+                                     finished=lambda: self._connecting.discard(connection_id))
+        else:
+            self.submit(work, done, failed, label=f"连接 {config.name}",
+                        finished=lambda: self._connecting.discard(connection_id))
 
     def _confirm_connection_host_key(self, config, error, after=None):
         # A queued response must never approve a different profile/endpoint.
@@ -3325,7 +3518,11 @@ class MainWindow(QMainWindow):
         def done(schemas):
             if self.sessions.get(connection_id) is session:
                 self.fill_schemas(connection_id, schemas)
-        self.submit(session.schemas, done, label="Loading schemas")
+        if session.config.driver == "oracle":
+            self._submit_oracle_read(session, lambda event: session.schemas(cancel_event=event), done,
+                                     label="读取 Oracle 架构")
+        else:
+            self.submit(session.schemas, done, label="Loading schemas")
 
     def fill_schemas(self, connection_id, schemas):
         items = self.connection_items(connection_id)
@@ -3376,6 +3573,8 @@ class MainWindow(QMainWindow):
             item.takeChildren()
             completions = []
             categories = [("数据", "redis_data", "table"), ("查询", "query", "query"), ("备份", "backup", "backup")] if session.config.driver == "redis" else [("表", "table", "table"), ("视图", "view", "view"), ("查询", "query", "query"), ("备份", "backup", "backup")]
+            if session.config.driver == "oracle":
+                categories = ORACLE_CATEGORIES
             if session.config.driver == "mongodb":
                 categories = [("集合", "mongo_collection", "table"), ("视图", "mongo_view", "view"),
                     ("函数", "mongo_function", "function"), ("索引", "mongo_index", "index"),
@@ -3387,7 +3586,7 @@ class MainWindow(QMainWindow):
                 category.setData(0, Qt.ItemDataRole.UserRole, {"type": "category", "id": info["id"], "schema": info["schema"], "kind": kind})
                 item.addChild(category)
                 category.setExpanded(label in expanded)
-                if kind in {"mongo_function", "mongo_mapreduce"}:
+                if kind in {"mongo_function", "mongo_mapreduce"} or session.config.driver == "oracle" and kind in {"materialized_view", "function", "query"}:
                     category.setDisabled(True)
                     category.setToolTip(0, "此专用工具尚未实现，仍在完整对齐范围内。")
                 if kind == "redis_data":
@@ -3433,12 +3632,17 @@ class MainWindow(QMainWindow):
                 target_info["loaded"] = False
                 target.setData(0, Qt.ItemDataRole.UserRole, target_info)
             self.error(error)
-        def work():
-            objects = [] if session.config.driver == "redis" else session.objects(info["schema"])
+        def work(cancel_event=None):
+            objects = ([] if session.config.driver == "redis" else
+                       session.objects(info["schema"], cancel_event=cancel_event) if session.config.driver == "oracle" else
+                       session.objects(info["schema"]))
             if session.config.driver == "mongodb":
                 objects += [dict(obj, kind="mongo_index") for obj in session.indexes(info["schema"])]
             return objects
-        self.submit(work, done, failed, "读取对象")
+        if session.config.driver == "oracle":
+            self._submit_oracle_read(session, work, done, failed, "读取 Oracle 对象")
+        else:
+            self.submit(work, done, failed, "读取对象")
 
     def tree_selected(self, item, column=0):
         info = item.data(0, Qt.ItemDataRole.UserRole)
@@ -3468,6 +3672,9 @@ class MainWindow(QMainWindow):
             self.show_objects(info.get("kind", "table"))
 
     def open_table(self, info):
+        if self.configs[info["id"]].driver == "oracle" and info["kind"] not in {"table", "view"}:
+            self._oracle_unavailable(info["id"])
+            return
         if info["kind"] == "mongo_pipeline":
             return self.open_mongo_pipeline(
                 info["id"], info["schema"], pipeline_id=info.get("pipeline_id"))
@@ -3616,6 +3823,8 @@ class MainWindow(QMainWindow):
 
     def new_query(self, checked=False, sql="", connection_id=None, query_language=None):
         connection_id = connection_id or self.active_id
+        if self._oracle_unavailable(connection_id):
+            return
         if connection_id not in self.configs:
             QMessageBox.information(self, "选择连接", "请先创建或选择一个连接。")
             return
@@ -3654,6 +3863,8 @@ class MainWindow(QMainWindow):
             self.run_query(page)
 
     def run_query(self, page):
+        if self._oracle_unavailable(page.connection_id):
+            return
         if isinstance(page, NativeMongoQueryPage):
             return page.run_native()
         if page.running:
@@ -3695,6 +3906,8 @@ class MainWindow(QMainWindow):
 
     def stop(self):
         self.batch_job_controller.cancel()
+        for token in tuple(self._oracle_jobs):
+            self._cancel_oracle_job(token)
         for token, (_session, cancelled, _started) in tuple(self._mongo_pipeline_jobs.items()):
             cancelled.set()
             cancellation = self._mongo_pipeline_cancel_states.get(token)
@@ -3713,7 +3926,9 @@ class MainWindow(QMainWindow):
                     continue
                 session = self.sessions.get(page.connection_id)
                 if session:
-                    if session.config.driver == "mongodb":
+                    if session.config.driver == "oracle":
+                        continue  # The captured Oracle token owns cancellation.
+                    elif session.config.driver == "mongodb":
                         marker = session.cancellation_marker()
                         if marker is not None:
                             targets[id(session)] = (session, marker)
@@ -3741,6 +3956,8 @@ class MainWindow(QMainWindow):
                     else session.cancel(expected_comment=marker), label="正在取消操作", finished=finish, pool=self.cancel_pool)
 
     def transaction(self, sql):
+        if self._oracle_unavailable():
+            return
         session = self.sessions.get(self.active_id)
         if session:
             if session.config.driver in {"redis", "mongodb"}:
@@ -3790,6 +4007,7 @@ class MainWindow(QMainWindow):
             sqlite = bool(config and config.driver == "sqlite")
             redis = bool(config and config.driver == "redis")
             mongo = bool(config and config.driver == "mongodb")
+            oracle = bool(config and config.driver == "oracle")
             self.category_actions["table"].setText("集合" if mongo else "数据" if redis else "表")
             for key in ("view", "function", "other", "index", "trigger"):
                 self.category_actions[key].setVisible(not redis)
@@ -3800,13 +4018,19 @@ class MainWindow(QMainWindow):
                 self.category_actions["other"].setText("其它")
                 self.category_actions["other"].setIcon(tool_icon("other"))
             self.category_actions["trigger"].setVisible(sqlite)
-            self.category_actions["backup"].setVisible(not mongo)
+            self.category_actions["backup"].setVisible(not mongo and not oracle)
+            self.category_actions["materialized_view"].setVisible(oracle)
+            self.category_actions["data_pump"].setVisible(oracle)
+            self.category_actions["materialized_view"].setEnabled(False)
+            self.category_actions["data_pump"].setEnabled(False)
             self.mongo_pipeline_action.setVisible(mongo)
             self.mongo_pipeline_action.setEnabled(connected)
             if not mongo:
                 self.mongo_pipeline_action.setChecked(False)
             for key in ("table", "view", "index", "trigger", "query", "backup", "model", "other"):
                 self.category_actions[key].setEnabled(connected)
+            if oracle:
+                self.category_actions["query"].setEnabled(False)
             other = self.category_actions["other"]
             user = self.category_actions["user"]
             self.main_toolbar.removeAction(other)
@@ -3818,17 +4042,24 @@ class MainWindow(QMainWindow):
             else:
                 for action in ([user, other] if sqlite else [other, user]):
                     self.main_toolbar.insertAction(before, action)
-        self.query_action.setEnabled(self.active_id in self.configs and self.configs[self.active_id].driver in SUPPORTED_DRIVERS)
-        relational = connected and self.configs[self.active_id].driver not in {"redis", "mongodb"}
+        self.query_action.setEnabled(self.active_id in self.configs and self.configs[self.active_id].driver in SUPPORTED_DRIVERS
+                                     and self.configs[self.active_id].driver != "oracle")
+        oracle = self.active_id in self.configs and self.configs[self.active_id].driver == "oracle"
+        relational = connected and self.configs[self.active_id].driver not in {"redis", "mongodb", "oracle"}
         self.table_action.setEnabled(relational and not self.configs[self.active_id].read_only)
         self.diagram_action.setEnabled(relational)
         self.category_actions["model"].setEnabled(relational)
         if hasattr(self, "object_page"):
             self.object_page.update_actions()
-        self.run_action.setEnabled((isinstance(page, QueryPage) or isinstance(page, BatchJobPage) and bool(page.definition.jobs)) and not getattr(page, 'running', False))
-        self.stop_action.setEnabled(not self._cancelling and (bool(self.batch_job_controller.runs) or bool(self._mongo_index_jobs) or bool(self._mongo_collection_jobs) or bool(self._mongo_timeseries_jobs) or bool(self._mongo_view_jobs) or bool(self._mongo_pipeline_jobs) or
+        self.run_action.setEnabled((isinstance(page, QueryPage) and self.configs[page.connection_id].driver != "oracle"
+                                    or isinstance(page, BatchJobPage) and bool(page.definition.jobs)) and not getattr(page, 'running', False))
+        self.stop_action.setEnabled(not self._cancelling and (bool(self._oracle_jobs) or bool(self.batch_job_controller.runs) or bool(self._mongo_index_jobs) or bool(self._mongo_collection_jobs) or bool(self._mongo_timeseries_jobs) or bool(self._mongo_view_jobs) or bool(self._mongo_pipeline_jobs) or
             any(isinstance(self.tabs.widget(i), QueryPage) and self.tabs.widget(i).running for i in range(self.tabs.count()))))
-        self.import_action.setEnabled(isinstance(page, TablePage) and page.kind == "table" and not self.configs[page.connection_id].read_only)
+        self.import_action.setEnabled(isinstance(page, TablePage) and page.kind == "table" and
+                                      self.configs[page.connection_id].driver != "oracle" and not self.configs[page.connection_id].read_only)
+        for action in self.transaction_actions:
+            action.setEnabled(not oracle)
+        self.explain_action.setEnabled(not oracle)
         self.export_action.setEnabled(isinstance(page, (QueryPage, TablePage)) and page.current_result() is not None)
         session = self.sessions.get(self.active_id)
         if hasattr(self, "transaction_status"):
@@ -3836,7 +4067,8 @@ class MainWindow(QMainWindow):
         if isinstance(page, QueryPage) and page.current_result() is not None and not page.running:
             self.status.setText(f"{len(page.current_result().rows)} 条记录")
         elif isinstance(page, TablePage) and page.model is not None and not page.loading:
-            self.status.setText(f"{page.total} 条记录在第 {page.offset // int(page.page_size.currentText()) + 1} 页")
+            self.status.setText(f"{page.total} 条记录在第 {page.offset // int(page.page_size.currentText()) + 1} 页" if page.total_known
+                                else f"本页 {len(page.model.result.rows)} 条记录 · 总数未知" + (" · 后续仍有记录" if page.has_more else ""))
         elif isinstance(page, (MongoCollectionPage, MongoGridFSPage)) and page.page is not None and not page.loading:
             unit = "文件" if isinstance(page, MongoGridFSPage) else "文档"
             self.status.setText(f"本页 {len(page.page.documents)} 个{unit}" + (" · 已编辑" if page.dirty else ""))
@@ -3894,7 +4126,7 @@ class MainWindow(QMainWindow):
         if session and session.in_transaction:
             if QMessageBox.question(self, "事务尚未结束", "回滚尚未提交的事务并关闭连接？", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel) != QMessageBox.StandardButton.Yes:
                 return False
-        if session and session.config.driver == "mongodb":
+        if session and session.config.driver in {"mongodb", "oracle"}:
             # MongoClient.close can drain cursors and send commands. Keep that
             # work on the same serial owner as reads/writes, then change widgets.
             self._closing_connections.add(connection_id)
@@ -3910,7 +4142,7 @@ class MainWindow(QMainWindow):
                 cancelled = getattr(retry, "cancelled", None)
                 if callable(cancelled):
                     cancelled()
-            self.submit(session.close, completed, failed, label="关闭 MongoDB 连接")
+            self.submit(session.close, completed, failed, label="关闭 Oracle 连接" if session.config.driver == "oracle" else "关闭 MongoDB 连接")
             return True
         if session:
             session.close()
@@ -4043,6 +4275,8 @@ class MainWindow(QMainWindow):
             page.format_sql()
 
     def new_table(self):
+        if self._oracle_unavailable():
+            return
         session = self.sessions.get(self.active_id)
         if not session:
             return
@@ -4058,6 +4292,8 @@ class MainWindow(QMainWindow):
 
     def import_rows(self):
         page = self.tabs.currentWidget()
+        if isinstance(page, TablePage) and self._oracle_unavailable(page.connection_id):
+            return
         if not isinstance(page, TablePage) or not page.can_discard():
             return
         path, _ = QFileDialog.getOpenFileName(self, "Import into " + page.table, "", "Data files (*.csv *.json)")
@@ -4097,15 +4333,25 @@ class MainWindow(QMainWindow):
 
     def compare_data(self):
         page = self.tabs.currentWidget()
+        if self._oracle_unavailable(getattr(page, "connection_id", self.active_id)):
+            return
         if not isinstance(page, TablePage):
             QMessageBox.information(self, "数据同步", "请先打开源表，再选择已连接的目标表。")
             return
         if self.tasks or not page.can_discard():
             return
         dialog = CompareTargetDialog(self, page)
+        selector = getattr(dialog, "connection", None)
+        if isinstance(selector, QComboBox):
+            for index in reversed(range(selector.count())):
+                config = self.configs.get(selector.itemData(index))
+                if config and config.driver == "oracle":
+                    selector.removeItem(index)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         target_id, schema, table = dialog.target()
+        if self._oracle_unavailable(target_id):
+            return
         source = self.sessions[page.connection_id]
         target = self.sessions[target_id]
         def done(plan):
@@ -4114,6 +4360,8 @@ class MainWindow(QMainWindow):
         self.submit(lambda: compare_tables(source, target, page.schema, page.table, schema, table), done, label="Comparing table data")
 
     def open_diagram(self):
+        if self._oracle_unavailable():
+            return
         if self.tasks or self.active_id not in self.sessions:
             return
         session = self.sessions[self.active_id]
@@ -4377,7 +4625,7 @@ class MainWindow(QMainWindow):
         for dialog in tuple(self._mongo_maintenance_dialogs):
             dialog.reject()
         mongo_sessions = [(identifier, session) for identifier, session in self.sessions.items()
-                          if session.config.driver == "mongodb"]
+                          if session.config.driver in {"mongodb", "oracle"}]
         if mongo_sessions:
             self._closing_mongo = True
             mongo_pages = [self.tabs.widget(index) for index in range(self.tabs.count())
@@ -4398,7 +4646,7 @@ class MainWindow(QMainWindow):
                 for page in mongo_pages:
                     page._closed = False
                 self.error(error)
-            self.submit(close_mongo, closed, failed, label="关闭 MongoDB 连接")
+            self.submit(close_mongo, closed, failed, label="关闭数据库连接")
             event.ignore()
             return
         if any(session.in_transaction for session in self.sessions.values()):

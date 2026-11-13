@@ -144,21 +144,35 @@ def test_group_selection_filter_and_active_only_have_no_connection_side_effects(
 
 def test_unknown_fields_and_unimplemented_driver_are_guarded_before_any_io_or_dialog(qtbot, setup, monkeypatch):
     pg = source(blocked=True)
-    oracle = source("synthetic:oracle", driver="oracle", blocked=True, name="Oracle metadata")
-    discover(qtbot, setup, pg, oracle)
+    snowflake = source("synthetic:snowflake", driver="snowflake", blocked=True, name="Snowflake metadata")
+    discover(qtbot, setup, pg, snowflake)
     window = setup.window
     def forbidden(*_a, **_k):pytest.fail("Blocked profiles must not hydrate/connect/open another driver's settings")
     monkeypatch.setattr(setup.store, "hydrate", forbidden)
     monkeypatch.setattr(window_module, "DatabaseSession", forbidden)
     monkeypatch.setattr(window_module, "ConnectionDialog", forbidden)
-    pg_id, oracle_id = imported_id(setup), imported_id(setup, "synthetic:oracle")
-    window.connect_id(pg_id); window.connect_id(oracle_id)
+    pg_id, snowflake_id = imported_id(setup), imported_id(setup, "synthetic:snowflake")
+    window.connect_id(pg_id); window.connect_id(snowflake_id)
     assert [message[0] for message in setup.messages] == ["待复核连接", "未实现驱动"]
-    window.set_active(oracle_id); window.edit_connection()
-    window.new_connection(config=window.configs[oracle_id])
+    window.set_active(snowflake_id); window.edit_connection()
+    window.new_connection(config=window.configs[snowflake_id])
     assert len(setup.messages) == 4 and not window.sessions and not window.tasks
-    assert "未实现驱动" in window.connection_item(oracle_id).toolTip(0)
+    assert "未实现驱动" in window.connection_item(snowflake_id).toolTip(0)
     assert "待复核" in window.connection_item(pg_id).toolTip(0)
+
+
+def test_known_oracle_driver_still_requires_import_review_before_prompt_or_io(qtbot, setup, monkeypatch):
+    from PySide6.QtWidgets import QInputDialog
+    discover(qtbot, setup, source("synthetic:oracle", driver="oracle", blocked=True,
+        name="Oracle metadata", database="", oracle_service_identifier="GENERATED_SERVICE"))
+    identifier = imported_id(setup, "synthetic:oracle")
+    def forbidden(*_args, **_kwargs): pytest.fail("Unreviewed Oracle metadata must not prompt or connect")
+    monkeypatch.setattr(setup.store, "hydrate", forbidden)
+    monkeypatch.setattr(window_module, "DatabaseSession", forbidden)
+    monkeypatch.setattr(QInputDialog, "getText", forbidden)
+    setup.window.connect_id(identifier)
+    assert [message[0] for message in setup.messages] == ["待复核连接"]
+    assert not setup.window.sessions and not setup.window.tasks
 
 
 def test_cancel_real_settings_keeps_import_review_guard_and_profile_untouched(qtbot, setup, monkeypatch):

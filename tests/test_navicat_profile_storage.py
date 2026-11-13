@@ -74,7 +74,7 @@ def test_all_nine_families_groups_and_explicit_review_blocks_round_trip(tmp_path
                          unsupported_fields=("authenticationmode",) if driver == "sqlserver" else ()) for driver in drivers]
     store = Store(tmp_path)
     counts = store.sync_navicat_profiles(report(*profiles))
-    assert counts["added"] == 9 and counts["blocked"] == 3
+    assert counts["added"] == 9 and counts["blocked"] == 2
     restarted = Store(tmp_path)
     by_driver = {config.driver: config for config in restarted.connections()}
     assert set(by_driver) == set(drivers)
@@ -85,9 +85,9 @@ def test_all_nine_families_groups_and_explicit_review_blocks_round_trip(tmp_path
         assert metadata["source_format"] == "macos-plist" and metadata["platform"] == "darwin"
         assert metadata["group_paths"] == [["Work", "Development"], ["Secondary"]]
         assert metadata["requires_secrets"] == ["password"]
-        assert metadata["blocked"] == (driver in {"oracle", "snowflake", "sqlserver"})
+        assert metadata["blocked"] == (driver in {"snowflake", "sqlserver"})
         assert not metadata["locally_edited"] and not metadata["source_missing"] and metadata["last_seen"]
-        if driver in {"oracle", "snowflake"}:
+        if driver == "snowflake":
             assert "driver" in metadata["unsupported_fields"]
     assert not vault[1]
 
@@ -166,7 +166,7 @@ def test_local_review_clears_unknown_block_and_refresh_preserves_config_all_secr
 
 def test_unsupported_driver_cannot_be_unblocked_merely_by_resaving_metadata(tmp_path, vault):
     store = Store(tmp_path)
-    store.sync_navicat_profiles(report(imported(driver="oracle")))
+    store.sync_navicat_profiles(report(imported(driver="snowflake")))
     config = store.connections()[0]
     store.save_connection(config)
     assert store.state["navicat_imports"][config.id]["blocked"]
@@ -174,7 +174,7 @@ def test_unsupported_driver_cannot_be_unblocked_merely_by_resaving_metadata(tmp_
     config.driver = "postgresql"
     store.save_connection(config)
     assert not store.state["navicat_imports"][config.id]["blocked"]
-    store.sync_navicat_profiles(report(imported(driver="oracle")))
+    store.sync_navicat_profiles(report(imported(driver="snowflake")))
     assert store.connections()[0].driver == "postgresql" and not store.state["navicat_imports"][config.id]["blocked"]
 
 

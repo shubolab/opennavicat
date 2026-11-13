@@ -16,13 +16,28 @@ from .icons import icon, tool_icon
 from ..query_language import LEGACY
 
 OBJECT_LABELS = {"table": "表", "view": "视图", "index": "索引", "trigger": "触发器",
+    "materialized_view": "实体化视图", "function": "函数",
     "redis_data": "数据", "query": "查询", "backup": "备份", "mongo_collection": "集合",
     "mongo_timeseries": "时间序列集合", "mongo_view": "视图", "mongo_index": "索引",
     "mongo_function": "函数", "mongo_mapreduce": "MapReduce", "mongo_pipeline": "聚合管道",
     "mongo_bucket": "GridFS 存储桶"}
 
+ORACLE_TABLE_COLUMNS = tuple(zip(
+    ("名称", "状态", "表类型", "表空间名称", "集群名称", "集群所有者", "IOT 名称", "IOT 类型",
+     "日志", "已备份", "行", "度数", "实例", "缓存", "表锁定", "样本大小", "上次分析", "分区",
+     "临时", "次要", "嵌套", "正在监控", "依赖性", "行移动", "压缩", "已生成", "缓冲池", "注释"),
+    ("name", "status", "table_type", "tablespace_name", "cluster_name", "cluster_owner", "iot_name", "iot_type",
+     "logging", "backed_up", "num_rows", "degree", "instances", "cache", "table_lock", "sample_size",
+     "last_analyzed", "partitioned", "temporary", "secondary", "nested", "monitoring", "dependencies",
+     "row_movement", "compression", "generated", "buffer_pool", "comment")))
+ORACLE_VIEW_COLUMNS = tuple(zip(
+    ("名称", "状态", "文本长度", "类型文本", "类型文本长度", "OID 文本", "OID 文本长度", "视图类型",
+     "视图类型所有者", "超级视图名称", "版本视图", "只读", "注释"),
+    ("name", "status", "text_length", "type_text", "type_text_length", "oid_text", "oid_text_length",
+     "view_type", "view_type_owner", "superview_name", "editioning_view", "read_only", "comment")))
+
 def object_symbol(kind):
-    return {"mongo_collection": "table", "mongo_timeseries": "table", "mongo_view": "view",
+    return {"materialized_view": "view", "mongo_collection": "table", "mongo_timeseries": "table", "mongo_view": "view",
             "mongo_index": "index", "mongo_bucket": "database",
             "mongo_pipeline": "query"}.get(kind, kind)
 
@@ -140,7 +155,11 @@ class ObjectBrowser(QWidget):
         headers = {"index": ["名称", "唯一键", "自动索引", "表名称", "根页面"],
                    "trigger": ["名称", "类型", "表名称", "触发", ""]}.get(kind,
                    ["名称", "根页面", "有索引", "有触发器", ""])
-        if kind == "mongo_collection":
+        config = self.window.configs.get(connection_id)
+        if config and config.driver == "oracle":
+            columns = {"table": ORACLE_TABLE_COLUMNS, "view": ORACLE_VIEW_COLUMNS}.get(kind)
+            headers = [label for label, _key in columns] if columns else ["名称", "状态"]
+        elif kind == "mongo_collection":
             headers = ["名称", "文档数", "已固定", "内存中的总大小", "对象的平均大小", "存储大小", "索引数", "索引的总大小"]
         elif kind.startswith("mongo_"):
             if kind == "mongo_index":
@@ -186,7 +205,10 @@ class ObjectBrowser(QWidget):
             self.show_objects(items)
             return
         show_system = self.system_indexes_check.isChecked()
-        def work():
+        def work(cancel_event=None):
+            if session.config.driver == "oracle":
+                return [dict(obj, id=connection_id) for obj in session.objects(schema, cancel_event=cancel_event)
+                        if obj["kind"] == kind], 0
             if session.config.driver == "mongodb":
                 if kind == "mongo_index":
                     rows = session.indexes(schema)
@@ -246,14 +268,25 @@ class ObjectBrowser(QWidget):
             if self.window.sessions.get(connection_id) is session and not getattr(self.window, "_closing_mongo", False) and connection_id not in getattr(self.window, "_closing_connections", ()) and (self.connection_id, self.schema, self.kind) == (connection_id, schema, kind):
                 self.hidden_system_indexes = hidden
                 self.show_objects(objects)
-        self.window.submit(work, done, label="读取对象")
+        if session.config.driver == "oracle":
+            self.window._submit_oracle_read(session, work, done, label="读取 Oracle 对象")
+        else:
+            self.window.submit(work, done, label="读取对象")
 
     def show_objects(self, objects):
         self.records = objects
         self.table.setRowCount(len(objects))
         for row, entry in enumerate(objects):
             values = [entry["name"], entry.get("rootpage", ""), "是" if entry.get("indexed") else "否", "是" if entry.get("triggers") else "否", ""]
-            if self.kind == "index":
+            config = self.window.configs.get(self.connection_id)
+            oracle_columns = ({"table": ORACLE_TABLE_COLUMNS, "view": ORACLE_VIEW_COLUMNS}.get(self.kind)
+                              if config and config.driver == "oracle" else None)
+            if config and config.driver == "oracle":
+                columns = oracle_columns or (("名称", "name"), ("状态", "status"))
+                unavailable = set(entry.get("unavailable_fields", ()))
+                values = ["—" if key in unavailable or entry.get(key) is None else entry[key]
+                          for _label, key in columns]
+            elif self.kind == "index":
                 values = [entry["name"], "是" if entry.get("unique") else "否", "是" if entry.get("automatic") else "否", entry["table"], entry.get("rootpage", "")]
             elif self.kind == "trigger":
                 values = [entry["name"], "View" if entry.get("owner_type") == "view" else "Table", entry["table"], entry.get("timing", "") + " " + entry.get("event", ""), ""]
@@ -279,6 +312,10 @@ class ObjectBrowser(QWidget):
                 values = [entry["name"], "", "", "", ""]
             for column, value in enumerate(values):
                 item = QTableWidgetItem(str(value))
+                if config and config.driver == "oracle":
+                    key = columns[column][1]
+                    if key in unavailable or entry.get(key) is None:
+                        item.setToolTip("此元数据尚不可用；不表示否或零。")
                 if column == 0:
                     item.setIcon(icon(object_symbol(entry["kind"]), 16))
                     item.setData(Qt.ItemDataRole.UserRole, entry)
@@ -311,7 +348,9 @@ class ObjectBrowser(QWidget):
             if (self.window._closed or getattr(self.window, "_closing_mongo", False)
                     or self.connection_id in getattr(self.window, "_closing_connections", ())):
                 return
-            if self.window.inspector.isVisible() and session and entry["kind"] in {"table", "view"}:
+            if session and session.config.driver == "oracle":
+                self.window.inspector.show_object(entry, self.window.configs.get(entry["id"]))
+            elif self.window.inspector.isVisible() and session and entry["kind"] in {"table", "view"}:
                 def done(ddl):
                     if self.selected() == entry and self.window.tabs.currentWidget() is self:
                         self.window.inspector.show_object(entry, self.window.configs.get(entry["id"]), ddl)
@@ -330,9 +369,11 @@ class ObjectBrowser(QWidget):
     def update_actions(self):
         selected = self.selected() is not None
         connected = self.connection_id in self.window.sessions and self.connection_id not in getattr(self.window, "_closing_connections", ()) and not getattr(self.window, "_closing_mongo", False)
-        writable = connected and not self.window.configs[self.connection_id].read_only
-        self.open_action.setEnabled(selected and self.kind != "mongo_index")
-        self.design_action.setEnabled(connected and selected and self.kind in {
+        oracle = connected and self.window.configs[self.connection_id].driver == "oracle"
+        writable = connected and not oracle and not self.window.configs[self.connection_id].read_only
+        self.open_action.setEnabled(selected and self.kind != "mongo_index" and
+                                    (not oracle or self.kind in {"table", "view", "query"}))
+        self.design_action.setEnabled(connected and not oracle and selected and self.kind in {
             "table", "view", "index", "trigger", "mongo_index", "mongo_collection", "mongo_timeseries", "mongo_view"})
         self.new_action.setEnabled(writable and self.kind in {
             "table", "index", "trigger", "mongo_index", "mongo_collection", "mongo_pipeline"})
@@ -348,7 +389,7 @@ class ObjectBrowser(QWidget):
             shortcut.setEnabled(self.kind == "mongo_index" and self.delete_action.isEnabled())
         self.import_action.setEnabled(writable and selected and self.kind == "table")
         self.export_action.setEnabled(connected and selected and self.kind in {"table", "view"})
-        self.er_action.setEnabled(connected and self.window.configs[self.connection_id].driver not in {"redis", "mongodb"})
+        self.er_action.setEnabled(connected and self.window.configs[self.connection_id].driver not in {"redis", "mongodb", "oracle"})
 
     def filter_rows(self, text):
         text = text.casefold()
@@ -375,11 +416,15 @@ class ObjectBrowser(QWidget):
             self.window.open_table(dict(entry, table=entry["name"]))
 
     def design_selected(self):
+        if self.window._oracle_unavailable(self.connection_id):
+            return
         entry = self.selected()
         if entry:
             self.window.design_object(dict(entry, table=entry["name"]) if entry["kind"] not in {"index", "trigger", "mongo_index"} else entry)
 
     def import_selected(self):
+        if self.window._oracle_unavailable(self.connection_id):
+            return
         self.open_selected()
         self.window.when_idle(self.window.import_rows)
 
@@ -388,6 +433,8 @@ class ObjectBrowser(QWidget):
         self.window.when_idle(self.window.export_rows)
 
     def drop_selected(self):
+        if self.window._oracle_unavailable(self.connection_id):
+            return
         entry = self.selected()
         if entry:
             if entry["kind"] == "mongo_collection":
@@ -514,6 +561,13 @@ class Inspector(QWidget):
         self.buttons.idClicked.connect(self.stack.setCurrentIndex)
 
     def show_object(self, info, config=None, ddl=""):
+        oracle = bool(config and config.driver == "oracle")
+        self.ddl_button.setEnabled(not oracle)
+        self.ddl_button.setToolTip("Oracle DDL 预览尚未实现。" if oracle else "")
+        self.ddl.setPlaceholderText("Oracle DDL 预览尚未实现。" if oracle else "")
+        if oracle:
+            self.general.setChecked(True)
+            self.stack.setCurrentIndex(0)
         kind = info.get("kind", "query")
         self.symbol.setPixmap(icon(object_symbol(kind), 48).pixmap(48, 48))
         self.title.setText(info.get("name", info.get("table", "无标题")))

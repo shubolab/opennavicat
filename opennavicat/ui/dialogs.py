@@ -1058,6 +1058,20 @@ class ConnectionDialog(QDialog):
         except ValueError as exc:
             QMessageBox.warning(self, "测试连接", str(exc))
             return
+        self._start_connection_test(config)
+
+    @staticmethod
+    def _probe_session(session, config):
+        session.connect()
+        if config.driver != "mongodb":
+            session.execute("PING" if config.driver == "redis" else "SELECT 1", limit=1)
+        # MongoSession.connect performs its authenticated ping directly.
+        if config.driver == "sqlite":
+            session.objects("main")
+        return "连接成功"
+
+    def _start_connection_test(self, config):
+        """Run an already captured profile using the dialog's serial owner."""
         self._testing = True
         self.content.setEnabled(False)
         self.buttons.setEnabled(False)
@@ -1068,20 +1082,12 @@ class ConnectionDialog(QDialog):
         self._test_success_message = ""
         from opennavicat.database import DatabaseSession
         from opennavicat.tasks import Task
+        probe = self._probe_session
 
         def work():
             session = DatabaseSession(config)
             try:
-                session.connect()
-                if config.driver != "mongodb":
-                    session.execute("PING" if config.driver == "redis" else "SELECT 1", limit=1)
-                # MongoSession.connect performs an actual authenticated ping;
-                # do not send SQL or invent a shell command for its probe.
-                if config.driver == "sqlite":
-                    # SELECT 1 alone can succeed without reading a corrupt
-                    # SQLite header. Read its real schema before reporting success.
-                    session.objects("main")
-                return "连接成功"
+                return probe(session, config)
             finally:
                 session.close()
 
@@ -1106,6 +1112,7 @@ class ConnectionDialog(QDialog):
         # allow finished to run midway through that prompt and lose a retry.
         from opennavicat.transport import SSHHostKeyError
         error = self._test_error
+        self._test_error = None
         approved = isinstance(error, SSHHostKeyError) and confirm_ssh_host_key(self, error)
         if approved:
             self._ssh_host_key = error.pin

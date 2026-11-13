@@ -7,10 +7,13 @@ limits bound delivered rows/bytes, not Oracle execution work or total RSS.
 from __future__ import annotations
 
 import contextlib
+from copy import deepcopy
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 import re
+import ipaddress
+import sys
 import threading
 import time
 from typing import Any
@@ -49,9 +52,17 @@ class OracleError(DatabaseError):
 @dataclass(eq=False)
 class _Operation:
     external_cancel: threading.Event | None
+    timeout_seconds: int = 10
     cancelled: threading.Event = field(default_factory=threading.Event)
     finished: threading.Event = field(default_factory=threading.Event)
     connection: Any = None
+    retiring: bool = False
+    cancel_inflight: bool = False
+    cancel_done: threading.Event = field(default_factory=threading.Event)
+    discard_connection: Any = None
+
+    def __post_init__(self):
+        self.cancel_done.set()
 
 
 def _safe_error(error):
@@ -89,6 +100,7 @@ class OracleSession(DatabaseSession):
         self._cancel_requested = threading.Event()
         self._operation_lock = threading.RLock()
         self._operation_token: _Operation | None = None
+        self._connected_config = None
 
     @property
     def placeholder(self):
@@ -97,15 +109,23 @@ class OracleSession(DatabaseSession):
     @property
     def in_transaction(self):
         # Cached/local driver property; never issue GUI-thread SQL.
-        return bool(self.connection is not None and self.connection.transaction_in_progress)
+        with self._operation_lock:
+            connection = self.connection
+            try:
+                return bool(connection is not None and connection.transaction_in_progress)
+            except Exception:
+                # A connection concurrently marked unusable is not a reason to
+                # propagate a native driver exception through a GUI status read.
+                return False
 
     @property
     def current_operation_marker(self):
         with self._operation_lock:
-            return self._operation_token
+            token = self._operation_token
+            return token if token is not None and not token.retiring else None
 
-    def _connection_options(self):
-        c = self.config
+    def _connection_options(self, config=None):
+        c = config if config is not None else self.config
         strings = (c.oracle_connection_type, c.oracle_service_type, c.oracle_service_identifier,
                    c.oracle_role, c.oracle_tns_alias, c.oracle_settings_directory,
                    c.oracle_client_charset, c.oracle_initial_query, c.oracle_notes)
@@ -130,6 +150,20 @@ class OracleSession(DatabaseSession):
         for value in (c.host, c.username, c.oracle_service_identifier):
             if type(value) is not str or not value.strip() or any(ord(ch) < 32 for ch in value):
                 raise ValueError("Oracle host, username and service are required plain text")
+        # Component-based driver options still become an Oracle Net descriptor.
+        # Accept a literal IP/DNS host and plain service, never descriptor syntax
+        # smuggled through these fields or an implicit Easy Connect alias.
+        try:
+            ipaddress.ip_address(c.host)
+        except ValueError:
+            try:
+                hostname = c.host.encode("idna").decode("ascii")
+            except UnicodeError:
+                raise ValueError("Oracle host must be a literal IP address or DNS hostname") from None
+            if len(hostname) > 253 or not re.fullmatch(r"[A-Za-z0-9_.-]+", hostname):
+                raise ValueError("Oracle host must be a literal IP address or DNS hostname")
+        if not re.fullmatch(r"[A-Za-z0-9_.$#-]{1,512}", c.oracle_service_identifier):
+            raise ValueError("Oracle Basic currently requires a plain service identifier")
         if any(ch in c.username for ch in "[]/@"):
             raise ValueError("Oracle proxy or external authentication is not implemented")
         if type(c.password) is not str or not c.password:
@@ -153,13 +187,20 @@ class OracleSession(DatabaseSession):
                 raise ValueError("Oracle database list row is invalid")
         return dict(user=c.username, password=c.password, host=c.host, port=c.port,
                     service_name=c.oracle_service_identifier, protocol="tcp", externalauth=False,
-                    mode=0, retry_count=0, tcp_connect_timeout=c.connect_timeout)
+                    mode=0, retry_count=0, tcp_connect_timeout=c.connect_timeout,
+                    # In-band Oracle breaks survive TCP forwarders which may
+                    # drop urgent/OOB data. This is a public driver option, not
+                    # a private socket/driver monkeypatch.
+                    disable_oob=True)
 
     def connect(self, *, cancel_event=None):
         self._check_cancel(cancel_event=cancel_event)
         if self.connection is not None:
+            if self._connected_config != self.config:
+                raise DatabaseError("Oracle profile changed; close and reopen the connection before reading")
             return
-        options = self._connection_options()  # Validate before driver/file/network operations.
+        snapshot = deepcopy(self.config)
+        options = self._connection_options(snapshot)  # Validate before driver/file/network operations.
         import oracledb
         if not oracledb.is_thin_mode():
             raise ValueError("Oracle Basic currently requires Thin mode; the process already uses Thick mode")
@@ -168,11 +209,12 @@ class OracleSession(DatabaseSession):
             # Explicit components, no DSN/alias/wallet/config directory and no
             # global enable_thin_mode()/defaults mutation.
             connection = oracledb.connect(**options)
-            connection.call_timeout = self.config.connect_timeout * 1000
+            connection.call_timeout = snapshot.connect_timeout * 1000
             connection.autocommit = False
-            connection.outputtypehandler = self._output_type_handler
             connection.module = "OpenNavicat Oracle Basic"
             self._check_cancel(cancel_event=cancel_event)
+            if self.config != snapshot:
+                raise DatabaseError("Oracle profile changed while connecting; reopen the connection")
             with self._operation_lock:
                 self.connection = connection
                 if self._operation_token is not None:
@@ -183,27 +225,25 @@ class OracleSession(DatabaseSession):
                 cursor.execute("SELECT SYS_CONTEXT('USERENV','CURRENT_SCHEMA') FROM DUAL")
                 self._selected_schema = cursor.fetchone()[0]
             self._check_cancel(cancel_event=cancel_event)
+            if self.config != snapshot:
+                raise DatabaseError("Oracle profile changed while connecting; reopen the connection")
+            self._connected_config = snapshot
         except BaseException as error:
+            close_now = connection
             with self._operation_lock:
                 if self._operation_token is not None:
                     self._operation_token.connection = None
+                    self._operation_token.discard_connection = connection
+                    close_now = None
                 self.connection = None
                 self._selected_schema = None
-                if connection is not None:
-                    with contextlib.suppress(Exception):
-                        connection.close()
-            if isinstance(error, (OracleError, ValueError, KeyboardInterrupt, SystemExit)):
+                self._connected_config = None
+            if close_now is not None:
+                with contextlib.suppress(Exception):
+                    close_now.close()
+            if isinstance(error, (DatabaseError, ValueError, KeyboardInterrupt, SystemExit)):
                 raise
             raise _safe_error(error) from None
-
-    @staticmethod
-    def _output_type_handler(cursor, metadata):
-        import oracledb
-        if metadata.type_code == oracledb.DB_TYPE_NUMBER:
-            # NUMBER never takes a binary-float detour, including unconstrained
-            # scales, 38-digit integers and negative scales.
-            return cursor.var(oracledb.DB_TYPE_VARCHAR, size=172,
-                              arraysize=cursor.arraysize, outconverter=Decimal)
 
     def close(self):
         with self._operation_lock:
@@ -211,8 +251,12 @@ class OracleSession(DatabaseSession):
                 raise DatabaseError("Cancel and finish the Oracle operation before closing its connection")
             connection, self.connection = self.connection, None
             self._selected_schema = None
+            self._connected_config = None
         if connection is not None:
-            connection.close()
+            try:
+                connection.close()
+            except Exception as error:
+                raise _safe_error(error) from None
 
     def _check_cancel(self, token=None, *, cancel_event=None):
         token = token or self._operation_token
@@ -223,7 +267,8 @@ class OracleSession(DatabaseSession):
 
     @contextlib.contextmanager
     def _operation(self, cancel_event=None):
-        token = _Operation(cancel_event)
+        timeout = self.config.connect_timeout
+        token = _Operation(cancel_event, timeout_seconds=timeout if type(timeout) is int and 1 <= timeout <= 60 else 1)
         with self._operation_lock:
             if self._operation_token is not None:
                 raise DatabaseError("Oracle session already has an active operation")
@@ -237,6 +282,7 @@ class OracleSession(DatabaseSession):
             yield token
             with self._operation_lock:
                 self._check_cancel(token)
+                token.retiring = True
         except Exception as error:
             if isinstance(error, (DatabaseError, ValueError)):
                 raise
@@ -244,36 +290,72 @@ class OracleSession(DatabaseSession):
                 raise OracleError("Stopped by user", cancelled=True) from None
             raise _safe_error(error) from None
         finally:
+            pending_error = sys.exc_info()[0] is not None
+            health_failed = False
             with self._operation_lock:
+                token.retiring = True
+            # No network I/O is performed while holding the short marker lock.
+            # The serial owner cannot retire this token/start a new operation
+            # until every already accepted break for this token has returned.
+            token.cancel_done.wait()
+            discarded = token.discard_connection
+            with self._operation_lock:
+                try:
+                    healthy = self.connection is None or self.connection.is_healthy()
+                except Exception:
+                    healthy = False
+                    health_failed = True
+                if not healthy:
+                    discarded, self.connection = self.connection, None
+                    self._selected_schema = None
+                    self._connected_config = None
+                    token.connection = None
                 self._operation_token = None
                 self._active = False
                 token.finished.set()
+            if discarded is not None:
+                with contextlib.suppress(Exception):
+                    discarded.close()
+            if health_failed and not pending_error:
+                raise OracleError("Oracle connection health could not be verified; connection discarded") from None
 
     def cancel_current(self, marker):
         """Run on the separate cancellation worker, never the GUI/owner queue.
 
         Repeat breaks until this token exits: one early break can arrive before
         execute dispatch and otherwise miss a statement. The lock serializes
-        every break with token retirement, so a late sender cannot hit the next
-        operation or a replacement connection.
+        accepted break with token retirement, so a late sender cannot hit the
+        next operation or a replacement connection. No network send holds the
+        marker lock used by cached GUI reads.
         """
         with self._operation_lock:
-            if marker is None or marker is not self._operation_token:
+            if marker is None or marker is not self._operation_token or marker.retiring:
                 return False
             marker.cancelled.set()
-        deadline = time.monotonic() + self.config.connect_timeout + 1
-        while True:
-            with self._operation_lock:
-                if marker is not self._operation_token or marker.finished.is_set():
-                    return True
-                connection = marker.connection
-                if connection is not None and connection is self.connection:
+            if marker.cancel_inflight:
+                return True
+            marker.cancel_inflight = True
+            marker.cancel_done.clear()
+        try:
+            deadline = time.monotonic() + marker.timeout_seconds + 1
+            while True:
+                with self._operation_lock:
+                    if marker is not self._operation_token or marker.retiring:
+                        return True
+                    connection = marker.connection
+                    if connection is not self.connection:
+                        connection = None
+                if connection is not None:
                     try:
                         connection.cancel()
                     except Exception as error:
                         raise _safe_error(error) from None
-            if marker.finished.wait(0.025) or time.monotonic() >= deadline:
-                return True
+                if marker.finished.wait(0.025) or time.monotonic() >= deadline:
+                    return True
+        finally:
+            with self._operation_lock:
+                marker.cancel_inflight = False
+                marker.cancel_done.set()
 
     def cancel(self):
         self.cancel_current(self.current_operation_marker)
@@ -281,7 +363,8 @@ class OracleSession(DatabaseSession):
     def test_connection(self, *, cancel_event=None):
         with self._operation(cancel_event):
             self._read("SELECT 1 FROM DUAL", limit=1)
-            return "Oracle " + self.connection.version
+            version = self.connection.version
+            return "Oracle " + (version if type(version) is str and re.fullmatch(r"[0-9.]{1,64}", version) else "(version unavailable)")
 
     @staticmethod
     def quote_identifier(name):
@@ -305,7 +388,7 @@ class OracleSession(DatabaseSession):
     @staticmethod
     def _cell(value):
         if value is None or type(value) in {bool, int, float, Decimal, datetime, date, timedelta}:
-            return value, 64
+            return value, len(str(value).encode("utf-8"))
         if type(value) in {str, bytes}:
             size = len(value.encode("utf-8")) if type(value) is str else len(value)
             if size > MAX_CELL_BYTES:
@@ -323,7 +406,10 @@ class OracleSession(DatabaseSession):
             cursor.arraysize = min(128, limit + 1)
             cursor.prefetchrows = 0
             self._check_cancel()
-            cursor.execute(sql, params or {})
+            # Public per-statement conversion in the pinned driver; no global
+            # defaults and no binary float or server VARCHAR intermediate for
+            # NUMBER, including unconstrained and negative scales.
+            cursor.execute(sql, params or {}, fetch_decimals=True)
             self._check_cancel()
             description = cursor.description or []
             allowed = {getattr(oracledb, name) for name in ("DB_TYPE_NUMBER", "DB_TYPE_VARCHAR", "DB_TYPE_NVARCHAR",
@@ -351,6 +437,8 @@ class OracleSession(DatabaseSession):
                                (time.perf_counter() - started) * 1000, len(rows) > limit, sql)
 
     def execute(self, sql, limit=1000, *, cancel_event=None):
+        if type(limit) is not int or not 1 <= limit <= MAX_ROWS:
+            raise ValueError("Oracle result limit must be between 1 and 10000")
         statement = self._validate_query(sql)
         with self._operation(cancel_event):
             result = self._read(statement, limit=limit)
@@ -408,9 +496,9 @@ class OracleSession(DatabaseSession):
             all_views = self._dictionary_fields("ALL_VIEWS")
             table_columns = {v for v in TABLE_FIELDS.values() if v and v in all_tables}
             view_columns = {v for v in VIEW_FIELDS.values() if v in all_views}
-            tables = self._metadata("SELECT TABLE_NAME," + ",".join(sorted(table_columns)) +
+            tables = self._metadata("SELECT TABLE_NAME" + ("," + ",".join(sorted(table_columns)) if table_columns else "") +
                                     " FROM ALL_TABLES WHERE OWNER=:owner", {"owner": schema})
-            views = self._metadata("SELECT VIEW_NAME," + ",".join(sorted(view_columns)) +
+            views = self._metadata("SELECT VIEW_NAME" + ("," + ",".join(sorted(view_columns)) if view_columns else "") +
                                    " FROM ALL_VIEWS WHERE OWNER=:owner", {"owner": schema})
             table_map = {row["TABLE_NAME"]: row for row in tables}
             view_map = {row["VIEW_NAME"]: row for row in views}
@@ -494,6 +582,12 @@ class OracleSession(DatabaseSession):
 
     def _assert_write(self):
         raise DatabaseError("Oracle grid mutations, imports, comparison application and DDL tools are not implemented")
+
+    def _cursor(self, *, stream=False):
+        raise DatabaseError("Generic SQL-adapter cursors are not supported for Oracle; use its dedicated read APIs")
+
+    def _run(self, cursor, sql, params=None):
+        raise DatabaseError("Generic SQL-adapter commands are not supported for Oracle")
 
     def insert_row(self, schema, table, values):
         self._assert_write()

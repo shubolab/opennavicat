@@ -30,6 +30,28 @@ def test_stage_catalog_matches_reference_order():
         "$sortByCount", "$unionWith", "$unset", "$unwind")
 
 
+@pytest.mark.parametrize('operation', [preview_pipeline, execute_pipeline])
+def test_cancel_accepted_after_operation_marker_prevents_aggregate_dispatch(operation):
+    from contextlib import contextmanager
+    import threading
+
+    cancelled = threading.Event()
+    @contextmanager
+    def marked_operation():
+        cancelled.set()
+        yield 'generated-marker'
+    class Session:
+        config = SimpleNamespace(read_only=False)
+        _cancel_requested = cancelled
+        _validate_namespace = staticmethod(lambda *_args: None)
+        _operation = staticmethod(marked_operation)
+        @property
+        def connection(self):
+            pytest.fail('An accepted pre-dispatch cancellation must not send aggregate')
+    with pytest.raises(DatabaseError, match='before dispatch'):
+        operation(Session(), 'generated', PipelineDefinition(source='docs', stages=[PipelineStage()]))
+
+
 def test_nagg_roundtrip_preserves_bson_and_disabled_stages():
     definition = PipelineDefinition(
         name="generated_pipeline", source="docs", sample_mode="first", sample_size=25,

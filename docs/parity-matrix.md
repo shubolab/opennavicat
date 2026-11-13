@@ -1,6 +1,6 @@
 # Navicat 完整对齐矩阵
 
-记录日期：2026-11-11，Asia/Shanghai。目标是 **1:1 Navicat UI + 完整数据库工具功能 + Windows/Linux/macOS 三平台可用**。用户已明确恢复完整目标，当前基准为 `/Users/wangshubo/Downloads/Navicat Premium.app`，**Navicat Premium 18.0.5 build 321**。原16.1.1 build51证据保留为历史，不能直接验收新版。现有 OpenNavicat 是部分原型，本矩阵不把核心工作流、首版六平台安装包或现有测试范围当作目标上限。
+记录日期：2026-11-13，Asia/Shanghai。目标是 **1:1 Navicat UI + 完整数据库工具功能 + Windows/Linux/macOS 三平台可用**。用户已明确恢复完整目标，当前基准为 `/Users/wangshubo/Downloads/Navicat Premium.app`，**Navicat Premium 18.0.5 build 321**。原16.1.1 build51证据保留为历史，不能直接验收新版。现有 OpenNavicat 是部分原型，本矩阵不把核心工作流、首版六平台安装包或现有测试范围当作目标上限。
 
 ## 范围、状态与证据规则
 
@@ -36,7 +36,8 @@
 | M18-01–M18-08 | [18 MongoDB实际运行观察](ui-reference-18-mongodb.md) | 自有样例的分类/集合统计/原生查询/BSON视图、GridFS上传预览下载与清理、临时索引保存删除；所有未执行菜单、完整JS和三平台对齐仍开放。 |
 | MC18-01–MC18-07 | [18 普通集合设计器运行观察](ui-reference-18-mongodb-collections.md) / [当前内嵌索引实现](mongodb-inline-index.md) | macOS/MongoDB 8 自有 fixture 的七页顺序/默认状态、内嵌索引与隐藏 `_id_`、两个集合级存储脚本页、普通创建/取消/保存/重开；本机新增参考形三列表格、键模态、新建/重命名/选项/删除真实保存及错误草稿保留。高级现有选项、内嵌集合创建顺序、其它平台仍开放。 |
 | MV18-01–MV18-06 | [18 验证器运行观察](ui-reference-18-mongodb-validation.md) / [当前可视编辑器](mongodb-validator-ui.md) | 已按普通MongoDB 8/macOS实现22 BSON类型与Multiple、属性/根模式、类型约束、原始片段、独立Schema/Query、真实保存/取消/错误/重开和UUID保护；无法安全投影的精确Schema自动进入完整原始Query，owned MongoDB已用1001属性Schema完成标题修改、保存与回读。外部有损转换、全部未知/根模式和Windows/Linux参考UI仍开放。 |
-| AP18-01–AP18-08 | [18聚合管线实际运行观察](ui-reference-18-mongodb-pipeline.md) / [当前实现](mongodb-pipeline.md) | 已观察源集合、三档预览采样、42阶段菜单及全部编辑器Help模板、默认 Match、图/编辑器、输入输出预览、脚本、运行结果、保存Sheet、单/多节点视觉Explain、实际`Version 0.0 .nagg`字节及完整Options页；确认只有`$match/$project/$sort/$limit/$skip`显示创建工具切换。本机实现同入口、阶段增删/上下移动/启停、全部/最初/随机采样、42模板、分阶段预览、真实运行、左到右计划画布及浮动节点详情、结果导出、`Version 0.0`导入导出和Options映射；588字节Lookup文件与参考逐字节及SHA一致，Options实际进入preview/execute/Explain，未编辑`MQL`保留参考Help注释且编辑后写新文本。大型分叉/分片/副本集计划形状、精确成本公式、未知/未来Options语义、自动任务引用和三平台UI仍开放。 |
+| AP18-01–AP18-09 | [18聚合管线实际运行观察](ui-reference-18-mongodb-pipeline.md) / [当前实现](mongodb-pipeline.md) | 已观察源集合、三档预览采样、42阶段菜单及全部编辑器Help模板、默认 Match、图/编辑器、输入输出预览、脚本、运行结果、保存Sheet、单/多节点视觉Explain、实际`Version 0.0 .nagg`字节及完整Options页；确认只有`$match/$project/$sort/$limit/$skip`显示创建工具切换。本机实现同入口、阶段增删/上下移动/启停、全部/最初/随机采样、42模板、分阶段预览、真实运行、左到右计划画布及浮动节点详情、结果导出、`Version 0.0`导入导出和Options映射；588字节Lookup文件与参考逐字节及SHA一致，Options实际进入preview/execute/Explain，未编辑`MQL`保留参考Help注释且编辑后写新文本。AP18-09另观察$changeStream在standalone的真实拒绝及单节点副本集Batch空批次完成/idle游标边界，不是持续stream验收；自动任务引用见AU18及当前Batch片段。大型分叉/分片/副本集计划形状、精确成本公式、未知/未来Options语义、完整自动任务及三平台UI仍开放。 |
+| AU18-01–AU18-06 | [18自动运行实际观察](ui-reference-18-automation.md) / [当前Batch片段](batch-jobs.md) | 全局列表/四页Batch、16类别、Version1.4文件与Jobs空对象、已保存Pipeline引用/重复/改名失效、None认证断开后的独立执行、错误继续/跳过、历史重开和copy/sort均有自有样例观察；未创建OS计划或发邮件。Batch取消、其余类别执行与三平台仍开放。永久删除确认已取消，残留合成任务被清空；两容器/四匿名卷逐ID核验已清理。 |
 | S-W | [window.py](../opennavicat/ui/window.py)、[workspace.py](../opennavicat/ui/workspace.py)、[query.py](../opennavicat/ui/query.py)、[theme.py](../opennavicat/ui/theme.py) | 0.2 按实际参考重建的部分工作台、对象/信息区、表和查询页；尚未完成完整对照。 |
 | S-D | [dialogs.py](../opennavicat/ui/dialogs.py)、[editor.py](../opennavicat/ui/editor.py)、[grid.py](../opennavicat/ui/grid.py) | 现有连接/新表/记录对话框、SQL 和网格组件。 |
 | S-E | [database.py](../opennavicat/database.py) | SQLite/PostgreSQL/MySQL/MariaDB四驱动、基础metadata/SQL/行修改；其余五个数据库族和完整对象管理仍有缺口。 |
@@ -73,7 +74,7 @@
 | U10 | SQL/脚本、查询构建器和输出区域 | ◐ | L18-03实际观察消息/摘要/多结果/数据分析；当前布局和完整状态仍未对齐 | 编辑、运行、消息/摘要/多个结果/分析/解释及构建器逐状态对照，覆盖空/错误/取消/旧结果清理。 |
 | U11 | SQLite七页及各驱动对象设计器 | ◐ | L18-02已在参考实建/重命名核验；0.4独立SQLite设计标签、预览确认/保存和生命周期已接入并实测；保留旧表差异、完整选项和三平台对齐仍开放 | 对照七个实际页及属性/工具条/行增删排序、SQL预览、保存/取消/错误；用独立数据库检查每次创建与修改，不能只复刻页签。 |
 | U12 | 导入/导出/传输/同步/生成向导 | ✗ | E8–E11/R16；现有选文件/比较页不同 | 所有步骤、默认值、返回/下一步、映射、预览、执行、日志和配置保存页对齐。 |
-| U13 | 备份/还原、自动运行、监控、DB权限窗口 | ✗ | E13/R16；只有 SQLite 保存入口 | 每项工具列表、设置、详情、执行/日志、错误交互逐页对照。 |
+| U13 | 备份/还原、自动运行、监控、DB权限窗口 | ◐ | AU18已实测全局自动运行五列列表、四页Batch、16种可用工作类别、名称Sheet、高级默认、执行日志/历史、重复引用与错误策略；本轮新增参考形Qt四页和本地Batch基础，主窗口入口/真实批任务正在整合，尚未取得本轮真库Window验收。其它备份/还原、监控和DB权限窗口仍缺，不因这一个片段变为已实现；完整列表copy/group、计划/SMTP及三平台仍开放，见[批任务记录](batch-jobs.md) | 每项工具列表、设置、详情、执行/日志、错误交互逐页对照；Batch全部类别、排列/选择状态、计划/邮件/历史及各平台行为分别验收。 |
 | U14 | 模型/BI多资产工作区及设计器 | ✗ | R18-H/F；L18-01确认BI入口，尚非完整工作区执行；只读关系图不足 | 模型/图/字典/命名标准/词汇表及BI数据源/图/仪表盘/参数的列表/缩略图、内部标签、属性/依赖、画布、保存输出完整对照。 |
 | U15 | 字体、颜色、图标、间距、边框、选中/禁用/焦点/悬浮 | ✗ | 自定义视觉未参考对照 | 统一条件下覆盖主窗口、菜单、表单、网格、设计器的全部视觉状态，消除差异。 |
 | U16 | 空数据、忙碌、进度、错误、取消、断线 | ◐ | 现有自定义提示未对齐 | 主动触发各状态并留图，核对按钮、文字、重试/取消及恢复路径。 |
@@ -82,7 +83,7 @@
 | U19 | 连接管理器、星标/隐藏、导航过滤和URI窗口 | ✗ | R18-H/F；动态可见路径需继续实际观察 | 管理器和导航同步、vendor/active/star过滤、定位活动对象/折叠、顶/底过滤栏、URI预览/编辑/错误和profile切换逐状态对照。 |
 | U20 | 数据分析、脱敏、数据字典和AI各页/向导 | ✗ | R18-H/F；L18-03只核实部分实际入口 | 按扫描/结果/部署/版面/聊天等真实页顺序留图，完整选项、依赖、预览、返回/取消、错误和持久化一致。 |
 | U21 | Redis/Snowflake专属连接、对象、数据/权限窗口 | ✗ | R18-H/F；不能套用关系型通用网格或普通密码页 | 专有字段/模式/类型/属性、Sentinel/TTL/ACL/warehouse/role/MFA等适用状态与UI分别对照。 |
-| U22 | MongoDB独立聚合管线设计器 | ◐ | AP18-01–AP18-08 已实际观察Navicat 18的工具栏/对象入口、42阶段及全部编辑器模板、源集合与三档预览样本、阶段图/编辑器、分阶段输入输出、脚本、运行结果、保存Sheet、单/多节点视觉Explain、实际`.nagg`及Options页；本机已接入独立Qt页、阶段增删/顺序/启停、全部/最初/随机采样、分阶段预览、真实运行、左到右计划画布/浮动详情、JSON/网格/统计/信息、结果导出、`Version 0.0`导入导出及保存/重开。已按参考只保留五类创建工具，42类编辑器Help模板、阶段拖拽和Options映射均接入；已知Options进入preview/execute/Explain。大型分叉/分片/副本集计划、未知/未来Options语义、自动任务引用和三平台UI仍未对齐 | source/stage图/阶段编辑/输入输出预览/脚本/选项/解释/结果、文件兼容、拖动与启用禁用完整对照。 |
+| U22 | MongoDB独立聚合管线设计器 | ◐ | AP18-01–AP18-09 已实际观察Navicat 18的工具栏/对象入口、42阶段及全部编辑器模板、源集合与三档预览样本、阶段图/编辑器、分阶段输入输出、脚本、运行结果、保存Sheet、单/多节点视觉Explain、实际`.nagg`及Options页；本机已接入独立Qt页、阶段增删/顺序/启停、全部/最初/随机采样、分阶段预览、真实运行、左到右计划画布/浮动详情、JSON/网格/统计/信息、结果导出、`Version 0.0`导入导出及保存/重开。已按参考只保留五类创建工具，42类编辑器Help模板、阶段拖拽和Options映射均接入；已知Options进入preview/execute/Explain。3bc020f另修复typed BSON脚本、preview写入/stream保护及真实连接树Pipeline路由；AU18引用已有本地Batch片段，主窗口整合尚待真库验收。大型分叉/分片/副本集计划、持续stream、未知/未来Options语义、完整自动任务和三平台UI仍未对齐 | source/stage图/阶段编辑/输入输出预览/脚本/选项/解释/结果、文件兼容、拖动与启用禁用完整对照。 |
 | U23 | MongoDB普通/时间序列集合设计器 | ◐ | main已有普通集合新建/设计基础：集合选项、验证、collation、原始只读BSON、脚本预览、删除/清空永久确认、重命名、时间序列创建/设计、staged集合复制、验证/重建索引、worker保存/取消及真实Mongo主窗测试；本轮macOS/MongoDB 8普通集合新建实际观察为索引→验证→存储引擎→索引选项→集合选项→排序规则→脚本预览；本轮开发按MC18重排七页、内嵌表隐藏_id_，接通WiredTiger存储引擎/索引默认配置的创建/取消/错误重试/重开；开发分支新增参考形验证页：独立JSON Schema属性/根模式与Query、22 BSON类型及Multiple、类型约束、原始片段、失败保留与真实主窗口保存/取消/重开，owned MongoDB与Cocoa专项通过；开发分支新增参考形内嵌索引三列表格、嵌套键模态、唯一/背景/稀疏/TTL/存储桶大小、新建/重命名/删除和顺序非事务保存，真实Mongo主窗通过；开发分支另接入参考形结构化collation（locale及8个联动字段、已有集合服务器归一值只读和未知字段保留），真实主窗创建/回读通过；内嵌集合创建顺序、未知高级选项、外部验证器转换、全部未知/根模式、集群/旧存储选项、集合选项页已按18.0.5接入固定/聚集集合、聚集名称与TTL、变更流前后图像、自动索引ID及两项旧版存储控件，pinned MongoDB 8.0.34确认真实创建/collMod和旧选项拒绝；已从18.0.5实际菜单逐页枚举152个无重复非空locale值并保持顺序，AX顶部100/滚动后153的计数差异仍开放；其它类型/版本/三平台布局继续开放 | 对照新建常规/时间序列入口及全部页、默认/启用条件、名称Sheet、脚本预览、保存/取消/错误/权限/重开；独立核验真实DDL和只读回退。 |
 
 ## B. 连接、数据库认证和配置
@@ -159,7 +160,7 @@
 | Q09 | 查询对象、命名/保存/导入导出/历史/本地库 | ◐ | SQL文件/收藏/历史非参考对象管理 | 分类/列表、位置、重命名/删除、历史检索、打开/关闭/重启和文件交换完整。 |
 | Q10 | 消息/日志、结果命名、查看/复制/保存与获取 | ◐ | 多结果及已加载导出 | 全部输出页和上下文动作，真实类型/NULL/BLOB、大结果及继续获取，不丢执行语义。 |
 | Q11 | MongoDB Find/Aggregate Builder、脚本和结果 | ◐ | 0.8.1接入原生JS变量/函数/循环及已实现BSON/数据库接口，保留旧命令语言、游标/限流/取消和部分结果；真实主窗执行索引UUID脚本已验证；0.9候选补充create/drop/list等八项索引helpers及结构化server code/codeName，真实mongosh不是原版Navicat证据；完整参考全局/API、结果视图与可视builder仍开放 | 真实查询/管道/参数/BSON/错误与各结果模式，每个builder生成和执行均可验证。 |
-| Q12 | MongoDB独立Aggregation Pipeline对象与阶段执行 | ◐ | 已按AP18接入42阶段和模板、source collection、全部/最初/随机采样、逐阶段输入输出、脚本、真实运行、左到右视觉Explain画布、结果导出、取消标记、Navicat`Version 0.0 .nagg`导入导出和参考Options编辑器，已知磁盘/批处理/超时/读关注/collation/hint/comment/写关注/Let实际进入命令；自动任务引用、未知/未来Options语义、大型分叉/分片/副本集计划形状和三平台实际验收仍开放 | 新建/保存/导入/重开，source collection、阶段移动/开关、逐阶段输入输出、采样/全量、错误/取消、真实结果/计划及自动任务引用一致。 |
+| Q12 | MongoDB独立Aggregation Pipeline对象与阶段执行 | ◐ | 已按AP18接入42阶段和模板、source collection、全部/最初/随机采样、逐阶段输入输出、脚本、真实运行、左到右视觉Explain画布、结果导出、取消标记、Navicat`Version 0.0 .nagg`导入导出和参考Options编辑器，已知磁盘/批处理/超时/读关注/collation/hint/comment/写关注/Let实际进入命令；AU18任务引用进入本地Batch模型/Qt/runtime片段，真实主窗口执行验收仍pending；3bc020f保持typed脚本与preview安全门禁，拒绝stream预览不是持续stream能力。完整自动任务、未知/未来Options语义、大型分叉/分片/副本集计划形状和三平台实际验收仍开放 | 新建/保存/导入/重开，source collection、阶段移动/开关、逐阶段输入输出、采样/全量、错误/取消、真实结果/计划及自动任务引用一致。 |
 
 ### E1. AI工具门禁，排除产品账号而保留独立provider配置
 
@@ -202,8 +203,8 @@
 | B02 | 原生服务端/文件备份及特有备份对象 | ✗ | E13 backup device等 | 实际设备/路径/组件/压缩等参考选项，服务端权限/日志/取消/错误及原生独立恢复。 |
 | B03 | Oracle Data Pump导入/导出 | ✗ | E13/R16 | 自有Oracle以适用角色覆盖实际模式/目录/对象/过滤/映射，原生工具可读并正确重导入。 |
 | B04 | Redis备份/还原、namespace和原生选项 | ✗ | R18-H/F专有Backup/RestoreNoSQL档案 | 按参考实际格式/namespace/选项备份，在独立临时Redis恢复后每key类型/值/TTL及适用ACL一致，错误/取消/部署边界逐项验证。 |
-| A01 | 自动运行/Batch Job创建、编排、本地管理 | ✗ | L1/E13/R18-H声明新增管线/脱敏/字典profile参与任务 | 枚举全部可加入工具及参数/profile，含新版实际支持项；顺序/依赖、命名、保存/复制/删除/打开/重启一致，不假定每种工具都可计划。 |
-| A02 | 计划、执行、取消、日志、失败/重启/离线 | ✗ | E13/R16 automation_schedule | 三OS近时/重复等实际计划的真实DB结果，凭据/时区/退出后执行/失败策略按参考验证。 |
+| A01 | 自动运行/Batch Job创建、编排、本地管理 | ◐ | [AU18-01–AU18-06](ui-reference-18-automation.md)已在macOS18.0.5用自有Pipeline实测16类别、顺序重复引用、保存/重开、复制、排序、改名失效和历史；本轮实现[Version1.4本地模型/Qt四页/串行独立session及Store历史基础](batch-jobs.md)，包括Jobs空对象形状、未知非秘密字段保留与精确名称绑定。当前仅已保存MongoDB pipeline任务可执行，主窗口真实任务验收仍pending；其余15类别及完整copy/group/文件往返、依赖和跨平台管理仍开放 | 枚举全部可加入工具及参数/profile，含新版实际支持项；顺序/依赖、命名、保存/复制/删除/打开/重启一致，不假定每种工具都可计划。 |
+| A02 | 计划、执行、取消、日志、失败/重启/离线 | ✗ | E13/R16及AU18；已新增手动Pipeline批任务的串行runtime、单独取消worker、日志/历史基础专项，但未完成OS计划、退出后执行/触发/恢复或三平台参考验收，不能用手动Start替代Scheduler。原版Batch取消动作本轮未核实；普通stream预览拒绝也不是stream执行功能 | 三OS近时/重复等实际计划的真实DB结果，凭据/时区/退出后执行/失败策略按参考验证；另核手动批任务错误/取消与完成副作用、不自动重试和重启恢复。 |
 | M01 | 模型工作区、本地文件与版本管理 | ✗ | E1/E12/E14/R16；diagram无模型文档 | 新建/打开/保存/另存/版本/属性/格式完整，重启回读全部对象；原格式兼容范围需实测。 |
 | M02 | 概念/逻辑/物理/Hybrid模型及对象关系编辑 | ◐ | R18-H；只读schema图仅显示一角 | 每类型完整编辑/校验/撤销重做/依赖/属性持久化，Hybrid逻辑/物理映射和视图切换、全部专有对象与参考一致。 |
 | M03 | 正向/逆向工程、SQL导入、转换、双向同步和SQL输出 | ◐ | R18-H/F；当前只读metadata图，无模型DDL部署 | 真库或SQL逆向、编辑/转换/输出/部署、DB→模型和模型→DB再比较，约束/类型/关系保持且预览/失败/依赖对照。 |

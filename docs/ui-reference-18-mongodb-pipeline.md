@@ -278,7 +278,146 @@ highlighting, search dimming and a floating server-detail panel. The generated
 pipeline was discarded, and the exact-owned container and volumes were removed
 after identity verification.
 
-## Boundaries
+## AP18-09 Change-stream stage and batch probe
+
+On 2026-11-13, a new exact-owned native ARM64 MongoDB **8.0.34** standalone
+fixture contained four synthetic `pipeline_task_reference.sales` documents.
+Changing a generated pipeline's operator to `$changeStream` left a raw editor
+containing its existing `{}` body; no Create Tool switch was exposed. Run
+entered the Messages view and displayed the aggregate script plus:
+
+```text
+The $changeStream stage is only supported on replica sets
+at line 1, column 27
+```
+
+The edited pipeline title carried `— 已编辑`. This was an actual execution
+error, not a resource-label declaration or successful stream observation.
+
+A second new exact-owned fixture was initialized as a single-node replica set
+with the same four synthetic documents. The generated reference connection
+used Direct/Standalone connection settings to that new loopback endpoint.
+The saved `$changeStream: {}` pipeline was referenced twice by a generated
+Batch Job. With no new events, both job entries reported success after about
+one second each. The native server profiler independently recorded two
+`getMore` operations with an originating aggregate pipeline containing
+`$changeStream`; each returned zero documents. After the batch reported
+completion, an independent `$currentOp` observation still found those two
+idle tailable/awaitData cursors. The reference application was normally exited
+and the entire exact-owned service was then removed; release of individual
+cursors on application exit was not independently measured before teardown.
+
+This bounded probe does **not** qualify a continuous change-stream workspace,
+event delivery, resume tokens, cursor lifetime guarantees, stream cancellation,
+permissions, sharded/replica-set connection configuration or future batches.
+It also does not justify copying the observed idle-cursor retention into an
+implementation. The normal finite pipeline path cannot be declared a complete
+stream implementation merely by permitting the operator.
+
+The Batch Job reference, file and error-policy observations are recorded
+separately as [AU18-01–AU18-06](ui-reference-18-automation.md). Both database
+containers and their four anonymous volumes were verified absent after
+identity-bound cleanup. Generated local connection/pipeline and empty-job
+metadata remain explicitly disclosed in AU18-06; no permanent metadata
+deletion, schedule or email action was performed. This is CUA runtime
+observation AP18-09, not a REA Evidence ID. No REA session was opened.
+
+## AP18-10 Independent change-stream execution and Stop
+
+On 2026-11-13, a fresh exact-owned native ARM64 MongoDB **8.0.34** single-node
+replica set contained four generated `pipeline_stream_reference.sales`
+documents. Only the previously generated, password-free
+`OpenNavicat Task Reference 20261113` profile was repointed to its new loopback
+endpoint. All observations below used an independent, unsaved Pipeline tab;
+they do not reuse the Batch Job cancellation conclusions in AU18.
+
+Selecting `$changeStream` in a new stage exposed a raw editor and an
+operator-specific Help template. The template named `fullDocumentBeforeChange`,
+`resumeAfter`, `showExpandedEvents`, `startAfter`, `startAtOperationTime`,
+`allChangesForCluster` and `fullDocument`. No separate Create Tool switch or
+resume-token management control was exposed in this inspected stage. The
+presence of a template option does not establish successful execution of every
+option.
+
+With `$changeStream: {}` and no new events, Run switched to `消息` and completed
+with `> OK` and a **1.016 s** query time. No event-document result grid was
+observed. The owned server profiler recorded one `getMore` returning zero
+documents; `$currentOp` with `idleCursors` then showed its tailable/awaitData
+cursor. Inserting one generated document after this finite return and checking
+again after three seconds produced no further `getMore` or automatic UI
+refresh. This observed execution was finite; it is not evidence of an ongoing
+watch workspace.
+
+A second Run used an independent native client that waited until the reference's
+`getMore` became active before inserting one additional generated document.
+The profiler recorded one event returned at **03:37:05.020 UTC**, followed by an
+empty `getMore` at **03:37:06.029 UTC**. The reference again completed finitely,
+leaving an idle tailable cursor. An `输出` page was present, but the inspected
+page first appeared blank and later displayed execution text; no event-document
+rows or paging controls were observed. Wire delivery of the generated event is
+therefore established separately from useful UI event presentation.
+
+For a third Run, a separate native client obtained a resume token from only
+this generated fixture and closed its own probe cursor. Entering that token
+through the raw editor with `resumeAfter` and `fullDocument: "updateLookup"`
+was accepted by the server. The reference's complete message showed the exact
+requested options, `> OK` and **1.010 s**. The new reference cursor had returned
+one historical insert event in its initial batch, then an empty `getMore` at
+**03:39:01.793 UTC**. No event-document result grid was observed. This verifies
+a finite resume request on this fixture; it does not verify update lookup
+semantics, a saved resume workflow or UI-managed token recovery. The native
+probe's cursor and its explicit `killCursors` were distinguished from reference
+cursors in the private receipt.
+
+Immediately after Run or Stop, an initial accessibility read could still contain
+the previous execution's message. The conclusions above use the later completed
+message together with the independent server checkpoint, rather than assigning
+the old message to the newly requested script.
+
+Adding a second `$limit: 1` stage through the normal graph and running the chain
+displayed the server error `$limit is not permitted in a $changeStream pipeline`,
+with a line/column location and **0.005 s** query time. The UI allowed the chain
+to be constructed and reported the execution error; it did not silently remove
+the stage.
+
+For a bounded independent cancellation probe, the second stage was changed to
+`$addFields` with a generated JavaScript `$function` that waited at most ten
+seconds for the one resumed event. During Run, the Pipeline graph remained
+visible, the stage operator was disabled, a busy indicator appeared and the
+toolbar exposed a separate red-square **`停止`** button. Clicking it eventually
+displayed **`[Error] Stopped by user`**, with a **10.267 s** query time. This
+does not establish immediate cancellation latency or behavior of other stage
+types.
+
+The owned service log independently recorded the same cancellation sequence at
+**03:45:24 UTC**: the session killer interrupted the active aggregate, killed
+the reference session and its three earlier idle cursors, and the aggregate
+reported code **11601**, `JavaScript execution interrupted` (server duration
+**10.252 s**). The three earlier cursor IDs were
+`3827203912959439979`, `8984674585197847101` and `1767425126170645087`;
+their retained state before this Stop and absence afterwards are separate
+observations. This is evidence of the observed session-wide Stop, not a cursor
+lifetime guarantee for other runs or a reason to reproduce idle-cursor retention.
+
+After completion, closing the dirty unsaved tab displayed `是否保存更改？`,
+with `保存`, `不保存` and `取消`. Choosing `不保存` returned to an empty Pipeline
+object list for this new database. The reference was normally quit and confirmed
+not running. A native checkpoint after exit found no active operations or idle
+cursors for the owned collection. The exact-owned container and its two
+anonymous volumes were then removed and independently verified absent. The
+prior harmless generated profile and empty-job metadata remain as disclosed in
+AU18-06; this round saved no new pipeline or job, performed no permanent
+metadata deletion and created no OS schedule or email action.
+
+AP18-10 is CUA runtime observation, not a REA Evidence ID; no REA session was
+opened. It narrows the independent Run, raw-option, finite-return and Stop
+unknowns from AP18-09. Event rendering, any supported ongoing-refresh workflow,
+pagination, fullDocument update variants, resume persistence/recovery, different
+permissions/topologies and Windows/Linux reference behavior remain open. The
+OpenNavicat finite-preview rejection of `$changeStream` is a safety boundary,
+not completion of these stream-tool gates.
+
+## Boundaries of AP18-01–AP18-08
 
 This round did not complete an automated reference drag operation, every
 stage's editor template and option execution, every visual Explain operator/shape,
@@ -287,4 +426,6 @@ reopening, concurrent peer changes, all server/topology variants, or
 Windows/Linux reference layouts. OpenNavicat's
 corresponding stage drag and `$match` create tool are implementation results,
 not proof of unobserved reference behavior. The fixture was disconnected and removed
-after verifying its exact container ID, owner label and loopback port.
+after verifying its exact container ID, owner label and loopback port. The later
+AU18/AP18-09 observations above narrow some unknowns without closing the
+remaining automation, stream or three-platform gates.

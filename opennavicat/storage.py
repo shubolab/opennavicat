@@ -101,7 +101,7 @@ class Store:
         self.directory.mkdir(parents=True, exist_ok=True)
         self.path = self.directory / "workspace.json"
         self.state = {"connections": [], "favorites": [], "drafts": [], "remembered_passwords": [],
-                      "remembered_secrets": {}, "navicat_imports": {}, "mongo_pipelines": []}
+                      "remembered_secrets": {}, "navicat_imports": {}, "mongo_pipelines": [], "batch_jobs": []}
         if self.path.exists():
             try:
                 self.state.update(json.loads(self.path.read_text("utf-8")))
@@ -115,6 +115,7 @@ class Store:
             if 'query_language' not in {row[1] for row in db.execute('PRAGMA table_info(history)')}:
                 db.execute("ALTER TABLE history ADD COLUMN query_language TEXT NOT NULL DEFAULT 'legacy'")
             db.execute("UPDATE history SET query_language='legacy' WHERE query_language IS NULL")
+            db.execute("CREATE TABLE IF NOT EXISTS batch_job_history (id INTEGER PRIMARY KEY, job_id TEXT NOT NULL, execution_id INTEGER NOT NULL, result TEXT NOT NULL, UNIQUE(job_id, execution_id))")
         for collection in ('drafts', 'favorites'):
             for entry in self.state.get(collection, []):
                 if 'sql' in entry and entry.get('query_language') is None: entry['query_language'] = LEGACY
@@ -448,6 +449,88 @@ class Store:
         if len(self.state["mongo_pipelines"]) == before:
             raise ValueError("Pipeline not found")
         self.flush()
+
+    def save_batch_job(self, name, text, *, job_id=None):
+        from .batch_jobs import from_nbatpremium, to_nbatpremium
+
+        if not isinstance(name, str) or not name.strip() or len(name) > 240 or any(ord(c) < 32 for c in name):
+            raise ValueError('A batch job needs a bounded nonempty name')
+        text = to_nbatpremium(from_nbatpremium(text))
+        previous = self.state.get('batch_jobs', [])
+        entries = deepcopy(previous)
+        entry = next((item for item in entries if item['id'] == job_id), None)
+        if job_id is not None and entry is None:
+            raise ValueError('The saved batch job no longer exists')
+        if any(item['name'] == name.strip() and item['id'] != job_id for item in entries):
+            raise ValueError('A batch job with that name already exists')
+        now = datetime.now(timezone.utc).isoformat(timespec='seconds')
+        if entry is None:
+            entry = {'id': str(uuid.uuid4()), 'created': now}
+            entries.append(entry)
+        entry.update(name=name.strip(), nbatpremium=text, size=len(text.encode('utf-8')), modified=now, accessed=now)
+        self.state['batch_jobs'] = entries
+        try:
+            self.flush()
+        except Exception:
+            self.state['batch_jobs'] = previous
+            raise
+        return deepcopy(entry)
+
+    def batch_jobs(self):
+        return deepcopy(self.state.get('batch_jobs', []))
+
+    def batch_job(self, job_id):
+        entry = next((item for item in self.state.get('batch_jobs', []) if item['id'] == job_id), None)
+        return deepcopy(entry) if entry is not None else None
+
+    def delete_batch_job(self, job_id):
+        previous = self.state.get('batch_jobs', [])
+        entries = [deepcopy(item) for item in previous if item['id'] != job_id]
+        if len(entries) == len(previous):
+            raise ValueError('The saved batch job no longer exists')
+        self.state['batch_jobs'] = entries
+        try:
+            self.flush()
+        except Exception:
+            self.state['batch_jobs'] = previous
+            raise
+
+    def touch_batch_job(self, job_id):
+        previous = self.state.get('batch_jobs', [])
+        entries = deepcopy(previous)
+        entry = next((item for item in entries if item['id'] == job_id), None)
+        if entry is None:
+            raise ValueError('The saved batch job no longer exists')
+        entry['accessed'] = datetime.now(timezone.utc).isoformat(timespec='seconds')
+        self.state['batch_jobs'] = entries
+        try:
+            self.flush()
+        except Exception:
+            self.state['batch_jobs'] = previous
+            raise
+
+    def record_batch_job_run(self, job_id, result):
+        if self.batch_job(job_id) is None:
+            raise ValueError('The batch job must be saved before recording history')
+        if not isinstance(result, dict) or len(result.get('logs', [])) > 5000:
+            raise ValueError('Batch history exceeds its log bound')
+        record = deepcopy(result)
+        text = json.dumps(record, ensure_ascii=False, allow_nan=False)
+        if len(text.encode('utf-8')) > 2 * 1024 * 1024:
+            raise ValueError('Batch history exceeds its byte bound')
+        with closing(sqlite3.connect(self.history_path)) as db, db:
+            db.execute('BEGIN IMMEDIATE')
+            number = db.execute('SELECT COALESCE(MAX(execution_id), 0) + 1 FROM batch_job_history WHERE job_id=?', (job_id,)).fetchone()[0]
+            record['execution_id'] = number
+            db.execute('INSERT INTO batch_job_history(job_id, execution_id, result) VALUES (?, ?, ?)',
+                       (job_id, number, json.dumps(record, ensure_ascii=False, allow_nan=False)))
+            db.execute('DELETE FROM batch_job_history WHERE job_id=? AND id NOT IN (SELECT id FROM batch_job_history WHERE job_id=? ORDER BY execution_id DESC LIMIT 200)', (job_id, job_id))
+        return record
+
+    def batch_job_history(self, job_id):
+        with closing(sqlite3.connect(self.history_path)) as db:
+            return [json.loads(row[0]) for row in db.execute(
+                'SELECT result FROM batch_job_history WHERE job_id=? ORDER BY execution_id DESC LIMIT 200', (job_id,))]
 
     def add_favorite(self, name, sql, connection_id, *, query_language=LEGACY):
         if not isinstance(query_language, str) or query_language not in LANGUAGES: raise ValueError('Unknown query language')

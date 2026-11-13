@@ -5,8 +5,10 @@ No existing Navicat profile or external endpoint participates in these tests.
 from __future__ import annotations
 
 from copy import deepcopy
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 import threading
+import time
 import uuid
 
 from bson import Binary, Decimal128, Int64
@@ -189,6 +191,8 @@ def test_real_aggregation_pipeline_preview_run_explain_and_saved_object(qtbot, m
     definition = page.draft(); definition.name = 'generated_pipeline'
     saved = window.save_mongo_pipeline(page, definition)
     assert saved is not None and page.pipeline_id == saved['id']
+    assert page.definition.name == 'generated_pipeline' and not page.dirty
+    assert window.tabs.tabText(window.tabs.indexOf(page)).startswith('generated_pipeline@')
     assert window.store.mongo_pipeline(saved['id'])['source'] == 'docs'
     categories = {schema.child(i).data(0, Qt.ItemDataRole.UserRole)['kind']: schema.child(i)
                   for i in range(schema.childCount())}
@@ -218,6 +222,223 @@ def test_real_aggregation_pipeline_preview_run_explain_and_saved_object(qtbot, m
     assert reopened.definition.name == 'generated_pipeline'
     assert reopened.definition.source == 'docs'
     assert len(reopened.definition.stages) == 2
+    assert not errors and threads
+
+
+def _batch_owned_check(qtbot, executor, function):
+    """Independent fixture reads never execute in the GUI wait predicate."""
+    future = executor.submit(function)
+    qtbot.waitUntil(future.done, timeout=10000)
+    return future.result()
+
+
+def _batch_owned_documents(database):
+    from opennavicat.mongodb_session import RAW_CODEC
+    with database.get_collection('docs', codec_options=RAW_CODEC).find().sort('_id', 1) as cursor:
+        return [bytes(value.raw) for value in cursor]
+
+
+def _batch_run_page(qtbot, window, page, timeout=20000):
+    page.start_action.trigger()
+    qtbot.waitUntil(lambda: page.last_result is not None and not page.running
+                   and not window.batch_job_controller.runs, timeout=timeout)
+    idle(qtbot, window)
+    return deepcopy(page.last_result)
+
+
+def test_real_batch_job_runs_disconnected_repeated_pipeline_and_reopens_history(qtbot, mongo_window, monkeypatch):
+    from opennavicat.batch_jobs import add_job, new_batch_job, new_pipeline_reference
+    from opennavicat.mongodb_pipeline import PipelineDefinition, PipelineStage, to_nagg
+    from opennavicat.ui.batch_jobs import BatchJobPage
+    import opennavicat.batch_job_runtime as runtime
+
+    window, config, database, _schema, errors, threads = mongo_window
+    execution_sessions, execution_threads = [], []
+    original_execute = runtime.execute_pipeline
+    def execute(session, *args, **kwargs):
+        execution_sessions.append(session); execution_threads.append(threading.get_ident())
+        assert threading.get_ident() != threading.main_thread().ident
+        return original_execute(session, *args, **kwargs)
+    monkeypatch.setattr(runtime, 'execute_pipeline', execute)
+    definition = PipelineDefinition(source='docs', stages=[PipelineStage('$match', {'_id': {'$gte': 3}})])
+    saved = window.store.save_mongo_pipeline(config.id, config.database, 'generated_batch_pipeline', to_nagg(definition))
+    with ThreadPoolExecutor(max_workers=1) as independent:
+        before = _batch_owned_check(qtbot, independent, lambda: _batch_owned_documents(database))
+        workspace_session = window.sessions[config.id]
+        assert window.disconnect(config.id)
+        qtbot.waitUntil(lambda: config.id not in window.sessions, timeout=15000); idle(qtbot, window)
+        root = window.connection_item(config.id)
+        assert root.childCount() == 1 and root.child(0).text(0) == '双击以打开连接'
+        assert window.category_actions['automation'].isEnabled()
+        window.category_actions['automation'].trigger()
+        listing = window.batch_job_controller.list_page
+        assert window.tabs.currentWidget() is listing
+        page = window.batch_job_controller.new_job()
+        reference = new_pipeline_reference(config.name, config.database, saved['name'])
+        job = add_job(add_job(new_batch_job(), reference), reference)
+        page.load_definition(job, name='generated_repeated_batch')
+        entry = window.batch_job_controller.save(page, page.draft())
+        assert entry is not None and len(page.definition.jobs) == 2
+        result = _batch_run_page(qtbot, window, page)
+        assert result['status'] == 'success' and result['total'] == result['success'] == 2
+        assert result['failed'] == result['cancelled'] == result['skipped'] == 0
+        assert len(execution_sessions) == 2 and execution_sessions[0] is not execution_sessions[1]
+        assert all(value is not workspace_session and value.connection is None for value in execution_sessions)
+        assert len(set(execution_threads)) == 1 and config.id not in window.sessions
+        assert root.childCount() == 1 and root.child(0).text(0) == '双击以打开连接'
+        assert _batch_owned_check(qtbot, independent, lambda: _batch_owned_documents(database)) == before
+        assert page.history_table.rowCount() == 1 and result['execution_id'] == 1
+        window.close_tab(window.tabs.indexOf(page))
+        window.category_actions['automation'].trigger()
+        assert window.tabs.currentWidget() is listing
+        row = next(index for index in range(listing.table.rowCount())
+                   if listing.table.item(index, 0).data(Qt.ItemDataRole.UserRole) == entry['id'])
+        item = listing.table.item(row, 0)
+        listing.table.scrollToItem(item)
+        point = listing.table.visualItemRect(item).center()
+        qtbot.mouseClick(listing.table.viewport(), Qt.MouseButton.LeftButton, pos=point)
+        qtbot.mouseDClick(listing.table.viewport(), Qt.MouseButton.LeftButton, pos=point)
+        qtbot.waitUntil(lambda: isinstance(window.tabs.currentWidget(), BatchJobPage), timeout=10000)
+        reopened = window.tabs.currentWidget()
+        assert reopened is not page and reopened.job_id == entry['id'] and len(reopened.definition.jobs) == 2
+        assert reopened.history_table.rowCount() == 1
+        persisted = _batch_owned_check(qtbot, independent,
+            lambda: Store(window.store.directory).batch_job_history(entry['id']))
+        assert len(persisted) == 1 and persisted[0]['execution_id'] == 1 and persisted[0]['success'] == 2
+        assert config.id not in window.sessions
+    assert not errors and threads
+
+
+def test_real_batch_job_latest_saved_pipeline_error_policy_rename_and_per_job_history(qtbot, mongo_window, monkeypatch):
+    from opennavicat.batch_jobs import add_job, new_batch_job, new_pipeline_reference
+    from opennavicat.mongodb_pipeline import PipelineDefinition, PipelineStage, to_nagg
+    import opennavicat.batch_job_runtime as runtime
+
+    window, config, database, _schema, errors, threads = mongo_window
+    connected_sessions, executed = [], []
+    original_connect, original_execute = MongoSession.connect, runtime.execute_pipeline
+    def connect(session, *args, **kwargs):
+        assert threading.get_ident() != threading.main_thread().ident
+        connected_sessions.append(session)
+        return original_connect(session, *args, **kwargs)
+    def execute(session, schema, definition):
+        assert threading.get_ident() != threading.main_thread().ident
+        executed.append(deepcopy(definition))
+        return original_execute(session, schema, definition)
+    monkeypatch.setattr(MongoSession, 'connect', connect)
+    monkeypatch.setattr(runtime, 'execute_pipeline', execute)
+    good = PipelineDefinition(source='docs', stages=[PipelineStage('$match', {'_id': 1})])
+    saved = window.store.save_mongo_pipeline(config.id, config.database, 'generated_latest_pipeline', to_nagg(good))
+    reference = new_pipeline_reference(config.name, config.database, saved['name'])
+    definition = add_job(add_job(new_batch_job(), reference), reference)
+    page = window.batch_job_controller.new_job()
+    page.load_definition(definition, name='generated_error_policy_batch')
+    job = window.batch_job_controller.save(page, page.draft())
+    bad = PipelineDefinition(source='docs', stages=[PipelineStage('$match', {'$unknown': True})])
+    window.store.save_mongo_pipeline(config.id, config.database, saved['name'], to_nagg(bad), pipeline_id=saved['id'])
+    with ThreadPoolExecutor(max_workers=1) as independent:
+        before = _batch_owned_check(qtbot, independent, lambda: _batch_owned_documents(database))
+        continued = _batch_run_page(qtbot, window, page)
+        assert continued['status'] == 'failed' and continued['failed'] == 2 and continued['skipped'] == 0
+        assert len(executed) == 2 and all(value.stages[0].body == {'$unknown': True} for value in executed)
+        assert all(value.connection is None for value in connected_sessions)
+        stopped_definition = page.draft(); stopped_definition.general['ContinueOnError'] = False
+        page.load_definition(stopped_definition, job_id=job['id'], name=job['name'])
+        assert window.batch_job_controller.save(page, page.draft()) is not None
+        stopped = _batch_run_page(qtbot, window, page)
+        assert stopped['failed'] == 1 and stopped['skipped'] == 1 and len(executed) == 3
+        assert stopped['execution_id'] == 2
+        window.store.save_mongo_pipeline(config.id, config.database, 'generated_renamed_pipeline', to_nagg(good), pipeline_id=saved['id'])
+        renamed_definition = page.draft(); renamed_definition.general['ContinueOnError'] = True
+        page.load_definition(renamed_definition, job_id=job['id'], name=job['name'])
+        assert window.batch_job_controller.save(page, page.draft()) is not None
+        prior_sessions = len(connected_sessions)
+        missing = _batch_run_page(qtbot, window, page)
+        assert missing['failed'] == 2 and missing['skipped'] == 0 and missing['execution_id'] == 3
+        assert len(connected_sessions) == prior_sessions and len(executed) == 3
+        assert sum('LocateObject' in value['message'] for value in missing['logs']) == 2
+        assert all(value.reference_name == saved['name'] for value in page.definition.jobs)
+        second_page = window.batch_job_controller.new_job()
+        second = add_job(new_batch_job(), new_pipeline_reference(config.name, config.database, 'generated_renamed_pipeline'))
+        second_page.load_definition(second, name='generated_independent_history_batch')
+        second_job = window.batch_job_controller.save(second_page, second_page.draft())
+        succeeded = _batch_run_page(qtbot, window, second_page)
+        assert succeeded['status'] == 'success' and succeeded['success'] == 1 and succeeded['execution_id'] == 1
+        history = _batch_owned_check(qtbot, independent,
+            lambda: Store(window.store.directory).batch_job_history(job['id']))
+        other_history = _batch_owned_check(qtbot, independent,
+            lambda: Store(window.store.directory).batch_job_history(second_job['id']))
+        assert [value['execution_id'] for value in history] == [3, 2, 1]
+        assert len(other_history) == 1 and other_history[0]['execution_id'] == 1
+        assert _batch_owned_check(qtbot, independent, lambda: _batch_owned_documents(database)) == before
+    assert not errors and threads
+
+
+def test_real_batch_job_stop_uses_independent_cancel_worker_and_allows_fresh_run(qtbot, mongo_window, monkeypatch):
+    from opennavicat.batch_jobs import add_job, new_batch_job, new_pipeline_reference
+    from opennavicat.mongodb_pipeline import PipelineDefinition, PipelineStage, to_nagg
+
+    window, config, database, _schema, errors, threads = mongo_window
+    window.configs[config.id] = replace(window.configs[config.id], read_only=True)
+    workspace_session = window.sessions[config.id]
+    owners, cancel_calls = {}, []
+    original_connect, original_cancel = MongoSession.connect, MongoSession.cancel
+    def connect(session, *args, **kwargs):
+        owners[id(session)] = threading.get_ident()
+        assert threading.get_ident() != threading.main_thread().ident
+        return original_connect(session, *args, **kwargs)
+    def cancel(session, *args, **kwargs):
+        cancel_calls.append((session, threading.get_ident(), deepcopy(kwargs)))
+        assert threading.get_ident() != threading.main_thread().ident
+        assert threading.get_ident() != owners[id(session)]
+        return original_cancel(session, *args, **kwargs)
+    monkeypatch.setattr(MongoSession, 'connect', connect)
+    monkeypatch.setattr(MongoSession, 'cancel', cancel)
+    slow = PipelineDefinition(source='docs', stages=[PipelineStage('$project', {
+        '_id': 1, 'delayed': {'$function': {
+            'body': 'function(value){sleep(5000);return value;}', 'args': ['$_id'], 'lang': 'js'}}})])
+    saved = window.store.save_mongo_pipeline(config.id, config.database, 'generated_slow_batch_pipeline', to_nagg(slow))
+    reference = new_pipeline_reference(config.name, config.database, saved['name'])
+    definition = add_job(add_job(new_batch_job(), reference), reference)
+    page = window.batch_job_controller.new_job()
+    page.load_definition(definition, name='generated_cancel_batch')
+    job = window.batch_job_controller.save(page, page.draft())
+    def current_operations(marker=None):
+        match = {'command.aggregate': 'docs', 'command.$db': config.database}
+        if marker is not None: match['command.comment'] = marker
+        with database.client.admin.aggregate([{'$currentOp': {'allUsers': False}}, {'$match': match}]) as cursor:
+            return list(cursor)
+    with ThreadPoolExecutor(max_workers=1) as independent:
+        before = _batch_owned_check(qtbot, independent, lambda: _batch_owned_documents(database))
+        page.start_action.trigger()
+        marker, deadline = None, time.monotonic() + 12
+        while marker is None and time.monotonic() < deadline:
+            active = _batch_owned_check(qtbot, independent, current_operations)
+            if active:
+                marker = active[0]['command'].get('comment')
+                break
+            qtbot.wait(50)
+        assert marker is not None and page.running and window.stop_action.isEnabled()
+        assert window.cancel_pool is not window.pool
+        window.stop_action.trigger()
+        qtbot.waitUntil(lambda: page.last_result is not None and not page.running
+                       and not window.batch_job_controller.runs, timeout=15000)
+        idle(qtbot, window)
+        result = page.last_result
+        assert result['status'] == 'cancelled' and result['cancelled'] == 1 and result['skipped'] == 1
+        assert result['success'] == result['failed'] == 0
+        assert cancel_calls and all(call[0] is not workspace_session for call in cancel_calls)
+        assert all(call[2] == {'expected_comment': marker} for call in cancel_calls)
+        assert _batch_owned_check(qtbot, independent, lambda: current_operations(marker)) == []
+        assert _batch_owned_check(qtbot, independent, lambda: _batch_owned_documents(database)) == before
+        assert window.sessions[config.id] is workspace_session
+        good = PipelineDefinition(source='docs', stages=[PipelineStage('$match', {'_id': 4})])
+        window.store.save_mongo_pipeline(config.id, config.database, saved['name'], to_nagg(good), pipeline_id=saved['id'])
+        succeeded = _batch_run_page(qtbot, window, page)
+        assert succeeded['status'] == 'success' and succeeded['success'] == 2 and succeeded['cancelled'] == 0
+        assert succeeded['execution_id'] == 2 and not window.batch_job_controller.runs
+        assert _batch_owned_check(qtbot, independent, lambda: _batch_owned_documents(database)) == before
+        assert len(window.store.batch_job_history(job['id'])) == 2
     assert not errors and threads
 
 

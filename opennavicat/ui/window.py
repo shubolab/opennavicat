@@ -63,6 +63,8 @@ from .mongo_timeseries_designer import MongoTimeSeriesDesignerPage
 from .mongo_view_designer import MongoViewDesignerPage, MongoViewDropDialog
 from .mongo_maintenance import MongoMaintenanceConfirmDialog, MongoMaintenanceResultDialog
 from .mongo_pipeline import MongoPipelinePage
+from .batch_jobs import BatchJobPage
+from .batch_job_controller import BatchJobController
 
 DESIGNER_PAGES = (TableDesignerPage, IndexDesignerPage, TriggerDesignerPage, MongoIndexDesignerPage, MongoCollectionDesignerPage, MongoTimeSeriesDesignerPage, MongoViewDesignerPage)
 MONGO_PAGES = (MongoCollectionPage, MongoGridFSPage, MongoPipelinePage)
@@ -506,6 +508,7 @@ class MainWindow(QMainWindow):
         self._mongo_collection_copy_dialogs = {}
         self._mongo_maintenance_dialogs = set()
         self._closed = False
+        self.batch_job_controller = BatchJobController(self)
         self._navicat_discovering = False
         self._navicat_pending_configs = set()
         self.last_navicat_counts = None
@@ -770,6 +773,8 @@ class MainWindow(QMainWindow):
                 self.object_page.selection_changed()
 
     def show_objects(self, kind="table"):
+        if kind == 'automation':
+            return self.batch_job_controller.show_list()
         if self.active_id not in self.sessions or self.active_id in self._closing_connections or self._closing_mongo:
             return
         if self.configs[self.active_id].driver == "redis" and kind == "table":
@@ -2194,6 +2199,7 @@ class MainWindow(QMainWindow):
             entry = self.store.save_mongo_pipeline(
                 page.connection_id, page.schema, definition.name, text, pipeline_id=page.pipeline_id)
             saved = mongo_pipeline_tools.from_nagg(entry["nagg"])
+            saved.name = entry['name']
         except Exception as error:
             page.show_error(error)
             return None
@@ -3488,6 +3494,9 @@ class MainWindow(QMainWindow):
 
     def run_current(self):
         page = self.tabs.currentWidget()
+        if isinstance(page, BatchJobPage):
+            page.request_start()
+            return
         if isinstance(page, QueryPage):
             self.run_query(page)
 
@@ -3532,6 +3541,7 @@ class MainWindow(QMainWindow):
         self.submit(work, done, failed, label, finish)
 
     def stop(self):
+        self.batch_job_controller.cancel()
         # Cancellation targets the executing connection, not an arbitrary profile.
         if self._cancelling:
             return
@@ -3581,6 +3591,8 @@ class MainWindow(QMainWindow):
 
     def tab_changed(self, index):
         page = self.tabs.widget(index)
+        if isinstance(page, BatchJobPage):
+            self.batch_job_controller.update_title(page)
         if self._focus_page is not None and page is not self._focus_page:
             self.focus_workspace(self._focus_page, False)
         if isinstance(page, DESIGNER_PAGES):
@@ -3612,6 +3624,8 @@ class MainWindow(QMainWindow):
         page = self.tabs.currentWidget()
         connected = self.active_id in self.sessions and self.active_id not in self._closing_connections and not self._closing_mongo
         if hasattr(self, "category_actions"):
+            self.category_actions['automation'].setEnabled(True)
+            self.category_actions['automation'].setToolTip('本地批处理作业')
             config = self.configs.get(self.active_id)
             sqlite = bool(config and config.driver == "sqlite")
             redis = bool(config and config.driver == "redis")
@@ -3651,8 +3665,8 @@ class MainWindow(QMainWindow):
         self.category_actions["model"].setEnabled(relational)
         if hasattr(self, "object_page"):
             self.object_page.update_actions()
-        self.run_action.setEnabled(isinstance(page, QueryPage) and not page.running)
-        self.stop_action.setEnabled(not self._cancelling and (bool(self._mongo_index_jobs) or bool(self._mongo_collection_jobs) or bool(self._mongo_timeseries_jobs) or bool(self._mongo_view_jobs) or bool(self._mongo_pipeline_jobs) or
+        self.run_action.setEnabled((isinstance(page, QueryPage) or isinstance(page, BatchJobPage) and bool(page.definition.jobs)) and not getattr(page, 'running', False))
+        self.stop_action.setEnabled(not self._cancelling and (bool(self.batch_job_controller.runs) or bool(self._mongo_index_jobs) or bool(self._mongo_collection_jobs) or bool(self._mongo_timeseries_jobs) or bool(self._mongo_view_jobs) or bool(self._mongo_pipeline_jobs) or
             any(isinstance(self.tabs.widget(i), QueryPage) and self.tabs.widget(i).running for i in range(self.tabs.count()))))
         self.import_action.setEnabled(isinstance(page, TablePage) and page.kind == "table" and not self.configs[page.connection_id].read_only)
         self.export_action.setEnabled(isinstance(page, (QueryPage, TablePage)) and page.current_result() is not None)
@@ -3792,6 +3806,8 @@ class MainWindow(QMainWindow):
         page = self.tabs.widget(index)
         if index == 0 or self.tasks or getattr(page, "running", False) or getattr(page, "loading", False):
             return
+        if isinstance(page, BatchJobPage) and not self.batch_job_controller.can_discard(page):
+            return
         if isinstance(page, TablePage) and not page.can_discard():
             return
         if isinstance(page, DESIGNER_PAGES) and not self.can_leave_designer(page, lambda: self.close_tab(self.tabs.indexOf(page))):
@@ -3805,6 +3821,8 @@ class MainWindow(QMainWindow):
             if answer == QMessageBox.StandardButton.Save and not self.save_sql(page=page):
                 return
         self.tabs.removeTab(index)
+        if isinstance(page, BatchJobPage):
+            self.batch_job_controller.unsaved_history.pop(id(page), None)
         if isinstance(page, MONGO_PAGES):
             page._closed = True
         page.deleteLater()
@@ -3832,6 +3850,9 @@ class MainWindow(QMainWindow):
 
     def save_sql(self, checked=False, page=None):
         page = page or self.tabs.currentWidget()
+        if isinstance(page, BatchJobPage):
+            page.request_save()
+            return not page.dirty
         if isinstance(page, MongoGridFSPage):
             return False
         if isinstance(page, (RedisBrowserPage, MongoCollectionPage, *DESIGNER_PAGES)):
@@ -4178,6 +4199,9 @@ class MainWindow(QMainWindow):
         for i in range(self.tabs.count()):
             page = self.tabs.widget(i)
             if isinstance(page, DESIGNER_PAGES) and not self.can_leave_designer(page, self.close):
+                event.ignore()
+                return
+            if isinstance(page, BatchJobPage) and not self.batch_job_controller.can_discard(page):
                 event.ignore()
                 return
             if isinstance(page, TablePage) and not page.can_discard():

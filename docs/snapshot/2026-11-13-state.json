@@ -315,7 +315,40 @@
   },
   "current_work": {
     "pipeline_safety_and_navigation": "implemented_scoped_tests_passed_not_released",
-    "batch_job_workflow": "in_progress_reference_model_ui_runtime; not_functionally_accepted",
-    "change_stream": "reference_in_progress; dedicated_runtime_ui_and_topology_gates_open"
+    "batch_job_workflow": "implemented_owned_source_and_cocoa_checks_passed; installer_and_full_parity_gates_open",
+    "change_stream": "AP18-10 bounded_reference_observation_complete; runtime_and_full_ui_gates_open"
+  },
+  "candidate_release": {
+    "version": "0.11.0",
+    "status": "preparing_not_published",
+    "frozen_source_sha": null,
+    "six_target_ci_started": false,
+    "tag_created": false,
+    "public_release_created": false,
+    "final_local_source": {
+      "passed": 2011,
+      "skipped": 567,
+      "failed": 0,
+      "errors": 0,
+      "seconds": 79.24,
+      "receipt": "artifacts/release-011/final-source.xml"
+    },
+    "final_local_collections": {
+      "passed": 460,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0,
+      "seconds": 53.23,
+      "owned_fixtures": 8,
+      "independently_absent_by_exact_id": true,
+      "source_hashes_matched": 48,
+      "receipt": "artifacts/release-011/final-collections/summary.json"
+    },
+    "native_cocoa": {
+      "passed": 51,
+      "skipped": 0,
+      "seconds": 10.64
+    },
+    "single_gif": "28_phase_script_qualified_60_tests; actual_recording_in_progress_not_reviewed"
   }
 }

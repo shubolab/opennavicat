@@ -719,10 +719,15 @@ def _aggregate_rows(session, database, definition, pipeline, limit, *, allow_wri
     operation = session._operation(user_comment) if user_comment is not None else session._operation()
     with operation as comment:
         aggregate_options["comment"] = comment
+        cancellation = getattr(session, '_cancel_requested', None)
+        if cancellation is not None and cancellation.is_set():
+            raise DatabaseError('Aggregation was cancelled before dispatch')
         cursor = session.connection.get_database(database, codec_options=RAW_CODEC)[definition.source].aggregate(
             bounded, **aggregate_options)
         try:
             for document in cursor:
+                if cancellation is not None and cancellation.is_set():
+                    raise DatabaseError('Aggregation was cancelled; acknowledged changes are not automatically undone')
                 if len(rows) >= limit or (rows and size + len(document.raw) > _MAX_PAGE_BYTES):
                     truncated = True
                     break

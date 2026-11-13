@@ -10,6 +10,44 @@ The retained UI baseline is the actual macOS **18.0.5 build 321**
 [connection-form scope](validation-oracle-connection-ui.md) and the
 [complete parity matrix](parity-matrix.md).
 
+## Current checkpoint: 2026-11-14
+
+The current integrated application source is
+`211fef0ec0c7edbca2c016d0fd887e4acd977c90`, pushed to main. It includes the
+async-delete, IPv6-scope and test-host fixes below, plus the independent
+[Navicat18 icon work](validation-icons-navicat18.md). Earlier checkpoint
+results and failures remain historical; their pending root/local gates are
+superseded only by the separately measured results here.
+
+- Frozen default source: **2,633 passed / 662 conditional skips / zero failures
+  or errors**, 139.274s; exact 3,295-case collection/execution/JUnit multiset and
+  240 runtime/test/build/workflow inputs equal before/after and Git211. This
+  passes the new aggregate without proving the old GridFS timeout's cause.
+- Fresh owned native ARM64 Oracle, actual **Cocoa** Window: **3 passed / zero
+  skips**, real Test/save-reopen/Open/catalog/typed table-view data and both
+  CPU-query Stop/reuse/Disconnect-or-Shutdown cases. The runner's 24 declared
+  inputs match Git211 before/after. Independent 106 structure/resource checks,
+  required/JUnit Counter, exact container/PID/PGID absence, zero volumes and app
+  sessions pass. All 28 phase PNGs / 16 unique images were reviewed; no privacy
+  issue or missing icon, with the connection diagram's low contrast still open.
+- New macOS ARM64 app build and isolated packaged smoke exit0. SQLite 6×4 and
+  all four Oracle26.1 native/thin flags pass; complete 79 own modules match
+  source, 61 Mach-O images are ARM64 and 95 symlinks are valid. The frozen smoke
+  process does not self-report its QPA: Cocoa was the single explicit request.
+  This is a local bundle, not six installers or Oracle endpoint execution.
+- A separate 240-input source bracket remains identical from default-suite end,
+  through the generated demonstration and actual Oracle Cocoa run, to Git211.
+  This does not silently expand the Oracle runner's own 24-input declaration.
+- New main CI [43473238808](https://github.com/shubolab/opennavicat/actions/runs/43473238808)
+  is still being qualified. Nine required jobs and 15 artifacts, including two
+  separate native Linux backend+Window Oracle scopes, must be audited along with
+  all six actual installer bytes. No new public release or tag is claimed.
+
+Local receipts live under `artifacts/icon-parity-18/{default-source-211,
+native-211,oracle-cocoa-211,oracle-cocoa-211-independent}/`; raw screenshots and
+reference assets remain outside version control. The current resume index is
+[2026-11-14 snapshot](snapshot/2026-11-14-goal-resume.md).
+
 ## Executable slice and safety boundaries
 
 The dedicated `OracleSession` uses pinned **python-oracledb 26.1.0**, in its
@@ -140,7 +178,7 @@ the GUI thread and weak references retire. The module passed 24 cases with
 four database opt-in skips; the unchanged original prefix passed 651 with 287
 skips. Its 223 declared inputs match Git. Product GridFS code is unchanged;
 the original timeout's causal link to the host defect remains unproved. A new
-aggregate run remains necessary.
+aggregate run at Git211 now passes as recorded above; the original timeout cause remains unproved.
 
 Separate backend fix `f63d16dd3e1b3388d6ac90edc5540695f977b3e6` restricts the
 IPv6 scope identifier to ordinary ASCII interface/index characters without
@@ -178,7 +216,7 @@ image was visually reviewed. A separate static audit again passed all 21
 checks: 77 own modules including the changed Window match source, 61 Mach-O
 images support ARM64 and four Oracle extensions match the official wheel's
 ARM64 machine code and metadata/license payloads. These are local app-bundle
-checks; actual Oracle Window, aggregate source and installer gates remain open.
+checks; at that checkpoint actual Oracle Window, aggregate source and installer gates remained open. Current local/Window results are recorded above; installer gates remain separate.
 The new receipts are
 `artifacts/oracle-integration/local-native-post-close-fix/packaged-cocoa-verification.json`
 and `artifacts/oracle-packaging-review/native-app-post-close-fix/verification.json`.
@@ -191,7 +229,7 @@ six historical exact container IDs were independently absent. Its independent
 review includes server SQL_ID/child/SID/SERIAL#/username ownership, serial and
 control threads, unchanged rows, zero remaining app sessions, native image,
 secret scans and process/FD cleanup. This checkpoint predates root's close
-fix and IPv6 fix; fresh root Cocoa acceptance remains a distinct gate.
+fix and IPv6 fix; fresh root Cocoa acceptance is separately measured at Git211 above.
 
 The runner's 14 offline contracts include real owned fork cases where the
 leader exits before a descendant that holds, or closes, inherited pipes. It
@@ -211,7 +249,7 @@ materialized-view tools, 15 Other categories, Data Pump, users/grants and every
 other applicable Oracle tool stay open. Windows/Linux reference observations
 and all three platforms' complete UI/tool/human acceptance remain open.
 
-No new tag, public release, six Oracle-capable installers or refreshed demo GIF
-is claimed here. A usable release must independently qualify all six native
-installers, exact checksums and public bytes and refresh the single actual-app
-GIF when its demonstration changes.
+No new tag, public release or six Oracle-capable installers is claimed here.
+The Git211 demonstration is recorded separately and must pass every-phase privacy
+review before replacing the single README GIF. A usable release must independently
+qualify all six native installers, exact checksums and public bytes.

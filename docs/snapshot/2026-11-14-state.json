@@ -1,0 +1,190 @@
+{
+  "schema_version": 4,
+  "captured_on": "2026-11-14",
+  "timezone": "Asia/Shanghai",
+  "handoff": "2026-11-14-goal-resume.md",
+  "previous_handoff": "2026-11-13-goal-resume.md",
+  "historical_state": "2026-11-13-state.json",
+  "goal": {
+    "status": "active",
+    "complete": false,
+    "full_parity_verified": false,
+    "scope": "Complete retained Navicat18 database-tool functionality and 1:1 UI on Windows/Linux/macOS",
+    "current_user_priority": "Align all icons and small visual elements as closely as possible"
+  },
+  "repository": {
+    "remote": "git@github.com:shubolab/opennavicat.git",
+    "working_branch": "codex_oracle_basic_integration",
+    "workspace": "/Users/wangshubo/.codex/worktrees/oracle-basic-integration/opennavicat",
+    "application_source_checkpoint": "211fef0ec0c7edbca2c016d0fd887e4acd977c90",
+    "main_source_at_checkpoint": "211fef0ec0c7edbca2c016d0fd887e4acd977c90",
+    "source_pushed_to_main_and_candidate": true,
+    "documentation_head_scope": "Later documentation/GIF-only commits must be reconciled with this explicit application-source checkpoint; do not infer a self-referential final HEAD",
+    "branches_or_dirty_work_removed": false
+  },
+  "public_release": {
+    "tag": "v0.12.0",
+    "source_sha": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
+    "prerelease": true,
+    "installers": 6,
+    "assets": 8,
+    "prior_verification": "../validation-0.12.md"
+  },
+  "candidate": {
+    "version": "0.13.0",
+    "published": false,
+    "tag_created": false,
+    "six_native_targets_qualified": false,
+    "reference_full_parity_verified": false,
+    "validation": "../validation-oracle-0.13-candidate.md",
+    "icons_validation": "../validation-icons-navicat18.md"
+  },
+  "reference": {
+    "path": "/Users/wangshubo/Downloads/Navicat Premium.app",
+    "version": "18.0.5",
+    "build": "321",
+    "executable_sha256": "3857a354fde7f42f8afbf9ef3a25956e6ff3b9745f598f77bbab1d27e7493bd1",
+    "runtime_icon_scope": "Actual macOS generated SQLite main/table/query/connection chooser; no existing database connection opened",
+    "temporary_sqlite_removed": true,
+    "generated_connection_off_sessions_zero": true,
+    "normal_quit_observed": true,
+    "rea_exported_and_closed": true,
+    "raw_reference_images_committed": false,
+    "windows_linux_reference_acceptance": false
+  },
+  "local_qualification": {
+    "revision": "211fef0ec0c7edbca2c016d0fd887e4acd977c90",
+    "default": {
+      "passed": 2633,
+      "conditional_skipped": 662,
+      "failed": 0,
+      "errors": 0,
+      "total": 3295,
+      "seconds": 139.274,
+      "exact_collection_execution_junit": true,
+      "source_inputs": 240,
+      "source_before_after_git_equal": true,
+      "native_helper_stable": true,
+      "evidence": "artifacts/icon-parity-18/default-source-211/verification.json"
+    },
+    "native_bundle": {
+      "os": "Darwin",
+      "architecture": "arm64",
+      "build_exit": 0,
+      "packaged_smoke_exit": 0,
+      "qt_platform_requested": "cocoa",
+      "frozen_smoke_self_reports_qpa": false,
+      "own_pyz_modules": 79,
+      "macho": 61,
+      "symlinks": 95,
+      "static_checks": 23,
+      "oracle_version": "26.1.0",
+      "oracle_native_flags_true": 4,
+      "installer_built": false,
+      "six_target_qualification": false,
+      "evidence": "artifacts/icon-parity-18/native-211/packaged-verification.json"
+    },
+    "actual_oracle_window": {
+      "passed": 3,
+      "skipped": 0,
+      "failed": 0,
+      "actual_qt_platform": "cocoa",
+      "source_inputs": 24,
+      "source_before_after_git_equal": true,
+      "owned_fixture_cleanup": true,
+      "evidence": "artifacts/icon-parity-18/oracle-cocoa-211/verification.json",
+      "independent_audit_pending": false,
+      "independent_checks": 106,
+      "phase_pngs": 28,
+      "unique_pngs_reviewed": 16,
+      "independent_exact_container_process_absence": true,
+      "independent_evidence": "artifacts/icon-parity-18/oracle-cocoa-211-independent/verification.json"
+    },
+    "source_bracketing": {
+      "inputs": 240,
+      "default_end_demo_oracle_end_git_equal": true,
+      "evidence": "artifacts/icon-parity-18/combined-source-verification.json"
+    }
+  },
+  "icons": {
+    "independent_geometry": true,
+    "reference_resources_runtime_dependency": false,
+    "factory_offscreen_cases": 104,
+    "factory_cocoa_cases": 104,
+    "chooser_cases": 72,
+    "page_callsite_cases": 217,
+    "page_live_cases_deselected": 24,
+    "context_cocoa_cases": 5,
+    "sizes_logical": {
+      "main": 28,
+      "tree_tabs": 16,
+      "query_picker": 14,
+      "chooser_grid": 50,
+      "chooser_list_filter": 16
+    },
+    "raster_cache_max_entries": 256,
+    "raster_cache_max_bytes": 33554432,
+    "all_reference_small_elements_accepted": false
+  },
+  "demo": {
+    "source_revision": "211fef0ec0c7edbca2c016d0fd887e4acd977c90",
+    "version": "0.13.0 candidate",
+    "phase_count": 34,
+    "frames": 457,
+    "duration_seconds": 76.17,
+    "bytes": 1800760,
+    "sha256": "b81e97bc17640e04829d1c830d5472f51de64baa2d38936290c7bddb7bf31854",
+    "recorded_qpa": "cocoa",
+    "all_frame_text_guards": 457,
+    "human_phase_review_pending": false,
+    "copied_to_readme_asset": true,
+    "reference_images_used": false,
+    "fixture_cleanup_producer_checks": true,
+    "independent_exact_volume_cleanup_audit": false,
+    "phase_full_size_representatives_reviewed": 34,
+    "reviewer_coverage": {
+      "child": "phases1-23",
+      "root": "phases24-34"
+    },
+    "all_457_frames_visually_viewed": false,
+    "independent_exact_container_absence": true,
+    "public_receipt": "docs/assets/opennavicat-demo.json",
+    "private_review": "artifacts/icon-parity-18/demo-211-review/"
+  },
+  "ci": {
+    "run_id": 43473238808,
+    "head_sha": "211fef0ec0c7edbca2c016d0fd887e4acd977c90",
+    "url": "https://github.com/shubolab/opennavicat/actions/runs/43473238808",
+    "status_at_checkpoint": "in_progress",
+    "success_claimed": false,
+    "required_jobs": 9,
+    "publisher_expected": "skipped on main",
+    "expected_artifacts": 15,
+    "six_installer_bytes_audited": false,
+    "oracle_native_targets": [
+      "Linux amd64",
+      "Linux arm64"
+    ],
+    "oracle_scopes_per_target": {
+      "backend_cases": 14,
+      "actual_window_cases": 3
+    },
+    "independent_audit_in_progress": true
+  },
+  "open_gates": [
+    "All retained database-tool functionality and 1:1 UI",
+    "Windows/Linux/macOS actual reference and human acceptance",
+    "Remaining small elements, inactive main toolbar, themes/hover/focus and dialogs/wizards",
+    "Redis Enterprise Cloud provider artwork applicability",
+    "Current 0.13 six native installer qualification and public bytes",
+    "Oracle Query/transactions/writes/designers/DataPump/other tools/types/auth/security/advanced",
+    "Server-side SLEEP timely cancellation",
+    "MongoDB full stream preview/output/recovery"
+  ],
+  "next_actions": [
+    "Finish current main CI and actual six installer byte audit",
+    "Preserve failures and rerun after minimal fixes if needed",
+    "Publish 0.13 only after six formal native installers/manifests/checksums and public downloads are verified",
+    "Continue full parity without pausing at this milestone"
+  ]
+}

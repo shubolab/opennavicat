@@ -77,8 +77,9 @@ def test_invalid_ledger_is_rejected_before_any_docker_inspection(tmp_path, monke
 def test_real_slow_child_receives_interrupt_finishes_finalizer_and_is_reaped(tmp_path):
     ready, finalized = tmp_path / "ready", tmp_path / "finalized"
     script = ("from pathlib import Path\nimport time\n"
-              f"Path({str(ready)!r}).write_text('ready')\n"
-              "try:\n time.sleep(60)\n"
+              "try:\n"
+              f" Path({str(ready)!r}).write_text('ready')\n"
+              " time.sleep(60)\n"
               f"finally:\n Path({str(finalized)!r}).write_text('finalized')\n")
     process = subprocess.Popen([sys.executable, "-c", script], start_new_session=True,
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

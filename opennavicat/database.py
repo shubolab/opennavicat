@@ -23,7 +23,7 @@ from typing import Any, Iterator, TypedDict, Literal
 import sqlparse
 
 
-SUPPORTED_DRIVERS = frozenset({"sqlite", "postgresql", "mysql", "mariadb", "sqlserver", "redis", "mongodb"})
+SUPPORTED_DRIVERS = frozenset({"sqlite", "postgresql", "mysql", "mariadb", "sqlserver", "redis", "mongodb", "oracle"})
 
 
 class OracleDatabaseListEntry(TypedDict):
@@ -168,6 +168,9 @@ def _tls_context(config):
 class DatabaseSession:
     def __new__(cls, config):
         if cls is DatabaseSession:
+            if config.driver == "oracle":
+                from .oracle_session import OracleSession
+                return object.__new__(OracleSession)
             if config.driver == "redis":
                 from .redis_session import RedisSession
                 return object.__new__(RedisSession)

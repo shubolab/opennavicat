@@ -63,7 +63,7 @@ _PROVIDER_LABELS = {
 }
 PROVIDER_NAMES = tuple(_PROVIDERS)
 UNOBSERVED_PROVIDER_NAMES = frozenset({"redis_enterprise"})
-_TOGGLES = frozenset({"info", "ai", "new_ai", "result_below", "result_beside", "grid", "list", "focus"})
+_TOGGLES = frozenset({"info", "ai", "new_ai", "result_below", "result_beside", "grid", "list", "focus", "profile_pane"})
 
 
 def _gui_app() -> QGuiApplication:

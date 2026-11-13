@@ -367,6 +367,17 @@ def _profile(p, c):
     _grid_lines(p, c['blue'], 6.6, 8.4, 9.2, 6.7, rows=2, columns=3, width=.95)
 
 
+def _profile_pane(p, c):
+    _box(p, 1.1, 2, 15.8, 14, c['blue'], 1.05)
+    _line(p, (5.3, 2), (5.3, 16), c['blue'], 1.05)
+
+
+def _profile_add(p, c):
+    _ellipse(p, 2.1, 2.1, 13.8, 13.8, c['gray'], 1.05)
+    _line(p, (5.5, 9), (12.5, 9), c['gray'], 1.05)
+    _line(p, (9, 5.5), (9, 12.5), c['gray'], 1.05)
+
+
 def _cell_editor(p, c):
     _box(p, 2, 5.3, 10.4, 10.4, c['gray'], 1)
     _path(p, [(6, 12), (7.2, 8.7), (13.5, 2.4), (15.8, 4.7),
@@ -530,6 +541,7 @@ _DRAWERS = {
     'chevron_up': _chevron_up, 'chevron_down': _chevron_down,
     'navigation': _navigation, 'info': _info, 'run': _run, 'stop': _stop,
     'profile': _profile, 'table_profile': _profile, 'cell_editor': _cell_editor,
+    'profile_pane': _profile_pane, 'profile_add': _profile_add,
     'filter_sort': _filter_sort, 'history': _history, 'ai': _ai, 'new_ai': _ai,
     'analysis': _analysis, 'generate': _generate, 'mask': _mask, 'focus': _focus,
     'settings': _settings, 'zoom': _zoom, 'zoom_in': _zoom, 'zoom_out': _zoom_out,

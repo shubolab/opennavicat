@@ -3,19 +3,54 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import replace
+import re
 import threading
 import uuid
 
-from PySide6.QtCore import QSignalBlocker, QSize, Qt, QThreadPool
+from PySide6.QtCore import QRegularExpression, QSignalBlocker, QSize, Qt, QThreadPool
+from PySide6.QtGui import QRegularExpressionValidator
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout,
     QFrame, QHBoxLayout, QHeaderView, QInputDialog, QLabel, QLineEdit, QListWidget,
     QMessageBox, QPlainTextEdit, QPushButton, QSpinBox, QTableWidget, QTableWidgetItem,
-    QVBoxLayout, QWidget,
+    QSizePolicy, QVBoxLayout, QWidget,
 )
 
 from opennavicat.database import ConnectionConfig
 from .dialogs import ConnectionDialog, _ConnectionDiagram, _PortSpinBox
+from .icons import tool_icon, toggle_icon
+
+
+class _OraclePortEdit(QLineEdit):
+    """Oracle's plain port field; keep invalid drafts visible for validation.
+
+    The small value/setValue API retains existing form callers without adding
+    spin buttons or changing a port through Up/Down. Programmatic assignment is
+    deliberately neither truncated nor clamped to a different valid endpoint.
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setValidator(QRegularExpressionValidator(QRegularExpression('[0-9]{1,5}'), self))
+
+    def setValue(self, value):
+        self._assigned_value = value
+        self._assigned_text = '' if value is None else str(value)
+        self.setText(self._assigned_text)
+        self._assigned_text = self.text()
+
+    def value(self):
+        text = self.text()
+        if not re.fullmatch('[0-9]{1,5}', text) or not 1 <= int(text) <= 65535:
+            raise ValueError('请输入 1 到 65535 之间的端口号。')
+        return int(text)
+
+    def draftValue(self):
+        """Retain hidden Basic options while editing an unsupported TNS draft."""
+        text = self.text()
+        if text == self._assigned_text:
+            return self._assigned_value
+        return int(text) if re.fullmatch('[0-9]{1,5}', text) else text
 
 # Public Oracle character-set identifiers in the actually observed menu order.
 # This module has no runtime dependency on reference files or local TNS clients.
@@ -113,7 +148,10 @@ class OracleConnectionDialog(ConnectionDialog):
         self.profile_pane.setObjectName('connectionProfilePane')
         profiles = QVBoxLayout(self.profile_pane); profiles.setContentsMargins(0, 0, 0, 0)
         title = QHBoxLayout(); title.addWidget(QLabel('连接配置文件'))
-        self.new_profile_button = QPushButton('＋'); self.new_profile_button.setFixedWidth(26)
+        self.new_profile_button = QPushButton(); self.new_profile_button.setFixedWidth(26)
+        self.new_profile_button.setIcon(tool_icon('profile_add', 16)); self.new_profile_button.setIconSize(QSize(16, 16))
+        self.new_profile_button.setStyleSheet('QPushButton { padding: 0px; }')
+        self.new_profile_button.setAccessibleName('新建连接配置文件')
         self.new_profile_button.setEnabled(False)
         self.new_profile_button.setToolTip('多个连接配置文件尚未实现。')
         title.addWidget(self.new_profile_button); profiles.addLayout(title)
@@ -141,7 +179,10 @@ class OracleConnectionDialog(ConnectionDialog):
         self.test_finished.connect(self._display_test_result)
         self.footer = QFrame(); self.footer.setFixedHeight(60); footer = QHBoxLayout(self.footer)
         footer.setContentsMargins(18, 12, 18, 12)
-        self.profile_toggle = QPushButton('▤'); self.profile_toggle.setCheckable(True); self.profile_toggle.setChecked(True)
+        self.profile_toggle = QPushButton(); self.profile_toggle.setCheckable(True); self.profile_toggle.setChecked(True)
+        self.profile_toggle.setIcon(toggle_icon('profile_pane', 16)); self.profile_toggle.setIconSize(QSize(16, 16))
+        self.profile_toggle.setStyleSheet('QPushButton { padding: 0px; }')
+        self.profile_toggle.setAccessibleName('隐藏或显示连接配置文件')
         self.profile_toggle.setFixedWidth(28); self.profile_toggle.setToolTip('隐藏或显示连接配置文件')
         self.profile_toggle.toggled.connect(self._toggle_profiles); footer.addWidget(self.profile_toggle)
         self.uri_button = QPushButton('URI'); self.uri_button.setEnabled(False)
@@ -172,8 +213,13 @@ class OracleConnectionDialog(ConnectionDialog):
     def _center_form(layout, form, label_width=80):
         """Center the retained 300px field column, with labels on its left."""
         form.setContentsMargins(0, 0, 0, 0)
-        form.setFormAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop)
-        widget = QWidget(); widget.setLayout(form); widget.setFixedWidth(300 + label_width)
+        # The form owns its label/spacing metrics. A nominal label-width cap
+        # clips fixed-width fields as styles or visible rows change. The outer
+        # stretches center this natural-size form; align its contents left so
+        # QFormLayout does not add right-alignment spacing past that size.
+        form.setFormAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        widget = QWidget(); widget.setLayout(form)
+        widget.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
         centered = QHBoxLayout(); centered.setContentsMargins(0, 0, 0, 0)
         centered.addStretch(1); centered.addWidget(widget); centered.addSpacing(label_width); centered.addStretch(1)
         layout.addLayout(centered)
@@ -203,7 +249,7 @@ class OracleConnectionDialog(ConnectionDialog):
         self.oracle_type_combo = self._combo([('基本', 'basic'), ('TNS', 'tns')], self._base.oracle_connection_type)
         form.addRow('连接类型:', self.oracle_type_combo)
         self.host_edit = QLineEdit(self._base.host); self.host_edit.setObjectName('connectionHost')
-        self.port_spin = _PortSpinBox(); self.port_spin.setValue(self._base.port or 1521)
+        self.port_spin = _OraclePortEdit(); self.port_spin.setValue(self._base.port)
         self.oracle_service_edit = QLineEdit(self._base.oracle_service_identifier)
         self.oracle_service_edit.setObjectName('oracleServiceIdentifier')
         self.database_edit = QLineEdit(self); self.database_edit.hide(); self.database_edit.setText('')
@@ -248,7 +294,7 @@ class OracleConnectionDialog(ConnectionDialog):
         layout.addWidget(self.support_label); layout.addStretch(1)
         for widget in (self.oracle_type_combo, self.oracle_role_combo): widget.currentIndexChanged.connect(self._state_changed)
         for widget in (self.oracle_os_auth_check, self.oracle_service_radio, self.oracle_sid_radio): widget.toggled.connect(self._state_changed)
-        for widget in (self.host_edit, self.user_edit, self.oracle_service_edit): widget.textChanged.connect(self._state_changed)
+        for widget in (self.host_edit, self.user_edit, self.oracle_service_edit, self.port_spin): widget.textChanged.connect(self._state_changed)
 
     def _build_advanced(self):
         self.advanced_tab, layout, _diagram = self._page('高级')
@@ -365,6 +411,13 @@ class OracleConnectionDialog(ConnectionDialog):
     def _state_changed(self, *_):
         if self._loading: return
         basic = self.oracle_type_combo.currentData() == 'basic'
+        try:
+            if basic: self.port_spin.value()
+            port_valid = True
+        except ValueError:
+            port_valid = False
+        self.buttons.button(QDialogButtonBox.StandardButton.Save).setEnabled(port_valid and not self._testing)
+        self.test_button.setEnabled(port_valid and not self._testing)
         for row in self._basic_rows: self.general_form.setRowVisible(row, basic)
         self.general_form.setRowVisible(self.oracle_tns_label, not basic)
         self.oracle_service_label.setText('SID:' if self.oracle_sid_radio.isChecked() else '服务名称:')
@@ -398,7 +451,9 @@ class OracleConnectionDialog(ConnectionDialog):
 
     def _draft_config(self):
         return replace(self._base, name=self.name_edit.text().strip(), driver='oracle', database='',
-            host=self.host_edit.text().strip(), port=self.port_spin.value(), username=self.user_edit.text(),
+            host=self.host_edit.text().strip(),
+            port=self.port_spin.value() if self.oracle_type_combo.currentData() == 'basic' else self.port_spin.draftValue(),
+            username=self.user_edit.text(),
             password=self.password_edit.text() if self.remember_password else '',
             oracle_connection_type=self.oracle_type_combo.currentData(),
             oracle_service_type=self._unknown_service_type or ('sid' if self.oracle_sid_radio.isChecked() else 'service'),
@@ -452,6 +507,7 @@ class OracleConnectionDialog(ConnectionDialog):
         for diagram in self._diagrams:
             diagram.connection_succeeded = success; diagram.update()
         self.test_banner.show()
+        self._state_changed()
 
     def _copy_test_result(self):
         from PySide6.QtWidgets import QApplication

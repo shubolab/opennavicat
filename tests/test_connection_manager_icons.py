@@ -2,11 +2,12 @@
 import threading
 
 from PySide6.QtCore import QRect, QSize, Qt
-from PySide6.QtGui import QFontMetrics, QIcon
+from PySide6.QtGui import QFontMetrics, QIcon, QImage
 from PySide6.QtTest import QSignalSpy
 import pytest
 
 from opennavicat.ui import connection_manager as manager
+from opennavicat.ui import icons
 from test_connection_manager import labels, select_card, select_filter, show_manager
 
 
@@ -71,7 +72,7 @@ def test_driver_grid_and_compact_list_use_real_50_and_16_pixel_delegate_targets(
     mysql = dialog.connection_list.visualItemRect(dialog.connection_list.item(0))
     mysql_paint = next(rect for identity, rect, _mode, _state in paints if identity == ('driver', 'mysql'))
     assert mysql_paint.y() == mysql.y() + (mysql.height() - 16)//2
-    assert len(labels(dialog)) == 9
+    assert len(labels(dialog)) == 11
 
 
 def test_provider_filter_badges_and_cloud_tiles_receive_different_brand_context(qtbot, artwork_calls):
@@ -92,23 +93,75 @@ def test_provider_filter_badges_and_cloud_tiles_receive_different_brand_context(
     assert dialog.next_button.isEnabled()
 
 
-def test_unobserved_provider_never_substitutes_driver_art_or_changes_backend_availability(qtbot, artwork_calls):
+def _render_bytes(artwork, size):
+    assert not artwork.isNull() and artwork.cacheKey()
+    image = artwork.pixmap(QSize(size, size), 2.0, QIcon.Mode.Normal,
+                           QIcon.State.Off).toImage().convertToFormat(QImage.Format.Format_RGBA8888)
+    assert image.size() == QSize(size * 2, size * 2)
+    return bytes(image.constBits())
+
+
+@pytest.mark.parametrize('label, kind', [
+    ('MongoDB Atlas', 'mongodb'), ('Redis Enterprise Cloud', 'redis'),
+])
+def test_direct_alias_uses_database_brand_in_grid_and_list_and_preserves_availability(qtbot, artwork_calls, label, kind):
     requested, _paints = artwork_calls
-    dialog = show_manager(qtbot, supported_kinds={'redis'})
-    assert dialog.vendor_items['Redis Enterprise Cloud'].icon(0).isNull()
-    assert '图标待对齐' in dialog.vendor_items['Redis Enterprise Cloud'].toolTip(0)
-    requested.clear()
-    select_filter(qtbot, dialog, dialog.vendor_items['Redis Enterprise Cloud'])
-    row = select_card(qtbot, dialog, 'Redis Enterprise Cloud')
-    assert row.icon().isNull() and row.data(Qt.ItemDataRole.UserRole + 2)
-    assert '图标待对齐' in row.toolTip()
-    assert '图标待对齐' in row.data(Qt.ItemDataRole.AccessibleTextRole)
-    assert not requested
+    dialog = show_manager(qtbot, supported_kinds={kind})
+    assert label in labels(dialog) and label not in dialog.vendor_items
+    row = select_card(qtbot, dialog, label)
+    assert row.icon().cacheKey() == row.data(Qt.ItemDataRole.DecorationRole).cacheKey()
+    assert _render_bytes(row.icon(), 50) == _render_bytes(icons.icon(kind, 50), 50)
+    assert ('driver', kind, 50, None) in requested
+    assert not row.data(Qt.ItemDataRole.UserRole + 2)
+    assert '图标待对齐' not in row.toolTip()
+    assert '图标待对齐' not in row.data(Qt.ItemDataRole.AccessibleTextRole)
+    assert not any(family == 'provider' and name in {'provider_mongodb_atlas', 'redis_enterprise'}
+                   for family, name, _size, _driver in requested)
+    qtbot.mouseClick(dialog.list_button, Qt.MouseButton.LeftButton)
+    row = dialog.connection_list.currentItem()
+    assert row.text() == label and row.icon().cacheKey()
+    assert _render_bytes(row.icon(), 16) == _render_bytes(icons.icon(kind, 16), 16)
+    assert ('driver', kind, 16, None) in requested
+    dialog.set_supported_kinds(set())
+    assert dialog.connection_list.currentItem().text() == label
+    assert not dialog.next_button.isEnabled()
+    dialog.set_supported_kinds({kind})
     assert dialog.next_button.isEnabled()
     spy = QSignalSpy(dialog.selectionRequested)
     qtbot.mouseClick(dialog.next_button, Qt.MouseButton.LeftButton)
-    assert spy.count() == 1 and spy.at(0)[0] == 'redis'
-    assert spy.at(0)[1]['name'] == 'Redis Enterprise Cloud'
+    assert spy.count() == 1 and spy.at(0)[0] == kind
+    assert spy.at(0)[1]['driver'] == kind and spy.at(0)[1]['name'] == label
+
+
+@pytest.mark.parametrize('label, kind', [
+    ('MongoDB Atlas', 'mongodb'), ('Redis Enterprise Cloud', 'redis'),
+])
+def test_direct_alias_remains_discoverable_in_driver_filter_and_search_has_no_provider_entry(qtbot, label, kind):
+    dialog = show_manager(qtbot, supported_kinds=set())
+    assert label in labels(dialog)  # Availability never hides the entry.
+    select_filter(qtbot, dialog, dialog.driver_items[kind])
+    assert labels(dialog) == [manager.DRIVER_LABELS[kind], label]
+    select_filter(qtbot, dialog, dialog.all_item)
+    dialog.search_edit.setText(label)
+    assert labels(dialog) == [label]
+    assert label not in dialog.vendor_items and len(dialog.vendor_items) == 12
+    row = select_card(qtbot, dialog, label)
+    assert not row.icon().isNull() and not dialog.next_button.isEnabled()
+    dialog.search_edit.clear()
+    assert label in labels(dialog)
+
+
+def test_catalog_retains_fourteen_alias_groups_but_only_twelve_provider_filters(qtbot):
+    dialog = show_manager(qtbot)
+    assert len(manager.VENDOR_ALIASES) == 14
+    assert manager.DIRECT_DRIVER_ALIASES == {'MongoDB Atlas': 'mongodb', 'Redis Enterprise Cloud': 'redis'}
+    assert len(dialog.vendor_items) == 12
+    assert set(dialog.vendor_items) == set(manager.VENDOR_ALIASES) - set(manager.DIRECT_DRIVER_ALIASES)
+    assert labels(dialog) == [*manager.DRIVER_LABELS.values(), 'MongoDB Atlas', 'Redis Enterprise Cloud']
+    actual = {(p.label, p.kind, p.vendor) for p in dialog._catalog}
+    assert actual == ({(label, kind, '') for kind, label in manager.DRIVER_LABELS.items()}
+                      | {(label, kind, vendor) for vendor, rows in manager.VENDOR_ALIASES.items()
+                         for label, kind in rows})
 
 
 def test_unknown_driver_alias_keeps_provider_identity_without_fabricated_database_brand(qtbot, artwork_calls):

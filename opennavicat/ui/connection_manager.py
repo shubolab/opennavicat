@@ -83,16 +83,22 @@ VENDOR_ALIASES = {
 }
 
 
+# These observed cards are database-brand aliases, not provider filters. Keep
+# their catalog provenance above without substituting a provider identity.
+DIRECT_DRIVER_ALIASES = {
+    "MongoDB Atlas": "mongodb",
+    "Redis Enterprise Cloud": "redis",
+}
+
+
 # These are independently drawn provider identities, not backend compatibility.
-# No observed standalone Redis Enterprise provider glyph is available yet.
 _PROVIDER_GLYPHS = {
     "Alibaba Cloud": "provider_alibaba", "Huawei": "provider_huawei",
     "Tencent Cloud": "provider_tencent", "Kingbase": "provider_kingbase",
     "PingCAP": "provider_pingcap", "HighGo": "provider_highgo",
     "OceanBase": "provider_oceanbase", "AWS": "provider_aws",
     "Fujitsu": "provider_fujitsu", "Google Cloud": "provider_google",
-    "Microsoft": "provider_microsoft", "MongoDB Atlas": "provider_mongodb_atlas",
-    "Oracle": "provider_oracle_cloud",
+    "Microsoft": "provider_microsoft", "Oracle": "provider_oracle_cloud",
 }
 
 
@@ -101,6 +107,11 @@ class ConnectionPreset:
     label: str
     kind: str | None
     vendor: str = ""
+
+
+def _is_direct_driver_alias(preset: ConnectionPreset) -> bool:
+    return (preset.vendor in DIRECT_DRIVER_ALIASES and preset.label == preset.vendor
+            and preset.kind == DIRECT_DRIVER_ALIASES[preset.vendor])
 
 
 def supported_driver_kinds() -> frozenset[str]:
@@ -575,6 +586,8 @@ class ConnectionManagerDialog(QDialog):
         vendors.setFlags(vendors.flags() & ~Qt.ItemFlag.ItemIsSelectable)
         self.vendor_items = {}
         for vendor in VENDOR_ALIASES:
+            if vendor in DIRECT_DRIVER_ALIASES:
+                continue
             item = QTreeWidgetItem(vendors, [vendor])
             item.setData(0, Qt.ItemDataRole.UserRole, ("vendor", vendor))
             provider_name = _PROVIDER_GLYPHS.get(vendor)
@@ -692,7 +705,7 @@ class ConnectionManagerDialog(QDialog):
 
     @staticmethod
     def _preset_artwork(preset, size):
-        if not preset.vendor:
+        if not preset.vendor or _is_direct_driver_alias(preset):
             return icon(preset.kind, size)
         provider_name = _PROVIDER_GLYPHS.get(preset.vendor)
         if provider_name is None:
@@ -715,12 +728,13 @@ class ConnectionManagerDialog(QDialog):
         terms = self.search_edit.text().casefold().split()
         self.connection_list.clear()
         for preset in self._catalog:
-            if filter_type == "all" and preset.vendor:
-                # Searching all also discovers vendor aliases; the initial view
-                # remains the nine directly observed database types.
+            direct_alias = _is_direct_driver_alias(preset)
+            if filter_type == "all" and preset.vendor and not direct_alias:
+                # Searching all also discovers provider aliases. Direct-brand
+                # database aliases remain discoverable without a search.
                 if not terms:
                     continue
-            if filter_type == "driver" and (preset.kind != filter_value or preset.vendor):
+            if filter_type == "driver" and (preset.kind != filter_value or (preset.vendor and not direct_alias)):
                 continue
             if filter_type == "vendor" and preset.vendor != filter_value:
                 continue

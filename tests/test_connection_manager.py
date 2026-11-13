@@ -50,11 +50,12 @@ def select_filter(qtbot, dialog, item):
     assert dialog.filter_tree.currentItem() is item
 
 
-def test_nine_visible_driver_choices_and_actual_settings_handoff(qtbot, monkeypatch):
+def test_driver_choices_and_direct_aliases_remain_visible_with_actual_settings_handoff(qtbot, monkeypatch):
     monkeypatch.setattr(database, "SUPPORTED_DRIVERS", SUPPORTED, raising=False)
     dialog = show_manager(qtbot)
     assert labels(dialog) == ["MySQL", "PostgreSQL", "SQL Server", "Oracle", "SQLite",
-                              "MariaDB", "MongoDB", "Redis", "Snowflake"]
+                              "MariaDB", "MongoDB", "Redis", "Snowflake",
+                              "MongoDB Atlas", "Redis Enterprise Cloud"]
     assert not dialog.next_button.isEnabled()
     spy = QSignalSpy(dialog.selectionRequested)
     select_card(qtbot, dialog, "Oracle")
@@ -101,8 +102,7 @@ def test_observed_vendor_filters_search_modes_and_generic_alias_handoff(qtbot):
     dialog = show_manager(qtbot, supported_kinds=SUPPORTED)
     assert list(dialog.vendor_items) == [
         "Alibaba Cloud", "Huawei", "Tencent Cloud", "Kingbase", "PingCAP", "HighGo",
-        "OceanBase", "AWS", "Fujitsu", "Google Cloud", "Microsoft", "MongoDB Atlas",
-        "Oracle", "Redis Enterprise Cloud",
+        "OceanBase", "AWS", "Fujitsu", "Google Cloud", "Microsoft", "Oracle",
     ]
     select_filter(qtbot, dialog, dialog.vendor_items["AWS"])
     assert set(labels(dialog)) == {

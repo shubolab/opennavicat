@@ -39,7 +39,7 @@ ORACLE_VIEW_COLUMNS = tuple(zip(
 def object_symbol(kind):
     return {"materialized_view": "view", "mongo_collection": "table", "mongo_timeseries": "table", "mongo_view": "view",
             "mongo_index": "index", "mongo_bucket": "database",
-            "mongo_pipeline": "query"}.get(kind, kind)
+            "mongo_pipeline": "query", "mongo_mapreduce": "query", "mongo_function": "function"}.get(kind, kind)
 
 
 def _mongo_index_type(entry):
@@ -84,6 +84,9 @@ class ObjectBrowser(QWidget):
         self.delete_action = self.add_action("删除表", "delete", self.drop_selected)
         self.clear_action = self.add_action("清空集合", "delete", self.clear_selected)
         self.rename_action = self.add_action("重命名集合", "design", self.rename_selected)
+        for action in (self.new_timeseries_action, self.new_view_action,
+                       self.clear_action, self.rename_action):
+            action.setVisible(False)  # Initial context is table, not MongoDB.
         self.toolbar.addSeparator()
         self.import_action = self.add_action("导入向导", "import", self.import_selected)
         self.export_action = self.add_action("导出向导", "export", self.export_selected)

@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QPointF, QSize, Qt
-from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap
+from PySide6.QtCore import QSize, Qt
+from PySide6.QtGui import QIcon, QPainter
 from PySide6.QtWidgets import (
     QAbstractItemView, QComboBox, QFrame, QHBoxLayout, QInputDialog, QLabel,
     QMenu, QPlainTextEdit, QSizePolicy, QSpinBox, QSplitter, QTableWidget,
@@ -13,34 +13,12 @@ from PySide6.QtWidgets import (
 
 from .editor import SqlEditor, pretty_sql
 from .grid import DataGrid, DataModel
-from .icons import icon, tool_icon
+from .icons import CONNECTION_ICON_DRIVERS, connection_icon, database_icon, toggle_icon, tool_icon
 
 
 def _execution_icon(stop=False):
-    """Original small outline execution pictograms at two display resolutions."""
-    result = QIcon()
-    for scale in (1, 2, 3):
-        pixmap = QPixmap(16 * scale, 16 * scale)
-        pixmap.fill(Qt.GlobalColor.transparent)
-        painter = QPainter(pixmap)
-        painter.scale(scale, scale)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.setPen(QPen(QColor("#c86260" if stop else "#438fc8"), 1.3,
-                            Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap,
-                            Qt.PenJoinStyle.RoundJoin))
-        if stop:
-            painter.drawRect(3, 3, 10, 10)
-        else:
-            shape = QPainterPath(QPointF(4, 2))
-            shape.lineTo(13, 8)
-            shape.lineTo(4, 14)
-            shape.closeSubpath()
-            painter.drawPath(shape)
-        painter.end()
-        pixmap.setDevicePixelRatio(scale)
-        result.addPixmap(pixmap)
-    return result
+    """Use the shared scalable execution artwork and disabled-state rendering."""
+    return tool_icon("stop" if stop else "run", 16)
 
 
 class _QueryGrid(DataGrid):
@@ -92,11 +70,11 @@ class QueryPage(QWidget):
         self.save_button = self._tool("保存查询", "save", lambda: window.save_sql(page=self))
         tools.addWidget(self.save_button)
         tools.addWidget(self._separator())
-        self.builder_button = self._tool("查询创建工具（尚未实现）", "model", available=False)
+        self.builder_button = self._tool("查询创建工具（尚未实现）", "builder", available=False)
         tools.addWidget(self.builder_button)
         self.format_button = self._tool("格式化 SQL", "format", self.format_sql)
         tools.addWidget(self.format_button)
-        self.snippets_button = self._tool("代码片段库（尚未实现）", "query", available=False)
+        self.snippets_button = self._tool("代码片段库（尚未实现）", "snippets", available=False)
         tools.addWidget(self.snippets_button)
         self.ai_button = self._tool("询问 AI（尚未实现）", "ai", available=False)
         tools.addWidget(self.ai_button)
@@ -105,12 +83,18 @@ class QueryPage(QWidget):
         self.export_button.setEnabled(False)
         tools.addWidget(self.export_button)
         tools.addStretch()
-        self.results_below_button = self._tool("在编辑器下方显示结果", "table", self.results_below)
-        self.results_beside_button = self._tool("在编辑器旁边显示结果", "navigation", self.results_beside)
+        self.results_below_button = self._tool("在编辑器下方显示结果", "result_below", self.results_below)
+        self.results_beside_button = self._tool("在编辑器旁边显示结果", "result_beside", self.results_beside)
+        for button, symbol in ((self.results_below_button, "result_below"),
+                               (self.results_beside_button, "result_beside")):
+            button.setCheckable(True)
+            button.setIcon(toggle_icon(symbol, 16))
+        self.results_below_button.setChecked(True)
         tools.addWidget(self.results_below_button)
         tools.addWidget(self.results_beside_button)
         tools.addWidget(self._separator())
-        self.focus_action = self._tool("专注模式", "design")
+        self.focus_action = self._tool("专注模式", "focus")
+        self.focus_action.setIcon(toggle_icon("focus", 16))
         self.focus_action.setCheckable(True)
         self.focus_action.toggled.connect(lambda enabled: window.focus_workspace(self, enabled))
         tools.addWidget(self.focus_action)
@@ -123,9 +107,11 @@ class QueryPage(QWidget):
         execution.setContentsMargins(7, 3, 7, 3)
         execution.setSpacing(8)
         self.connection_picker = QComboBox()
+        self.connection_picker.setIconSize(QSize(14, 14))
         self.connection_picker.setFixedWidth(150)
         self.connection_picker.setToolTip("连接")
         self.schema_picker = QComboBox()
+        self.schema_picker.setIconSize(QSize(14, 14))
         self.schema_picker.setFixedWidth(150)
         self.schema_picker.setToolTip("数据库 / 模式")
         execution.addWidget(self.connection_picker)
@@ -153,7 +139,7 @@ class QueryPage(QWidget):
         self.stop_button.clicked.connect(window.stop)
         self.stop_button.setEnabled(False)
         execution.addWidget(self.stop_button)
-        self.explain_button = self._tool("解释 SQL / 执行计划", "builder", self._explain)
+        self.explain_button = self._tool("解释 SQL / 执行计划", "explain", self._explain)
         self.explain_button.setFixedSize(24, 24)
         if not callable(getattr(window, "explain_query", None)):
             self.explain_button.setEnabled(False)
@@ -303,7 +289,7 @@ class QueryPage(QWidget):
         self.connection_picker.blockSignals(True)
         self.connection_picker.clear()
         for connection_id, config in self.window.configs.items():
-            self.connection_picker.addItem(icon(config.driver, 16), config.name, connection_id)
+            self.connection_picker.addItem(connection_icon(config.driver, 14, connected=connection_id in getattr(self.window, "sessions", {})) if config.driver in CONNECTION_ICON_DRIVERS else QIcon(), config.name, connection_id)
         self.connection_picker.setCurrentIndex(self.connection_picker.findData(self.connection_id))
         self.connection_picker.blockSignals(False)
         self.schema_picker.blockSignals(True)
@@ -313,14 +299,44 @@ class QueryPage(QWidget):
             for index in range(root.childCount()):
                 info = root.child(index).data(0, Qt.ItemDataRole.UserRole)
                 if info and info["type"] == "schema":
-                    self.schema_picker.addItem(info["schema"])
+                    self.schema_picker.addItem(database_icon(14, opened=bool(info.get("loaded"))), info["schema"])
         if self.schema and self.schema_picker.findText(self.schema) < 0:
-            self.schema_picker.addItem(self.schema)
+            self.schema_picker.addItem(database_icon(14, opened=self.connection_id in getattr(self.window, "sessions", {})), self.schema)
         self.schema_picker.setCurrentIndex(self.schema_picker.findText(self.schema or ""))
         self.schema_picker.blockSignals(False)
         config = self.window.configs.get(self.connection_id)
         self.connection_label.setText(f"{config.name if config else ''} / {self.schema or ''}")
         self._apply_protocol_mode()
+        self.refresh_context_icons()
+
+    def refresh_context_icons(self):
+        """Refresh badge state without rebuilding selectors or emitting changes."""
+        sessions = getattr(self.window, "sessions", {})
+        for row in range(self.connection_picker.count()):
+            identifier = self.connection_picker.itemData(row)
+            config = self.window.configs.get(identifier)
+            if config:
+                state = [config.driver, identifier in sessions]
+                if self.connection_picker.itemData(row, Qt.ItemDataRole.UserRole + 18) != state:
+                    badge = connection_icon(config.driver, 14, connected=identifier in sessions) if config.driver in CONNECTION_ICON_DRIVERS else QIcon()
+                    self.connection_picker.setItemIcon(row, badge)
+                    self.connection_picker.setItemData(row, state, Qt.ItemDataRole.UserRole + 18)
+        root = self.window.connection_item(self.connection_id)
+        schemas = {}
+        if root and self.connection_id in sessions:
+            for index in range(root.childCount()):
+                child = root.child(index)
+                info = child.data(0, Qt.ItemDataRole.UserRole) or {}
+                if info.get("type") == "schema":
+                    schemas[info["schema"]] = child.icon(0)
+        for row in range(self.schema_picker.count()):
+            current = schemas.get(self.schema_picker.itemText(row))
+            # Preserve the native icon's identity between ordinary action refreshes.
+            key = current.cacheKey() if current and not current.isNull() else 0
+            if self.schema_picker.itemData(row, Qt.ItemDataRole.UserRole + 18) != key:
+                self.schema_picker.setItemIcon(row, current if key else database_icon(14, opened=False))
+                self.schema_picker.setItemData(row, key, Qt.ItemDataRole.UserRole + 18)
+
 
     def _connection_changed(self, index):
         if self.running:
@@ -366,10 +382,14 @@ class QueryPage(QWidget):
 
     def results_below(self):
         self.split.setOrientation(Qt.Orientation.Vertical)
+        self.results_below_button.setChecked(True)
+        self.results_beside_button.setChecked(False)
         self.split.setSizes([55, 45])
 
     def results_beside(self):
         self.split.setOrientation(Qt.Orientation.Horizontal)
+        self.results_below_button.setChecked(False)
+        self.results_beside_button.setChecked(True)
         self.split.setSizes([55, 45])
 
     def _run_menu(self, position):

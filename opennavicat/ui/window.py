@@ -8,8 +8,8 @@ from copy import deepcopy
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 
-from PySide6.QtCore import QByteArray, QRectF, QSize, Qt, QThreadPool, QTimer, Signal
-from PySide6.QtGui import QAction, QColor, QFont, QIcon, QKeySequence, QPainter, QPen, QPixmap, QStandardItem, QStandardItemModel
+from PySide6.QtCore import QByteArray, QSize, Qt, QThreadPool, QTimer, Signal
+from PySide6.QtGui import QAction, QIcon, QKeySequence, QStandardItem, QStandardItemModel
 from PySide6.QtWidgets import (
     QApplication, QAbstractItemView, QComboBox, QDialog, QDialogButtonBox,
     QFileDialog, QFormLayout, QFrame, QHBoxLayout, QHeaderView, QInputDialog,
@@ -47,7 +47,7 @@ from .grid import DataGrid, DataModel
 from .compare import CompareTargetDialog, ComparisonPage
 from .diagram import SchemaDiagram
 from .workspace import ObjectBrowser, Inspector, OBJECT_LABELS, object_symbol
-from .icons import icon as workbench_icon, tool_icon
+from .icons import CONNECTION_ICON_DRIVERS, icon as workbench_icon, busy_icon, connection_icon, database_icon, toggle_icon, tool_icon
 from .query import QueryPage
 from .mongo_native_query import NativeMongoQueryPage
 from .table_designer import TableDesignerPage
@@ -126,6 +126,36 @@ class ConnectionTree(QTreeWidget):
         super().keyPressEvent(event)
 
 
+class WorkspaceTabs(QTabWidget):
+    """Use a scalable close glyph while retaining the native tab-button side."""
+
+    def tabInserted(self, index):
+        super().tabInserted(index)
+        if not self.tabsClosable():
+            return
+        bar = self.tabBar()
+        side = self.style().styleHint(QStyle.StyleHint.SH_TabBar_CloseButtonPosition)
+        position = bar.ButtonPosition(side)
+        for existing in (bar.ButtonPosition.LeftSide, bar.ButtonPosition.RightSide):
+            bar.setTabButton(index, existing, None)
+        page = self.widget(index)
+        button = QToolButton(bar)
+        button.setObjectName("workspaceTabClose")
+        button.setAccessibleName("关闭标签页")
+        button.setToolTip("关闭标签页")
+        button.setIcon(tool_icon("record_cancel", 12))
+        button.setIconSize(QSize(12, 12))
+        button.setFixedSize(16, 16)
+        button.setAutoRaise(True)
+        button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        def close_page():
+            current = self.indexOf(page)
+            if current >= 0:
+                self.tabCloseRequested.emit(current)
+        button.clicked.connect(close_page)
+        bar.setTabButton(index, position, button)
+
+
 class TablePage(QWidget):
     def __init__(self, window, connection_id, schema, table, kind="table"):
         super().__init__()
@@ -161,19 +191,19 @@ class TablePage(QWidget):
             tool("提交", "commit", lambda: window.transaction("COMMIT"), enabled=not oracle),
             tool("回滚", "rollback", lambda: window.transaction("ROLLBACK"), enabled=not oracle)]
         self.toolbar.addSeparator()
-        self.record_editor_action = tool("编辑器", "design", self.edit_record, enabled=not oracle)
+        self.record_editor_action = tool("编辑器", "cell_editor", self.edit_record, enabled=not oracle)
         self.filter_action = tool("筛选", "filter")
         self.filter_action.setCheckable(True)
         if oracle:
             self.filter_action.setEnabled(False)
             self.filter_action.setToolTip("Oracle 值筛选尚未实现。")
         tool("排序", "sort", self.open_sort)
-        tool("列", "table", self.open_columns)
+        tool("列", "columns", self.open_columns)
         self.toolbar.addSeparator()
         self.toolbar.addAction(window.import_action)
         self.toolbar.addAction(window.export_action)
         self.toolbar.addSeparator()
-        tool("数据生成（尚未实现）", "database", enabled=False)
+        tool("数据生成（尚未实现）", "generate", enabled=False)
         tool("创建图表（尚未实现）", "chart", enabled=False)
         layout.addWidget(self.toolbar)
         self.filter_bar = QWidget()
@@ -189,7 +219,9 @@ class TablePage(QWidget):
         find.clicked.connect(self.apply_filter)
         filter_layout.addWidget(find)
         close_filter = QToolButton()
-        close_filter.setText("×")
+        close_filter.setIcon(tool_icon("record_cancel", 16))
+        close_filter.setIconSize(QSize(16, 16))
+        close_filter.setToolTip("关闭筛选")
         close_filter.clicked.connect(lambda: self.filter_action.setChecked(False))
         filter_layout.addWidget(close_filter)
         self.filter_bar.hide()
@@ -275,10 +307,10 @@ class TablePage(QWidget):
         self.page_size.setCurrentText("1000")
         self.page_size.currentTextChanged.connect(self.apply_filter)
         self.page_size.hide()
-        settings = button("设置", "other", self.page_settings)
+        settings = button("设置", "settings", self.page_settings)
         bar.addSpacing(10)
-        button("网格视图", "table", lambda: self.subtabs.setCurrentIndex(0))
-        button("表单视图", "list", self.edit_record)
+        button("网格视图", "grid", lambda: self.subtabs.setCurrentIndex(0))
+        button("表单视图", "form", self.edit_record)
         layout.addWidget(self.footer)
         self.note = QLabel(self)
         self.note.hide()
@@ -594,7 +626,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("OpenNavicat")
         self.resize(1512, 920)
         self.setMinimumSize(950, 620)
-        self.setWindowIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DriveHDIcon))
+        self.setWindowIcon(workbench_icon("connection", 32))
         self.build_ui()
         self.build_menu()
         self.populate_connections()
@@ -620,7 +652,7 @@ class MainWindow(QMainWindow):
         if shortcut:
             action.setShortcut(shortcut)
         if icon:
-            action.setIcon(workbench_icon(icon) if isinstance(icon, str) else self.style().standardIcon(icon))
+            action.setIcon(workbench_icon(icon, 28) if isinstance(icon, str) else self.style().standardIcon(icon))
         return action
 
     def build_ui(self):
@@ -690,23 +722,32 @@ class MainWindow(QMainWindow):
         self.ai_panel_action.setEnabled(False)
         self.ai_panel_action.setToolTip("AI 会话面板尚未实现")
         self.navigation_action.setIcon(tool_icon("navigation", 18))
-        self.info_action.setIcon(tool_icon("info", 18))
+        self.info_action.setIcon(toggle_icon("info", 28))
+        self.ai_panel_action.setIcon(toggle_icon("ai", 28))
         self.view_controls = QWidget()
         view_layout = QVBoxLayout(self.view_controls)
         view_layout.setContentsMargins(4, 0, 4, 0)
         view_layout.setSpacing(0)
-        view_buttons = QHBoxLayout()
-        view_buttons.setContentsMargins(0, 0, 0, 0)
-        view_buttons.setSpacing(9)
-        for action in (self.info_action, self.ai_panel_action):
+        view_button_group = QWidget()
+        view_button_group.setObjectName("viewButtonGroup")
+        view_button_group.setFixedHeight(34)
+        view_buttons = QHBoxLayout(view_button_group)
+        view_buttons.setContentsMargins(5, 0, 5, 0)
+        view_buttons.setSpacing(0)
+        for index, action in enumerate((self.info_action, self.ai_panel_action)):
+            if index:
+                divider = QFrame()
+                divider.setObjectName("viewButtonDivider")
+                divider.setFixedSize(1, 18)
+                view_buttons.addWidget(divider)
             button = QToolButton()
             button.setDefaultAction(action)
             button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
-            button.setIconSize(QSize(18, 18))
-            button.setFixedSize(28, 30)
+            button.setIconSize(QSize(28, 28))
+            button.setFixedSize(36, 30)
             button.setAutoRaise(True)
             view_buttons.addWidget(button)
-        view_layout.addLayout(view_buttons)
+        view_layout.addWidget(view_button_group)
         view_label = QLabel("查看")
         view_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         view_label.setStyleSheet("font-size:11px;")
@@ -758,10 +799,10 @@ class MainWindow(QMainWindow):
         bottom.addWidget(self.tree_filter, 1)
         side.addLayout(bottom)
         self.splitter.addWidget(self.sidebar)
-        self.tabs = QTabWidget()
+        self.tabs = WorkspaceTabs()
         self.tabs.setObjectName("workspaceTabs")
         self.tabs.setDocumentMode(True)
-        self.tabs.setIconSize(QSize(20, 20))
+        self.tabs.setIconSize(QSize(16, 16))
         self.tabs.setTabsClosable(True)
         self.tabs.setMovable(False)
         self.tabs.tabCloseRequested.connect(self.close_tab)
@@ -875,7 +916,7 @@ class MainWindow(QMainWindow):
             other = self.category_actions["other"]
             selected = kind in {"mongo_index", "mongo_mapreduce", "mongo_bucket"}
             other.setText(OBJECT_LABELS[kind] if selected else "其它")
-            other.setIcon(tool_icon(object_symbol(kind) if selected else "other"))
+            other.setIcon(workbench_icon(object_symbol(kind) if selected else "other", 28))
         for key, action in self.category_actions.items():
             if action.isCheckable():
                 action.setChecked(key == kind or {"table": "mongo_collection", "view": "mongo_view",
@@ -942,7 +983,7 @@ class MainWindow(QMainWindow):
         page = RedisBrowserPage(self, connection_id, schema)
         page.titleChanged.connect(lambda *_: self.update_redis_title(page))
         page.focusRequested.connect(lambda enabled: self.focus_workspace(page, enabled))
-        self.tabs.addTab(page, workbench_icon("table", 20), "(所有数据)")
+        self.tabs.addTab(page, workbench_icon("table", 16), "(所有数据)")
         self.tabs.setCurrentWidget(page)
         self.update_redis_title(page)
         return page
@@ -980,7 +1021,7 @@ class MainWindow(QMainWindow):
             kind="view" if kind == "mongo_view" else kind)
         page.titleChanged.connect(lambda *_: self.update_mongo_title(page))
         page.focusRequested.connect(lambda enabled: self.focus_workspace(page, enabled))
-        self.tabs.addTab(page, workbench_icon(object_symbol(kind), 20), collection)
+        self.tabs.addTab(page, workbench_icon(object_symbol(kind), 16), collection)
         self.tabs.setCurrentWidget(page)
         self.update_mongo_title(page)
         return page
@@ -1013,7 +1054,7 @@ class MainWindow(QMainWindow):
         page = MongoGridFSPage(self, connection_id, database, bucket)
         page.focusRequested.connect(lambda enabled: self.focus_workspace(page, enabled))
         page.titleChanged.connect(lambda *_: self.update_mongo_title(page))
-        self.tabs.addTab(page, workbench_icon("database", 20), bucket)
+        self.tabs.addTab(page, workbench_icon("database", 16), bucket)
         self.tabs.setCurrentWidget(page)
         self.update_mongo_title(page)
         return page
@@ -1052,7 +1093,7 @@ class MainWindow(QMainWindow):
         page.subtabs.setTabVisible(0, False)
         page.subtabs.tabBar().show()
         page.subtabs.setCurrentIndex(1)
-        self.tabs.setCurrentIndex(self.tabs.addTab(page, workbench_icon("design", 20),
+        self.tabs.setCurrentIndex(self.tabs.addTab(page, workbench_icon("design", 16),
             f"{page.table}@{page.schema} ({config.name})"))
         self.tabs.setTabToolTip(self.tabs.indexOf(page), "只读结构；此数据库的可编辑对象设计器仍待实现")
         return page
@@ -1079,7 +1120,7 @@ class MainWindow(QMainWindow):
         page.titleChanged.connect(lambda _: self.update_designer_title(page))
         page.focusRequested.connect(lambda enabled: self.focus_workspace(page, enabled))
         page.savePreviewPreferenceChanged.connect(self.set_schema_preview_suppressed)
-        self.tabs.addTab(page, workbench_icon("design", 20), "无标题")
+        self.tabs.addTab(page, workbench_icon("design", 16), "无标题")
         self.tabs.setCurrentWidget(page)
         self.update_designer_title(page)
         if table:
@@ -1109,7 +1150,7 @@ class MainWindow(QMainWindow):
         page.focusRequested.connect(lambda enabled: self.focus_workspace(page, enabled))
         page.savePreviewPreferenceChanged.connect(self.set_schema_preview_suppressed)
         page.ownerChanged.connect(lambda owner_type, table: self.load_object_columns(page, owner_type, table))
-        self.tabs.addTab(page, workbench_icon(kind, 20), "无标题")
+        self.tabs.addTab(page, workbench_icon(kind, 16), "无标题")
         self.tabs.setCurrentWidget(page)
         if name:
             self.load_designer(page)
@@ -1308,7 +1349,7 @@ class MainWindow(QMainWindow):
         page.savePreviewPreferenceChanged.connect(self.set_schema_preview_suppressed)
         page._index_request = 0
         page._pending_connection = session is None
-        self.tabs.addTab(page, workbench_icon("index", 20), name or "无标题")
+        self.tabs.addTab(page, workbench_icon("index", 16), name or "无标题")
         self.tabs.setCurrentWidget(page)
         self.update_designer_title(page)
         if session is not None:
@@ -1479,7 +1520,7 @@ class MainWindow(QMainWindow):
         page._collection_request = 0
         page._index_request = 0
         page._pending_connection = session is None
-        self.tabs.addTab(page, workbench_icon("table", 20), name or "无标题")
+        self.tabs.addTab(page, workbench_icon("table", 16), name or "无标题")
         self.tabs.setCurrentWidget(page)
         self.update_designer_title(page)
         if session is not None:
@@ -2016,7 +2057,7 @@ class MainWindow(QMainWindow):
         page.savePreviewPreferenceChanged.connect(self.set_schema_preview_suppressed)
         page._timeseries_request = 0
         page._pending_connection = session is None
-        self.tabs.addTab(page, workbench_icon("table", 20), name or "无标题")
+        self.tabs.addTab(page, workbench_icon("table", 16), name or "无标题")
         self.tabs.setCurrentWidget(page)
         self.update_designer_title(page)
         if session is not None:
@@ -2177,7 +2218,7 @@ class MainWindow(QMainWindow):
         page.focusRequested.connect(lambda enabled: self.focus_workspace(page, enabled))
         page.titleChanged.connect(lambda _title: self.update_mongo_pipeline_title(page))
         page.dirtyChanged.connect(lambda _dirty: self.refresh_actions())
-        self.tabs.addTab(page, workbench_icon("query", 20), "无标题")
+        self.tabs.addTab(page, workbench_icon("query", 16), "无标题")
         self.tabs.setCurrentWidget(page)
         if pipeline_id:
             entry = self.store.mongo_pipeline(pipeline_id)
@@ -2254,18 +2295,7 @@ class MainWindow(QMainWindow):
         def update_tab_busy():
             if not animate_tab or not self._pipeline_page_alive(page):
                 return
-            pixmap = QPixmap(16, 16)
-            pixmap.fill(Qt.GlobalColor.transparent)
-            painter = QPainter(pixmap)
-            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-            painter.setPen(QPen(QColor('#b4b7bc'), 1.7))
-            painter.drawEllipse(QRectF(2, 2, 12, 12))
-            pen = QPen(QColor('#565b62'), 1.7)
-            pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-            painter.setPen(pen)
-            painter.drawArc(QRectF(2, 2, 12, 12), angle[0] * 16, 100 * 16)
-            painter.end()
-            self.tabs.setTabIcon(self.tabs.indexOf(page), QIcon(pixmap))
+            self.tabs.setTabIcon(self.tabs.indexOf(page), busy_icon(angle[0], 16))
             angle[0] = (angle[0] - 30) % 360
 
         timer = QTimer(self)
@@ -2529,7 +2559,7 @@ class MainWindow(QMainWindow):
         page.focusRequested.connect(lambda enabled: self.focus_workspace(page, enabled))
         page.savePreviewPreferenceChanged.connect(self.set_schema_preview_suppressed)
         page._view_request = 0; page._pending_connection = session is None
-        self.tabs.addTab(page, workbench_icon("view", 20), name or "无标题")
+        self.tabs.addTab(page, workbench_icon("view", 16), name or "无标题")
         self.tabs.setCurrentWidget(page); self.update_designer_title(page)
         if session is not None: self.load_mongo_view_designer(page)
         else: page.show_message("连接后重新读取视图定义。")
@@ -3089,7 +3119,8 @@ class MainWindow(QMainWindow):
                 item = QTreeWidgetItem([config.name])
                 item.setData(0, Qt.ItemDataRole.UserRole, {"type": "connection", "id": config.id})
                 item.setToolTip(0, self._connection_tooltip(config))
-                item.setIcon(0, workbench_icon(config.driver, 16))
+                item.setIcon(0, connection_icon(config.driver, 16, connected=config.id in self.sessions) if config.driver in CONNECTION_ICON_DRIVERS else QIcon())
+                item.setData(0, Qt.ItemDataRole.UserRole + 18, [config.driver, config.id in self.sessions])
                 if parent is None:
                     self.tree.addTopLevelItem(item)
                 else:
@@ -3539,7 +3570,7 @@ class MainWindow(QMainWindow):
             for schema in schemas:
                 child = QTreeWidgetItem([schema])
                 child.setData(0, Qt.ItemDataRole.UserRole, {"type": "schema", "id": connection_id, "schema": schema, "loaded": False})
-                child.setIcon(0, workbench_icon("database", 16))
+                child.setIcon(0, database_icon(16, opened=False))
                 child.addChild(QTreeWidgetItem([""]))
                 item.addChild(child)
                 children.append(child)
@@ -3614,6 +3645,7 @@ class MainWindow(QMainWindow):
                 target_info = target.data(0, Qt.ItemDataRole.UserRole)
                 target_info["loaded"] = True
                 target.setData(0, Qt.ItemDataRole.UserRole, target_info)
+                target.setIcon(0, database_icon(16, opened=True))
                 completions = render(target, objects)
             for index in range(self.tabs.count()):
                 page = self.tabs.widget(index)
@@ -3630,6 +3662,7 @@ class MainWindow(QMainWindow):
             for target in self._schema_items(info["id"], info["schema"]):
                 target_info = target.data(0, Qt.ItemDataRole.UserRole)
                 target_info["loaded"] = False
+                target.setIcon(0, database_icon(16, opened=False))
                 target.setData(0, Qt.ItemDataRole.UserRole, target_info)
             self.error(error)
         def work(cancel_event=None):
@@ -3690,7 +3723,7 @@ class MainWindow(QMainWindow):
                 self.tabs.setCurrentIndex(i)
                 return page
         page = TablePage(self, info["id"], info["schema"], info["table"], info["kind"])
-        self.tabs.setCurrentIndex(self.tabs.addTab(page, workbench_icon(info.get("kind", "table"), 20), f"{info['table']}@{info['schema']} ({self.configs[info['id']].name})"))
+        self.tabs.setCurrentIndex(self.tabs.addTab(page, workbench_icon(info.get("kind", "table"), 16), f"{info['table']}@{info['schema']} ({self.configs[info['id']].name})"))
         return page
 
     def refresh_tree(self):
@@ -3850,7 +3883,7 @@ class MainWindow(QMainWindow):
                     collect(schema_item)
         page.editor.set_completions(completions)
         self.query_number += 1
-        self.tabs.setCurrentIndex(self.tabs.addTab(page, workbench_icon("query", 20), f"无标题@{page.schema} ({self.configs[connection_id].name})"))
+        self.tabs.setCurrentIndex(self.tabs.addTab(page, workbench_icon("query", 16), f"无标题@{page.schema} ({self.configs[connection_id].name})"))
         page.editor.setFocus()
         return page
 
@@ -3995,9 +4028,31 @@ class MainWindow(QMainWindow):
             self.setWindowTitle("OpenNavicat")
         self.refresh_actions()
 
+    def refresh_connection_icons(self):
+        def visit(item):
+            info = item.data(0, Qt.ItemDataRole.UserRole) or {}
+            if info.get("type") == "connection":
+                config = self.configs.get(info.get("id"))
+                if config:
+                    state = [config.driver, config.id in self.sessions]
+                    if item.data(0, Qt.ItemDataRole.UserRole + 18) != state:
+                        badge = connection_icon(config.driver, 16, connected=config.id in self.sessions) if config.driver in CONNECTION_ICON_DRIVERS else QIcon()
+                        item.setIcon(0, badge)
+                        item.setData(0, Qt.ItemDataRole.UserRole + 18, state)
+                return
+            for index in range(item.childCount()):
+                visit(item.child(index))
+        for index in range(self.tree.topLevelItemCount()):
+            visit(self.tree.topLevelItem(index))
+        for index in range(self.tabs.count()):
+            page = self.tabs.widget(index)
+            if isinstance(page, QueryPage):
+                page.refresh_context_icons()
+
     def refresh_actions(self):
         if not hasattr(self, "run_action") or not hasattr(self, "status"):
             return
+        self.refresh_connection_icons()
         page = self.tabs.currentWidget()
         connected = self.active_id in self.sessions and self.active_id not in self._closing_connections and not self._closing_mongo
         if hasattr(self, "category_actions"):
@@ -4016,7 +4071,7 @@ class MainWindow(QMainWindow):
             self.category_actions["index"].setVisible(sqlite)
             if not mongo:
                 self.category_actions["other"].setText("其它")
-                self.category_actions["other"].setIcon(tool_icon("other"))
+                self.category_actions["other"].setIcon(workbench_icon("other", 28))
             self.category_actions["trigger"].setVisible(sqlite)
             self.category_actions["backup"].setVisible(not mongo and not oracle)
             self.category_actions["materialized_view"].setVisible(oracle)

@@ -39,6 +39,13 @@ QToolBar QToolButton:hover { background: %(hover)s; border-color: %(border)s; }
 QToolBar QToolButton:pressed, QToolBar QToolButton:checked { background: %(selected_tab)s; border-color: %(border)s; }
 QToolBar QToolButton:disabled { color: %(disabled)s; }
 QToolBar::separator { background: %(border)s; width: 1px; margin: 5px 4px; }
+QToolButton#workspaceTabClose { min-width: 0; padding: 0; border: 0; background: transparent; }
+QToolButton#workspaceTabClose:hover { background: %(hover)s; border-radius: 3px; }
+QWidget#viewButtonGroup { background: %(button)s; border: 1px solid %(border)s; border-radius: 17px; }
+QWidget#viewButtonGroup QToolButton { min-width: 0; border: 0; padding: 0; background: transparent; }
+QWidget#viewButtonGroup QToolButton:hover { background: %(hover)s; border-radius: 12px; }
+QFrame#viewButtonDivider { background: %(muted)s; border: 0; }
+
 QPushButton { padding: 2px 8px; min-height: 20px; }
 QPushButton:disabled, QLabel:disabled, QToolButton:disabled { color: %(disabled)s; }
 QLineEdit, QSpinBox, QDoubleSpinBox { background: %(edit)s; color: %(text)s; border: 1px solid %(border)s; padding: 2px 4px; min-height: 18px; selection-background-color: %(selection)s; selection-color: %(selection_text)s; }

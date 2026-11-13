@@ -95,8 +95,12 @@ and Windows/Linux reference layout remains a parity gate.
 Preview never runs `$out` or `$merge` and never executes `$changeStream` as an
 unbounded stream. Runs are bounded to 1000 rows and 16 MiB of delivered BSON.
 Cancellation uses the MongoDB connection's exact operation marker through the
-existing separate cancellation worker. Read-only connections reject write and
-streaming stages.
+existing separate cancellation worker. Read-only connections reject write
+stages. The unreleased finite-stream backend permits reads with a scoped read
+role; its internal result path is not accepted reference UI. Preview and Explain
+still reject stream stages. The separately tested finite-run, no-retry and cursor
+cleanup contracts and remaining gates are in the
+[finite-stream development checkpoint](mongodb-pipeline-stream.md).
 
 For positive `maxTimeMS`, Run/Preview and Explain use dedicated owner-thread
 clients with finite network timeouts, preserving the positive server limit

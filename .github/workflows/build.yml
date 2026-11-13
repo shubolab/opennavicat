@@ -168,6 +168,16 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: python scripts/test-mongodb-security.py --evidence artifacts/security-integration/mongodb-security
+      - name: Verify finite stream TLS and SSH transport without read retries
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python scripts/test-mongodb-security.py --scope stream --evidence artifacts/security-integration/mongodb-stream-security
+      - name: Verify finite stream events cancellation and exact cursor cleanup
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python scripts/test-mongodb-stream.py --evidence artifacts/security-integration/mongodb-stream
+      - name: Verify interrupted stream fixture cleanup ownership boundaries
+        run: python scripts/test-mongodb-stream-cleanup.py --evidence artifacts/security-integration/mongodb-stream-cleanup
       - name: Verify ordinary MongoDB collection backend and designer
         env:
           QT_QPA_PLATFORM: offscreen

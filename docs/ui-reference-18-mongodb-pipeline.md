@@ -417,6 +417,71 @@ permissions/topologies and Windows/Linux reference behavior remain open. The
 OpenNavicat finite-preview rejection of `$changeStream` is a safety boundary,
 not completion of these stream-tool gates.
 
+### AP18-10 follow-up: event presentation and preview actions
+
+A separate follow-up on 2026-11-13 used the same **18.0.5 build 321** reference
+with a fresh exact-owned native ARM64 MongoDB **8.0.34** single-node replica
+set. Its `pipeline_stream_ui_reference.sales` started with four generated
+documents. Only the existing generated, password-free Task Reference profile
+was repointed to this loopback fixture; no existing saved pipeline or user
+database was opened. Both inspected Pipeline tabs were new and unsaved.
+
+After selecting `sales`, the source sample defaults were `随机` and **1,000**
+documents. A selected `$changeStream` stage initially showed `无预览` in both
+input and output preview panes. The stage's `预览` and toolbar `预览全部`
+actions remained available: the stream operator did not automatically disable
+them. The toolbar dropdown contained `预览全部` and
+`重新加载并预览全部`. The reload variant was enumerated but not executed.
+Script Preview for the generated body `{}` showed:
+
+```javascript
+db.getCollection("sales").aggregate([
+  {$changeStream: {}}]);
+```
+
+For Run, an independent native producer inserted one generated document only
+after observing the reference's active `getMore` for this exact namespace.
+The profiler recorded an event-bearing `getMore` at **04:47:11.979 UTC**, then
+an empty one at **04:47:12.980 UTC**; the resulting idle tailable/awaitData
+cursor reported one document returned. The reference completed in **1.069 s**
+and selected `消息`. Both that page and the subsequently explicitly selected
+`输出` page displayed the aggregate script, `> OK` and query time in a text
+area. Neither the screenshots nor accessibility trees exposed event fields,
+an event grid, a `结果 1` page or paging controls. This confirms the inspected
+presentation after actual wire delivery; it does not establish useful event
+rendering or justify treating OpenNavicat's generic result grid as UI parity.
+
+Stage Preview and Preview All were then tested separately:
+
+| Action | Independently observed wire sequence | Actual UI outcome |
+| --- | --- | --- |
+| Selected stage `预览`, no event injected | At **04:47:43.048 UTC**, an independent `sales` aggregate containing only `$sample: {size: 1000}` returned five source documents. A separate cursor whose originating pipeline was only `$changeStream: {}` returned an empty `getMore` at **04:47:44.057 UTC**. | The input preview displayed the five ordinary source documents; the stage operator became disabled while busy. Before a completed stream output was observed, the reference crashed at **12:47:44.214 +0800**. |
+| Toolbar `预览全部`, fresh unsaved tab after relaunch | At **04:49:20.103 UTC**, an independent `$sample: {size: 1000}` aggregate returned the five existing source documents. A producer then inserted a sixth document only during the new reference stream's active `getMore`; it returned one event at **04:49:20.137 UTC**, then zero at **04:49:21.143 UTC**. | The input preview again showed the ordinary source sample, with the stream stage busy and output still `无预览`. The reference crashed at **12:49:21.280 +0800**, before useful stream output was observed. |
+
+The sample read was a **separate aggregate**, not a `$sample` stage prepended
+to the `$changeStream` pipeline. In particular, the generated event document
+appearing in the source input sample in a later action was an ordinary stored
+document, not evidence that a change-event envelope had been rendered.
+
+Both macOS diagnostic reports identify reference **18.0.5 / 321**,
+`EXC_BAD_ACCESS` / `SIGSEGV` and faulting thread 0. The first report's leading
+frame was `CCNavicat::beginReadAccess(CMObject*)`; raw diagnostics, full stacks,
+paths and server receipts remain ignored private evidence. These are two
+bounded reference failures, not a desired behavior to reproduce. Normal
+successful stream preview/output, other options and platforms remain open;
+the failures do not remove the preview acceptance gates.
+
+After the second relaunch, the generated profile was confirmed `Off`, and
+the reference was normally quit and confirmed not running. The native
+checkpoint still found **three idle cursors and no active operation** from
+the earlier completed/crashed runs; normal exit of the newly relaunched,
+disconnected application is not evidence that it released those earlier
+sessions. The exact-owned container and both recorded anonymous volumes were
+then removed and individually verified absent. No new pipeline was saved.
+The prior harmless generated profile remains disconnected with this now-removed
+fixture endpoint; no permanent local metadata deletion was attempted. This
+follow-up remains CUA observation under AP18-10, not a REA Evidence ID.
+
 ## Boundaries of AP18-01–AP18-08
 
 This round did not complete an automated reference drag operation, every

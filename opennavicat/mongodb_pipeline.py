@@ -827,7 +827,8 @@ def preview_pipeline(session, database, definition, *, limit=50, cancel_event=No
 def execute_pipeline(session, database, definition, *, limit=1000, cancel_event=None):
     validate_pipeline(definition)
     if any(stage.operator in STREAM_STAGES for stage in definition.stages if stage.enabled):
-        raise DatabaseError("Change streams remain a dedicated streaming workflow")
+        from .mongodb_pipeline_stream import execute_finite_stream
+        return execute_finite_stream(session, database, definition, limit=limit, cancel_event=cancel_event)
     if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= MAX_EXECUTION_ROWS:
         raise DatabaseError("Aggregation execution limit is invalid")
     if session.config.read_only and any(

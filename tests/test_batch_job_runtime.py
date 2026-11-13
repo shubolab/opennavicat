@@ -11,7 +11,7 @@ import subprocess
 import sys
 import threading
 
-from bson import Int64
+from bson import BSON, Int64
 from pymongo.errors import OperationFailure
 import pytest
 
@@ -20,6 +20,7 @@ from opennavicat.batch_job_runtime import BatchRunControl, PreparedPipelineJob, 
 from opennavicat.batch_jobs import ResolvedPipelineReference, add_job, new_batch_job, new_pipeline_reference
 from opennavicat.database import ConnectionConfig, DatabaseError
 from opennavicat.mongodb_pipeline import PipelineDefinition, PipelineStage, to_nagg
+from opennavicat.mongodb_pipeline_stream import FiniteStreamResult, StreamEvent, StreamExecutionError
 
 
 def plan(*names, continue_on_error=True):
@@ -311,20 +312,47 @@ def test_prepared_binding_changes_are_refused_before_any_session(monkeypatch):
     assert 'LocateObject' in result['logs'][-1]['message']
 
 
-def test_stream_uses_existing_pipeline_rejection_and_still_closes_the_session():
-    definition, prepared = plan('stream')
+def test_stream_byte_limit_failure_skips_following_closes_session_once_and_keeps_events_private(monkeypatch):
+    definition, prepared = plan('stream', 'following', continue_on_error=False)
     original = prepared[0]
     resolved = ResolvedPipelineReference(original.resolved.connection_id,
         original.resolved.connection_name, original.resolved.schema, original.resolved.pipeline_id,
         original.resolved.pipeline_name, to_nagg(PipelineDefinition(source='generated_documents',
             stages=[PipelineStage('$changeStream', {})])))
     prepared[0] = PreparedPipelineJob(original.reference, resolved, original.config)
-    instances = []
+    private_event = {'_id': {'token': 'generated-private-resume-token'},
+        'fullDocument': {'value': 'generated-private-stream-business-value'}}
+    canonical = json.dumps(private_event)
+    partial = FiniteStreamResult((StreamEvent(BSON.encode(private_event), canonical),),
+        completion='byte_limit', elapsed_seconds=.02, undelivered_event_count=1,
+        undelivered_raw_bytes=123, undelivered_rendered_bytes=234)
+    failure = StreamExecutionError(
+        'The finite stream byte limit was reached; one obtained event was not delivered', partial)
+    instances, executions, events = [], [], []
     def factory(config):
         value = FakeSession(config); instances.append(value); return value
-    result = run_batch_job(definition, prepared, control=BatchRunControl(), emit=lambda _event: None, session_factory=factory)
+
+    def execute(session, schema, pipeline, *, cancel_event):
+        assert session.calls == ['connect'] and not session.closed
+        assert pipeline.stages[0].operator == '$changeStream'
+        assert not cancel_event.is_set()
+        executions.append(schema)
+        raise failure
+
+    monkeypatch.setattr(runtime, 'execute_pipeline', execute)
+    result = run_batch_job(definition, prepared, control=BatchRunControl(), emit=events.append,
+        session_factory=factory)
     assert result['status'] == 'failed' and result['failed'] == 1
+    assert result['success'] == result['cancelled'] == 0 and result['skipped'] == 1
+    assert executions == ['generated_catalog'] and len(instances) == 1
     assert instances[0].closed and instances[0].calls == ['connect', 'close']
+    assert [event['status'] for event in events] == ['running', 'failed', 'skipped']
+    serialized = json.dumps({'result': result, 'events': events})
+    assert 'generated-private-resume-token' not in serialized
+    assert 'generated-private-stream-business-value' not in serialized
+    assert 'partial_result' not in serialized
+    assert failure.partial_result is partial and partial.undelivered_event_count == 1
+    assert partial.events[0].raw_bson == BSON.encode(private_event)
 
 
 def test_event_sink_failure_cannot_skip_cleanup_or_disclose_its_exception(monkeypatch):

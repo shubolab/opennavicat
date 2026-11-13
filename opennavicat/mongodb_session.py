@@ -584,6 +584,7 @@ class MongoSession(DatabaseSession):
         self._control = None
         self._connected_options = None
         self._pipeline_clients = {}
+        self._finite_stream_client = None
         self._tunnel = self._pem_dir = None
         self._selected_schema = config.database or "admin"
         self._seal_key = secrets.token_bytes(32)
@@ -697,8 +698,9 @@ class MongoSession(DatabaseSession):
             raise self._error(exc) from exc
 
     def close(self):
-        budget_clients = tuple(self._pipeline_clients.values())
+        budget_clients = (*self._pipeline_clients.values(), self._finite_stream_client)
         self._pipeline_clients.clear()
+        self._finite_stream_client = None
         self._connected_options = None
         for client in (*budget_clients, self.connection, self._control):
             if client is not None:
@@ -736,20 +738,7 @@ class MongoSession(DatabaseSession):
             try:
                 client = self._pipeline_clients.get(ceiling_seconds)
                 if client is None:
-                    milliseconds = ceiling_seconds * 1000
-                    options = dict(self._connected_options)
-                    options.update(timeoutMS=None, socketTimeoutMS=milliseconds)
-                    for key in ("connectTimeoutMS", "serverSelectionTimeoutMS"):
-                        options[key] = min(options.get(key) or milliseconds, milliseconds)
-                    client = MongoClient(**options)
-                    # Complete cold selection/authentication before the caller's
-                    # final cancellation/deadline check. Ping has no user
-                    # maxTimeMS to preserve, so bound its entire handshake with
-                    # CSOT as well as the client's finite network settings.
-                    warm_seconds = min(options["connectTimeoutMS"],
-                                       options["serverSelectionTimeoutMS"], milliseconds) / 1000
-                    with mongo_timeout(warm_seconds):
-                        client.admin.command("ping")
+                    client = self._new_bounded_pipeline_client(ceiling_seconds)
                     self._pipeline_clients[ceiling_seconds] = client
                 yield client, min(max_time_ms, ceiling_seconds * 1000)
             except BaseException:
@@ -759,6 +748,58 @@ class MongoSession(DatabaseSession):
                     with contextlib.suppress(Exception):
                         client.close()
                 raise
+
+    def _new_bounded_pipeline_client(self, ceiling_seconds, *, retry_reads=None):
+        milliseconds = ceiling_seconds * 1000
+        options = dict(self._connected_options)
+        options.update(timeoutMS=None, socketTimeoutMS=milliseconds)
+        if retry_reads is not None:
+            options["retryReads"] = retry_reads
+        for key in ("connectTimeoutMS", "serverSelectionTimeoutMS"):
+            options[key] = min(options.get(key) or milliseconds, milliseconds)
+        client = MongoClient(**options)
+        try:
+            # Complete cold selection/authentication before dispatch checks.
+            # Ping has no user maxTimeMS, so CSOT may bound the full handshake.
+            warm_seconds = min(options["connectTimeoutMS"],
+                               options["serverSelectionTimeoutMS"], milliseconds) / 1000
+            with mongo_timeout(warm_seconds):
+                client.admin.command("ping")
+            return client
+        except BaseException:
+            with contextlib.suppress(Exception):
+                client.close()
+            raise
+
+    @contextlib.contextmanager
+    def _finite_stream_budget(self, max_time_ms):
+        """One separately owned no-retry client for finite stream requests.
+
+        Retrying an ambiguous initial $changeStream aggregate would reopen at
+        a new time and lose an unobserved interval. Ordinary pipeline clients
+        retain their configured retryReads setting.
+        """
+        self._check()
+        if (isinstance(max_time_ms, bool) or not isinstance(max_time_ms, int)
+                or max_time_ms < 1 or self._connected_options is None):
+            raise DatabaseError("Finite stream command budget is invalid")
+        client = None
+        with mongo_timeout(0):
+            try:
+                client = self._finite_stream_client
+                if client is None:
+                    client = self._new_bounded_pipeline_client(120, retry_reads=False)
+                    self._finite_stream_client = client
+                yield client, min(max_time_ms, 120000)
+            except BaseException:
+                self._discard_finite_stream_client(client)
+                raise
+
+    def _discard_finite_stream_client(self, client):
+        if client is not None and self._finite_stream_client is client:
+            self._finite_stream_client = None
+            with contextlib.suppress(Exception):
+                client.close()
 
     def _check(self):
         if self.connection is None:

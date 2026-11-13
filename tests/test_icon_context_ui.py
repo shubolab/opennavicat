@@ -2,7 +2,8 @@
 
 Pixel differences here protect state propagation, not reference visual parity.
 """
-from PySide6.QtCore import QSize, Qt
+from PySide6.QtCore import QCoreApplication, QEvent, QSize, Qt
+from PySide6.QtWidgets import QAbstractButton
 from PySide6.QtGui import QIcon
 
 from test_ui import idle, open_sample, run_query, window
@@ -108,3 +109,17 @@ def test_close_glyph_tracks_its_page_when_tab_indices_shift(qtbot, window):
     assert window.tabs.indexOf(third) == -1
     assert window.tabs.indexOf(page) == 1
     assert window.tabs.widget(0) is window.object_page
+
+
+def test_replacing_native_close_glyph_releases_hidden_buttons(qtbot, window):
+    page = open_sample(qtbot, window)
+    bar = window.tabs.tabBar()
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    baseline = len(bar.findChildren(QAbstractButton))
+    for number in range(30):
+        generated = window.new_query(connection_id=page.connection_id,
+                                     sql=f"SELECT {number};")
+        window.close_tab(window.tabs.indexOf(generated))
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    assert len(bar.findChildren(QAbstractButton)) == baseline
+    assert window.tabs.count() == 2

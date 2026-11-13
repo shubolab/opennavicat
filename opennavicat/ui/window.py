@@ -136,8 +136,7 @@ class WorkspaceTabs(QTabWidget):
         bar = self.tabBar()
         side = self.style().styleHint(QStyle.StyleHint.SH_TabBar_CloseButtonPosition)
         position = bar.ButtonPosition(side)
-        for existing in (bar.ButtonPosition.LeftSide, bar.ButtonPosition.RightSide):
-            bar.setTabButton(index, existing, None)
+        self.clear_close_buttons(index)
         page = self.widget(index)
         button = QToolButton(bar)
         button.setObjectName("workspaceTabClose")
@@ -154,6 +153,17 @@ class WorkspaceTabs(QTabWidget):
                 self.tabCloseRequested.emit(current)
         button.clicked.connect(close_page)
         bar.setTabButton(index, position, button)
+
+
+    def clear_close_buttons(self, index):
+        bar = self.tabBar()
+        for side in (bar.ButtonPosition.LeftSide, bar.ButtonPosition.RightSide):
+            previous = bar.tabButton(index, side)
+            bar.setTabButton(index, side, None)
+            # setTabButton(None) only hides the old widget; Qt no longer
+            # removes it with the tab. Release its signals and page closure.
+            if previous is not None:
+                previous.deleteLater()
 
 
 class TablePage(QWidget):
@@ -817,8 +827,7 @@ class MainWindow(QMainWindow):
         self.splitter.setStretchFactor(2, 0)
         self.object_page = ObjectBrowser(self)
         self.tabs.addTab(self.object_page, "对象")
-        self.tabs.tabBar().setTabButton(0, self.tabs.tabBar().ButtonPosition.RightSide, None)
-        self.tabs.tabBar().setTabButton(0, self.tabs.tabBar().ButtonPosition.LeftSide, None)
+        self.tabs.clear_close_buttons(0)
         self.status = QLabel("")
         self.status.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.statusBar().setSizeGripEnabled(False)

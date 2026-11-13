@@ -44,6 +44,7 @@ MONGO_BATCH_NAME = "生成批处理作业"
 MONGO_STREAM_COLLECTION = "generated_stream_events"
 ORACLE_FORM_NAME = "Oracle · 连接设置演示"
 ORACLE_FORM_PHASES = ("oracle_connection_general", "oracle_connection_advanced", "oracle_connection_databases")
+CONNECTION_CHOOSER_PHASES = ("connection_chooser",)
 SQLITE_PHASES = ("objects", "table_data", "query_editor", "query_results", "table_designer", "designer_sql_preview")
 MONGO_PHASES = ("mongodb_collection_grid", "mongodb_typed_tree", "mongodb_gridfs_preview",
     "mongodb_javascript_editor", "mongodb_javascript_results", "mongodb_collection_inline_index",
@@ -83,10 +84,12 @@ def mongo_storage_options():
     }
 
 
-def required_demo_phases(*, mongodb=False, stream=False, oracle_form=False):
+def required_demo_phases(*, mongodb=False, stream=False, oracle_form=False, connection_chooser=False):
     if stream and not mongodb:
         raise ValueError("A finite-stream demo requires its MongoDB workflows.")
-    return SQLITE_PHASES + (MONGO_PHASES if mongodb else ()) + (STREAM_PHASES if stream else ()) + (ORACLE_FORM_PHASES if oracle_form else ())
+    return (SQLITE_PHASES + (MONGO_PHASES if mongodb else ()) + (STREAM_PHASES if stream else ())
+            + (ORACLE_FORM_PHASES if oracle_form else ())
+            + (CONNECTION_CHOOSER_PHASES if connection_chooser else ()))
 
 
 def mongo_collection_options():
@@ -778,6 +781,67 @@ def fit_capture_image(source, width, height, *, save_sheet=False):
 
 
 @contextmanager
+def connection_chooser_demo(parent=None):
+    """Unbound actual chooser: no workspace, credential or settings handoff."""
+    from PySide6.QtCore import Qt
+    from opennavicat.ui.connection_manager import ConnectionManagerDialog
+
+    dialog = ConnectionManagerDialog(parent)
+    dialog.setWindowModality(Qt.WindowModality.WindowModal)
+    dialog._demo_chooser_attempts = []
+    dialog.selectionRequested.connect(lambda *_: dialog._demo_chooser_attempts.append("handoff"))
+    dialog.accepted.connect(lambda: dialog._demo_chooser_attempts.append("accepted"))
+    try:
+        dialog.search_edit.clear()
+        dialog.filter_tree.setCurrentItem(dialog.all_item)
+        dialog.connection_list.clearSelection()
+        dialog.connection_list.setCurrentRow(-1)
+        dialog.search_edit.setFocus()
+        yield dialog
+    finally:
+        try:
+            dialog.reject()
+        finally:
+            dialog.deleteLater()
+
+
+def verify_connection_chooser_demo(dialog):
+    """Verify actual widgets before every chooser frame, without a backend."""
+    from PySide6.QtCore import QThread, QSize, Qt
+    from PySide6.QtWidgets import QApplication, QListView
+    from opennavicat.ui.connection_manager import ConnectionManagerDialog, DRIVER_LABELS, VENDOR_ALIASES
+
+    app = QApplication.instance()
+    if app is None or QThread.currentThread() is not app.thread():
+        raise RuntimeError("Connection chooser demo widgets need their GUI owner.")
+    if not isinstance(dialog, ConnectionManagerDialog):
+        raise RuntimeError("The demo must capture its actual application connection chooser.")
+    canonical = {(label, kind) for kind, label in DRIVER_LABELS.items()}
+    aliases = {(label, kind) for vendor in ("MongoDB Atlas", "Redis Enterprise Cloud")
+               for label, kind in VENDOR_ALIASES[vendor]}
+    rows = [dialog.connection_list.item(i) for i in range(dialog.connection_list.count())]
+    actual = [(item.text(), item.data(Qt.ItemDataRole.UserRole).kind) for item in rows]
+    if (dialog.search_edit.text() or dialog.filter_tree.currentItem() is None
+            or dialog.filter_tree.currentItem().data(0, Qt.ItemDataRole.UserRole) != ("all", "")
+            or not canonical <= set(actual) or not set(actual) <= canonical | aliases
+            or len(actual) != len(set(actual)) or any(item.icon().isNull() for item in rows)
+            or dialog.connection_list.viewMode() != QListView.ViewMode.IconMode
+            or dialog.connection_list.iconSize() != QSize(50, 50)
+            or not dialog.grid_button.isChecked() or dialog.list_button.isChecked()
+            or dialog.connection_list.currentItem() is not None
+            or dialog.connection_list.selectedItems() or dialog.next_button.isEnabled()
+            or dialog.uri_dialog is not None or dialog.edit_button.isEnabled()
+            or getattr(dialog, "_demo_chooser_attempts", None) != []):
+        raise RuntimeError("The demo chooser changed its catalog, artwork, empty selection or no-handoff state.")
+    return {"view": "all", "labels": [label for label, _kind in actual],
+            "direct_aliases": [label for label, kind in actual if (label, kind) in aliases],
+            "grid_icon_size_logical": [50, 50], "search_empty": True,
+            "selection_empty": True, "next_enabled": False, "artwork_present": True,
+            "settings_handoff_attempted": False, "profile_saved": False,
+            "database_connection_attempted": False}
+
+
+@contextmanager
 def oracle_form_demo(parent=None):
     """Actual unsaved form, with every Oracle connection attempt forbidden."""
     from opennavicat.oracle_session import OracleSession
@@ -916,6 +980,7 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
 
     include_stream = bool(getattr(args, "include_stream", False))
     include_oracle_form = bool(getattr(args, "include_oracle_form", False))
+    include_connection_chooser = bool(getattr(args, "include_connection_chooser", False))
     if include_stream and (mongo is None or not mongo.replica_set):
         raise RuntimeError("A generated stream recording requires its new owned replica set.")
     io_jobs = []
@@ -997,9 +1062,11 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
              "mongo_batch_page": None, "mongo_batch_verification": None,
              "mongo_stream_page": None, "mongo_stream_verification": None,
              "oracle_form": None, "oracle_form_guard": None, "oracle_form_verification": None,
+             "connection_chooser": None, "connection_chooser_guard": None, "connection_chooser_verification": None,
              "stream_abort": threading.Event(), "stream_release": threading.Event(),
              "capture_target": window}
-    deadline = time.monotonic() + (150 if include_stream else 120) + (12 if include_oracle_form else 0)
+    deadline = (time.monotonic() + (150 if include_stream else 120)
+                + (12 if include_oracle_form else 0) + (6 if include_connection_chooser else 0))
     capture_timer = QTimer(app)
     capture_timer.setInterval(round(1000 / args.fps))
 
@@ -1029,6 +1096,8 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
             target = state["capture_target"]
             if target is state["oracle_form"]:
                 verify_oracle_form_demo(target)
+            if target is state["connection_chooser"]:
+                verify_connection_chooser_demo(target)
             if target is not window:
                 # A real app sheet is grabbed directly, never composited into a
                 # synthetic main-window image or sampled from the desktop.
@@ -1056,7 +1125,8 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
         target = state["capture_target"]
         state["phases"].append({"name": name, "first_frame": state["count"],
             "surface": ("main_window" if target is window else "oracle_connection_dialog"
-                        if target is state["oracle_form"] else "save_sheet"),
+                        if target is state["oracle_form"] else "connection_manager_dialog"
+                        if target is state["connection_chooser"] else "save_sheet"),
             "source_size_logical": [target.width(), target.height()],
             "fit": "existing_main_window_scale" if target is window else "keep_aspect_centered_neutral_letterbox"})
 
@@ -1844,7 +1914,7 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
 
     def finish_workflows():
         if not include_oracle_form:
-            finish()
+            show_connection_chooser()
             return
         capture_timer.stop()
         guard = oracle_form_demo(window)
@@ -1871,6 +1941,33 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
         state["capture_target"] = window
         # Keep the last form phase's frames together: finish verification is
         # paused and the main window is not captured under that form phase.
+        show_connection_chooser(capture_last=False)
+
+    def show_connection_chooser(*, capture_last=True):
+        if not include_connection_chooser:
+            finish(capture_last=capture_last)
+            return
+        capture_timer.stop()
+        guard = connection_chooser_demo(window)
+        dialog = guard.__enter__()
+        state["connection_chooser_guard"] = guard
+        state["connection_chooser"] = dialog
+        state["capture_target"] = dialog
+        dialog.show()
+        wait_for(dialog.isVisible, connection_chooser_ready, "showing the actual unselected connection chooser")
+
+    def connection_chooser_ready():
+        state["connection_chooser_verification"] = verify_connection_chooser_demo(state["connection_chooser"])
+        phase(CONNECTION_CHOOSER_PHASES[0])
+        capture(); capture_timer.start()
+        hold(3.0, close_connection_chooser)
+
+    def close_connection_chooser():
+        capture(); capture_timer.stop()
+        state["connection_chooser_verification"] = verify_connection_chooser_demo(state["connection_chooser"])
+        state["connection_chooser_guard"].__exit__(None, None, None)
+        state["connection_chooser_guard"] = None
+        state["capture_target"] = window
         finish(capture_last=False)
 
     def finish(*, capture_last=True):
@@ -1898,6 +1995,8 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
                     raise RuntimeError("The generated finite stream was not independently verified.")
             if include_oracle_form and not state["oracle_form_verification"]:
                 raise RuntimeError("The actual Oracle connection form was not verified.")
+            if include_connection_chooser and not state["connection_chooser_verification"]:
+                raise RuntimeError("The actual connection chooser was not verified.")
         window.submit(verify_preview, lambda _result: shutdown(), label="验证生成的演示数据")
 
     def shutdown():
@@ -1907,6 +2006,10 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
         if state["oracle_form_guard"] is not None:
             state["oracle_form_guard"].__exit__(None, None, None)
             state["oracle_form_guard"] = None
+            state["capture_target"] = window
+        if state["connection_chooser_guard"] is not None:
+            state["connection_chooser_guard"].__exit__(None, None, None)
+            state["connection_chooser_guard"] = None
             state["capture_target"] = window
         state["stream_abort"].set()
         state["stream_release"].set()
@@ -2010,7 +2113,8 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
         raise RuntimeError(state["error"] or "Demo application failed.")
     if not window._closed or not idle():
         raise RuntimeError("The demo exited before its native sessions and window had closed.")
-    expected_phases = required_demo_phases(mongodb=mongo is not None, stream=include_stream, oracle_form=include_oracle_form)
+    expected_phases = required_demo_phases(mongodb=mongo is not None, stream=include_stream,
+        oracle_form=include_oracle_form, connection_chooser=include_connection_chooser)
     if state["count"] < 2 or tuple(item["name"] for item in state["phases"]) != expected_phases:
         raise RuntimeError("The demo did not capture all required workflows.")
     for index, item in enumerate(state["phases"]):
@@ -2058,6 +2162,7 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
         "mongodb_batch_job": state["mongo_batch_verification"],
         "mongodb_finite_stream": state["mongo_stream_verification"],
         "oracle_connection_form": state["oracle_form_verification"],
+        "connection_chooser": state["connection_chooser_verification"],
         "visible_text_privacy_guard": "labels, editors, titles, actions, combos, tree/table display fields; paths/endpoints/credentials rejected before frame save",
         "sqlite_closed_in_worker": state["sqlite_closed_in_worker"],
         "native_window_closed_before_quit": bool(window._closed),
@@ -2079,6 +2184,8 @@ def main():
         help="Add real finite-stream busy/messages/output using an authenticated owned replica set; requires --include-mongodb")
     parser.add_argument("--include-oracle-form", action="store_true",
         help="Add three actual Oracle connection-form pages with empty host/user/password; no database connection or saved profile")
+    parser.add_argument("--include-connection-chooser", action="store_true",
+        help="Add the actual unselected connection chooser grid; no settings handoff, saved profile or database connection")
     parser.add_argument("--check-dependencies", action="store_true")
     args = parser.parse_args()
     if args.include_stream and not args.include_mongodb:
@@ -2087,13 +2194,14 @@ def main():
     if args.check_dependencies:
         print(json.dumps({"ffmpeg": version, "palette_filters": True, "Pillow_required": False,
             "mongodb_requested":args.include_mongodb,"oracle_form_requested":args.include_oracle_form,
+            "connection_chooser_requested":args.include_connection_chooser,
             "docker_available":shutil.which("docker") is not None}))
         return 0
     if args.width < 950 or args.height < 620:
         parser.error("The application needs at least 950 by 620 logical pixels.")
     if args.output.suffix.lower() != ".gif":
         parser.error("The demo output must be a .gif file.")
-    if (args.include_mongodb or args.include_oracle_form) and not any(value == "--output" or value.startswith("--output=") for value in sys.argv[1:]):
+    if (args.include_mongodb or args.include_oracle_form or args.include_connection_chooser) and not any(value == "--output" or value.startswith("--output=") for value in sys.argv[1:]):
         parser.error("An extended demo capture requires an explicit --output; use an ignored development artifact before publishing.")
     os.environ["QT_QPA_PLATFORM"] = args.platform
     sys.path.insert(0, str(ROOT))

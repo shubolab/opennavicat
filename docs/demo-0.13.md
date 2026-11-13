@@ -26,3 +26,23 @@ Oracle 部分展示连接设置界面，回执明确记录 `database_connection_
 本阶段已完成离屏回归 `96 passed, 3 skipped`。其中新增 Oracle 表单与保护检查 17 项通过；3 个跳过项需要显式启用真实 MongoDB 集成环境。本轮未启动数据库服务。实际 Oracle 三页的 Qt 抓图与 RGB32 比例处理已通过测试，这些离屏检查不替代最终 Cocoa 全流程录制或人工视觉验收。
 
 最终交付继续使用 README 中的一份实际应用 GIF。合流后应逐阶段检查首、中、尾帧及全尺寸画面，核对全部帧的隐私检查、34 个阶段的顺序、编码回执和生成工作区清理结果，再更新正式资产。Oracle 数据库功能资格与原版 UI 观察分别见对应验证和参考文档；表单演示不构成完整 Oracle 工具、三个操作系统或整体 Navicat 对齐验收。
+
+## 0.13.1 连接选择器录制准备
+
+新增可选参数 `--include-connection-chooser`，在既有流程最后追加一个 `connection_chooser` 阶段。未指定该参数时，默认 6 阶段、MongoDB 有限流 31 阶段和追加 Oracle 表单后的 34 阶段均保持原顺序；全部启用时预期为 35 阶段。
+
+新阶段直接显示应用的 `ConnectionManagerDialog` 并抓取其真实画面。使用空搜索的“全部连接类型”网格，图标为 50×50 逻辑像素；校验九个数据库类型存在，回执记录实际显示的卡片名称及已观察的直接别名。当前基线显示九类数据库，合流后的 MongoDB Atlas 与 Redis Enterprise Cloud 别名由应用本身提供；录制器不会添加卡片或替换图标。最终 11 张卡片须在合流后的实际 Cocoa 录制中另行核对。
+
+每帧检查卡片未选中、“下一步”禁用、没有设置页交接、URI 子窗口或保存行为，并继续检查真实标题、搜索框、侧栏和卡片文本中的路径、端点与凭据。该对话框不绑定主窗口的新建连接回调，不读取已有 Store 或凭据；结束和异常路径均拒绝对话框并安排 Qt 销毁。画面沿用真实模态表单的等比例居中纯色留边，不合成主窗口背景或控件。
+
+新增参数同样要求显式 `--output`。后续合流录制命令为：
+
+```sh
+.venv/bin/python scripts/record-demo.py \
+  --platform cocoa --theme light --width 1440 --height 900 --fps 6 \
+  --include-mongodb --include-stream --include-oracle-form \
+  --include-connection-chooser \
+  --output artifacts/release-0131/demo-candidate.gif
+```
+
+本次准备不录制 GIF、不启动数据库服务，也不改公开资产。离屏回归验证实际选择器抓图、无交接状态、可见文本保护及正常／异常后的销毁；这些检查不替代合流后的 35 阶段 Cocoa 录制、逐阶段视觉审查或三平台验收。

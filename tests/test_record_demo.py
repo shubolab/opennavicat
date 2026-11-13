@@ -29,6 +29,139 @@ def recorder():
     return module
 
 
+def test_connection_chooser_uses_actual_unbound_grid_and_deletes_after_capture(qtbot, recorder, tmp_path, monkeypatch):
+    from PySide6.QtCore import QCoreApplication, QEvent, QSize
+    from PySide6.QtGui import QImage
+    from PySide6.QtTest import QSignalSpy
+    from PySide6.QtWidgets import QListView
+    from shiboken6 import isValid
+    from types import ModuleType
+    from opennavicat import database
+    from opennavicat.storage import Store
+    from opennavicat.ui.connection_manager import ConnectionManagerDialog, DRIVER_LABELS
+
+    def forbidden(*_args, **_kwargs):
+        pytest.fail("The isolated chooser cannot read a workspace, credentials or create a session")
+    monkeypatch.setattr(Store, '__init__', forbidden)
+    monkeypatch.setattr(Store, 'secret', forbidden)
+    monkeypatch.setattr(database, 'DatabaseSession', forbidden)
+    monkeypatch.setattr(recorder.sqlite3, 'connect', forbidden)
+    denied_keyring = ModuleType('keyring')
+    for name in ('get_password', 'set_password', 'delete_password', 'get_keyring'):
+        setattr(denied_keyring, name, forbidden)
+    monkeypatch.setitem(recorder.sys.modules, 'keyring', denied_keyring)
+    with recorder.connection_chooser_demo() as dialog:
+        assert type(dialog) is ConnectionManagerDialog
+        emitted = QSignalSpy(dialog.selectionRequested)
+        dialog.show()
+        qtbot.waitExposed(dialog)
+        facts = recorder.verify_connection_chooser_demo(dialog)
+        assert set(DRIVER_LABELS.values()) <= set(facts['labels'])
+        assert facts['direct_aliases'] == [label for label in facts['labels']
+                                          if label in {'MongoDB Atlas', 'Redis Enterprise Cloud'}]
+        assert dialog.connection_list.viewMode() == QListView.ViewMode.IconMode
+        assert dialog.connection_list.iconSize() == QSize(50, 50)
+        assert facts['search_empty'] and facts['selection_empty'] and facts['artwork_present']
+        assert not facts['next_enabled'] and not facts['settings_handoff_attempted']
+        assert not facts['profile_saved'] and not facts['database_connection_attempted']
+        assert emitted.count() == 0
+        recorder.assert_visible_privacy(dialog, tmp_path)
+        source = dialog.grab().toImage()
+        fitted = recorder.fit_capture_image(source, 1440, 900, save_sheet=True)
+        assert not source.isNull() and fitted.format() == QImage.Format.Format_RGB32
+        assert (fitted.width(), fitted.height()) == (1440, 900)
+    assert not dialog.isVisible() and emitted.count() == 0
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    assert not isValid(dialog)
+
+
+@pytest.mark.parametrize('change', ['search', 'selection', 'list', 'missing_artwork', 'vendor', 'uri'])
+def test_connection_chooser_refuses_changed_real_widget_state(qtbot, recorder, change):
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QIcon
+
+    with recorder.connection_chooser_demo() as dialog:
+        dialog.show()
+        qtbot.waitExposed(dialog)
+        if change == 'search': dialog.search_edit.setText('SQLite')
+        elif change == 'selection': dialog.connection_list.setCurrentRow(0)
+        elif change == 'list': qtbot.mouseClick(dialog.list_button, Qt.MouseButton.LeftButton)
+        elif change == 'missing_artwork': dialog.connection_list.item(0).setIcon(QIcon())
+        elif change == 'vendor': dialog.filter_tree.setCurrentItem(dialog.vendor_items['AWS'])
+        else: qtbot.mouseClick(dialog.uri_button, Qt.MouseButton.LeftButton)
+        with pytest.raises(RuntimeError, match='catalog, artwork, empty selection or no-handoff'):
+            recorder.verify_connection_chooser_demo(dialog)
+
+
+def test_connection_chooser_detects_actual_handoff_even_after_selection_is_cleared(qtbot, recorder):
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QSignalSpy
+
+    with recorder.connection_chooser_demo() as dialog:
+        dialog.show()
+        qtbot.waitExposed(dialog)
+        emitted = QSignalSpy(dialog.selectionRequested)
+        dialog.connection_list.setCurrentRow(0)
+        assert dialog.next_button.isEnabled()
+        qtbot.mouseClick(dialog.next_button, Qt.MouseButton.LeftButton)
+        assert emitted.count() == 1
+        dialog.connection_list.setCurrentRow(-1)
+        with pytest.raises(RuntimeError, match='no-handoff'):
+            recorder.verify_connection_chooser_demo(dialog)
+
+
+@pytest.mark.parametrize('surface', ['title', 'card', 'sidebar'])
+def test_connection_chooser_actual_visible_text_is_privacy_checked(qtbot, recorder, tmp_path, surface):
+    with recorder.connection_chooser_demo() as dialog:
+        dialog.show()
+        qtbot.waitExposed(dialog)
+        if surface == 'title': dialog.setWindowTitle('private endpoint 198.51.100.41')
+        elif surface == 'card': dialog.connection_list.item(0).setText('198.51.100.41')
+        else: dialog.driver_items['mysql'].setText(0, str(tmp_path / 'private-path'))
+        with pytest.raises(RuntimeError, match='endpoint|filesystem path'):
+            recorder.assert_visible_privacy(dialog, tmp_path)
+
+
+def test_connection_chooser_is_deleted_when_capture_body_fails(qtbot, recorder):
+    from PySide6.QtCore import QCoreApplication, QEvent
+    from shiboken6 import isValid
+
+    with pytest.raises(RuntimeError, match='controlled capture failure'):
+        with recorder.connection_chooser_demo() as dialog:
+            dialog.show()
+            qtbot.waitExposed(dialog)
+            raise RuntimeError('controlled capture failure')
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    assert not isValid(dialog)
+
+
+def test_connection_chooser_verification_refuses_non_gui_owner(qtbot, recorder):
+    from concurrent.futures import ThreadPoolExecutor
+
+    with recorder.connection_chooser_demo() as dialog, ThreadPoolExecutor(max_workers=1) as pool:
+        with pytest.raises(RuntimeError, match='GUI owner'):
+            pool.submit(recorder.verify_connection_chooser_demo, dialog).result(timeout=3)
+
+
+def test_chooser_opt_in_adds_one_phase_and_preserves_all_previous_modes(recorder):
+    assert len(recorder.required_demo_phases()) == 6
+    assert len(recorder.required_demo_phases(mongodb=True, stream=True)) == 31
+    previous = recorder.required_demo_phases(mongodb=True, stream=True, oracle_form=True)
+    assert len(previous) == 34
+    assert recorder.required_demo_phases(mongodb=True, stream=True, oracle_form=True,
+        connection_chooser=True) == previous + ('connection_chooser',)
+    assert recorder.required_demo_phases(connection_chooser=True) == recorder.SQLITE_PHASES + ('connection_chooser',)
+
+
+def test_chooser_extended_capture_requires_explicit_output_before_recording(recorder, monkeypatch):
+    monkeypatch.setattr(recorder.sys, 'argv', ['record-demo.py', '--include-connection-chooser'])
+    monkeypatch.setattr(recorder, 'dependencies', lambda *_args: ('unused-encoder', 'unused-version'))
+    monkeypatch.setattr(recorder, 'record', lambda *_args: pytest.fail('No capture without explicit output'))
+    with pytest.raises(SystemExit) as caught:
+        recorder.main()
+    assert caught.value.code == 2
+
+
 def test_oracle_form_records_actual_three_pages_with_no_endpoint_or_success(qtbot, recorder, tmp_path, monkeypatch):
     import oracledb
     from PySide6.QtGui import QImage

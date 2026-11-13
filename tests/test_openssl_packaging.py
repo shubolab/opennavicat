@@ -1,8 +1,10 @@
 """Provider discovery, frozen paths and SDK-vs-CPython DLL precedence."""
 import importlib.util
+import json
 import os
 from pathlib import Path
 import runpy
+import subprocess
 import sys
 from types import SimpleNamespace
 
@@ -148,10 +150,50 @@ def test_windows_sdk_is_preloaded_after_provider_path_but_before_later_hooks(tmp
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     monkeypatch.setattr(sys, "_MEIPASS", str(tmp_path), raising=False)
     monkeypatch.setenv("PATH", "original")
-    monkeypatch.delenv("OPENSSL_MODULES", raising=False)
+    # Register even an originally absent key before the real hook writes it;
+    # delenv on an absent key alone would leave that direct assignment behind.
+    monkeypatch.setenv("OPENSSL_MODULES", "")
     runpy.run_path(str(ROOT / "scripts/runtime_libpq.py"))
     assert called == [tmp_path]
     assert os.environ["PATH"].split(os.pathsep)[0] == str(tmp_path)
+
+
+@pytest.mark.parametrize("initially_present", [False, True], ids=["absent", "present"])
+def test_provider_hook_test_restores_environment_in_real_child_pytest(tmp_path, initially_present):
+    """The real hook must not leave a mock provider path for later processes."""
+    original = tmp_path / "owned-original-modules"
+    original.mkdir()
+    evidence = tmp_path / "environment.json"
+    program = r'''import json,os,pathlib,sys
+import opennavicat,pytest
+expected=None
+class Probe:
+ def pytest_collection_finish(self,session):
+  global expected
+  # Finish module/driver discovery before isolating this test's environment;
+  # do not make cryptography load from an intentionally empty mock directory.
+  if sys.argv[1]=='present':os.environ['OPENSSL_MODULES']=sys.argv[2]
+  else:os.environ.pop('OPENSSL_MODULES',None)
+  expected=os.environ.get('OPENSSL_MODULES')
+code=pytest.main(['-q','-W','error','tests/test_openssl_packaging.py::test_windows_sdk_is_preloaded_after_provider_path_but_before_later_hooks','--basetemp='+sys.argv[4]],plugins=[Probe()])
+actual=os.environ.get('OPENSSL_MODULES')
+data=dict(pytest_exit_code=int(code),initially_present=sys.argv[1]=='present',after_present='OPENSSL_MODULES' in os.environ,restored=actual==expected)
+pathlib.Path(sys.argv[3]).write_text(json.dumps(data,indent=2)+'\n')
+raise SystemExit(0 if int(code)==0 and data['restored'] else 1)
+'''
+    env = {key: value for key, value in os.environ.items()
+           if key != "PYTEST_ADDOPTS" and not key.startswith(
+               ("OPENNAVICAT_TEST", "OPENNAVICAT_MONGODB", "OPENNAVICAT_ORACLE"))}
+    process = subprocess.run(
+        [sys.executable, "-c", program, "present" if initially_present else "absent",
+         str(original), str(evidence), str(tmp_path / "child")],
+        cwd=ROOT, env=env, capture_output=True, text=True, timeout=60,
+    )
+    assert evidence.is_file(), process.stdout + process.stderr
+    result = json.loads(evidence.read_text())
+    assert process.returncode == 0, json.dumps(result) + "\n" + process.stdout + process.stderr
+    assert result == {"pytest_exit_code": 0, "initially_present": initially_present,
+                      "after_present": initially_present, "restored": True}
 
 
 def test_macos_bundle_cannot_keep_an_absolute_homebrew_crypto_dependency(tmp_path, monkeypatch):

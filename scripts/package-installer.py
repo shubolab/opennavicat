@@ -333,6 +333,11 @@ def validate_smoke_report(path: Path, version: str, architecture: str, operating
         raise PackagingError("Installed native database adapters or SQL Server TLS context did not initialize")
     if any(runtime.get(field) is not True for field in ("mongodb_adapter_constructed", "mongodb_bson_probe", "mongodb_tls_context_ready")):
         raise PackagingError("Installed MongoDB adapter, native BSON codec or TLS context did not initialize")
+    if tuple(map(int, version.split("."))) >= (0, 13, 0):
+        if runtime.get("oracledb") != "26.1.0" or any(runtime.get(field) is not True for field in (
+                "oracle_adapter_constructed", "oracle_native_extensions_loaded",
+                "oracle_parameters_ready", "oracle_thin_mode_ready")):
+            raise PackagingError("Installed Oracle driver, native extensions or local parameter probes did not pass")
     if (operating_system == "windows" and tuple(map(int, version.split("."))) >= (0, 7, 0)
             and runtime.get("navicat_windows_api_ready") is not True):
         raise PackagingError("Installed Windows registry metadata APIs did not initialize")

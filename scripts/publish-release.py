@@ -68,6 +68,11 @@ def validate_assets(directory, version):
         require(isinstance(runtime.get("libpq"), int) and runtime["libpq"] >= 170000 and all(runtime.get(field) for field in ("qt", "psycopg", "pymysql", "paramiko", "cryptography", "python_tds", "redis", "pyopenssl", "certifi", "sqlserver_default_ca_present", "pymongo")), f"Installed database/SSH dependencies are incomplete: {installer.name}")
         require(all(runtime.get(field) is True for field in ("extra_adapters_constructed", "sqlserver_tls_context_ready")), f"Installed SQL Server/Redis adapter or TLS context probes did not pass: {installer.name}")
         require(all(runtime.get(field) is True for field in ("mongodb_adapter_constructed", "mongodb_bson_probe", "mongodb_tls_context_ready")), f"Installed MongoDB adapter, BSON or TLS probes did not pass: {installer.name}")
+        if tuple(map(int, version.split("."))) >= (0, 13, 0):
+            require(runtime.get("oracledb") == "26.1.0" and all(runtime.get(field) is True for field in (
+                "oracle_adapter_constructed", "oracle_native_extensions_loaded",
+                "oracle_parameters_ready", "oracle_thin_mode_ready")),
+                f"Installed Oracle native driver probes did not pass: {installer.name}")
         if system == "windows" and tuple(map(int, version.split("."))) >= (0, 7, 0):
             require(runtime.get("navicat_windows_api_ready") is True,
                 f"Installed Windows registry metadata APIs did not initialize: {installer.name}")

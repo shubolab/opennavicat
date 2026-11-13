@@ -29,8 +29,11 @@ hiddenimports = collect_submodules("keyring.backends")
 metadata = copy_metadata("keyring") + copy_metadata("psycopg") + binary_metadata
 metadata += copy_metadata("python-tds") + copy_metadata("redis") + copy_metadata("pyOpenSSL") + copy_metadata("certifi")
 metadata += copy_metadata("pymongo") + copy_metadata("dnspython")
+metadata += copy_metadata("oracledb")
 hiddenimports += ["opennavicat.sqlserver_session", "opennavicat.redis_session", "pytds", "redis", "OpenSSL", "certifi"]
 hiddenimports += ["opennavicat.mongodb_session", "pymongo", "pymongo._cmessage", "bson", "bson._cbson"]
+hiddenimports += ["opennavicat.oracle_session", "opennavicat.oracle_probe", "oracledb",
+                  "oracledb.base_impl", "oracledb.thin_impl"]
 if binary_metadata:
     hiddenimports += ["psycopg_binary.pq", "psycopg_binary._psycopg"]
 else:

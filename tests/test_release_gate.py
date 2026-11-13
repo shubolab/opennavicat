@@ -31,6 +31,9 @@ def assets(tmp_path):
                     "extra_adapters_constructed": True, "sqlserver_tls_context_ready": True,
                     "pymongo": "4.19.0", "mongodb_adapter_constructed": True,
                     "mongodb_bson_probe": True, "mongodb_tls_context_ready": True,
+                    "oracledb": "26.1.0", "oracle_adapter_constructed": True,
+                    "oracle_native_extensions_loaded": True, "oracle_parameters_ready": True,
+                    "oracle_thin_mode_ready": True,
                     "navicat_windows_api_ready": True if system == "windows" else None,
                     **dict.fromkeys(('native_js_helper_ready','native_js_bigint_bson_probe','native_js_cancel_probe','native_js_child_reaped','native_js_no_console','native_js_bundled'),True)}}}
         manifest = {"name": "OpenNavicat", "version": VERSION, "os": system,
@@ -129,6 +132,19 @@ def test_windows_registry_probe_must_be_actual_true_boolean(assets, reported):
     manifest_path.write_text(json.dumps(manifest), "utf-8")
     path.with_suffix(".installed-smoke.json").write_text(json.dumps(manifest["verification"]), "utf-8")
     with pytest.raises(ValueError, match="Windows registry"):
+        gate.validate_assets(assets, VERSION)
+
+
+@pytest.mark.parametrize("field", ["oracle_adapter_constructed", "oracle_native_extensions_loaded",
+    "oracle_parameters_ready", "oracle_thin_mode_ready"])
+@pytest.mark.parametrize("reported", [None, False, "true", 1])
+def test_oracle_published_probe_must_be_actual_true_boolean(assets, field, reported):
+    path, manifest = first_manifest(assets)
+    manifest["verification"]["runtime"]["runtime"][field] = reported
+    path.write_text(json.dumps(manifest), "utf-8")
+    installer = assets / manifest["installer"]
+    installer.with_suffix(".installed-smoke.json").write_text(json.dumps(manifest["verification"]), "utf-8")
+    with pytest.raises(ValueError, match="Oracle"):
         gate.validate_assets(assets, VERSION)
 
 

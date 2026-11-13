@@ -103,6 +103,9 @@ def report(architecture="arm64", version="0.3.0"):
             "certifi": "2026.10.23", "sqlserver_default_ca_present": True, "extra_adapters_constructed": True, "sqlserver_tls_context_ready": True,
             "pymongo": "4.19.0", "mongodb_adapter_constructed": True,
             "mongodb_bson_probe": True, "mongodb_tls_context_ready": True,
+            "oracledb": "26.1.0", "oracle_adapter_constructed": True,
+            "oracle_native_extensions_loaded": True, "oracle_parameters_ready": True,
+            "oracle_thin_mode_ready": True,
             **dict.fromkeys(('native_js_helper_ready','native_js_bigint_bson_probe','native_js_cancel_probe','native_js_child_reaped','native_js_no_console','native_js_bundled'),True)}}
 
 
@@ -160,6 +163,39 @@ def test_old_windows_release_does_not_claim_a_later_registry_probe(tmp_path):
     path = tmp_path / "report.json"
     path.write_text(json.dumps(report(version="0.6.1")))
     assert installer.validate_smoke_report(path, "0.6.1", "arm64", "windows")["smoke"] == "passed"
+
+
+@pytest.mark.parametrize("field", ["oracle_adapter_constructed", "oracle_native_extensions_loaded",
+    "oracle_parameters_ready", "oracle_thin_mode_ready"])
+@pytest.mark.parametrize("value", [None, False, "true", 1])
+def test_new_installed_oracle_probes_require_actual_true(tmp_path, field, value):
+    payload = report(version="0.13.0")
+    payload["runtime"]["navicat_windows_api_ready"] = True
+    payload["runtime"][field] = value
+    path = tmp_path / "report.json"
+    path.write_text(json.dumps(payload))
+    with pytest.raises(installer.PackagingError, match="Oracle"):
+        installer.validate_smoke_report(path, "0.13.0", "arm64", "windows")
+
+
+def test_oracle_probe_is_not_retroactively_required_by_published_012(tmp_path):
+    payload = report(version="0.12.0")
+    payload["runtime"]["navicat_windows_api_ready"] = True
+    for field in tuple(payload["runtime"]):
+        if field.startswith("oracle"):
+            payload["runtime"].pop(field)
+    path = tmp_path / "report.json"
+    path.write_text(json.dumps(payload))
+    assert installer.validate_smoke_report(path, "0.12.0", "arm64", "windows")["smoke"] == "passed"
+
+
+def test_new_installed_oracle_requires_qualified_driver_version(tmp_path):
+    payload = report(version="0.13.0")
+    payload["runtime"]["oracledb"] = "3.3.0"
+    path = tmp_path / "report.json"
+    path.write_text(json.dumps(payload))
+    with pytest.raises(installer.PackagingError, match="Oracle"):
+        installer.validate_smoke_report(path, "0.13.0", "arm64", "windows")
 @pytest.mark.parametrize('field', ['native_js_helper_ready','native_js_bigint_bson_probe','native_js_cancel_probe','native_js_child_reaped','native_js_no_console','native_js_bundled'])
 @pytest.mark.parametrize('value', [None, False, 'true', 1])
 def test_installed_native_javascript_requires_executed_true_probes(tmp_path,field,value):

@@ -117,6 +117,8 @@ def main():
             "native_openssl_bootstrap": getattr(sys, "_opennavicat_native_openssl", None)}
         from .js_engine.probe import probe_native_javascript
         runtime.update(probe_native_javascript())
+        from .oracle_probe import probe_oracle_runtime
+        runtime.update(probe_oracle_runtime())
     app = QApplication(sys.argv[:1])
     app.setApplicationName("OpenNavicat")
     app.setOrganizationName("OpenNavicat")

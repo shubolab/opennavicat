@@ -1,13 +1,16 @@
 """Native connection editor layout and explicitly requested connection tests."""
 from contextlib import closing
+import gc
 import sqlite3
 import threading
 import base64
+import weakref
 
 import pytest
 
 from PySide6.QtCore import QPoint, Qt, QThread
 from PySide6.QtWidgets import QDialog, QFormLayout, QMessageBox
+from shiboken6 import isValid
 
 from opennavicat.database import ConnectionConfig, DatabaseSession
 from opennavicat.ui.dialogs import ConnectionDialog, confirm_ssh_host_key
@@ -406,3 +409,78 @@ def test_async_ssh_mismatch_never_offers_acceptance_or_retries(qtbot, monkeypatc
     assert len(alerts) == 1
     assert dialog._collect_config().ssh_host_key == saved_pin
     assert not dialog._testing
+
+
+@pytest.mark.parametrize('initial', ['valid', 'corrupt'])
+def test_real_sqlite_test_releases_signal_objects_on_gui_after_worker_tail(
+        qtbot, tmp_path, monkeypatch, initial):
+    import opennavicat.tasks as tasks
+
+    path = tmp_path / 'generated-lifetime.sqlite'
+    if initial == 'corrupt':
+        path.write_text('GENERATED INVALID SQLITE')
+    else:
+        with closing(sqlite3.connect(path)) as database, database:
+            database.execute('CREATE TABLE generated(id INTEGER PRIMARY KEY)')
+    gui, original = threading.get_ident(), tasks.Task
+    entered, release = threading.Event(), threading.Event()
+    references, destroyed, worker_gc = [], [], []
+    was_enabled = gc.isenabled()
+    gc.disable()
+
+    class TailTask(original):
+        def __init__(self, function):
+            super().__init__(function)
+            number = len(references)
+            self.signals.destroyed.connect(
+                lambda *_args, index=number: destroyed.append((index, threading.get_ident())),
+                Qt.ConnectionType.DirectConnection)
+            references.append((weakref.ref(self), weakref.ref(self.signals)))
+
+        def run(self):
+            super().run()
+            entered.set()
+            assert release.wait(5)
+            worker_gc.append(threading.get_ident())
+            gc.collect()
+
+    monkeypatch.setattr(tasks, 'Task', TailTask)
+    dialog = ConnectionDialog(config=ConnectionConfig('owned-lifetime', 'Generated lifetime', database=str(path)))
+    qtbot.addWidget(dialog)
+    completed = []
+    dialog.test_finished.connect(lambda success, message: completed.append((success, message, threading.get_ident())))
+    dialog.show()
+    try:
+        qtbot.mouseClick(dialog.test_button, Qt.MouseButton.LeftButton)
+        qtbot.waitUntil(lambda: entered.is_set() and len(completed) == 1
+            and not dialog._testing and dialog._test_task is None, timeout=5000)
+        assert completed[0][0] is (initial == 'valid') and completed[0][2] == gui
+        assert dialog._test_pool.activeThreadCount() == 1
+        if initial == 'corrupt':
+            # Retry while the old native runnable is still held at its tail.
+            # Its eventual cleanup must target its own signals, not this new
+            # queued task or the dialog's newly assigned _test_task.
+            path.unlink()
+            with closing(sqlite3.connect(path)) as database, database:
+                database.execute('CREATE TABLE generated(id INTEGER PRIMARY KEY)')
+            qtbot.mouseClick(dialog.test_button, Qt.MouseButton.LeftButton)
+            assert len(references) == 2 and dialog._testing
+            assert dialog._test_task is references[1][0]()
+            qtbot.wait(10)
+            assert dialog._test_task is references[1][0]() and isValid(references[1][1]())
+        release.set()
+        qtbot.waitUntil(lambda: not dialog._testing and dialog._test_task is None
+            and not dialog._test_pool.activeThreadCount(), timeout=5000)
+        expected = 2 if initial == 'corrupt' else 1
+        qtbot.waitUntil(lambda: len(destroyed) == expected, timeout=2000)
+        assert destroyed == [(number, gui) for number in range(expected)]
+        assert len(worker_gc) == expected and all(thread != gui for thread in worker_gc)
+        qtbot.waitUntil(lambda: all(task() is None and signals() is None
+            for task, signals in references), timeout=2000)
+        assert completed[-1] == (True, '连接成功', gui)
+        assert dialog.test_button.isEnabled()
+    finally:
+        release.set()
+        qtbot.waitUntil(lambda: not dialog._test_pool.activeThreadCount(), timeout=5000)
+        if was_enabled:
+            gc.enable()

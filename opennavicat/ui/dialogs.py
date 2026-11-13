@@ -1086,10 +1086,12 @@ class ConnectionDialog(QDialog):
                 session.close()
 
         task = Task(work)
+        task.signals.setParent(self)
         self._test_task = task
         task.signals.succeeded.connect(self._test_succeeded)
         task.signals.failed.connect(self._test_failed)
         task.signals.finished.connect(self._test_complete)
+        task.signals.finished.connect(task.signals.deleteLater)
         self._test_pool.start(task)
 
     def _test_succeeded(self, message):

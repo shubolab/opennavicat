@@ -205,3 +205,17 @@ def test_atomic_receipt_retains_prior_exact_ledger_if_replace_is_interrupted(tmp
     with pytest.raises(KeyboardInterrupt):
         fixture.save()
     assert (fixture.out / "fixture.json").read_bytes() == before
+
+
+def test_failed_docker_diagnostic_is_bounded_and_scrubs_all_generated_credentials(tmp_path, monkeypatch):
+    fixture = support.OwnedOracle(tmp_path / "new-fixture")
+    text = "x" * 9000 + " ".join([fixture.admin_password, fixture.app_password, fixture.denied_password])
+    monkeypatch.setattr(support.subprocess, "run", lambda *args, **kwargs:
+        SimpleNamespace(returncode=1, stderr=text))
+    with pytest.raises(RuntimeError, match="Docker operation failed"):
+        fixture.docker("info")
+    body = (fixture.out / "fixture.json").read_text()
+    assert all(secret not in body for secret in (fixture.admin_password, fixture.app_password, fixture.denied_password))
+    failure = json.loads(body)["docker_failure"]
+    assert failure["operation"] == "info" and failure["exit_code"] == 1
+    assert len(failure["stderr"]) <= 8192 and failure["stderr"].count("[REDACTED]") == 3

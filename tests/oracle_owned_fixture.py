@@ -61,6 +61,13 @@ class OwnedOracle:
         result = subprocess.run(cmd + ["--config", str(self.anonymous), *args], input=input,
                                 text=True, capture_output=True, timeout=timeout)
         if check and result.returncode:
+            detail = result.stderr
+            for secret in (self.admin_password, self.app_password, self.denied_password):
+                detail = detail.replace(secret, "[REDACTED]")
+            detail = detail[-8192:]
+            self.receipt["docker_failure"] = {"operation": args[0], "exit_code": result.returncode,
+                                               "stderr": detail}
+            self.save()
             raise RuntimeError("Owned Oracle Docker operation failed: " + args[0])
         return result
 
@@ -93,6 +100,8 @@ class OwnedOracle:
 
     def start(self, *, pull=False):
         engine = json.loads(self.docker("info", "--format", "{{json .}}", timeout=15).stdout)
+        self.receipt["engine_probe"] = {k: engine.get(k) for k in ("Architecture", "OSType", "ServerVersion", "ServerErrors")}
+        self.save()
         self.architecture = native_architecture(engine)
         pin = PINS[self.architecture]
         self.image, self.image_config = pin["image"], pin["config"]

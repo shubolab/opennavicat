@@ -35,20 +35,24 @@ def window(qtbot, tmp_path, monkeypatch):
     monkeypatch.setattr(QMessageBox, "critical", unexpected_message)
     widget = MainWindow(Store(tmp_path))
     widget.test_errors = errors
-    qtbot.addWidget(widget)
+
+    def prepare_close(window):
+        # pytest-qt closes and schedules deletion before yield-fixture teardown.
+        # Finish this cleanup while the window and its child pool still exist.
+        idle(qtbot, window)
+        for index in range(window.tabs.count()):
+            page = window.tabs.widget(index)
+            if isinstance(page, TablePage) and page.model:
+                page.model.discard()
+        for session in window.sessions.values():
+            if session.in_transaction:
+                session.execute("ROLLBACK")
+        # The framework can now close without an interactive confirmation,
+        # persisting drafts and releasing connections through closeEvent.
+
+    qtbot.addWidget(widget, before_close_func=prepare_close)
     widget.show()
     yield widget
-    idle(qtbot, widget)
-    for index in range(widget.tabs.count()):
-        page = widget.tabs.widget(index)
-        if isinstance(page, TablePage) and page.model:
-            page.model.discard()
-    for session in widget.sessions.values():
-        if session.in_transaction:
-            session.execute("ROLLBACK")
-    # The tests leave no dirty rows or open transactions, so closing must persist
-    # drafts and release connections without an interactive confirmation.
-    widget.close()
     assert errors == []
 
 

@@ -270,8 +270,15 @@ qualification. The `1a6eeed` main precheck
 finished failure at macOS amd64 hdiutil CREATE Resource busy; installed launch
 was not reached. The replacement `b6e1da4` precheck
 [43388068691](https://github.com/shubolab/opennavicat/actions/runs/43388068691)
-is in progress, not six-target qualified success. No formal tag or 0.12 release
-exists yet; later documentation-only commits do not change the frozen candidate.
+completed success for all seven precheck jobs; publisher was skipped. An independent
+13-artifact/six-installer byte audit passed, including native/installed manifest
+and sidecar checks; root rehashed all six installers. Both CI DMGs were created
+on their first attempt. Annotated tag `v0.12.0` now points exactly to `b6e1da4`;
+the formal push/tag run
+[43390347592](https://github.com/shubolab/opennavicat/actions/runs/43390347592)
+is in progress. No 0.12 public release or anonymous public-byte verification has
+completed. Formal rebuilt bytes must be audited separately, not assumed equal
+to the precheck; later documentation-only commits do not change tagged source.
 
 The packaging-only repair passed **79 installer contracts / zero skips**, including
 11 new cases. Each command retains a 600-second timeout; at most three CREATE
@@ -282,7 +289,7 @@ read-only DMG mount and isolated install/launch/uninstall passed; all eight
 image directories are absent. CREATE succeeded first attempt, so this does not
 claim live busy recovery or Intel CI acceptance. UI/DB/recorder scopes retain
 their actual execution provenance and are rebound only through unchanged declared
-bytes. Six-target installers and independent audit remain open.
+bytes. The main pre-tag six-installer audit passed; formal artifacts and public-download verification remain open.
 
 An initial parallel collection run ended in SIGSEGV; the separate fresh serial
 retry passed 507 cases with eight containers and sixteen volumes independently

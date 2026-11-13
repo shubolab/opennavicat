@@ -13,9 +13,12 @@
 当前完整候选源码已冻结为**`b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7`**：
 只新增限定`hdiutil CREATE Resource busy`的打包修复及合同测试，应用产品字节仍与`d9bee66`相同。
 默认全源2197通过/636条件跳过，201份文件前后相同并逐Git blob匹配`b6e1da4`。
-新main预检[43388068691](https://github.com/shubolab/opennavicat/actions/runs/43388068691)
-绑定该精确SHA，当前**in_progress**；已有macOS ARM64等部分job成功，不能预写六目标全绿。
-后续仅文档提交不改冻结源码；正式tag若新预检及独立审查通过，将精确绑定`b6e1da4`。正式tag及公开0.12仍未创建。
+main预检[43388068691](https://github.com/shubolab/opennavicat/actions/runs/43388068691)
+已**completed/success，7/7**（六原生目标＋DB security，publisher skipped），同SHA的独立安装器审查通过。
+据此已创建并推送annotated tag **v0.12.0**，精确指向`b6e1da4`。
+正式tag流水线[43390347592](https://github.com/shubolab/opennavicat/actions/runs/43390347592)
+为`push / v0.12.0 / b6e1da4`，当前**in_progress**。
+公开0.12尚未创建或匿名下载验证；正式重建产物须另行核验，不能预设与main预检bytes相同。后续doc-only提交不改tag源码。
 旧`1a6eeed`预检[43384833779](https://github.com/shubolab/opennavicat/actions/runs/43384833779)
 保持**completed/failure**：五原生目标和DB security成功，macOS amd64的hdiutil CREATE报Resource busy，
 未到安装后launch，publisher skipped；其2186本机结果不替代新打包源码资格。
@@ -29,6 +32,26 @@
 实际非法`$limit`错误另有服务器原文和独立`at line 1, column 27`行；Stop没有位置行。
 源、采样、数量和operator在忙时禁用；其它未执行的状态继续开放。
 原版退出与临时服务/卷清理有独立证据，原版遗留idle游标不作为期望产品行为复制。
+
+## 已通过的main预检与正式tag进度
+
+同SHA预检下载13个artifact；六个提取安装器的实际字节与native/installed两份manifest及sidecar SHA一致，
+原生架构及各目标CI的构建、smoke、安装/launch/卸载收据通过。Root另重新hash六安装器，
+独立完成检查确认两个自有只读DMG挂载已卸载；两个CI DMG均首试create成功，不能声称实际busy恢复。
+主报告为`artifacts/release-012/main-ci-audit-43388068691/`内的`verification.json`、
+`root-before-tag-check.json`和`independent-completion-check.json`。以下仅main预检安装器，**不是正式公开资产SHA**。
+
+| 目标 | 字节数 | main预检SHA256 |
+| --- | ---: | --- |
+| linux-amd64 | 76483378 | `105c6c5118d5ebb3d7e09a2eed69851f86cd45437f9a84a47bccb3f9dcb1e6ee` |
+| linux-arm64 | 75126808 | `d96b514cf9af1d2f3aa68759ed6811d6f61feac316c7bfa657674f22c1ad4e69` |
+| macos-amd64 | 50456506 | `62e0c4fd69d84e73deab067c18caa5019a8bfd4669e56383912a6c21fbee8953` |
+| macos-arm64 | 49793929 | `a4f48c6d08607316718b445a7f6b4b2fe6601b9a35fb3cdfd38900e9c197cd15` |
+| windows-amd64 | 43804383 | `ec2f50af307dd732b7f1365f2189a4047a79466e7f75ee6c537bfcebe264c6b5` |
+| windows-arm64 | 34749256 | `af9ca674b8e52bdb8449c6c5e2f67d4898b6dfb87603eef750403844485ff8f4` |
+
+正式run进行中，正式六目标产物、正式发布/八公开资产和匿名字节下载均待另行审查。
+源码/安装器CI不关闭完整参考UI、全部工具功能或三平台人工验收；goal仍active。
 
 ## 当前打包修复检查点（b6e1da4）
 
@@ -175,7 +198,7 @@ codeName或事件文档。有效aggregate位置必须对应本次冻结脚本；
 
 ## 待完成的交付门禁
 
-旧main预检43384833779已失败；新候选b6e1da4的main预检43388068691进行中，仍须完成六原生目标与独立审查。
+旧main预检43384833779已失败；b6e1da4的main预检43388068691及独立六安装器审查已通过，tag已创建，正式run43390347592进行中；正式产物和公开下载仍待验。
 唯一GIF已刷新为实际0.12候选应用的31阶段、411帧、68.5秒，1,712,746字节，
 SHA256 `d1ec33dd15e03fa38e5749f0ff0efe01051e5b40116c12229a7113d847e33c9e`。
 31阶段均检查首/中/尾编码帧（93帧）并补充全尺寸视觉检查，自动逐帧guard为411/411；
@@ -185,8 +208,8 @@ GIF与receipt已复制到`docs/assets/`，录制源码属于`979d052`：77份cap
 与当前产品`d9bee66`相比，演示运行源码仅Window/Dialog各两行ownership不同；pipeline widgets及recorder未变，
 新的两调用点79＋1专项验证修后工作流，兼容回执在`final-recorder-two-callers-compatibility-20261113T071112Z-222717.json`。
 `1a6eeed`额外只改测试握手。保留已审GIF，没有冒称当前SHA重新录制或旧capture哈希等于新Window/Dialog；仍不是公开0.12安装器验收。
-新六目标源码测试、原生构建、包内smoke、真实安装/运行/卸载、独立六安装器审查、
-正式tag及八个公开资产的匿名下载尚未完成；只能在完整六安装器和校验和通过后发布。
+main预检的六目标源码/构建/包内smoke/安装运行卸载及独立审查已通过，正式tag已创建；
+正式run须另核其六安装器/校验和与八个公开资产的匿名下载，不能把预检产物资格当正式公开下载验收。
 
 完整UI/工具功能、正常stream预览、全部选项/拓扑/权限、Windows/Linux实际参考和其它矩阵门禁
 继续开放。原版故障不取消这些要求；可用里程碑、源码或打包成功均不表示完整goal完成。

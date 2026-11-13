@@ -24,8 +24,12 @@ Windows/Linux/macOS 的 1:1 保留 UI；本次同步、既有 Release 或下一�
 MainWindow调用点修复为`479a811`，实际Dialog Test按钮同类局部修复为`d9bee66`，
 仅测试子进程ready握手修正为`1a6eeed`。当前限定DMG CREATE busy重试修复后的完整候选源码为
 `b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7`；默认全源2197/636，201份文件前后相同并逐Git blob匹配，产品字节仍与`d9bee66`相同。
-新main预检[43388068691](https://github.com/shubolab/opennavicat/actions/runs/43388068691)绑定该SHA，当前in_progress；
-部分job（含macOS ARM64）成功不能写成六目标全绿。后续doc-only提交不改候选源码；正式tag若新预检及独立审查通过将精确绑定b6e1da4，当前tag/公开0.12仍none。
+main预检[43388068691](https://github.com/shubolab/opennavicat/actions/runs/43388068691)已completed/success 7/7、publisher skipped；
+13 artifact/六安装器的实际字节、native/installed双manifest、sidecar和原生/安装执行收据独立审查通过，root另重新hash六文件。
+两个CI DMG均首试create成功，不冒称实际busy恢复。主回执在`artifacts/release-012/main-ci-audit-43388068691/`。
+据此annotated tag **v0.12.0**已创建并push，精确绑定b6e1da4；正式run
+[43390347592](https://github.com/shubolab/opennavicat/actions/runs/43390347592)为push/v0.12.0，同SHA，当前in_progress。
+公开0.12仍未创建/匿名下载验收；正式重建bytes须另核，不能预设与main预检相同。doc-only提交不改tag源码。
 旧`1a6eeed`的main预检[43384833779](https://github.com/shubolab/opennavicat/actions/runs/43384833779)
 保持completed/failure：五原生目标和DB security成功，macOS amd64在hdiutil CREATE报Resource busy，安装后launch未到、publisher skipped；不是六目标资格。
 修复前`f0b558e`预检[43383205925](https://github.com/shubolab/opennavicat/actions/runs/43383205925)
@@ -72,7 +76,7 @@ SHA256为`d1ec33dd15e03fa38e5749f0ff0efe01051e5b40116c12229a7113d847e33c9e`。
 GIF capture源码归属`979d052`，77份源逐Git blob核定；当前产品Window/Dialog各两行ownership不同，
 widgets及recorder未变并有两调用点后的新79＋1工作流资格，握手修正仅改测试。保留已审capture，不冒称当前SHA重新录制。
 
-当前继续顺序是推进已冻结b6e1da4的新六原生目标预检43388068691与独立安装器审查，
+当前继续顺序是推进已tag的b6e1da4正式run43390347592，独立核验该run六安装器及正式八资产/匿名公开下载，
 全部交付门禁通过才可决定里程碑发布；原始崩溃因果未知与完整资源门禁保持记录。
 正常stream预览、完整partial/恢复/options/拓扑、其它工具与三平台参考门禁继续开放，goal保持active。
 

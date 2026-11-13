@@ -563,3 +563,101 @@ were not replayed or copied as desired product behavior. This round does not
 close successful stream preview, live refresh, event rendering, all option or
 permission/topology variants, raw-editor/graph mutation during execution, or
 Windows/Linux reference acceptance.
+
+## AP18-12 Authenticated update events and explicit fullDocument lookup
+
+On 2026-11-13, reference **18.0.5 build 321** was observed through CUA with a
+new exact-owned native ARM64 MongoDB **8.0.34** single-member replica set. A
+new, uniquely named generated profile used password authentication and a user
+whose only database role was `read` on the new generated database. Password
+saving was unchecked. Existing profiles were not opened, edited or imported.
+The reference connection-type control remained `Standalone`; the server was a
+replica set, so this does not establish replica-set discovery or failover UI.
+
+Three separate generated source collections were prepared before opening this
+one connection. Each contained an existing document with BSON Int64,
+Decimal128, Binary, Timestamp and ObjectId values. One fresh, unsaved Pipeline
+tab was used throughout. Before each Run, its source, stage bodies, match and
+aggregate options were checked in Script Preview; execution was then started
+from the actual `管道` toolbar Run button. The checked options included
+`cursor: {batchSize: 0}` and `maxTimeMS: 5000`. Distinct generated aggregate
+comments correlated the reference's observed cursors with private server
+records. Generated names, comment values and barrier identifiers are omitted
+here. Stage Preview, Preview All and Explain were not executed.
+
+For each case, a separate producer waited for the exact generated namespace,
+comment and active reference `getMore`. It then performed one small update,
+followed by a separate, majority-acknowledged insert carrying a unique barrier
+identifier. A separate default, unfiltered observer confirmed the actual update
+and ordered insert. The barrier made the comparison positive **one versus two**
+returned events, instead of treating a possibly premature empty batch as proof
+that a field was absent.
+
+The first stage was `$changeStream`. The second was `$match`, allowing either
+the indicated update condition or that case's specific barrier insert:
+
+| Case | `$changeStream` body | Update branch of the match | Exact reference cursor's recorded `getMore` returns | Stable selected Output time |
+| --- | --- | --- | --- | --- |
+| U0, default control | `{}` | `operationType: "update"` | **1, 1, 0**; total **2** | `> OK`, **1.062 s** |
+| U1, default plus field-presence filter | `{}` | `operationType: "update"` and `"fullDocument.counter": {$exists: true}` | **1, 0**; total **1** | `> OK`, **1.030 s** |
+| U2, explicit lookup with the same field-presence filter | `{fullDocument: "updateLookup"}` | Same update condition as U1 | **1, 1, 0**; total **2** | `> OK`, **1.033 s** |
+
+The server's cursor/originating-command records matched each checked source,
+comment and pipeline, and recorded a terminal empty `getMore` with no active
+operation for that cursor. The observed default field-presence filter retained
+only the ordered barrier, whereas explicit `updateLookup` retained the update
+and barrier. The unfiltered default control retained both. This establishes the
+declared field-presence/filter comparison for these observed cursors; it does
+not establish the reference's private event-document values or BSON fidelity,
+an exact historical post-image, concurrent-update lookup behavior, or deleted
+document/null handling.
+
+The independent observer's raw BSON roundtripped through Canonical Extended
+JSON, and a separate majority read verified the complete expected typed
+document and unchanged control data. Those are **independent-client** results,
+not a capture of Navicat's private returned BSON. They are not evidence that
+the reference displayed typed event payloads.
+
+All three completed Runs exposed `管道`, `脚本预览`, `消息` and `输出`, with
+Messages initially selected. For U1 and U2, the first AX message read still
+contained the preceding Run's script and elapsed time. Those stale reads were
+not attributed to the new operation. After the corresponding server checkpoint,
+explicitly selecting Output showed that case's own aggregate script, `> OK`
+and the time in the table. No event envelope, event grid or paging controls
+appeared in those stable Output reads. This corroborates the text-only surface
+in AP18-11 without adding acceptance for useful event rendering.
+
+The profiler did not retain a separate initial aggregate record for these
+observed cursors. Their originating commands recorded `cursor.batchSize: 0`,
+which is the documented empty-initial-batch contract; it supports counting
+these cursors' subsequent returns, not counting every initial request.
+[MongoDB 8 aggregate documentation](https://www.mongodb.com/docs/v8.0/reference/command/aggregate/)
+describes that distinction. An originating command cannot exclude another
+aggregate that opened and closed before `getMore`. Accordingly, the private
+collector marked **per-observed-cursor semantics qualified**, but exhaustive
+initial-call cardinality **unknown** and each overall result **inconclusive**.
+No no-retry, no-fresh-cursor or automatic-resume conclusion is drawn.
+
+The unsaved tab was closed with `不保存`, returning to an empty Pipeline object
+list. Only this new generated profile was disconnected and observed `Off`.
+Normal Quit completed, and application inventory confirmed **not running**
+before the CUA completion summary. Subsequent exact server checkpoints still
+found **one idle reference cursor per case: three idle cursors and no active
+operation**. This is not a cursor-release guarantee or desired retention
+behavior to reproduce. The disposable container and its two recorded anonymous
+volumes were then removed and independently verified absent. The harmless new
+profile remains Off; no existing metadata was permanently deleted.
+
+AP18-12 assigns a document observation ID to the later actual CUA record kept
+privately as `PROVISIONAL-FULLDOCUMENT-02`; it is not a REA Evidence ID. The
+earlier incomplete U0 collection attempt remains inconclusive and is not
+retroactively repaired by these records. Headless collector and saved-case
+activation checks are separate tooling evidence, not additional reference Runs
+or product acceptance. Raw reference images, profiler records, generated data
+and credentials are not redistributed here or in application packages.
+
+This reference-only addition does not change the frozen v0.12.0 source/tag or
+its release evidence. `fullDocumentBeforeChange`, `whenAvailable`/`required`
+image modes, resume persistence/recovery, exhaustive request cardinality,
+negative permission cases, other topologies, successful Preview/Explain and
+Windows/Linux reference acceptance remain open.

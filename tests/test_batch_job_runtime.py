@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from copy import deepcopy
 from datetime import datetime
 import json
@@ -67,7 +68,7 @@ def test_duplicates_execute_in_order_with_independent_owned_sessions_and_frozen_
     def factory(config):
         value = FakeSession(config); instances.append(value); return value
 
-    def execute(session, schema, pipeline):
+    def execute(session, schema, pipeline, *, cancel_event):
         assert session.calls == ['connect'] and not session.closed
         observed.append((schema, pipeline.stages[0].body['revision']))
         assert type(pipeline.stages[0].body['revision']) is Int64
@@ -105,7 +106,7 @@ def test_missing_reference_failure_obeys_continue_policy_without_creating_a_sess
     instances = []
     def factory(config):
         value = FakeSession(config); instances.append(value); return value
-    monkeypatch.setattr(runtime, 'execute_pipeline', lambda *_args: ([], False))
+    monkeypatch.setattr(runtime, 'execute_pipeline', lambda *_args, **_kwargs: ([], False))
     result = run_batch_job(definition, prepared, control=BatchRunControl(), emit=lambda _event: None, session_factory=factory)
     assert result['failed'] == 1 and result['status'] == 'failed'
     assert result['success'] == int(continue_on_error) and result['skipped'] == int(not continue_on_error)
@@ -134,7 +135,7 @@ def test_every_session_failure_is_safe_and_cleanup_runs_on_the_owner(monkeypatch
         if phase == 'create': raise RuntimeError(unsafe)
         value = FailingSession(config); instances.append(value); return value
 
-    def execute(*_args):
+    def execute(*_args, **_kwargs):
         if phase == 'execute': raise DatabaseError(unsafe)
         return [], False
     monkeypatch.setattr(runtime, 'execute_pipeline', execute)
@@ -152,7 +153,7 @@ def test_every_session_failure_is_safe_and_cleanup_runs_on_the_owner(monkeypatch
 
 def test_safe_server_code_survives_without_server_error_body(monkeypatch):
     definition, prepared = plan('server_error')
-    def execute(*_args):
+    def execute(*_args, **_kwargs):
         try:
             raise OperationFailure('private response body', code=121, details={
                 'ok': 0, 'code': 121, 'codeName': 'DocumentValidationFailure',
@@ -170,7 +171,7 @@ def test_server_code_name_cannot_smuggle_a_known_credential_into_history(monkeyp
     definition, prepared = plan('server_error')
     private = 'PRIVATEBSONTOKEN'
     prepared[0].config.password = private
-    def execute(*_args):
+    def execute(*_args, **_kwargs):
         raise OperationFailure('private response body', code=121, details={
             'ok': 0, 'code': 121, 'codeName': private})
     monkeypatch.setattr(runtime, 'execute_pipeline', execute)
@@ -182,7 +183,7 @@ def test_secret_endpoints_paths_and_oversized_job_names_are_not_logged(monkeypat
     names = ('generated-database-secret', 'generated-ssh-secret', 'generated-key-secret',
              'generated-tls-secret', '/private/personal/script.nagg', 'example.internal:27017', 'x' * 1000)
     definition, prepared = plan(*names)
-    monkeypatch.setattr(runtime, 'execute_pipeline', lambda *_args: ([], False))
+    monkeypatch.setattr(runtime, 'execute_pipeline', lambda *_args, **_kwargs: ([], False))
     result = run_batch_job(definition, prepared, control=BatchRunControl(), emit=lambda _event: None, session_factory=FakeSession)
     assert result['success'] == len(names)
     assert all(len(event['name']) <= runtime.MAX_LABEL_LENGTH for event in result['logs'])
@@ -197,7 +198,7 @@ def test_cancel_while_queued_prevents_factory_connection_and_execution(monkeypat
     blocked, release = threading.Event(), threading.Event()
     def occupy():
         blocked.set(); assert release.wait(3)
-    def forbidden(*_args):
+    def forbidden(*_args, **_kwargs):
         pytest.fail('Queued cancellation must not create or execute a session')
     monkeypatch.setattr(runtime, 'execute_pipeline', forbidden)
     with ThreadPoolExecutor(max_workers=1) as worker:
@@ -224,7 +225,7 @@ def test_cancel_boundary_before_execution_closes_any_created_session(monkeypatch
         value = CancellingSession(config); instances.append(value); return value
     def emit(event):
         if when == 'before_connect' and event['status'] == 'running': control.request_cancel()
-    monkeypatch.setattr(runtime, 'execute_pipeline', lambda *_args: pytest.fail('Cancellation before execution must prevent pipeline dispatch'))
+    monkeypatch.setattr(runtime, 'execute_pipeline', lambda *_args, **_kwargs: pytest.fail('Cancellation before execution must prevent pipeline dispatch'))
     result = run_batch_job(definition, prepared, control=control, emit=emit, session_factory=factory)
     assert result['status'] == 'cancelled' and result['cancelled'] == 1 and result['skipped'] == 1
     assert len(instances) == int(when == 'after_connect')
@@ -236,7 +237,7 @@ def test_cancellation_after_acknowledged_execution_preserves_success_and_skips_f
     control, instances = BatchRunControl(), []
     def factory(config):
         value = FakeSession(config); instances.append(value); return value
-    def execute(*_args):
+    def execute(*_args, **_kwargs):
         control.request_cancel()
         return [], False
     monkeypatch.setattr(runtime, 'execute_pipeline', execute)
@@ -272,7 +273,7 @@ def test_real_slow_child_requires_independent_cancel_worker_and_is_reaped(monkey
     def factory(config):
         session = SlowSession(config); instances.append(session); return session
 
-    def execute(session, *_args):
+    def execute(session, *_args, **_kwargs):
         options = {'creationflags': subprocess.CREATE_NO_WINDOW} if os.name == 'nt' else {}
         session.child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'],
             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **options)
@@ -303,9 +304,9 @@ def test_real_slow_child_requires_independent_cancel_worker_and_is_reaped(monkey
 def test_prepared_binding_changes_are_refused_before_any_session(monkeypatch):
     definition, prepared = plan('one')
     prepared[0].config.name = 'different connection identity'
-    monkeypatch.setattr(runtime, 'execute_pipeline', lambda *_args: pytest.fail('Invalid bindings cannot execute'))
+    monkeypatch.setattr(runtime, 'execute_pipeline', lambda *_args, **_kwargs: pytest.fail('Invalid bindings cannot execute'))
     result = run_batch_job(definition, prepared, control=BatchRunControl(), emit=lambda _event: None,
-        session_factory=lambda *_args: pytest.fail('Invalid bindings cannot connect'))
+        session_factory=lambda *_args, **_kwargs: pytest.fail('Invalid bindings cannot connect'))
     assert result['failed'] == 1 and result['status'] == 'failed'
     assert 'LocateObject' in result['logs'][-1]['message']
 
@@ -332,8 +333,68 @@ def test_event_sink_failure_cannot_skip_cleanup_or_disclose_its_exception(monkey
     def factory(config):
         value = FakeSession(config); instances.append(value); return value
     def emit(_event): raise RuntimeError('private sink exception argv generated-database-secret')
-    monkeypatch.setattr(runtime, 'execute_pipeline', lambda *_args: ([], False))
+    monkeypatch.setattr(runtime, 'execute_pipeline', lambda *_args, **_kwargs: ([], False))
     result = run_batch_job(definition, prepared, control=BatchRunControl(), emit=emit, session_factory=factory)
     assert result['status'] == 'success' and instances[0].closed
     assert result['event_delivery_failures'] == 2 and len(result['logs']) == 2
     assert 'private sink' not in json.dumps(result)
+
+
+def test_cancel_after_runtime_check_before_pipeline_operation_cannot_dispatch(monkeypatch):
+    definition, prepared = plan('startup_gap', 'following')
+    control, entered, release = BatchRunControl(), threading.Event(), threading.Event()
+    instances, dispatched, operations = [], [], []
+    production_execute = runtime.execute_pipeline
+
+    class StartupSession(FakeSession):
+        def __init__(self, config):
+            super().__init__(config)
+            self._cancel_requested = threading.Event()
+            self.connection = self
+
+        def use_schema(self, _schema):
+            pass
+
+        def _validate_namespace(self, *_args):
+            pass
+
+        @contextmanager
+        def _operation(self, *_args):
+            self._cancel_requested.clear()
+            self.marker = 'owned-startup-gap-operation'
+            operations.append(self.marker)
+            try:
+                yield self.marker
+            finally:
+                self.marker = None
+
+        def get_database(self, *_args, **_kwargs):
+            dispatched.append(True)
+            raise AssertionError('Cancelled pipeline reached database dispatch')
+
+    def factory(config):
+        value = StartupSession(config); instances.append(value); return value
+
+    def delayed_execute(session, schema, pipeline, *, cancel_event=None):
+        entered.set()
+        assert release.wait(3)
+        # Gate is after the runtime's final cancellation check and before the
+        # production pipeline establishes its marker; a one-shot cancel has
+        # no server identity to target here.
+        return production_execute(session, schema, pipeline, cancel_event=cancel_event)
+
+    monkeypatch.setattr(runtime, 'execute_pipeline', delayed_execute)
+    with ThreadPoolExecutor(max_workers=1) as owner:
+        future = owner.submit(run_batch_job, definition, prepared, control=control,
+            emit=lambda _event: None, session_factory=factory)
+        try:
+            assert entered.wait(3)
+            control.request_cancel()
+            assert control.cancellation_target() is None
+        finally:
+            release.set()
+        result = future.result(3)
+    assert result['status'] == 'cancelled' and result['cancelled'] == 1 and result['skipped'] == 1
+    assert operations == ['owned-startup-gap-operation']
+    assert not dispatched and len(instances) == 1 and instances[0].closed
+    assert control.cancellation_target() is None

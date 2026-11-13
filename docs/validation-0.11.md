@@ -111,7 +111,8 @@ Batch整合全源证据为 `artifacts/resume-20261113/batch-full-source.xml`，
 Native Cocoa和新单GIF的实际结果见末节；最终冻结SHA与对应的原生安装器资格仍待CI补齐。
 版本元数据、发布说明和实际演示必须与最终里程碑一致；旧的25阶段演示不充当新增 Batch 功能实录。
 
-六原生目标 **Windows/Linux/macOS × amd64/arm64** 的本版构建、包内 smoke、真实安装/运行/卸载和独立资产审查尚未开始。
+六原生目标 **Windows/Linux/macOS × amd64/arm64** 的首次预检已完成，具体归属及未通过发布门禁的原因见下节；
+修复后最终源码的构建、包内 smoke、真实安装/运行/卸载和独立资产审查仍需重新取得。
 Windows EXE、Linux DEB、macOS DMG 各两架构全部就绪并核对摘要后才可正式发布。
 随后仍需核对 `SHA256SUMS`、`build-manifests.json` 和八个公开资产的实际匿名下载字节。
 现有分发尚无发布者签名或 Apple 公证；Windows ARM64 安装引导器为x86，应用及原生依赖仍须为ARM64，不能用模拟x64替代。
@@ -123,7 +124,7 @@ Windows EXE、Linux DEB、macOS DMG 各两架构全部就绪并核对摘要后�
 产品账号/授权/云账号协作的既定排除不影响数据库认证、数据库用户/角色/权限、云数据库连接和独立AI工具范围。
 完成本里程碑后完整 goal 继续推进，不自动暂停或宣称完成。
 
-## 最终本机工作树与唯一GIF
+## 首次本机工作树与唯一GIF
 
 在0.11.0元数据下，本机全源 **2011 passed / 567条件跳过**，零失败/错误，79.24秒；
 精确集合/批任务runner **460 passed / zero skips**，53.23秒。八个原生ARM64认证loopback MongoDB8.0.34
@@ -142,3 +143,58 @@ fixture均逐完整ID独立确认不存在，48项所列源文件摘要与该次
 
 原版AP18-10另取得单节点副本集的有限change-stream运行和独立Stop证据；这些是参考观察，
 当前实现仍不执行change-stream阶段，不能把本轮安全拒绝或wire观察当成功能完成。
+
+## 首次六目标预检及执行预算修复
+
+冻结源码 `4111d3310e22ac6e42d72de93fa1a93e4f975118` 的非tag预检
+[43362158137](https://github.com/shubolab/opennavicat/actions/runs/43362158137) 为 **7/7成功**：
+六个原生桌面目标及真库安全专项均成功，发布job按规则跳过。
+本轮只核对运行状态，未下载或独立审查其安装器字节；这轮结果不作为后续修复源码的发布资格。
+
+随后自有 MongoDB8.0.34、实际生产 MongoSession、公开 CommandListener 和 system.profile
+共同确认：PyMongo4.19.0 的 CSOT 将用户设置的 Run/Preview `maxTimeMS=1/10` 改成了约119999；
+Explain 外层约29999，原设置仍留在内层，无法证明内层时限在该服务器生效。
+因此保留这次绿色CI与失败复现，**不发布4111d33**，先修复再重新冻结验收。
+
+修复为正预算使用最多两个专属惰性客户端，复用已解析的TLS/SSH端点和临时证书，
+保留有限socket、连接和选服时限；执行异常和Session.close关闭这些客户端。
+Explain把正 `maxTimeMS` 放到外层命令。Run/Preview采用120秒、Explain采用30秒的协作截止，
+剩余不足一个整毫秒时拒绝发出命令，避免把正限制舍入为服务器的无限制0。
+这不是精确的整段CPU/墙钟抢占保证，也不组合任意调用方更短的外层隐式CSOT。
+显式0和未设置仍沿用原路径，不能描述为服务器零毫秒超时。
+
+修复后的独立15-case wire/profile回执确认 Run/Preview/Explain 的正1/10/5000均原样进入命令；
+Explain内层不再携带该正限制。1毫秒真实出现服务器code50，且之后可重新运行。
+两条专属客户端真实TLS/SSH用例另验证5000毫秒命令、verify-full原主机名及mTLS，
+客户端在tunnel和临时PEM清理前全部关闭。上述仍是专项证据，最终源码与六目标结果另行记录。
+私有回执分别为 `artifacts/pipeline-maxtime-wire-20261113/receipt.json`（原失败）、
+`artifacts/pipeline-maxtime-fixed-wire-20261113/receipt.json` 和
+`artifacts/pipeline-budget-security-final/verification.json`；各次精确fixture均已核对清理。
+
+## 预算和启动取消修复后的本机冻结检查
+
+进一步用真实MainWindow复现preview/run/explain三路启动竞态：worker已通过最初取消检查，
+但尚未建立session操作标记时Stop，旧实现仍实际发出aggregate/explain。
+现在同一次任务的独立Event贯穿三个入口及Batch runtime，冷连接完成后重新检查取消和剩余预算，
+预览阶段之间也保留请求。主窗口按任务token在独立cancel_pool重试精确marker，
+每任务最多一个在途取消；worker完成Event阻止GUI清理尚未送达时误抓下一任务标记。
+三项真实红例已转绿；另有currentOp首次空结果后的重试、并发数量和迟到取消隔离测试。
+
+最终本机测量如下，范围重叠，不相加：
+
+| 范围 | 结果 | 证据归属 |
+| --- | --- | --- |
+| 默认全源 | **2051 passed / 590条件跳过**，78.60秒 | `artifacts/release-011/budget-final-source.xml`；跳过不计为真库验收。 |
+| 完整集合/管线/Batch runner | **498 passed / 0 skipped**，52.10秒 | `artifacts/release-011/budget-final-collections-r2/summary.json`；48条精确声明目标、8个认证原生ARM64 MongoDB8.0.34 fixture，48项源码哈希匹配。 |
+| 原生Cocoa组件与真实Window路径 | **56 passed / 0 skipped**，13.77秒 | `artifacts/release-011/budget-final-cocoa.xml`；包含三路启动取消及两条timer合同，不能代替三平台参考UI。 |
+| 完整MongoDB TLS/SSH | **24 passed / 0 skipped**，27.87秒 | `artifacts/pipeline-budget-security-full/verification.json`；专属客户端真实mTLS/SSH原主机名和关闭顺序。 |
+| 后端预算/取消 scoped | **210 passed / 0 skipped**，11.67秒 | `artifacts/pipeline-budget-cancel-event-final/verification.json`；与上列重叠。 |
+| Batch runtime | **19 passed / 0 skipped** | `artifacts/pipeline-budget-batch-runtime-final.xml`；含调用前检查之后、标记建立之前的独立Event回归。 |
+| 源Cocoa smoke | **passed，6行×4列** | `artifacts/release-011/budget-final-source-smoke.json`；0.11.0及驱动/加密/native-JS探针。 |
+
+八个runner服务均逐完整容器ID独立确认不存在；独立回执
+`artifacts/release-011/budget-final-independent-cleanup.json`也确认48项所列源码摘要匹配。
+runner首次声明无参数化后缀的新增case被严格清单检查拒绝，未进入数据库执行；
+保留 `budget-final-collections/` 失败记录，改为preview/run/explain三个明确case后在新r2目录通过，未弱化校验。
+本轮执行预算/取消修复没有改变所示控件或演示工作流，保留前述已审查的28阶段唯一真实GIF。
+新六目标CI、安装器独立字节审查、正式tag和公开下载资格仍须绑定后续冻结SHA，不能借用4111d33结果。

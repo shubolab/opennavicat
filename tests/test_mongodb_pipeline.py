@@ -8,7 +8,13 @@ import json
 import os
 from pathlib import Path
 from types import SimpleNamespace
+from dataclasses import replace
+import threading
+import time
+import uuid
 import pytest
+from pymongo import monitoring, timeout
+from pymongo.errors import InvalidOperation, OperationFailure
 
 from opennavicat.database import DatabaseError
 from opennavicat.mongodb_pipeline import (
@@ -18,6 +24,390 @@ from opennavicat.mongodb_pipeline import (
     to_nagg, validate_pipeline,
 )
 from test_mongodb_session import mongodb_service, session  # noqa: F401 - pytest fixtures
+
+
+class _PipelineBudgetCommands(monitoring.CommandListener):
+    """Capture only non-sensitive budget fields through the public API."""
+
+    def __init__(self, database):
+        self.database = database
+        self.commands = []
+        self._lock = threading.Lock()
+
+    def started(self, event):
+        if event.database_name != self.database or event.command_name not in {"aggregate", "explain"}:
+            return
+        command = event.command
+        inner = command.get("explain", {})
+        with self._lock:
+            self.commands.append({
+                "kind": event.command_name, "maxTimeMS": command.get("maxTimeMS"),
+                "innerMaxTimeMS": inner.get("maxTimeMS") if isinstance(inner, dict) else None,
+            })
+
+    def succeeded(self, event):
+        pass
+
+    def failed(self, event):
+        pass
+
+
+@pytest.fixture
+def pipeline_wire_session(mongodb_service, monkeypatch):
+    from opennavicat.mongodb_session import MongoSession
+
+    config = replace(mongodb_service, database="opennavicat_budget_" + uuid.uuid4().hex)
+    value = MongoSession(config)
+    listener = _PipelineBudgetCommands(config.database)
+    original_options = value._connection_options
+    # Instrument this owned session only; no global listener registration or
+    # changes to PyMongo's command construction/timeout implementation.
+    monkeypatch.setattr(value, "_connection_options", lambda: {
+        **original_options(), "event_listeners": [listener]})
+    value.connect()
+    database = value.connection[config.database]
+    database.docs.insert_many([{"_id": 1, "generated": True}, {"_id": 2, "generated": True}])
+    database.command("profile", 2)
+    try:
+        yield value, listener
+    finally:
+        value.connection.drop_database(config.database)
+        value.close()
+
+
+@pytest.mark.parametrize("operation", [execute_pipeline, preview_pipeline, explain_pipeline])
+@pytest.mark.parametrize("requested", [1, 10, 5000, 0, None])
+def test_real_pipeline_max_time_wire_and_profiler(pipeline_wire_session, operation, requested):
+    session, listener = pipeline_wire_session
+    marker = "generated-budget-" + uuid.uuid4().hex
+    options = {"comment": marker}
+    if requested is not None:
+        options["maxTimeMS"] = requested
+    definition = PipelineDefinition(source="docs", sample_mode="all",
+        stages=[PipelineStage("$match", {})], reference_options=options)
+    try:
+        # An ambient short CSOT must not convert a positive 1 ms server limit
+        # to zero or replace it with a larger remaining client deadline.
+        with timeout(2):
+            operation(session, session.config.database, definition)
+    except DatabaseError as error:
+        # A genuine 1 ms server limit may expire even for this tiny workload.
+        assert requested in (1, 10)
+        assert isinstance(error.__cause__, OperationFailure) and error.__cause__.code == 50
+    commands = listener.commands
+    assert commands
+    profiles = list(session.connection[session.config.database]["system.profile"].find({"$or": [
+        {"command.comment.userComment": marker},
+        {"command.explain.comment.userComment": marker}]}))
+    assert profiles
+    if requested is not None and requested > 0:
+        assert all(type(item["maxTimeMS"]) is int and 0 < item["maxTimeMS"] <= requested for item in commands)
+        assert all(item["innerMaxTimeMS"] is None for item in commands)
+        assert all(0 < row["command"]["maxTimeMS"] <= requested for row in profiles)
+        assert all("maxTimeMS" not in row["command"].get("explain", {}) for row in profiles)
+    else:
+        # No positive server budget retains the original client and existing
+        # ambient/default CSOT behavior, rather than creating extra clients.
+        assert not session._pipeline_clients
+        assert all(0 < item["maxTimeMS"] <= 2000 for item in commands)
+        if operation is explain_pipeline:
+            assert all(item["innerMaxTimeMS"] == requested for item in commands)
+
+
+@pytest.mark.parametrize("operation,ceiling", [(execute_pipeline, 120), (explain_pipeline, 30)])
+def test_real_pipeline_server_timeout_closes_budget_client_and_session_recovers(
+        pipeline_wire_session, operation, ceiling):
+    session, listener = pipeline_wire_session
+    with session._pipeline_budget(5000, ceiling_seconds=ceiling) as (old_client, _effective):
+        old_client.admin.command("ping")
+    # A finite read-only expansion of two generated documents supplies normal
+    # executor interrupt points. Tiny JS-only pipelines can reach EOF without
+    # an interrupt check, so elapsed JS time alone is not a timeout assertion.
+    slow = PipelineDefinition(source="docs", sample_mode="all", stages=[
+        PipelineStage("$project", {"generatedNumbers": {"$range": [0, 200000]}}),
+        PipelineStage("$unwind", "$generatedNumbers"),
+        PipelineStage("$group", {"_id": None, "total": {"$sum": "$generatedNumbers"}})],
+        reference_options={"maxTimeMS": 10})
+    started = time.monotonic()
+    with pytest.raises(DatabaseError) as failure:
+        operation(session, session.config.database, slow)
+    assert isinstance(failure.value.__cause__, OperationFailure) and failure.value.__cause__.code == 50
+    assert time.monotonic() - started < 5
+    assert listener.commands[-1]["maxTimeMS"] == 10
+    with pytest.raises(InvalidOperation):
+        old_client.admin.command("ping")
+    ordinary = PipelineDefinition(source="docs", stages=[PipelineStage("$match", {})],
+        reference_options={"maxTimeMS": 5000})
+    rows, truncated = execute_pipeline(session, session.config.database, ordinary)
+    assert len(rows) == 2 and not truncated
+    with session._pipeline_budget(5000, ceiling_seconds=ceiling) as (replacement, _effective):
+        assert replacement is not old_client
+        replacement.admin.command("ping")
+    session.connection.admin.command("ping")
+
+
+def test_submillisecond_pipeline_budget_cannot_dispatch_unlimited_zero(monkeypatch):
+    import opennavicat.mongodb_pipeline as module
+
+    monkeypatch.setattr(module.time, "monotonic", lambda: 100.0)
+    with pytest.raises(DatabaseError, match="elapsed-time safety limit"):
+        with module._pipeline_command_budget(object(), {"maxTimeMS": 1},
+                ceiling_seconds=120, deadline=100.0004):
+            pytest.fail("A rounded-zero server budget must never dispatch")
+
+
+@pytest.mark.parametrize("operation", [execute_pipeline, explain_pipeline])
+@pytest.mark.parametrize("gate_phase", ["construction", "warm_ping"])
+def test_cold_budget_cancel_with_no_server_operation_prevents_dispatch(operation, gate_phase, monkeypatch):
+    import opennavicat.mongodb_session as module
+
+    preparing, release = threading.Event(), threading.Event()
+    dispatched, failures, controls = [], [], []
+
+    class EmptyCursor(list):
+        def close(self):
+            pass
+
+    class Control:
+        admin = property(lambda self: self)
+
+        def aggregate(self, *_args, **_kwargs):
+            controls.append("no active server operation")
+            return EmptyCursor()
+
+    class ColdClient:
+        admin = property(lambda self: self)
+
+        def __init__(self, **_kwargs):
+            if gate_phase == "construction":
+                preparing.set()
+                assert release.wait(3), "The test must release cold preparation"
+
+        def command(self, command):
+            if command == "ping" and gate_phase == "warm_ping":
+                preparing.set()
+                assert release.wait(3), "The test must release cold authentication"
+            elif command != "ping":
+                dispatched.append("explain")
+            return {"ok": 1}
+
+        def get_database(self, *_args, **_kwargs):
+            return self
+
+        def __getitem__(self, _name):
+            return self
+
+        def aggregate(self, *_args, **_kwargs):
+            dispatched.append("aggregate")
+            return EmptyCursor()
+
+        def close(self):
+            pass
+
+    class Endpoint(ColdClient):
+        def __init__(self):
+            pass
+
+        def command(self, command):
+            dispatched.append("explain")
+            return {"ok": 1}
+
+    monkeypatch.setattr(module, "MongoClient", ColdClient)
+    session = module.MongoSession(SimpleNamespace(database="generated"))
+    session.config.read_only = False
+    session.connection, session._control = Endpoint(), Control()
+    session._connected_options = {"connectTimeoutMS": 1000, "serverSelectionTimeoutMS": 1000}
+    definition = PipelineDefinition(source="docs", stages=[PipelineStage("$match", {})],
+        reference_options={"maxTimeMS": 5000})
+
+    def execute():
+        try:
+            operation(session, "generated", definition)
+        except DatabaseError as error:
+            failures.append(error)
+
+    worker = threading.Thread(target=execute)
+    worker.start()
+    try:
+        assert preparing.wait(2)
+        marker = session.cancellation_marker()
+        assert marker is not None
+        session.cancel(expected_comment=marker)
+        assert controls == ["no active server operation"]
+    finally:
+        release.set()
+        worker.join(3)
+    assert not worker.is_alive()
+    assert not dispatched, "A Stop accepted during cold preparation must prevent the later command"
+    assert failures and "cancelled before dispatch" in str(failures[0])
+
+
+@pytest.mark.parametrize("ceiling", [30, 120])
+@pytest.mark.parametrize("expired", [False, True])
+def test_pipeline_budget_charges_cold_preparation_to_remaining_deadline(ceiling, expired, monkeypatch):
+    import opennavicat.mongodb_pipeline as module
+    from contextlib import contextmanager
+
+    clock, endpoint = [0.0], object()
+    monkeypatch.setattr(module.time, "monotonic", lambda: clock[0])
+
+    @contextmanager
+    def prepared_client(requested, *, ceiling_seconds):
+        assert requested == 5000 and ceiling_seconds == ceiling
+        clock[0] = ceiling + .1 if expired else ceiling - .5
+        yield endpoint, requested
+
+    session = SimpleNamespace(_pipeline_budget=prepared_client)
+    options = {"maxTimeMS": 5000}
+    if expired:
+        with pytest.raises(DatabaseError, match="elapsed-time safety limit"):
+            with module._pipeline_command_budget(session, options, ceiling_seconds=ceiling, deadline=ceiling):
+                pytest.fail("Expired preparation must not dispatch")
+    else:
+        with module._pipeline_command_budget(session, options, ceiling_seconds=ceiling, deadline=ceiling) as client:
+            assert client is endpoint and options["maxTimeMS"] == 500
+
+
+@pytest.mark.parametrize("requested", [0, None, 5000])
+def test_explain_accepted_predispatch_cancel_never_sends_command(requested):
+    from contextlib import contextmanager
+
+    cancelled = threading.Event()
+
+    @contextmanager
+    def marked_operation():
+        cancelled.set()
+        yield "generated-marker"
+
+    class Session:
+        _cancel_requested = cancelled
+        _operation = staticmethod(marked_operation)
+        use_schema = staticmethod(lambda _database: None)
+
+        @property
+        def connection(self):
+            pytest.fail("Cancelled Explain must not open a network endpoint")
+
+    options = {} if requested is None else {"maxTimeMS": requested}
+    with pytest.raises(DatabaseError, match="cancelled before dispatch"):
+        explain_pipeline(Session(), "generated", PipelineDefinition(source="docs",
+            stages=[PipelineStage("$match", {})], reference_options=options))
+
+
+@pytest.mark.parametrize("operation", [execute_pipeline, preview_pipeline, explain_pipeline])
+def test_job_cancel_before_operation_marker_survives_session_flag_reset(operation):
+    from contextlib import contextmanager
+
+    job_cancel, session_cancel = threading.Event(), threading.Event()
+    job_cancel.set()
+
+    @contextmanager
+    def operation_marker():
+        # MongoSession starts a new marker by resetting its own cooperative
+        # flag. A Stop already accepted by the queued job remains authoritative.
+        session_cancel.clear()
+        yield "generated-marker"
+
+    class Session:
+        config = SimpleNamespace(read_only=False)
+        _cancel_requested = session_cancel
+        _operation = staticmethod(operation_marker)
+        _validate_namespace = staticmethod(lambda *_args: None)
+        use_schema = staticmethod(lambda _database: None)
+
+        @property
+        def connection(self):
+            pytest.fail("A queued job cancellation must survive marker creation")
+
+    with pytest.raises(DatabaseError, match="cancelled before dispatch"):
+        operation(Session(), "generated", PipelineDefinition(source="docs",
+            stages=[PipelineStage("$match", {})]), cancel_event=job_cancel)
+
+
+def test_preview_job_cancel_survives_between_source_and_stage_prefixes():
+    from bson.raw_bson import RawBSONDocument
+    from opennavicat.mongodb_session import BSON_CODEC, RAW_CODEC
+
+    job_cancel, calls = threading.Event(), []
+
+    class Cursor:
+        def __iter__(self):
+            return iter([RawBSONDocument(BSON.encode({"generated": True}, codec_options=BSON_CODEC),
+                codec_options=RAW_CODEC)])
+
+        def close(self):
+            job_cancel.set()
+
+    class Endpoint:
+        def get_database(self, *_args, **_kwargs):
+            return self
+
+        def __getitem__(self, _name):
+            return self
+
+        def aggregate(self, pipeline, **_kwargs):
+            calls.append(pipeline)
+            return Cursor()
+
+    session = SimpleNamespace(config=SimpleNamespace(read_only=False), connection=Endpoint(),
+        _validate_namespace=lambda *_args: None, _operation=lambda *_args: nullcontext("generated-marker"))
+    definition = PipelineDefinition(source="docs", sample_mode="all",
+        stages=[PipelineStage("$match", {}), PipelineStage("$project", {"generated": 1})])
+    with pytest.raises(DatabaseError, match="cancelled before dispatch"):
+        preview_pipeline(session, "generated", definition, cancel_event=job_cancel)
+    assert len(calls) == 1
+
+
+def test_real_pipeline_budget_preserves_read_only_and_independent_cancel(pipeline_wire_session):
+    session, listener = pipeline_wire_session
+    session.config.read_only = True
+    ordinary = PipelineDefinition(source="docs", stages=[PipelineStage("$match", {})],
+        reference_options={"maxTimeMS": 5000})
+    rows, _truncated = execute_pipeline(session, session.config.database, ordinary)
+    assert len(rows) == 2
+    before = len(listener.commands)
+    with pytest.raises(DatabaseError, match="writable session"):
+        execute_pipeline(session, session.config.database, PipelineDefinition(source="docs",
+            stages=[PipelineStage("$out", "generated_output")], reference_options={"maxTimeMS": 5000}))
+    assert len(listener.commands) == before
+
+    slow = PipelineDefinition(source="docs", stages=[PipelineStage("$addFields", {
+        "generatedHold": {"$function": {
+            "body": "function(v) { const end = Date.now() + 1000; while (Date.now() < end) {} return v; }",
+            "args": ["$_id"], "lang": "js"}}})],
+        reference_options={"maxTimeMS": 5000, "comment": "generated-budget-cancel"})
+    errors = []
+
+    def execute():
+        try:
+            execute_pipeline(session, session.config.database, slow)
+        except DatabaseError as error:
+            errors.append(error)
+
+    worker = threading.Thread(target=execute)
+    worker.start()
+    try:
+        deadline = time.monotonic() + 3
+        visible, marker = [], None
+        while time.monotonic() < deadline and worker.is_alive():
+            marker = session.cancellation_marker()
+            if marker is not None:
+                with timeout(1):
+                    visible = list(session._control.admin.aggregate([
+                        {"$currentOp": {"allUsers": False}}, {"$match": {"command.comment": marker}}]))
+                if visible:
+                    break
+            time.sleep(.01)
+        assert visible, "Owned budget query must be visible to its independent cancellation channel"
+        session.cancel(expected_comment=marker)
+        worker.join(3)
+        assert not worker.is_alive() and errors
+        assert session.cancellation_marker() is None
+        rows, _truncated = execute_pipeline(session, session.config.database, ordinary)
+        assert len(rows) == 2
+    finally:
+        worker.join(8)
+        assert not worker.is_alive()
 
 
 def test_stage_catalog_matches_reference_order():

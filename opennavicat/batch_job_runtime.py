@@ -194,7 +194,7 @@ def run_batch_job(definition, prepared_jobs, *, control, emit, session_factory=D
                         status, message = 'cancelled', 'Cancelled before execution; no pipeline execution was dispatched'
                     else:
                         phase = 'execute'
-                        execute_pipeline(session, item.resolved.schema, pipeline)
+                        execute_pipeline(session, item.resolved.schema, pipeline, cancel_event=control.cancel_event)
                         completed = True
                         status, message = 'success', 'Pipeline execution completed'
         except Exception as error:

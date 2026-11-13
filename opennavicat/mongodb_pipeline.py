@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 import json
+import time
 from typing import Any
 import uuid
 
@@ -697,7 +699,56 @@ def _sample_prefix(definition):
     return []
 
 
-def _aggregate_rows(session, database, definition, pipeline, limit, *, allow_write=False):
+def _check_pipeline_deadline(deadline):
+    if deadline is not None and time.monotonic() >= deadline:
+        raise DatabaseError("Aggregation exceeded its elapsed-time safety limit")
+
+
+def _pipeline_cancelled(session, cancel_event=None):
+    return any(signal is not None and signal.is_set() for signal in (
+        getattr(session, "_cancel_requested", None), cancel_event))
+
+
+def _check_pipeline_dispatch(session, deadline, cancel_event=None):
+    _check_pipeline_deadline(deadline)
+    if _pipeline_cancelled(session, cancel_event):
+        raise DatabaseError("Aggregation was cancelled before dispatch")
+
+
+def _pipeline_remaining_ms(deadline):
+    if deadline is None:
+        return None
+    remaining = int((deadline - time.monotonic()) * 1000)
+    if remaining < 1:
+        raise DatabaseError("Aggregation exceeded its elapsed-time safety limit")
+    return remaining
+
+
+@contextmanager
+def _pipeline_command_budget(session, options, *, ceiling_seconds, deadline=None, cancel_event=None):
+    requested = options.get("maxTimeMS")
+    if requested is None or requested == 0:
+        _check_pipeline_dispatch(session, deadline, cancel_event)
+        yield session.connection
+        return
+    _check_pipeline_dispatch(session, deadline, cancel_event)
+    _pipeline_remaining_ms(deadline)
+    with session._pipeline_budget(requested, ceiling_seconds=ceiling_seconds) as (client, effective):
+        # A single Stop can have found no operation while the lazy client was
+        # selecting/authenticating. Recheck after that work, immediately before
+        # the aggregate/explain dispatch, and charge warmup to the same budget.
+        _check_pipeline_dispatch(session, deadline, cancel_event)
+        remaining_ms = _pipeline_remaining_ms(deadline)
+        if remaining_ms is not None:
+            # Zero means unlimited to MongoDB. Never dispatch a rounded-zero
+            # limit, including when cold preparation consumed the last ms.
+            effective = min(effective, remaining_ms)
+        options["maxTimeMS"] = effective
+        yield client
+
+
+def _aggregate_rows(session, database, definition, pipeline, limit, *, allow_write=False,
+                    _deadline=None, cancel_event=None):
     collect_limit = MAX_EXECUTION_ROWS if allow_write else MAX_PREVIEW_ROWS
     if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= collect_limit:
         raise DatabaseError("Aggregation row limit is invalid")
@@ -716,30 +767,38 @@ def _aggregate_rows(session, database, definition, pipeline, limit, *, allow_wri
     aggregate_options = pipeline_aggregate_options(definition)
     user_comment = aggregate_options.pop("comment", None)
     aggregate_options.setdefault("batchSize", min(limit + 1, 100))
+    deadline = _deadline
+    if deadline is None and aggregate_options.get("maxTimeMS", 0) > 0:
+        deadline = time.monotonic() + 120
     operation = session._operation(user_comment) if user_comment is not None else session._operation()
     with operation as comment:
         aggregate_options["comment"] = comment
-        cancellation = getattr(session, '_cancel_requested', None)
-        if cancellation is not None and cancellation.is_set():
+        if _pipeline_cancelled(session, cancel_event):
             raise DatabaseError('Aggregation was cancelled before dispatch')
-        cursor = session.connection.get_database(database, codec_options=RAW_CODEC)[definition.source].aggregate(
-            bounded, **aggregate_options)
-        try:
-            for document in cursor:
-                if cancellation is not None and cancellation.is_set():
+        with _pipeline_command_budget(session, aggregate_options, ceiling_seconds=120,
+                deadline=deadline, cancel_event=cancel_event) as client:
+            cursor = client.get_database(database, codec_options=RAW_CODEC)[definition.source].aggregate(
+                bounded, **aggregate_options)
+            try:
+                for document in cursor:
+                    _check_pipeline_deadline(deadline)
+                    if _pipeline_cancelled(session, cancel_event):
+                        raise DatabaseError('Aggregation was cancelled; acknowledged changes are not automatically undone')
+                    if len(rows) >= limit or (rows and size + len(document.raw) > _MAX_PAGE_BYTES):
+                        truncated = True
+                        break
+                    value = BSON(document.raw).decode(codec_options=BSON_CODEC)
+                    rows.append(canonical_dumps(value))
+                    size += len(document.raw)
+                _check_pipeline_deadline(deadline)
+                if _pipeline_cancelled(session, cancel_event):
                     raise DatabaseError('Aggregation was cancelled; acknowledged changes are not automatically undone')
-                if len(rows) >= limit or (rows and size + len(document.raw) > _MAX_PAGE_BYTES):
-                    truncated = True
-                    break
-                value = BSON(document.raw).decode(codec_options=BSON_CODEC)
-                rows.append(canonical_dumps(value))
-                size += len(document.raw)
-        finally:
-            cursor.close()
+            finally:
+                cursor.close()
     return rows, truncated
 
 
-def preview_pipeline(session, database, definition, *, limit=50):
+def preview_pipeline(session, database, definition, *, limit=50, cancel_event=None):
     validate_pipeline(definition)
     # A $limit bounds delivered events, not the time spent waiting for one.
     # Reject the complete enabled stream before even fetching source previews.
@@ -748,13 +807,16 @@ def preview_pipeline(session, database, definition, *, limit=50):
     if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= MAX_PREVIEW_ROWS:
         raise DatabaseError("Pipeline preview row limit is invalid")
     sample = _sample_prefix(definition)
-    source_rows, source_truncated = _aggregate_rows(session, database, definition, sample, limit)
+    deadline = time.monotonic() + 120 if pipeline_aggregate_options(definition).get("maxTimeMS", 0) > 0 else None
+    source_rows, source_truncated = _aggregate_rows(session, database, definition, sample, limit,
+        _deadline=deadline, cancel_event=cancel_event)
     available = pipeline_documents(definition)
     stage_rows = []
     truncated = source_truncated
     for index, stage in enumerate(available):
         rows, more = _aggregate_rows(
-            session, database, definition, [*sample, *available[:index + 1]], limit)
+            session, database, definition, [*sample, *available[:index + 1]], limit,
+            _deadline=deadline, cancel_event=cancel_event)
         stage_rows.append({"index": index, "operator": next(iter(stage)),
                            "rows": rows, "truncated": more})
         truncated = truncated or more
@@ -762,7 +824,7 @@ def preview_pipeline(session, database, definition, *, limit=50):
         source_rows, stage_rows, stage_rows[-1]["rows"] if stage_rows else source_rows, truncated)
 
 
-def execute_pipeline(session, database, definition, *, limit=1000):
+def execute_pipeline(session, database, definition, *, limit=1000, cancel_event=None):
     validate_pipeline(definition)
     if any(stage.operator in STREAM_STAGES for stage in definition.stages if stage.enabled):
         raise DatabaseError("Change streams remain a dedicated streaming workflow")
@@ -774,10 +836,10 @@ def execute_pipeline(session, database, definition, *, limit=1000):
         raise DatabaseError("This aggregation pipeline requires a writable session")
     documents = pipeline_documents(definition)
     return _aggregate_rows(
-        session, database, definition, documents, limit, allow_write=True)
+        session, database, definition, documents, limit, allow_write=True, cancel_event=cancel_event)
 
 
-def explain_pipeline(session, database, definition, *, verbosity="executionStats"):
+def explain_pipeline(session, database, definition, *, verbosity="executionStats", cancel_event=None):
     validate_pipeline(definition)
     if any(stage.operator in WRITE_STAGES or stage.operator in STREAM_STAGES
            for stage in definition.stages if stage.enabled):
@@ -790,9 +852,23 @@ def explain_pipeline(session, database, definition, *, verbosity="executionStats
         aggregate["cursor"]["batchSize"] = batch_size
     aggregate.update(aggregate_options)
     command = {"explain": aggregate, "verbosity": verbosity}
+    positive_max_time = aggregate_options.get("maxTimeMS", 0) > 0
+    if positive_max_time:
+        # MongoDB 8 does not enforce an aggregate's nested explain maxTimeMS.
+        # Put the user limit on explain itself; the dedicated client prevents
+        # CSOT from replacing it (or rounding 1 ms down to unlimited zero).
+        command["maxTimeMS"] = aggregate.pop("maxTimeMS")
+    deadline = time.monotonic() + 30 if positive_max_time else None
     session.use_schema(database)
     operation = session._operation(user_comment) if user_comment is not None else session._operation()
     with timeout(30), operation as comment:
         aggregate["comment"] = comment
-        reply = session.connection[database].command(command)
+        if positive_max_time:
+            command["comment"] = comment
+        with _pipeline_command_budget(session, command, ceiling_seconds=30,
+                deadline=deadline, cancel_event=cancel_event) as client:
+            reply = client[database].command(command)
+            _check_pipeline_deadline(deadline)
+            if _pipeline_cancelled(session, cancel_event):
+                raise DatabaseError("Aggregation Explain was cancelled")
     return parse_explain_reply(reply)

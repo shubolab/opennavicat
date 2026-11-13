@@ -3,9 +3,10 @@
 This source checkpoint begins the reference-shaped local automation workspace.
 It is **partial**: a local document model, four-page Qt component, serial
 saved-MongoDB-pipeline runtime and bounded local history are implemented.
-MainWindow routing and its three real-window cases are being integrated at this
-handoff; they have not yet provided a completed real-database Batch Window
-acceptance result. The current source is not a newly published installer.
+MainWindow routing and three owned-database Window cases cover repeated
+execution, latest saved references, error policy, cancellation and persistent
+history. This is a bounded checkpoint, not full automation or reference parity;
+current release qualification is recorded in [0.11 validation](validation-0.11.md).
 
 The observed reference contract is [AU18-01–AU18-06](ui-reference-18-automation.md),
 using Navicat Premium **18.0.5 build 321** on macOS and owned MongoDB **8.0.34**.
@@ -62,11 +63,10 @@ references and removing selected/all references. A first-save name sheet has
 preview. It retains logging and continue-on-error options. Schedule controls
 and SMTP execution remain disabled; preserved metadata does not enable either.
 
-MainWindow integration is being wired to a global five-column job list
+MainWindow integration provides a global five-column job list
 (`名称`, `文件大小`, `创建日期`, `修改日期`, `访问时间`), local save/reopen,
 permanent-delete confirmation, dirty-document lifecycle and event delivery.
-Until the integration tests finish, these source paths are not reported as
-executed end-to-end. Full job copying, grouping, renaming, file chooser
+These routes have owned-database Window evidence. Full job copying, grouping, renaming, file chooser
 import/export, every toolbar state and layout geometry remain acceptance gaps.
 
 Definitions are stored in the existing local workspace state. Run summaries are
@@ -94,8 +94,11 @@ must not kill a later operation. Cancellation before dispatch avoids execution;
 later tasks are skipped. An operation that completed before a cancellation
 request remains completed. Successful or uncertain effects are never
 automatically undone or retried, and the multi-task sequence is not a transaction.
+The run's independent cancellation Event is also passed into pipeline execution,
+so a request made before the session establishes its operation marker survives
+that session's flag reset and is checked before dispatch.
 
-The integrating controller prepares a warning/confirmation for saved `$out` or
+The controller prepares a warning/confirmation for saved `$out` or
 `$merge` stages before dispatch. Their write execution/confirmation paths are not covered by the three read-task Batch Window cases. Ordinary preview continues
 to refuse write stages and change-stream execution. The latter refusal is a
 safety boundary, **not** completion of change-stream functionality.
@@ -161,10 +164,12 @@ pipeline save-title correction and demo extension. The later model/runtime/contr
 **111 cases / zero skips**, including85 model,18 runtime and8 controller cases; scopes overlap.
 These are development checks, not final release or complete reference acceptance.
 
-Final local 0.11 working-tree checks: **2011 passed / 567 conditional skips**
+Before the execution-budget and startup-cancellation repair, local 0.11 working-tree checks were **2011 passed / 567 conditional skips**
 (default source), **460 passed / zero skips** (the exact collection/task runner),
 and **51 passed / zero skips** on native Cocoa (page/controller/pipeline plus
 four actual MongoDB MainWindow routes). Eight fixture IDs were independently
 checked absent; all48 qualified source-file hashes matched the runner receipt.
-The final-source and Cocoa JUnit are under `artifacts/release-011/`; installer,
-public asset and complete reference UI acceptance remain separate pending gates.
+Those JUnit remain under `artifacts/release-011/`; they do not qualify later
+source changes. Final budget/cancellation, installer and public-asset evidence is
+tracked separately in [0.11 validation](validation-0.11.md); complete reference
+UI acceptance remains open.

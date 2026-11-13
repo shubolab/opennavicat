@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import secrets
 import socket
+import ssl
 import subprocess
 import platform
 import tempfile
@@ -20,6 +21,8 @@ import uuid
 
 import paramiko
 from pymongo import MongoClient
+from pymongo.errors import InvalidOperation
+from pymongo.monitoring import CommandListener
 import pytest
 
 from opennavicat.database import ConnectionConfig, DatabaseError
@@ -446,3 +449,166 @@ def test_real_ssh_mutual_tls_and_reconnect(mtls_mongo, tmp_path, isolated_tunnel
     finally:
         session.close(); server.close()
     assert len(isolated_tunnels) == 2 and all(endpoint_closed(endpoint) for endpoint in isolated_tunnels)
+
+
+def _observe_pipeline_clients(monkeypatch, holder):
+    """Observe real clients/commands without storing options or command bodies."""
+    import opennavicat.mongodb_session as module
+
+    created, closed, commands, events = [], set(), [], []
+    original_client = module.MongoClient
+
+    class Commands(CommandListener):
+        def started(self, event):
+            if event.command_name in {'aggregate', 'explain'}:
+                commands.append({'command': event.command_name, 'max_time_ms': event.command.get('maxTimeMS')})
+
+        def succeeded(self, _event):
+            pass
+
+        def failed(self, _event):
+            pass
+
+    listener = Commands()
+    def client(*args, **kwargs):
+        options = dict(kwargs)
+        options['event_listeners'] = [*options.get('event_listeners', []), listener]
+        value = original_client(*args, **options)
+        original_close = value.close
+        def close():
+            pem = holder.get('pem')
+            tunnel = holder.get('tunnel')
+            resources_live = (pem is None or pem.exists()) and (tunnel is None or tunnel.active)
+            try:
+                original_close()
+            finally:
+                closed.add(id(value))
+                events.append(('client_closed', id(value), resources_live))
+        monkeypatch.setattr(value, 'close', close)
+        created.append(value)
+        return value
+    monkeypatch.setattr(module, 'MongoClient', client)
+    return created, closed, commands, events
+
+
+def _trace_pipeline_resource_order(monkeypatch, session, holder, created, closed, events):
+    holder['pem'] = Path(session._pem_dir.name)
+    holder['tunnel'] = tunnel = session._tunnel
+    tunnel_endpoint = tunnel.endpoint if tunnel is not None else None
+    temporary = session._pem_dir
+    original_cleanup = temporary.cleanup
+    def cleanup():
+        events.append(('pem_cleanup', all(id(value) in closed for value in created),
+                       tunnel_endpoint is None or endpoint_closed(tunnel_endpoint)))
+        original_cleanup()
+    monkeypatch.setattr(temporary, 'cleanup', cleanup)
+    if tunnel is not None:
+        original_close = tunnel.close
+        def close_tunnel():
+            events.append(('tunnel_close', all(id(value) in closed for value in created)))
+            original_close()
+        monkeypatch.setattr(tunnel, 'close', close_tunnel)
+
+
+def _exercise_verified_pipeline_budgets(session, created, commands):
+    from opennavicat.mongodb_pipeline import PipelineDefinition, PipelineStage, execute_pipeline, explain_pipeline
+    from opennavicat.mongodb_session import canonical_loads
+
+    definition = PipelineDefinition(source='samples', stages=[PipelineStage('$match', {'_id': 1})],
+        reference_options={'maxTimeMS': 5000})
+    rows, truncated = execute_pipeline(session, 'security_fixture', definition)
+    assert not truncated and len(rows) == 1 and canonical_loads(rows[0])['verified'] == 'real-tls'
+    explained = explain_pipeline(session, 'security_fixture', definition)
+    assert explained.raw.get('ok') == 1
+    budget_clients = tuple(session._pipeline_clients.values())
+    assert len(budget_clients) == 2 and all(value is not session.connection and value is not session._control
+                                           for value in budget_clients)
+    assert all(value.options.timeout is None and value.options.pool_options.socket_timeout in (30, 120)
+               for value in budget_clients)
+    assert len(created) == 4  # Main/control plus both real, independently connected budget clients.
+    assert {value['command'] for value in commands} == {'aggregate', 'explain'}
+    assert all(type(value['max_time_ms']) is int and 0 < value['max_time_ms'] <= 5000 for value in commands)
+
+
+def _assert_pipeline_resources_closed(session, holder, created, closed, events):
+    assert closed == {id(value) for value in created}
+    assert all(event[2] for event in events if event[0] == 'client_closed')
+    assert all(event[1] for event in events if event[0] == 'tunnel_close')
+    assert all(event[1] and event[2] for event in events if event[0] == 'pem_cleanup')
+    assert [event[0] for event in events][-1] == 'pem_cleanup'
+    assert not holder['pem'].exists()
+    cache_empty = not session._pipeline_clients
+    options_cleared = session._connected_options is None
+    assert cache_empty and options_cleared
+    assert_drained(session)
+    for client in created:
+        # Public operation after close cannot silently create a replacement pool.
+        with pytest.raises(InvalidOperation):
+            client.admin.command('ping')
+
+
+def test_pipeline_budget_verify_full_over_ssh_keeps_hostname_and_resource_order(
+        tls_mongo, mongo_ssh, isolated_tunnels, monkeypatch):
+    import opennavicat.mongodb_session as module
+
+    holder, handshakes = {}, []
+    created, closed, commands, events = _observe_pipeline_clients(monkeypatch, holder)
+    original_init = module._TLSHostnameContext.__init__
+
+    class ObservedContext:
+        def __init__(self, context):
+            self.context = context
+
+        def __getattr__(self, name):
+            return getattr(self.context, name)
+
+        def wrap_socket(self, *args, **kwargs):
+            # The cert has DNS db.test/localhost and no IP SAN. This delegates
+            # to real crypto while witnessing the identity actually verified.
+            handshakes.append((kwargs.get('server_hostname') == 'db.test',
+                self.context.check_hostname, self.context.verify_mode == ssl.CERT_REQUIRED))
+            return self.context.wrap_socket(*args, **kwargs)
+
+    def context(self, actual, hostname):
+        original_init(self, actual, hostname)
+        self._context = ObservedContext(actual)
+    monkeypatch.setattr(module._TLSHostnameContext, '__init__', context)
+    session = holder['session'] = MongoSession(ssh_config(tls_mongo, mongo_ssh,
+        ssl_cert=str(tls_mongo.material['client']), ssl_key=str(tls_mongo.material['encrypted-client-key']),
+        ssl_key_password=KEY_PASSWORD))
+    try:
+        session.connect()
+        _trace_pipeline_resource_order(monkeypatch, session, holder, created, closed, events)
+        before = len(handshakes)
+        original_tunnel, original_pem = session._tunnel, session._pem_dir
+        _exercise_verified_pipeline_budgets(session, created, commands)
+        assert len(handshakes) > before and all(all(value) for value in handshakes)
+        assert session._tunnel is original_tunnel and session._pem_dir is original_pem
+        assert mongo_ssh.destinations and all(host == 'db.test' and port == tls_mongo.port
+                                            for host, port in mongo_ssh.destinations)
+    finally:
+        session.close()
+    _assert_pipeline_resources_closed(session, holder, created, closed, events)
+    assert len(isolated_tunnels) == 1 and all(endpoint_closed(value) for value in isolated_tunnels)
+    _report('pipeline-budget-ssh.json', dict(verified=True, original_hostname_verified=True,
+        verify_full=True, client_certificate_used=True, commands=commands, budget_clients=2,
+        clients_closed=True, clients_closed_before_tunnel_and_pem=True))
+
+
+def test_pipeline_budget_direct_mutual_tls_keeps_client_certificate_and_resource_order(mtls_mongo, monkeypatch):
+    holder = {}
+    created, closed, commands, events = _observe_pipeline_clients(monkeypatch, holder)
+    session = holder['session'] = MongoSession(client_config(mtls_mongo))
+    try:
+        session.connect()
+        _trace_pipeline_resource_order(monkeypatch, session, holder, created, closed, events)
+        original_pem = session._pem_dir
+        _exercise_verified_pipeline_budgets(session, created, commands)
+        assert session._pem_dir is original_pem and session._tunnel is None
+        assert holder['pem'].exists()
+    finally:
+        session.close()
+    _assert_pipeline_resources_closed(session, holder, created, closed, events)
+    _report('pipeline-budget-mtls.json', dict(verified=True, mutual_tls_required=True,
+        verify_full=True, encrypted_client_key_used=True, commands=commands, budget_clients=2,
+        clients_closed=True, clients_closed_before_pem=True))

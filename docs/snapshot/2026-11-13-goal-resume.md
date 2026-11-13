@@ -112,3 +112,29 @@ CUA/REA/Ghidra的可用性也是前序交接事实，后续需要使用时再验
 精确集合/任务runner460项零跳过，53.23秒，8个fixture逐完整ID独立确认不存在，48项源码哈希匹配。
 原生Cocoa组件与4个真实主窗路径51项零跳过，10.64秒；不与其它范围相加，也不当作六安装器或全部parity。
 28阶段、371帧、61.84秒的新单GIF已完成实际Cocoa录制、逐阶段隐私审核并替换README资源；0.11六目标CI/tag/公开资产仍待完成。
+
+## 首次预检后的预算问题与当前发布门禁
+
+候选 `4111d3310e22ac6e42d72de93fa1a93e4f975118` 已推送，非tag六目标预检
+[43362158137](https://github.com/shubolab/opennavicat/actions/runs/43362158137) **7/7成功**，发布跳过。
+本轮未下载这轮安装器字节；不能把状态成功当作独立资产审查。
+随后真实wire/profile发现PyMongo CSOT将Run/Preview设置的1/10毫秒改为约119999，
+Explain正限制也未在正确层级生效，因此**该提交不发布**。
+正预算专属有限网络客户端及Explain外层时限修复正在完成取消边界和最终整体验证；
+最终SHA须重新执行六目标与正式tag，不复用4111d33的CI资格。
+细节、原失败及修复后独立真库回执见 [0.11验证记录](../validation-0.11.md#首次六目标预检及执行预算修复)。
+完整goal保持active，不能因预检绿色、发布候选或下个里程碑而停止。
+
+修复后本机全源2051 passed/590条件跳过；完整runner498项零跳过、52.10秒，8个认证原生ARM64 fixture
+逐完整ID独立确认清理，48项源码哈希匹配。原生Cocoa56项、MongoDB TLS/SSH24项均零跳过，
+源smoke6行×4列通过。三路真实Window启动漏取消已红绿复现并修复，Batch runtime亦贯穿同一取消Event，
+独立cancel_pool的token/marker重试不会因GUI清理迟到而抓到下一任务。
+新增参数化case首次被严格runner声明检查拒绝且未执行DB；显式列明三case后新目录验收通过，旧失败保留。
+最终source仍须新main预检及六安装器审查通过后才tag；原4111预检只保留历史归属。
+
+下一条实现入口仍为AP18-10的有限change-stream Run：同一游标消费初始/非空批，
+首次空批即结束并由owner关闭，不自动resume或后台watch，也不照抄参考遗留idle游标。
+每次try_next至多一次有限await不等于整次Run只能一次getMore；参考已观察到事件批后再有空批。
+不得追加采样或$limit，必须分别限制行、原始BSON/渲染字节与协作时限，保留显式token选项和取得的事件。
+事件显示位置、Preview All/Stage Preview、fullDocument变体、断网游标清理、其它拓扑/权限及三平台UI
+仍需实际参考与owned fixture验收。此计划不属于0.11已交付功能，须先完成当前发布安全门禁。

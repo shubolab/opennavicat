@@ -92,6 +92,270 @@ def test_document_repr_does_not_log_contents_or_token():
     assert all(s not in repr(value) for s in ['not-public','raw-private','token-private'])
 
 
+class _PipelineBudgetClient:
+    def __init__(self, name, options, events, *, fail_ping=False):
+        self.name = name
+        self.options = dict(options)
+        self.events = events
+        self.fail_ping = fail_ping
+        self.admin = self
+        self.close_count = 0
+        self.ping_count = 0
+
+    def command(self, command, **kwargs):
+        assert command == 'ping'
+        self.ping_count += 1
+        if self.fail_ping:
+            raise RuntimeError('generated connection failure')
+        return {'ok': 1}
+
+    def server_info(self):
+        return {'versionArray': [8, 0, 34]}
+
+    def close(self):
+        self.close_count += 1
+        self.events.append(('close', self.name))
+
+
+def _pipeline_budget_clients(monkeypatch, *, connect=True, fail_ping_at=None):
+    import opennavicat.mongodb_session as module
+    events, clients, option_calls = [], [], []
+    options = dict(host='127.0.0.1', port=31991, connect=False, directConnection=True,
+        appname='OpenNavicat', username='generated-user', password='generated-password',
+        tls=True, tlsCertificateKeyFile='/generated/client.pem',
+        connectTimeoutMS=40000, serverSelectionTimeoutMS=9000,
+        socketTimeoutMS=None, timeoutMS=120000, retryReads=False, retryWrites=False)
+
+    def client_factory(**kwargs):
+        client = _PipelineBudgetClient('client-' + str(len(clients)), kwargs, events,
+            fail_ping=len(clients) == fail_ping_at)
+        clients.append(client)
+        return client
+
+    def connection_options():
+        option_calls.append(True)
+        assert len(option_calls) == 1, 'Budget clients must reuse the connected SSH/TLS options'
+        return options
+
+    monkeypatch.setattr(module, 'MongoClient', client_factory)
+    session = MongoSession(config_for(connect_timeout=240))
+    monkeypatch.setattr(session, '_connection_options', connection_options)
+    if connect:
+        session.connect()
+    return module, session, clients, events, options, option_calls
+
+
+@pytest.mark.parametrize('requested', [None, 0])
+def test_pipeline_budget_without_positive_limit_reuses_main_client(requested, monkeypatch):
+    _module, session, clients, _events, _options, option_calls = _pipeline_budget_clients(monkeypatch)
+    try:
+        with session._pipeline_budget(requested) as (client, effective_ms):
+            assert client is session.connection
+            assert effective_ms == requested
+        assert len(clients) == 2
+        assert len(option_calls) == 1
+        assert not any(client.close_count for client in clients)
+    finally:
+        session.close()
+
+
+@pytest.mark.parametrize('ceiling,requested,effective', [
+    (120, 1, 1), (120, 120001, 120000), (30, 1, 1), (30, 30001, 30000),
+])
+def test_pipeline_budget_bounds_client_timeouts_without_changing_saved_options(
+        ceiling, requested, effective, monkeypatch):
+    _module, session, clients, _events, options, option_calls = _pipeline_budget_clients(monkeypatch)
+    saved = dict(options)
+    try:
+        with session._pipeline_budget(requested, ceiling_seconds=ceiling) as (client, effective_ms):
+            assert client is clients[-1] and client is not session.connection
+            assert effective_ms == effective
+            expected = dict(saved, timeoutMS=None, socketTimeoutMS=ceiling * 1000,
+                connectTimeoutMS=min(saved['connectTimeoutMS'], ceiling * 1000),
+                serverSelectionTimeoutMS=min(saved['serverSelectionTimeoutMS'], ceiling * 1000))
+            assert client.options == expected
+        assert options == saved
+        assert session.connection.options == saved
+        assert len(clients) == 3 and len(option_calls) == 1
+        assert client.close_count == 0
+    finally:
+        session.close()
+
+
+def test_pipeline_budget_caches_only_one_client_per_supported_ceiling(monkeypatch):
+    _module, session, clients, _events, _options, option_calls = _pipeline_budget_clients(monkeypatch)
+    seen = {}
+    try:
+        for ceiling, requested in [(120, 500), (30, 700), (120, 2000), (30, 30001), (120, 200001)]:
+            with session._pipeline_budget(requested, ceiling_seconds=ceiling) as (client, effective_ms):
+                if ceiling in seen:
+                    assert client is seen[ceiling]
+                else:
+                    seen[ceiling] = client
+                assert effective_ms == min(requested, ceiling * 1000)
+        assert len(clients) == 4 and len(option_calls) == 1
+        assert seen[120] is not seen[30]
+        assert seen[120].ping_count == seen[30].ping_count == 1
+        assert not any(client.close_count for client in clients)
+    finally:
+        session.close()
+
+
+def test_pipeline_budget_reuses_connected_snapshot_after_config_mutation(monkeypatch):
+    _module, session, clients, _events, options, option_calls = _pipeline_budget_clients(monkeypatch)
+    saved = dict(options)
+    session.config.host = 'changed.invalid'
+    session.config.port = 1
+    session.config.password = 'changed-generated-password'
+    session.config.ssl_cert = '/changed/client.pem'
+    session.config.ssh_enabled = True
+    options.update(host='mutated-options.invalid', port=2, password='mutated-generated-password')
+    try:
+        with session._pipeline_budget(1000) as (client, _effective_ms):
+            expected = dict(saved, timeoutMS=None, socketTimeoutMS=120000)
+            assert client.options == expected
+        assert len(clients) == 3 and len(option_calls) == 1
+    finally:
+        session.close()
+
+
+def test_pipeline_budget_disables_csot_for_the_entire_yield_and_restores_it(monkeypatch):
+    module, session, _clients, _events, _options, _option_calls = _pipeline_budget_clients(monkeypatch)
+    active, calls = [], []
+
+    @contextlib.contextmanager
+    def public_timeout(seconds):
+        calls.append(seconds)
+        active.append(seconds)
+        try:
+            yield
+        finally:
+            assert active.pop() == seconds
+
+    monkeypatch.setattr(module, 'mongo_timeout', public_timeout)
+    try:
+        with session._pipeline_budget(1500):
+            assert active == [0]
+        assert calls == [0, 9] and active == []
+    finally:
+        session.close()
+
+
+def test_pipeline_budget_failed_body_evicts_only_its_client_and_retries(monkeypatch):
+    _module, session, clients, _events, _options, _option_calls = _pipeline_budget_clients(monkeypatch)
+    try:
+        with session._pipeline_budget(1000, ceiling_seconds=30) as (other, _):
+            pass
+        with pytest.raises(RuntimeError, match='generated pipeline failure'):
+            with session._pipeline_budget(1000) as (failed, _):
+                raise RuntimeError('generated pipeline failure')
+        assert failed.close_count == 1
+        assert other.close_count == 0
+        with session._pipeline_budget(2000, ceiling_seconds=30) as (reused, _):
+            assert reused is other
+        with session._pipeline_budget(2000) as (retry, _):
+            assert retry is not failed
+        assert len(clients) == 5
+        assert retry.close_count == 0
+    finally:
+        session.close()
+    assert failed.close_count == 1
+
+
+def test_pipeline_budget_failed_factory_is_not_cached(monkeypatch):
+    module, session, clients, _events, _options, _option_calls = _pipeline_budget_clients(monkeypatch)
+    factory = module.MongoClient
+    attempts = []
+
+    def fail_once(**kwargs):
+        attempts.append(True)
+        if len(attempts) == 1:
+            raise RuntimeError('generated client failure')
+        return factory(**kwargs)
+
+    monkeypatch.setattr(module, 'MongoClient', fail_once)
+    try:
+        with pytest.raises(RuntimeError, match='generated client failure'):
+            with session._pipeline_budget(1000):
+                pytest.fail('A failed client factory must not yield')
+        with session._pipeline_budget(1000) as (client, _):
+            assert client is clients[-1]
+        assert len(attempts) == 2 and len(clients) == 3
+    finally:
+        session.close()
+
+
+def test_pipeline_budget_failed_cold_auth_closes_client_and_retry_warms_once(monkeypatch):
+    _module, session, clients, _events, _options, _option_calls = _pipeline_budget_clients(
+        monkeypatch, fail_ping_at=2)
+    try:
+        with pytest.raises(RuntimeError, match='generated connection failure'):
+            with session._pipeline_budget(1000):
+                pytest.fail('Cold authentication must finish before yielding')
+        failed = clients[-1]
+        assert failed.close_count == 1 and failed.ping_count == 1
+        with session._pipeline_budget(1000) as (retry, _):
+            assert retry is not failed and retry.ping_count == 1
+        with session._pipeline_budget(2000) as (reused, _):
+            assert reused is retry and reused.ping_count == 1
+    finally:
+        session.close()
+    assert failed.close_count == 1
+
+
+@pytest.mark.parametrize('ceiling', [0, 1, 31, 121, None, True])
+def test_pipeline_budget_rejects_unbounded_or_unknown_client_ceiling(ceiling, monkeypatch):
+    _module, session, clients, _events, _options, _option_calls = _pipeline_budget_clients(monkeypatch)
+    try:
+        with pytest.raises((DatabaseError, ValueError)):
+            with session._pipeline_budget(1000, ceiling_seconds=ceiling):
+                pytest.fail('An unsupported ceiling must not yield a client')
+        assert len(clients) == 2
+    finally:
+        session.close()
+
+
+def test_pipeline_budget_close_releases_clients_before_tunnel_and_pem(monkeypatch):
+    _module, session, clients, events, _options, _option_calls = _pipeline_budget_clients(monkeypatch)
+
+    class Resource:
+        def close(self):
+            events.append(('resource', 'tunnel'))
+
+        def cleanup(self):
+            events.append(('resource', 'pem'))
+
+    session._tunnel = Resource()
+    session._pem_dir = Resource()
+    for ceiling in (30, 120):
+        with session._pipeline_budget(1000, ceiling_seconds=ceiling):
+            pass
+    session.close()
+    assert len(clients) == 4
+    assert all(client.close_count == 1 for client in clients)
+    first_resource = next(i for i, event in enumerate(events) if event[0] == 'resource')
+    assert all(events.index(('close', client.name)) < first_resource for client in clients)
+    assert session.connection is None and session._control is None
+    assert session._tunnel is None and session._pem_dir is None
+    assert not session._connected_options
+    session.close()
+    assert all(client.close_count == 1 for client in clients)
+
+
+@pytest.mark.parametrize('fail_ping_at', [0, 1])
+def test_pipeline_budget_connect_failure_clears_snapshot_and_clients(fail_ping_at, monkeypatch):
+    _module, session, clients, _events, _options, option_calls = _pipeline_budget_clients(
+        monkeypatch, connect=False, fail_ping_at=fail_ping_at)
+    with pytest.raises(DatabaseError, match='generated connection failure'):
+        session.connect()
+    assert len(option_calls) == 1
+    assert all(client.close_count == 1 for client in clients)
+    assert session.connection is None and session._control is None
+    assert not session._connected_options
+    session.close()
+    assert all(client.close_count == 1 for client in clients)
+
+
 def _docker(*args):
     return subprocess.run(['docker',*args],check=True,capture_output=True,text=True,timeout=120).stdout.strip()
 

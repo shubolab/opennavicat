@@ -320,9 +320,9 @@
   },
   "candidate_release": {
     "version": "0.11.0",
-    "status": "preparing_not_published",
+    "status": "local_budget_and_startup_cancellation_checks_passed_waiting_final_main_precheck",
     "frozen_source_sha": null,
-    "six_target_ci_started": false,
+    "six_target_ci_started": true,
     "tag_created": false,
     "public_release_created": false,
     "final_local_source": {
@@ -331,7 +331,8 @@
       "failed": 0,
       "errors": 0,
       "seconds": 79.24,
-      "receipt": "artifacts/release-011/final-source.xml"
+      "receipt": "artifacts/release-011/final-source.xml",
+      "scope": "4111d331_pre_budget_fix_worktree; overlapping_historical_local_measurement"
     },
     "final_local_collections": {
       "passed": 460,
@@ -342,12 +343,14 @@
       "owned_fixtures": 8,
       "independently_absent_by_exact_id": true,
       "source_hashes_matched": 48,
-      "receipt": "artifacts/release-011/final-collections/summary.json"
+      "receipt": "artifacts/release-011/final-collections/summary.json",
+      "scope": "4111d331_pre_budget_fix_worktree; overlapping_historical_local_measurement"
     },
     "native_cocoa": {
       "passed": 51,
       "skipped": 0,
-      "seconds": 10.64
+      "seconds": 10.64,
+      "scope": "4111d331_pre_budget_fix_worktree; overlapping_historical_local_measurement"
     },
     "single_gif": {
       "recorded_and_reviewed": true,
@@ -357,7 +360,64 @@
       "sha256": "5f46313db93fbc3e1bd9b9cc6ffb8a0d89cda748b10c23e434ebf223582b2b4e",
       "batch_tasks_executed": 2,
       "history_persisted": true,
-      "source_bson_and_uuid_unchanged": true
+      "source_bson_and_uuid_unchanged": true,
+      "post_fix_scope": "UI_and_demonstrated_workflows_unchanged_by_budget_and_cancel_repair; previously_reviewed_capture_retained"
+    },
+    "first_precheck": {
+      "source_sha": "4111d3310e22ac6e42d72de93fa1a93e4f975118",
+      "run_id": 43362158137,
+      "conclusion": "success",
+      "successful_jobs": 7,
+      "publisher": "skipped",
+      "independent_installer_byte_audit": false,
+      "release_qualification": false,
+      "reason": "subsequent_owned_wire_and_profiler_reproduction_found_positive_maxTimeMS_replaced_by_CSOT; final_fix_requires_new_source_and_run"
+    },
+    "pipeline_budget_fix": {
+      "status": "implemented_owned_wire_profile_tls_ssh_cold_client_and_window_startup_cancel_checks_passed",
+      "wire_receipt": "artifacts/pipeline-maxtime-fixed-wire-20261113/receipt.json",
+      "security_receipt": "artifacts/pipeline-budget-security-final/verification.json",
+      "positive_max_time_ms": [
+        1,
+        10,
+        5000
+      ],
+      "zero_and_unset": "original_path_retained",
+      "external_ambient_CSOT": "not_inherited_by_positive_budget_clients",
+      "precise_cpu_wall_preemption_claimed": false,
+      "backend_scoped_passed": 210,
+      "batch_runtime_passed": 19,
+      "security_module_passed": 24,
+      "security_module_skipped": 0,
+      "security_final_receipt": "artifacts/pipeline-budget-security-full/verification.json"
+    },
+    "post_fix_local_source": {
+      "passed": 2051,
+      "skipped": 590,
+      "seconds": 78.6,
+      "failed": 0,
+      "errors": 0,
+      "receipt": "artifacts/release-011/budget-final-source.xml"
+    },
+    "post_fix_local_collections": {
+      "passed": 498,
+      "skipped": 0,
+      "seconds": 52.1,
+      "failed": 0,
+      "errors": 0,
+      "owned_fixtures": 8,
+      "exact_declared_targets": 48,
+      "source_hashes_matched": 48,
+      "independently_absent_by_exact_id": true,
+      "receipt": "artifacts/release-011/budget-final-collections-r2/summary.json",
+      "independent_receipt": "artifacts/release-011/budget-final-independent-cleanup.json",
+      "initial_attempt": "strict_manifest_rejection_of_unparameterized_declared_case_before_DB_execution; retained"
+    },
+    "post_fix_native_cocoa": {
+      "passed": 56,
+      "skipped": 0,
+      "seconds": 13.77,
+      "receipt": "artifacts/release-011/budget-final-cocoa.xml"
     }
   }
 }

@@ -98,6 +98,18 @@ Cancellation uses the MongoDB connection's exact operation marker through the
 existing separate cancellation worker. Read-only connections reject write and
 streaming stages.
 
+For positive `maxTimeMS`, Run/Preview and Explain use dedicated owner-thread
+clients with finite network timeouts, preserving the positive server limit
+instead of allowing PyMongo CSOT to replace it. Explain places the limit on
+the outer command. These clients reuse the established TLS/SSH endpoint and
+certificate resources and close before those resources are released. Run and
+Preview share a cooperative 120-second elapsed limit; Explain uses 30 seconds.
+This is not a precise CPU or wall-clock preemption guarantee, and this path
+does not inherit an arbitrary caller's shorter ambient CSOT. Zero and an unset
+limit retain their existing client-timeout behavior. See the owned wire,
+profiler, TLS/SSH and cancellation evidence in the
+[0.11 validation record](validation-0.11.md).
+
 ## Verification boundary
 
 Unit tests cover the 42-entry catalog, nagg roundtrip with Int64 and Decimal128,
@@ -105,15 +117,15 @@ stage import, persistence, UI graph operations, preview rendering, save-sheet
 naming, nested visual plan projection, unknown-field retention and visual-view
 search. Owned MongoDB tests cover per-stage preview, final aggregation,
 `executionStats` Explain, `$out` confirmation boundaries and a full MainWindow
-save/reopen path. The expanded collection runner passed **288 cases with zero
-skips/failures/errors across eight exact-owned fixtures**; focused Cocoa pipeline
-checks passed **14/14**, the full source suite passed **1820 cases with 562
-conditionally skipped**, and source smoke returned 6 rows × 4 columns. The README
-GIF is 25 phases, 326 encoded frames and 54.34 seconds. Runtime reference observations are recorded in
+save/reopen path. The earlier 288-case collection runner, 14-case Cocoa pipeline
+check and 1820-pass source suite were historical checkpoints. Current source,
+candidate, installer and GIF evidence is tracked separately in the
+[0.11 validation record](validation-0.11.md), with exact source and CI ownership;
+overlapping test scopes are not added together. Runtime reference observations are recorded in
 [the Navicat observation](ui-reference-18-mongodb-pipeline.md).
 
 All 42 operator-specific editor templates were enumerated from the reference;
 only the five stages above expose a create-tool switch. Unknown/future Option
-semantics, exact visual Explain canvas and all operator shapes, automatic-task
-references, change-stream UI, all MongoDB versions/topologies and Windows/Linux
+semantics, exact visual Explain canvas and all operator shapes, full automatic-task
+workflows, change-stream UI, all MongoDB versions/topologies and Windows/Linux
 visual acceptance remain open.

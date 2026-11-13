@@ -582,6 +582,8 @@ class MongoSession(DatabaseSession):
         self.config = config
         self.connection = None
         self._control = None
+        self._connected_options = None
+        self._pipeline_clients = {}
         self._tunnel = self._pem_dir = None
         self._selected_schema = config.database or "admin"
         self._seal_key = secrets.token_bytes(32)
@@ -684,6 +686,10 @@ class MongoSession(DatabaseSession):
                 self._server_major = version[0]
                 self._control = MongoClient(**kwargs)
                 self._control.admin.command("ping")
+            # Reuse this already-resolved TLS/SSH endpoint for optional bounded
+            # pipeline clients; resolving it again would create another tunnel
+            # or replace the temporary client-certificate file.
+            self._connected_options = dict(kwargs)
         except Exception as exc:
             self.close()
             if isinstance(exc, (SSHHostKeyError, SSHAuthenticationError, TLSKeyPasswordError)):
@@ -691,7 +697,10 @@ class MongoSession(DatabaseSession):
             raise self._error(exc) from exc
 
     def close(self):
-        for client in (self.connection, self._control):
+        budget_clients = tuple(self._pipeline_clients.values())
+        self._pipeline_clients.clear()
+        self._connected_options = None
+        for client in (*budget_clients, self.connection, self._control):
             if client is not None:
                 with contextlib.suppress(Exception): client.close()
         self.connection = self._control = None
@@ -701,6 +710,55 @@ class MongoSession(DatabaseSession):
             self._pem_dir.cleanup(); self._pem_dir = None
         self._generation = secrets.token_hex(16)
         self._active_comment = None
+
+    @contextlib.contextmanager
+    def _pipeline_budget(self, max_time_ms, *, ceiling_seconds=120):
+        """Keep a positive server limit intact without unbounded network I/O.
+
+        PyMongo CSOT overwrites command maxTimeMS and can round a 1 ms limit
+        down to zero (unlimited on the server). These two owner-thread clients
+        disable CSOT only while bounded pipeline I/O runs. Finite socket,
+        selection and connection timeouts remain active. Callers also enforce
+        their pipeline's cooperative elapsed-time limit between I/O calls;
+        arbitrary ambient CSOT deadlines are intentionally not inherited here.
+        """
+        self._check()
+        if max_time_ms is None or max_time_ms == 0 and not isinstance(max_time_ms, bool):
+            yield self.connection, max_time_ms
+            return
+        if (isinstance(max_time_ms, bool) or not isinstance(max_time_ms, int)
+                or max_time_ms < 1 or ceiling_seconds not in (30, 120)):
+            raise DatabaseError("Pipeline command budget is invalid")
+        if self._connected_options is None:
+            raise DatabaseError("MongoDB pipeline endpoint is not connected")
+        client = None
+        with mongo_timeout(0):
+            try:
+                client = self._pipeline_clients.get(ceiling_seconds)
+                if client is None:
+                    milliseconds = ceiling_seconds * 1000
+                    options = dict(self._connected_options)
+                    options.update(timeoutMS=None, socketTimeoutMS=milliseconds)
+                    for key in ("connectTimeoutMS", "serverSelectionTimeoutMS"):
+                        options[key] = min(options.get(key) or milliseconds, milliseconds)
+                    client = MongoClient(**options)
+                    # Complete cold selection/authentication before the caller's
+                    # final cancellation/deadline check. Ping has no user
+                    # maxTimeMS to preserve, so bound its entire handshake with
+                    # CSOT as well as the client's finite network settings.
+                    warm_seconds = min(options["connectTimeoutMS"],
+                                       options["serverSelectionTimeoutMS"], milliseconds) / 1000
+                    with mongo_timeout(warm_seconds):
+                        client.admin.command("ping")
+                    self._pipeline_clients[ceiling_seconds] = client
+                yield client, min(max_time_ms, ceiling_seconds * 1000)
+            except BaseException:
+                if client is not None:
+                    if self._pipeline_clients.get(ceiling_seconds) is client:
+                        self._pipeline_clients.pop(ceiling_seconds, None)
+                    with contextlib.suppress(Exception):
+                        client.close()
+                raise
 
     def _check(self):
         if self.connection is None:

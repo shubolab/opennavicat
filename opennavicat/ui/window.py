@@ -502,6 +502,7 @@ class MainWindow(QMainWindow):
         self._mongo_timeseries_jobs = {}
         self._mongo_view_jobs = {}
         self._mongo_pipeline_jobs = {}
+        self._mongo_pipeline_cancel_states = {}
         self._mongo_index_delete_dialogs = {}
         self._mongo_collection_operation_dialogs = {}
         self._mongo_view_drop_dialogs = {}
@@ -2142,14 +2143,47 @@ class MainWindow(QMainWindow):
             return False
         token = uuid.uuid4().hex
         cancelled, started = threading.Event(), threading.Event()
+        owner_finished = threading.Event()
         self._mongo_pipeline_jobs[token] = (session, cancelled, started)
+        cancellation = {'inflight': False, 'last_attempt': 0.0}
+        timer = QTimer(self)
+        timer.setInterval(100)
+        def retry_cancel():
+            current = self._mongo_pipeline_jobs.get(token)
+            if (self._closed or current is None or current[0] is not session
+                    or owner_finished.is_set() or not cancelled.is_set()
+                    or not started.is_set() or cancellation['inflight']
+                    or time.monotonic() - cancellation['last_attempt'] < .2):
+                return
+            marker = session.cancellation_marker()
+            if marker is None:
+                return
+            cancellation['inflight'] = True
+            cancellation['last_attempt'] = time.monotonic()
+            def cancel_captured():
+                # The serial owner can finish before this queued control task
+                # starts. Never let its retry cancel a later request.
+                if not owner_finished.is_set():
+                    session.cancel(expected_comment=marker)
+            def cancelled_finished():
+                cancellation['inflight'] = False
+            self.submit(cancel_captured, failure=lambda _error: None,
+                        label='正在取消聚合管线', finished=cancelled_finished,
+                        pool=self.cancel_pool)
+        cancellation['retry'] = retry_cancel
+        self._mongo_pipeline_cancel_states[token] = cancellation
+        timer.timeout.connect(retry_cancel)
+        timer.start()
         page.set_running(True)
         self.refresh_actions()
         def execute():
             started.set()
-            if cancelled.is_set():
-                raise DatabaseError("The aggregation-pipeline request was cancelled before dispatch")
-            return work()
+            try:
+                if cancelled.is_set():
+                    raise DatabaseError("The aggregation-pipeline request was cancelled before dispatch")
+                return work(session, cancelled)
+            finally:
+                owner_finished.set()
         def success(value):
             if self._pipeline_page_alive(page) and self._pipeline_session_current(page.connection_id, session):
                 done(value)
@@ -2157,6 +2191,10 @@ class MainWindow(QMainWindow):
             if self._pipeline_page_alive(page):
                 failed(error)
         def finished():
+            owner_finished.set()
+            timer.stop()
+            timer.deleteLater()
+            self._mongo_pipeline_cancel_states.pop(token, None)
             self._mongo_pipeline_jobs.pop(token, None)
             if self._pipeline_page_alive(page):
                 page.set_running(False)
@@ -2166,9 +2204,11 @@ class MainWindow(QMainWindow):
 
     def preview_mongo_pipeline(self, page, definition):
         database = page.schema
+        definition = deepcopy(definition)
         return self._run_mongo_pipeline_job(
             page, "预览聚合管线",
-            lambda: mongo_pipeline_tools.preview_pipeline(self.sessions[page.connection_id], database, definition),
+            lambda session, cancelled: mongo_pipeline_tools.preview_pipeline(
+                session, database, definition, cancel_event=cancelled),
             page.show_preview, page.show_error)
 
     def run_mongo_pipeline(self, page, definition):
@@ -2179,18 +2219,20 @@ class MainWindow(QMainWindow):
                     "此管线包含 $out 或 $merge，会写入数据库。是否继续？") != QMessageBox.StandardButton.Yes:
                 return False
         database = page.schema
+        definition = deepcopy(definition)
         return self._run_mongo_pipeline_job(
             page, "运行聚合管线",
-            lambda: mongo_pipeline_tools.execute_pipeline(
-                self.sessions[page.connection_id], database, definition),
+            lambda session, cancelled: mongo_pipeline_tools.execute_pipeline(
+                session, database, definition, cancel_event=cancelled),
             lambda result: page.show_execution(*result), page.show_error)
 
     def explain_mongo_pipeline(self, page, definition):
         database = page.schema
+        definition = deepcopy(definition)
         return self._run_mongo_pipeline_job(
             page, "解释聚合管线",
-            lambda: mongo_pipeline_tools.explain_pipeline(
-                self.sessions[page.connection_id], database, definition),
+            lambda session, cancelled: mongo_pipeline_tools.explain_pipeline(
+                session, database, definition, cancel_event=cancelled),
             page.show_explain, page.show_error)
 
     def save_mongo_pipeline(self, page, definition):
@@ -3542,6 +3584,11 @@ class MainWindow(QMainWindow):
 
     def stop(self):
         self.batch_job_controller.cancel()
+        for token, (_session, cancelled, _started) in tuple(self._mongo_pipeline_jobs.items()):
+            cancelled.set()
+            cancellation = self._mongo_pipeline_cancel_states.get(token)
+            if cancellation is not None:
+                cancellation['retry']()
         # Cancellation targets the executing connection, not an arbitrary profile.
         if self._cancelling:
             return
@@ -3563,8 +3610,10 @@ class MainWindow(QMainWindow):
                         targets[id(session)] = (session, dynamic)
         for jobs in (self._mongo_index_jobs, self._mongo_collection_jobs,
                      self._mongo_timeseries_jobs, self._mongo_view_jobs, self._mongo_pipeline_jobs):
-            for session, cancelled, started in tuple(jobs.values()):
+            for token, (session, cancelled, started) in tuple(jobs.items()):
                 cancelled.set()
+                if jobs is self._mongo_pipeline_jobs and token in self._mongo_pipeline_cancel_states:
+                    continue  # The token-bound timer owns this pipeline's retries.
                 if started.is_set() and id(session) not in targets:
                     marker = getattr(session, "cancellation_marker", lambda: None)()
                     if marker is not None:

@@ -34,6 +34,7 @@ from opennavicat.ui.mongo_validator import MAX_PROPERTY_ROWS
 from opennavicat.ui.mongo_pipeline import MongoPipelinePage
 from opennavicat.ui.window import MainWindow, TablePage
 from test_mongodb_session import mongodb_service  # Reuse the owned-container fixture contract.
+from test_mongo_stop_marker_window import controlled as stop_controlled
 
 
 def idle(qtbot, window):
@@ -321,10 +322,10 @@ def test_real_batch_job_latest_saved_pipeline_error_policy_rename_and_per_job_hi
         assert threading.get_ident() != threading.main_thread().ident
         connected_sessions.append(session)
         return original_connect(session, *args, **kwargs)
-    def execute(session, schema, definition):
+    def execute(session, schema, definition, **kwargs):
         assert threading.get_ident() != threading.main_thread().ident
         executed.append(deepcopy(definition))
-        return original_execute(session, schema, definition)
+        return original_execute(session, schema, definition, **kwargs)
     monkeypatch.setattr(MongoSession, 'connect', connect)
     monkeypatch.setattr(runtime, 'execute_pipeline', execute)
     good = PipelineDefinition(source='docs', stages=[PipelineStage('$match', {'_id': 1})])
@@ -1354,3 +1355,131 @@ def test_real_window_structured_collation_create_and_readback(qtbot, mongo_windo
     assert not page.collation_editor.locale_combo.isEnabled()
     assert all(not combo.isEnabled() for combo in page.collation_editor.combos.values())
     assert threads and not errors
+
+
+@pytest.mark.parametrize('operation', ['preview', 'run', 'explain'])
+def test_real_pipeline_stop_before_operation_marker_prevents_late_dispatch(qtbot, mongo_window, monkeypatch, operation):
+    """Stop can arrive after the owner starts but before _operation registers."""
+    from pymongo.collection import Collection
+    from pymongo.database import Database
+    from opennavicat.mongodb_pipeline import PipelineDefinition, PipelineStage
+
+    window, config, _database, _schema, errors, threads = mongo_window
+    page = window.open_mongo_pipeline(config.id, config.database)
+    qtbot.waitUntil(lambda: 'docs' in page._sources, timeout=15000); idle(qtbot, window)
+    page.load_definition(PipelineDefinition(source='docs', stages=[PipelineStage('$match', {})]))
+    session = window.sessions[config.id]
+    entered, release = threading.Event(), threading.Event()
+    dispatched = []
+    function_name = {'preview': 'preview_pipeline', 'run': 'execute_pipeline', 'explain': 'explain_pipeline'}[operation]
+    original = getattr(window_module.mongo_pipeline_tools, function_name)
+    def before_operation(actual, *args, **kwargs):
+        assert actual is session
+        entered.set()
+        assert release.wait(5), 'The GUI must release the owned pipeline startup gate'
+        return original(actual, *args, **kwargs)
+    monkeypatch.setattr(window_module.mongo_pipeline_tools, function_name, before_operation)
+    original_aggregate, original_command = Collection.aggregate, Database.command
+    def aggregate(collection, pipeline, *args, **kwargs):
+        if collection.database.name == config.database and collection.name == 'docs':
+            dispatched.append('aggregate')
+        return original_aggregate(collection, pipeline, *args, **kwargs)
+    def command(database, value, *args, **kwargs):
+        if (database.name == config.database and isinstance(value, dict)
+                and isinstance(value.get('explain'), dict) and value['explain'].get('aggregate') == 'docs'):
+            dispatched.append('explain')
+        return original_command(database, value, *args, **kwargs)
+    monkeypatch.setattr(Collection, 'aggregate', aggregate)
+    monkeypatch.setattr(Database, 'command', command)
+    method = getattr(window, {'preview': 'preview_mongo_pipeline', 'run': 'run_mongo_pipeline',
+                              'explain': 'explain_mongo_pipeline'}[operation])
+    assert method(page, page.draft())
+    try:
+        qtbot.waitUntil(entered.is_set, timeout=5000)
+        assert page.running and session.cancellation_marker() is None
+        assert len(window._mongo_pipeline_jobs) == 1
+        window.stop()
+        assert all(cancelled.is_set() for _session, cancelled, _started in window._mongo_pipeline_jobs.values())
+    finally:
+        release.set()
+    idle(qtbot, window)
+    assert not dispatched, 'A Stop accepted before the operation marker must block later native dispatch'
+    assert 'cancelled before dispatch' in page.messages.toPlainText()
+    assert not page.running and not window._mongo_pipeline_jobs
+    assert window.sessions[config.id] is session
+    assert not errors and threads
+
+
+def _finish_captured_task(task):
+    finish, task.finish = task.finish, None
+    if finish is not None:
+        finish()
+
+
+def test_pipeline_cancel_timer_retries_empty_currentop_only_for_its_running_token(qtbot, stop_controlled):
+    window, query, session, control, pending = stop_controlled
+    query.running = False
+    page = MongoPipelinePage(session.config.id, session.config.database)
+    window.tabs.addTab(page, 'Generated timer pipeline')
+    entered, release = threading.Event(), threading.Event()
+    captured = []
+    def work(actual, cancel_event):
+        assert actual is session
+        with actual._operation() as marker:
+            captured.append(marker)
+            entered.set()
+            assert release.wait(5)
+    assert window._run_mongo_pipeline_job(page, 'Generated pipeline', work, lambda _value: None, page.show_error)
+    with ThreadPoolExecutor(max_workers=1) as owner:
+        future = owner.submit(pending[0].run)
+        try:
+            qtbot.waitUntil(entered.is_set, timeout=3000)
+            window.stop()
+            assert len(pending) == 2 and pending[1].pool is window.cancel_pool
+            pending[1].run(); _finish_captured_task(pending[1])
+            assert len(control.queries) == 1 and not control.killed
+            control.operations['generated-running'] = captured[0]
+            qtbot.waitUntil(lambda: len(pending) == 3, timeout=3000)
+            assert pending[2].pool is window.cancel_pool
+            qtbot.wait(250)
+            assert len(pending) == 3  # At most one queued/inflight retry for this job.
+            pending[2].run(); _finish_captured_task(pending[2])
+            assert control.killed == ['generated-running']
+            assert all(command[1]['$match']['command.comment'] == captured[0] for command in control.queries)
+        finally:
+            release.set(); future.result(3)
+            _finish_captured_task(pending[0])
+    assert not window._mongo_pipeline_jobs and not window._mongo_pipeline_cancel_states
+    assert not page.running
+
+
+def test_pipeline_cancel_timer_cannot_target_next_operation_before_gui_finished_delivery(qtbot, stop_controlled):
+    window, query, session, control, pending = stop_controlled
+    query.running = False
+    page = MongoPipelinePage(session.config.id, session.config.database)
+    window.tabs.addTab(page, 'Generated late-cleanup pipeline')
+    entered, release = threading.Event(), threading.Event()
+    def work(_session, _cancel_event):
+        entered.set()
+        assert release.wait(5)
+    assert window._run_mongo_pipeline_job(page, 'Generated pipeline', work, lambda _value: None, page.show_error)
+    with ThreadPoolExecutor(max_workers=1) as owner:
+        future = owner.submit(pending[0].run)
+        try:
+            qtbot.waitUntil(entered.is_set, timeout=3000)
+            assert session.cancellation_marker() is None
+            window.stop()
+            assert len(pending) == 1
+            release.set(); future.result(3)
+            # Simulate the serial owner starting later work before the first
+            # Task.finished signal has been delivered to the GUI's registry.
+            with session._operation() as later:
+                control.operations['later-operation'] = later
+                qtbot.wait(350)
+                assert len(pending) == 1
+                assert not session._cancel_requested.is_set()
+                assert not control.queries and not control.killed
+        finally:
+            release.set(); future.result(3)
+            _finish_captured_task(pending[0])
+    assert not window._mongo_pipeline_jobs and not window._mongo_pipeline_cancel_states

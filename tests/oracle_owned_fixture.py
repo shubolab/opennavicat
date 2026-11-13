@@ -1,4 +1,4 @@
-"""Fresh publisher-pinned native ARM64 Oracle fixture, no existing host data.
+"""Fresh publisher-pinned native amd64/arm64 Oracle, no existing host data.
 
 The runner is the only caller. Passwords stay in process memory and one new
 container tmpfs, never argv, Docker Config.Env, receipts or endpoint files.
@@ -17,10 +17,18 @@ import uuid
 
 import oracledb
 
-IMAGE = "docker.io/gvenzl/oracle-free@sha256:b0c7703767ca9403b50c8408d4c6aa824ee6bd93fbed8dc765a9073acf087740"
-IMAGE_CONFIG = "sha256:ce865b4992bd4ba70f0042cd01403068111965583f0c4ed9bf0627022da89849"
+IMAGE_MANIFEST = json.loads(Path(__file__).with_name("oracle_images.json").read_text())
+PINS = IMAGE_MANIFEST["platforms"]
 SECRET_DIR = "/run/opennavicat-owned-oracle"
 SECRET_FILE = SECRET_DIR + "/password"
+
+
+def native_architecture(engine):
+    aliases = {"amd64": "amd64", "x86_64": "amd64", "arm64": "arm64", "aarch64": "arm64"}
+    arch = aliases.get(engine.get("Architecture"))
+    if engine.get("OSType") != "linux" or arch not in PINS:
+        raise RuntimeError("Oracle fixture requires a native Linux amd64 or arm64 Docker engine; emulation is not accepted")
+    return arch
 
 
 class OwnedOracle:
@@ -37,13 +45,14 @@ class OwnedOracle:
         self.denied_password = "Cc3_" + secrets.token_hex(12)
         self.connections = []
         self.cid = self.port = None
+        self.architecture = self.image = self.image_config = None
         self.docker_host = docker_host
         self.anonymous = self.out / "docker-anonymous"
         self.anonymous.mkdir()
         (self.anonymous / "config.json").write_text("{}\n")
-        self.receipt = {"run_id": self.run_id, "owner_labels": self.labels, "image": IMAGE,
-            "image_config": IMAGE_CONFIG, "publisher": "gvenzl (not Oracle official)",
-            "tag_observed": "23.26.3-slim-faststart", "platform": "linux/arm64",
+        self.receipt = {"run_id": self.run_id, "owner_labels": self.labels, "container_name": self.name,
+            "image": None, "image_config": None, "publisher": IMAGE_MANIFEST["publisher"],
+            "tag_observed": IMAGE_MANIFEST["version_tag"], "index_digest": IMAGE_MANIFEST["index_digest"], "platform": None,
             "data_volumes": [], "credentials_persisted": False, "reference_ui_acceptance": False}
         self.save()
 
@@ -52,15 +61,27 @@ class OwnedOracle:
         result = subprocess.run(cmd + ["--config", str(self.anonymous), *args], input=input,
                                 text=True, capture_output=True, timeout=timeout)
         if check and result.returncode:
+            detail = result.stderr
+            for secret in (self.admin_password, self.app_password, self.denied_password):
+                detail = detail.replace(secret, "[REDACTED]")
+            detail = detail[-8192:]
+            self.receipt["docker_failure"] = {"operation": args[0], "exit_code": result.returncode,
+                                               "stderr": detail}
+            self.save()
             raise RuntimeError("Owned Oracle Docker operation failed: " + args[0])
         return result
 
     def save(self):
-        (self.out / "fixture.json").write_text(json.dumps(self.receipt, indent=2) + "\n")
+        # A signal between Docker create and the next receipt must leave the
+        # prior complete name/run/image ledger available for exact cleanup.
+        target = self.out / "fixture.json"
+        temporary = self.out / "fixture.json.tmp"
+        temporary.write_text(json.dumps(self.receipt, indent=2) + "\n")
+        temporary.replace(target)
 
     def inspect(self):
         data = json.loads(self.docker("inspect", self.cid).stdout)[0]
-        assert data["Id"] == self.cid and data["Image"] == IMAGE_CONFIG
+        assert data["Id"] == self.cid and data["Image"] == self.image_config
         assert all(data["Config"]["Labels"].get(k) == v for k, v in self.labels.items())
         assert not data["HostConfig"].get("Binds") and not data["HostConfig"].get("VolumesFrom")
         assert all(m["Type"] == "tmpfs" and m["Destination"] == SECRET_DIR for m in data.get("Mounts", []))
@@ -77,21 +98,31 @@ class OwnedOracle:
         assert connection.thin
         return connection
 
-    def start(self):
+    def start(self, *, pull=False):
         engine = json.loads(self.docker("info", "--format", "{{json .}}", timeout=15).stdout)
-        if engine["Architecture"] not in {"aarch64", "arm64"} or engine["OSType"] != "linux":
-            raise RuntimeError("This pinned fixture requires a native Linux ARM64 Docker engine; emulation is not accepted")
-        local = json.loads(self.docker("image", "inspect", IMAGE).stdout)[0]
-        assert local["Id"] == IMAGE_CONFIG and local["Architecture"] == "arm64"
+        self.receipt["engine_probe"] = {k: engine.get(k) for k in ("Architecture", "OSType", "ServerVersion", "ServerErrors")}
+        self.save()
+        self.architecture = native_architecture(engine)
+        pin = PINS[self.architecture]
+        self.image, self.image_config = pin["image"], pin["config"]
+        platform = "linux/" + self.architecture
+        self.receipt.update(image=self.image, image_config=self.image_config, platform=platform,
+                            engine_architecture=engine["Architecture"], native_architecture=self.architecture)
+        self.save()
+        if pull:
+            self.docker("pull", "--platform", platform, self.image, timeout=600)
+        local = json.loads(self.docker("image", "inspect", self.image).stdout)[0]
+        assert local["Id"] == self.image_config and local["Architecture"] == self.architecture
+        assert local["Os"] == "linux" and not local["Config"].get("Volumes")
         gate = ("i=0; while [ ! -s " + SECRET_FILE + " ]; do i=$((i+1)); "
                 "[ \"$i\" -lt 120 ] || exit 67; sleep 1; done; exec container-entrypoint.sh")
-        args = ["create", "--name", self.name, "--platform", "linux/arm64", "--memory", "4g",
+        args = ["create", "--name", self.name, "--platform", platform, "--memory", "4g",
             "--cpus", "2", "--shm-size", "1g", "--publish", "127.0.0.1::1521", "--stop-timeout", "30",
             "--tmpfs", SECRET_DIR + ":rw,noexec,nosuid,size=65536,mode=1777",
             "--env", "ORACLE_PASSWORD_FILE=" + SECRET_FILE]
         for key, value in self.labels.items():
             args += ["--label", key + "=" + value]
-        self.cid = self.docker(*args, "--entrypoint", "/bin/sh", IMAGE, "-c", gate).stdout.strip()
+        self.cid = self.docker(*args, "--entrypoint", "/bin/sh", self.image, "-c", gate).stdout.strip()
         assert re.fullmatch(r"[0-9a-f]{64}", self.cid)
         self.receipt["container_id"] = self.cid
         self.save()
@@ -119,8 +150,9 @@ class OwnedOracle:
                     raise RuntimeError("Owned Oracle readiness deadline") from None
                 time.sleep(1)
         self.docker("exec", self.cid, "rm", "--", SECRET_FILE)
-        assert self.docker("exec", self.cid, "uname", "-m").stdout.strip() == "aarch64"
-        self.receipt.update(actual_architecture="aarch64", server_version=self.admin.version,
+        uname = self.docker("exec", self.cid, "uname", "-m").stdout.strip()
+        assert uname == pin["uname"]
+        self.receipt.update(actual_architecture=uname, server_version=self.admin.version,
                             tmpfs_password_file_removed=True)
         self._seed()
         self.save()
@@ -221,3 +253,63 @@ class OwnedOracle:
                         raise RuntimeError("A credential was found in owned Oracle evidence")
         self.receipt["secret_scan_passed"] = True
         self.save()
+
+
+def cleanup_interrupted(out, *, docker_host=None):
+    """Exact ledger-only teardown. Never start a container or connect to a DB."""
+    out = Path(out)
+    ledger = out / "owned-fixture" / "fixture.json"
+    result = {"cleanup_only": True, "no_start": True, "no_database_connection": True,
+              "ledger_found": ledger.is_file(), "passed": False}
+    if not ledger.is_file():
+        result.update(passed=True, no_owned_ledger=True)
+        return result
+    data = json.loads(ledger.read_text())
+    run_id = data.get("run_id")
+    if type(run_id) is not str or not re.fullmatch(r"[a-f0-9]{32}", run_id):
+        raise RuntimeError("Invalid Oracle cleanup run ledger")
+    labels = {"owner": "opennavicat-codex", "task": "oracle-basic-backend-test", "run": run_id}
+    name = "opennavicat-oracle-test-" + run_id[:12]
+    if data.get("owner_labels") != labels or data.get("container_name") != name or data.get("data_volumes") != []:
+        raise RuntimeError("Oracle cleanup ownership ledger does not match")
+    cid = data.get("container_id")
+    if cid is not None and (type(cid) is not str or not re.fullmatch(r"[a-f0-9]{64}", cid)):
+        raise RuntimeError("Invalid Oracle cleanup exact container ID")
+    pin = next((p for p in PINS.values() if p["image"] == data.get("image") and p["config"] == data.get("image_config")), None)
+    # If image selection was never completed, no create command was authorized.
+    # A precise name inspection is still needed before asserting absence.
+    anonymous = out / "cleanup-docker-anonymous"
+    anonymous.mkdir(parents=True, exist_ok=True)
+    (anonymous / "config.json").write_text("{}\n")
+    def docker(*args, timeout=30):
+        cmd = ["docker"] + (["--host", docker_host] if docker_host else [])
+        return subprocess.run(cmd + ["--config", str(anonymous), *args],
+                              capture_output=True, text=True, timeout=timeout)
+    observed = docker("inspect", cid or name)
+    if observed.returncode == 1 and "no such" in observed.stderr.lower():
+        result.update(passed=True, exact_id_absent=True, container_id=cid, container_name=name)
+        return result
+    if observed.returncode or pin is None:
+        raise RuntimeError("Oracle cleanup could not verify the exact owned container")
+    container = json.loads(observed.stdout)[0]
+    actual_cid = container.get("Id")
+    if (not re.fullmatch(r"[a-f0-9]{64}", str(actual_cid)) or (cid is not None and cid != actual_cid)
+            or container.get("Image") != pin["config"] or container.get("Name") != "/" + name
+            or any(container.get("Config", {}).get("Labels", {}).get(k) != v for k, v in labels.items())):
+        raise RuntimeError("Oracle cleanup refused an unverified container owner/image")
+    host = container.get("HostConfig", {})
+    if host.get("Binds") or host.get("VolumesFrom") or any(
+            m.get("Type") != "tmpfs" or m.get("Destination") != SECRET_DIR for m in container.get("Mounts", [])):
+        raise RuntimeError("Oracle cleanup refused unexpected external data mounts")
+    try:
+        docker("stop", "--time", "30", actual_cid, timeout=45)
+    except subprocess.TimeoutExpired:
+        result["graceful_stop_timed_out"] = True
+    removed = docker("rm", "--force", actual_cid)
+    if removed.returncode:
+        raise RuntimeError("Oracle cleanup exact removal failed")
+    absent = docker("inspect", actual_cid)
+    if absent.returncode != 1 or "no such" not in absent.stderr.lower():
+        raise RuntimeError("Oracle cleanup exact absence was not confirmed")
+    result.update(passed=True, container_id=actual_cid, exact_id_absent=True, removed=True)
+    return result

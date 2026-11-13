@@ -86,3 +86,9 @@ Qt 原生页签关闭符号在离屏样式出现红框，在本机 Cocoa 控件�
 
 原 `6af3109` 全源 GridFS 预览 15 秒超时本轮默认全源通过；其最初原因仍未证明。
 不把图标改动或测试 host 生命周期修正当作该历史超时的已证原因。
+
+当前 main 预检 `43473238808` 已完成：九 required 成功、publisher skipped，实际下载并
+审查 15 artifact 与六安装器字节，全部本轮 native/frozen/installed Oracle26.1 四项探针
+为 true。其余独立 scope 及限制见 [0.13 验证](validation-0.13.md)；预检不替代正式发布
+或 Windows/Linux/macOS 原版图标人工对照。新 GIF 的 34 阶段均已查看全尺寸中帧，
+另看 34 份首/中/尾联系表；457 帧 guard/解码均完整，不声称逐帧目视。

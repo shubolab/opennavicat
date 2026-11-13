@@ -61,15 +61,18 @@ SQLite 文件。原始参考图像只留忽略目录，未提交或进入产品�
 审查与复制状态见机器索引/演示回执，不将 Oracle 表单画面当作 Oracle 数据库执行证明。
 
 当前 main 新 CI 为 [43473238808](https://github.com/shubolab/opennavicat/actions/runs/43473238808)，
-exact `211fef0`，启动于北京时间 2026-11-14 01:29:07；此快照时仍在运行，不能写成成功。
-新门禁为六原生桌面 + security + 两原生 Linux Oracle，共九个必需 job，publisher 在
-main 按规则 skipped。预期 15 artifact：六安装器、六桌面 validation、security、两个
-含后端/窗口子目录的 Oracle combined。必须实际下载并审查本轮六安装器字节，不能沿用
-旧 13 artifact 审计或将 workflow 声明当成真实执行。
+exact `211fef0`，启动于北京时间 2026-11-14 01:29:07；已完成：九个必需 job 成功、publisher 按 main 规则 skipped。
+六原生桌面 + security + 两原生 Linux Oracle 的实际 runner provenance 已核对。15 artifact
+已下载：六安装器、六桌面 validation、security、两个含后端/窗口子目录的 Oracle combined。
+六份安装器实际字节、两类 manifest、sidecar、native/installed/QuickJS 与 Oracle26.1 四项
+探针分别通过；两原生架构各 backend14/Window3 required/JUnit/source/cleanup 单独通过。
+两个只读 DMG 挂载均已 detach。详见 [0.13 验证](../validation-0.13.md)。这仍是 Git211 main
+预检，不能把其安装器摘要代替下一正式 tag 或公开下载。
 
 ## 继续顺序
 
-1. 完成当前新 CI 的逐 job/用例/源码/架构/安装/启动/卸载/清理与六安装器字节审查。
+1. main 预检与六安装器字节审查已完成；从应用源码仍等同 Git211 的下一文档检查点建立
+   annotated `v0.13.0`，对该 exact tag 新 CI 重新核验，不能继承预检字节。
 2. 失败则保留原 run 与具体证据，最小修复后重跑；成功后才按完整六目标正式 tag/release
    流程建立新的候选资格。任何 docs/GIF-only 后续提交均须明确应用源码是否仍等同 Git211。
 3. 正式发布前复核六安装器、checksums、合并 manifest 与匿名八资产，另做公开 ARM64

@@ -39,9 +39,11 @@ superseded only by the separately measured results here.
   through the generated demonstration and actual Oracle Cocoa run, to Git211.
   This does not silently expand the Oracle runner's own 24-input declaration.
 - New main CI [43473238808](https://github.com/shubolab/opennavicat/actions/runs/43473238808)
-  is still being qualified. Nine required jobs and 15 artifacts, including two
-  separate native Linux backend+Window Oracle scopes, must be audited along with
-  all six actual installer bytes. No new public release or tag is claimed.
+  completed with nine required jobs successful and publisher skipped. All15
+  artifacts and six actual installer bytes were independently audited, including
+  separate native Linux backend14+Window3 Oracle scopes on each architecture.
+  This is source211 preflight; the exact formal tag/public assets still require
+  new qualification. See [0.13 delivery validation](validation-0.13.md).
 
 Local receipts live under `artifacts/icon-parity-18/{default-source-211,
 native-211,oracle-cocoa-211,oracle-cocoa-211-independent}/`; raw screenshots and

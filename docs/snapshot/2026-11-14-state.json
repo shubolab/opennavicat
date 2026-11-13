@@ -37,7 +37,10 @@
     "six_native_targets_qualified": false,
     "reference_full_parity_verified": false,
     "validation": "../validation-oracle-0.13-candidate.md",
-    "icons_validation": "../validation-icons-navicat18.md"
+    "icons_validation": "../validation-icons-navicat18.md",
+    "main_preflight_qualified": true,
+    "formal_tag_qualification": false,
+    "public_bytes_verified": false
   },
   "reference": {
     "path": "/Users/wangshubo/Downloads/Navicat Premium.app",
@@ -149,18 +152,19 @@
     "all_457_frames_visually_viewed": false,
     "independent_exact_container_absence": true,
     "public_receipt": "docs/assets/opennavicat-demo.json",
-    "private_review": "artifacts/icon-parity-18/demo-211-review/"
+    "private_review": "artifacts/icon-parity-18/demo-211-review/",
+    "independent_review_passed": true
   },
   "ci": {
     "run_id": 43473238808,
     "head_sha": "211fef0ec0c7edbca2c016d0fd887e4acd977c90",
     "url": "https://github.com/shubolab/opennavicat/actions/runs/43473238808",
-    "status_at_checkpoint": "in_progress",
-    "success_claimed": false,
+    "status_at_checkpoint": "completed",
+    "success_claimed": true,
     "required_jobs": 9,
     "publisher_expected": "skipped on main",
     "expected_artifacts": 15,
-    "six_installer_bytes_audited": false,
+    "six_installer_bytes_audited": true,
     "oracle_native_targets": [
       "Linux amd64",
       "Linux arm64"
@@ -169,7 +173,13 @@
       "backend_cases": 14,
       "actual_window_cases": 3
     },
-    "independent_audit_in_progress": true
+    "independent_audit_in_progress": false,
+    "conclusion": "success",
+    "successful_required_jobs": 9,
+    "publisher_actual": "skipped",
+    "artifacts_audited": 15,
+    "independent_evidence": "artifacts/release-013/main-audit-43473238808/verification.json",
+    "installer_handoff": "artifacts/release-013/main-audit-43473238808/delivery-handoff.json"
   },
   "open_gates": [
     "All retained database-tool functionality and 1:1 UI",
@@ -182,9 +192,9 @@
     "MongoDB full stream preview/output/recovery"
   ],
   "next_actions": [
-    "Finish current main CI and actual six installer byte audit",
-    "Preserve failures and rerun after minimal fixes if needed",
-    "Publish 0.13 only after six formal native installers/manifests/checksums and public downloads are verified",
-    "Continue full parity without pausing at this milestone"
+    "Create annotated v0.13.0 from the next docs-only release checkpoint, whose240declared sources equal Git211",
+    "Run and independently audit the exact formal tag run, all15artifacts and six installer bytes",
+    "Verify all8anonymous public assets/checksums/manifests and public ARM64 Cocoa smoke",
+    "Update release status after actual publication, then continue full retained parity without pausing"
   ]
 }

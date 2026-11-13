@@ -615,7 +615,7 @@
   },
   "next_steps": [
     "Completedv0.12 prerelease milestone exactb6:formal8/8, independent13-artifact/six-installer audit, anonymous eight public assets and publicARM Cocoa smoke; keep full goal active and all unknown/reference/tool/human gates open.",
-    "Continue separate codex_mongodb_stream_variants/94de386 local19Window+46backend and AP18-12 evidence without assigning it to0.12 tag. Resolve complete variant/images/resume/initial-call cardinality/permission/topology workflows and qualify future source/platform milestones separately.",
+    "Integrate reviewed94de386 Window19/backend46 scope with latestmain (tree3012d3e), record newmainCI separately, then continue images/beforeChange/whenAvailable/required and complete recovery/topology/permission/Preview workflows; published0.12 tag/source/assets remain unchanged.",
     "Retain the refreshed single actual application GIF and its31-phase privacy review with exact source ownership; no reference screenshots or private data",
     "Keep successful stream Preview/PreviewAll, complete partial/recovery/options/topologies/permissions and Windows/Linux reference UI gates open; do not copy reference crashes or invent continuous-watch applicability",
     "Continue branched/sharded/replica Explain shapes/cost formulas, validator unknown/external conversion, all remaining database objects/authentication/query/wizard/AI/model/BI/backup/automation functions",
@@ -1848,5 +1848,47 @@
     "publisher": "skipped",
     "independent_artifact_audit_passed": true,
     "receipt": "artifacts/release-011/main-audit-43367059557/verification.json"
+  },
+  "post_release_variant_integration": {
+    "published_tag_unchanged": "v0.12.0",
+    "published_source_unchanged": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
+    "test_commit": "94de386259a443fd8a2ce3e711ade58b93dfe58d",
+    "integration_tree": "3012d3efd4f4ffc64b4eb5a5743c81da834cda89",
+    "main_documentation_parent": "33b0df7",
+    "application_source_changed": false,
+    "version_workflow_gif_public_assets_changed": false,
+    "window_scope": {
+      "passed": 19,
+      "skipped": 0,
+      "executed_before_main_merge": true,
+      "declared_source_paths_unchanged_and_rebound": 11
+    },
+    "backend_scope": {
+      "passed": 46,
+      "skipped": 0,
+      "separate_owned_fixture": true
+    },
+    "default_source": {
+      "passed": 2197,
+      "conditional_skipped": 639,
+      "stdout_seconds": 96.92,
+      "tracked_input_paths": 215,
+      "source_hashes_unchanged": true,
+      "git_blob_match": true,
+      "external_database_opt_in": false
+    },
+    "new_main_ci": "pending integration push; do not use old tag evidence",
+    "receipts": [
+      "artifacts/stream-variants/merged-source-binding.json",
+      "artifacts/stream-variants/full-merged/verification.json"
+    ],
+    "limits": "Local nativeARM64/offscreen ownedMongo8.0.34 scope; reference initialcallcardinality unknown, otherimage/resume/topology/permission/Preview/allplatform gates remain open"
+  },
+  "parallel_next_major_scope": {
+    "audit": "Oracle and Snowflake dedicated adapters missing; existing nine-family chooser and SQLite seven-page designer must not be recreated",
+    "selected_slice": "Oracle Basic password/service connection, actual reference settings/Test/save-reopen and dedicated owned schema/table/view browsing",
+    "reference_live_verified": false,
+    "fixture_and_six_native_dependency_research": "in_progress; official primary source declarations are not runtime acceptance",
+    "full_scope_retained": true
   }
 }

@@ -86,6 +86,28 @@ probe preceded the final typed-barrier assertion and is not the final source
 qualification. These local scopes are not six-target CI or published-release
 evidence.
 
+## Integration with the current main documentation
+
+The branch subsequently merged main `33b0df7` as `3012d3e`. All eleven
+recorded Window/backend source paths remained byte-identical to the qualified
+`94de386` inputs; their Git blobs and current files were checked again. This
+merge carries the verified v0.12.0 publication receipts and AP18-12 notes without
+changing the application, test cases, runner or workflow.
+
+The merged branch's default source suite passed **2,197 cases / 639 conditional
+skips** in 96.92 seconds. Its 215 tracked runtime, test, build, packaging and
+workflow inputs were unchanged before/after the run and individually matched
+the `3012d3e` Git blobs. No external database opt-in was enabled; the three
+additional skips are the new service-dependent cases, not executed acceptance.
+Actual Window/backend service qualification remains the separately recorded
+19/46 scopes above. Private integration receipts are
+`artifacts/stream-variants/merged-source-binding.json` and
+`artifacts/stream-variants/full-merged/verification.json`.
+
+This is a test/documentation integration after the published v0.12.0 source
+`b6e1da4`; it does not replace that tag, installer bytes or release evidence.
+The main CI result for this later integration must be recorded separately.
+
 `fullDocumentBeforeChange`, `whenAvailable`, `required`, image enablement and
 retention, unavailable/deleted lookup documents, broader resume and invalidation
 behavior, permission failures, other topologies, successful Preview workflows,

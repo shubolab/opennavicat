@@ -16,6 +16,21 @@ SUMS/合并manifest/正式CI字节全部匹配，并完成第二次独立八文�
 helper bundled/image arch通过、未读真实profile，最终detached且不再挂载。正式摘要与SHA见[0.12验证](../validation-0.12.md)。
 这是有限stream及生命周期/打包修复里程碑，完整UI、所有工具和三平台参考/人工门禁继续开放，goal仍active。
 
+### 发布后的当前集成（单独记录）
+
+后续`codex_mongodb_stream_variants`的测试/文档提交`94de386`已与main `33b0df7`合流为`3012d3e`。
+应用源码、CI、版本、GIF和公开安装器均未改变。三条实际工具栏回归以read角色、独立majority生产者和barrier
+验证默认update、默认fullDocument字段过滤及updateLookup过滤的2/1/2事件；精确typed BSON、原serial session复用、
+文本页不含事件数据和cursor清理均有各自断言。19 Window/46 backend的11份声明源在合流后逐Git blob复核未变。
+新集成默认全源为2197通过/639条件跳过，96.92秒；215份运行/测试/构建/packaging/workflow输入前后相同且匹配3012d3e。
+默认跳过不算真库执行。新的main CI资格需单独记录，不能沿用0.12 tag的六安装器证据；此变更不构成新发布。
+详见[variant验证记录](../validation-mongodb-stream-variants.md)。
+
+下一实际参考观察在自有pre/post-images OFF/ON集合上核whenAvailable/required，尚在进行中，不能预写成功。
+非Mongo源码审计确认Oracle/Snowflake适配器缺失，而九族/14供应商选择器及SQLite七页设计器已存在；
+正准备独立Oracle Basic连接/设置/专属catalog工作流的实际参考与owned fixture，不用通用SQL框代替缺失工具。
+Basic/TNS、service/SID、角色、OS认证及SSH等官方声明仍需18.0.5实际观察；三平台完整UI/功能门禁保持开放。
+
 ### 历史0.11基线
 
 **v0.11.0已公开**，源码`87df5cd70f9293c4585637b1eab6e00e37810097`，
@@ -36,7 +51,7 @@ helper bundled/image arch通过、未读真实profile，最终detached且不再�
 分支`codex_mongodb_finite_stream`，**0.12.0预发布已完成**，以其正式产物资格独立记录。有限UI/GIF检查点为`979d052`，
 MainWindow调用点修复为`479a811`，实际Dialog Test按钮同类局部修复为`d9bee66`，
 仅测试子进程ready握手修正为`1a6eeed`。本版限定DMG CREATE busy重试修复后的完整发布源码为
-`b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7`；默认全源2197/636，201份文件前后相同并逐Git blob匹配，产品字节仍与`d9bee66`相同。
+`b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7`；默认全源2197/636，201份文件前后相同并逐Git blob匹配，应用源码字节仍与`d9bee66`相同。
 main预检[43388068691](https://github.com/shubolab/opennavicat/actions/runs/43388068691)已completed/success 7/7、publisher skipped；
 13 artifact/六安装器的实际字节、native/installed双manifest、sidecar和原生/安装执行收据独立审查通过，root另重新hash六文件。
 两个CI DMG均首试create成功，不冒称实际busy恢复。主回执在`artifacts/release-012/main-ci-audit-43388068691/`。

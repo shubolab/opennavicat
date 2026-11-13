@@ -50,6 +50,15 @@ native-211,oracle-cocoa-211,oracle-cocoa-211-independent}/`; raw screenshots and
 reference assets remain outside version control. The current resume index is
 [2026-11-14 snapshot](snapshot/2026-11-14-goal-resume.md).
 
+The later annotated v0.13.0 at81523aa reached formal
+[43487011620](https://github.com/shubolab/opennavicat/actions/runs/43487011620),
+but macOS Intel default-source teardown failed after the actual designer case
+passed; eight other required jobs succeeded and publisher skipped. No0.13
+release was published. The controlled pytest-qt close/deleteLater→fixture cleanup
+ordering failure, separate unknown SQLite warning and next patch work are
+recorded in [delivery validation](validation-0.13.md) and the current snapshot.
+The main preflight does not cancel this retained formal failure.
+
 ## Executable slice and safety boundaries
 
 The dedicated `OracleSession` uses pinned **python-oracledb 26.1.0**, in its

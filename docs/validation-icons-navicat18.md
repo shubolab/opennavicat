@@ -92,3 +92,18 @@ Qt 原生页签关闭符号在离屏样式出现红框，在本机 Cocoa 控件�
 为 true。其余独立 scope 及限制见 [0.13 验证](validation-0.13.md)；预检不替代正式发布
 或 Windows/Linux/macOS 原版图标人工对照。新 GIF 的 34 阶段均已查看全尺寸中帧，
 另看 34 份首/中/尾联系表；457 帧 guard/解码均完整，不声称逐帧目视。
+
+## 端口与 profile 小控件补充观察
+
+本轮继续实际打开空 Oracle 常规页，EIDs
+`ev_6188159cec13df6fb78b425e23f3b6417df92460cf3d56a05fe526c0ac0a713f`（pane On）与
+`ev_cfb6bacf9e88e4ef3c629c1a7c54505dc2518495b6a03655b7f403dd0d953160`（Off），相同
+18.0.5/3857a354 executable。端口是普通文本框、无stepper，聚焦按Up仍1521；profile
+开关为蓝/灰外矩形加左窄pane线，新增profile为灰outlinecircleplus。仅这些行为/形状有
+实际依据，原版非法端口处理尚未验收。没有输入host/user/password、没有Test/Save或DB，
+pane还原On、选择器还原Grid、全连接Off后正常Quit；REA已导出并关闭。原图只存artifacts。
+
+独立自有Qt测量180条DPR/主题场景及20条FontChange：baseline没有证明stepper几何越界；
+36px Oracle General实际有垂直裁剪，而旧宽度断言仍可通过。窄＋/▤/⧉按钮内容区小于字形
+advance，但不能只凭metrics宣称每个像素已裁。下一独立片段优先修正控件类型与专用
+profile图形，完整大字/滚动/所有小元素仍开放。正式0.13失败及续作状态见最新snapshot。

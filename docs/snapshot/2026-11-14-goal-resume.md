@@ -6,6 +6,23 @@
 
 ## 当前恢复点
 
+**最新状态：正式 `v0.13.0` 尝试失败，尚未发布。** tag 固定在
+`81523aa4ff5b8734776f5bf0b6e7217ef0e192f7`，应用/测试/build 声明240源仍等同 Git211；
+[正式 run43487011620](https://github.com/shubolab/opennavicat/actions/runs/43487011620)
+最终八 required success、macOS Intel failure、publisher skipped。失败发生在真实 designer
+用例成功后的 fixture teardown，访问已被 Qt 销毁的 QThreadPool；不是发布成功。
+独立真实 pytest-qt 合法 close/deleteLater 后送达 DeferredDelete，复现相同错误；原 fixture
+把 cleanup 放在 yield 后，依赖删除落地时机。窄测试修正正在 `codex_qt_fixture_teardown_fix`
+中验证，把 cleanup 移至 before_close_func，不用 invalid guard 或修改产品/预算绕过。
+另有原 CI 的 SQLite unclosed warning，缺 allocation traceback，仍不作同因果结论。
+保留失败 tag/run；后续修正及小控件续作合流后，以新补丁版本重新资格，不改旧 tag。
+
+原版新补充观察也已保存：Oracle General 端口为纯文本框，Up 不改1521，没有 stepper；
+配置栏开关是蓝/灰 pane 图形，新增 profile 是灰色圆圈加号。原型 `_PortSpinBox` 的额外
+箭头并非参考行为。`codex_small_controls_18` 正在隔离实现纯文本端口与专用图形。
+新证据已 export/close REA，未 Test/Save/连接任何数据库，pane/grid 状态还原后正常 Quit。
+以下 main 预检、本机/演示记录依旧有效，但不能抵消正式失败或冒充后续新源资格。
+
 - 当前应用源码检查点：`211fef0ec0c7edbca2c016d0fd887e4acd977c90`，已推到 main 和
   `codex_oracle_basic_integration`；工作目录为
   `/Users/wangshubo/.codex/worktrees/oracle-basic-integration/opennavicat`。
@@ -71,13 +88,13 @@ exact `211fef0`，启动于北京时间 2026-11-14 01:29:07；已完成：九个
 
 ## 继续顺序
 
-1. main 预检与六安装器字节审查已完成；从应用源码仍等同 Git211 的下一文档检查点建立
-   annotated `v0.13.0`，对该 exact tag 新 CI 重新核验，不能继承预检字节。
-2. 失败则保留原 run 与具体证据，最小修复后重跑；成功后才按完整六目标正式 tag/release
-   流程建立新的候选资格。任何 docs/GIF-only 后续提交均须明确应用源码是否仍等同 Git211。
-3. 正式发布前复核六安装器、checksums、合并 manifest 与匿名八资产，另做公开 ARM64
-   安装器隔离 Cocoa smoke。当前尚无 0.13 公开安装器或 tag。
-4. 继续未对齐的小元素与完整数据库工具。Oracle Query 后续要先处理窗口关闭前事务决策、
+1. 完成 `codex_qt_fixture_teardown_fix` 的实际 framework teardown 红绿与独立审查；
+   完成 `codex_small_controls_18` 的纯端口/profile 图形及实际 Cocoa/原版边界验证。
+2. 合流后采用新补丁版本，先冻结新源码、全源/Cocoa/本机 bundle 与变化后的同一份 GIF
+   各自资格，再做六原生目标和正式新 tag。`v0.13.0`/81523/43487011620 保留失败历史。
+3. 正式发布前重新核六安装器、checksums、合并 manifest、匿名八资产，另做公开 ARM64
+   安装器隔离 Cocoa smoke；不沿用旧main预检或失败正式tag的文件。
+4. 继续未对齐小元素与完整数据库工具。Oracle Query 后续要先处理窗口关闭前事务决策、
    DDL 隐式提交等原有审查事项；不能把普通 SELECT 支持包装成完整查询/事务实现。
 
 文档、图标、演示、本机 app、main CI、正式 tag、公开下载及完整参考人工验收分别记录。

@@ -33,14 +33,16 @@
   "candidate": {
     "version": "0.13.0",
     "published": false,
-    "tag_created": false,
+    "tag_created": true,
     "six_native_targets_qualified": false,
     "reference_full_parity_verified": false,
     "validation": "../validation-oracle-0.13-candidate.md",
     "icons_validation": "../validation-icons-navicat18.md",
     "main_preflight_qualified": true,
     "formal_tag_qualification": false,
-    "public_bytes_verified": false
+    "public_bytes_verified": false,
+    "tag": "v0.13.0",
+    "tag_source": "81523aa4ff5b8734776f5bf0b6e7217ef0e192f7"
   },
   "reference": {
     "path": "/Users/wangshubo/Downloads/Navicat Premium.app",
@@ -53,7 +55,18 @@
     "normal_quit_observed": true,
     "rea_exported_and_closed": true,
     "raw_reference_images_committed": false,
-    "windows_linux_reference_acceptance": false
+    "windows_linux_reference_acceptance": false,
+    "small_controls": {
+      "evidence_on": "ev_6188159cec13df6fb78b425e23f3b6417df92460cf3d56a05fe526c0ac0a713f",
+      "evidence_off": "ev_cfb6bacf9e88e4ef3c629c1a7c54505dc2518495b6a03655b7f403dd0d953160",
+      "oracle_general_port": "Plain AXTextField1521, no visible steppers/increment buttons; focusedUp does not change1521",
+      "profile_toggle": "blueOn/grayOff outerrectangle/narrowleftpane",
+      "profile_add": "grayoutlinecircleplus",
+      "network_test_or_save_executed": false,
+      "normal_quit_and_chooser_grid_restore": true,
+      "implementation_branch": "codex_small_controls_18",
+      "qualification": "Observed control type/Up/toggle shapes only; invalid-port reference validation not accepted"
+    }
   },
   "local_qualification": {
     "revision": "211fef0ec0c7edbca2c016d0fd887e4acd977c90",
@@ -192,9 +205,35 @@
     "MongoDB full stream preview/output/recovery"
   ],
   "next_actions": [
-    "Create annotated v0.13.0 from the next docs-only release checkpoint, whose240declared sources equal Git211",
-    "Run and independently audit the exact formal tag run, all15artifacts and six installer bytes",
-    "Verify all8anonymous public assets/checksums/manifests and public ARM64 Cocoa smoke",
-    "Update release status after actual publication, then continue full retained parity without pausing"
-  ]
+    "Finish controlled before_close_func fixture fix and preserve failed formal0.13 evidence",
+    "Complete plain Oracle port/profile glyph followup against actual18 observations on separate branch",
+    "Integrate reviewed fixes, choose next patch version without moving failed0.13tag, refresh changed demo and qualify frozen source/nativeCocoa",
+    "Run fresh six-target/formal/public installer validation before any publish claim",
+    "Continue full retained parity without pausing"
+  ],
+  "formal_release_attempt": {
+    "tag": "v0.13.0",
+    "source_sha": "81523aa4ff5b8734776f5bf0b6e7217ef0e192f7",
+    "run_id": 43487011620,
+    "url": "https://github.com/shubolab/opennavicat/actions/runs/43487011620",
+    "status": "completed",
+    "conclusion": "failure",
+    "required_success": 8,
+    "failed_job": "macos-amd64",
+    "publisher": "skipped",
+    "published": false,
+    "formal_installer_or_public_bytes_qualified": false,
+    "failure_scope": "Verify application teardown of tests/test_ui.py::test_designer_review_execute_and_table_browser: pool wrapper already deleted",
+    "counts_macos_amd64": {
+      "passed": 2632,
+      "skipped": 663,
+      "teardown_errors": 1,
+      "seconds": 400.81
+    },
+    "controlled_evidence": "Real pytest-qt closes/deletes registered QWidget before fixture yield-finalizer; delivering its queued DeferredDelete reproduces same QThreadPool error after successful test body; no product delete injected",
+    "fix_branch": "codex_qt_fixture_teardown_fix",
+    "fix_scope": "Move original fixture cleanup to before_close_func; no invalid-object guard/product change/timeout or warning suppression",
+    "sqlite_unclosed_warning_cause": "unknown; original CI had no allocation traceback",
+    "history_policy": "Preserve failed v0.13.0 tag/source/run; next patch tag after fixes and fresh qualification"
+  }
 }

@@ -1,6 +1,6 @@
 # 0.13 原生交付验证
 
-本页当前记录 **main 预检已完成、正式 tag 与公开发布待独立验收**。最新公开版本仍为
+本页当前记录 **main 预检已完成，正式 v0.13.0 尝试失败、未公开发布**。最新公开版本仍为
 v0.12.0，不能把本轮预检文件当成公开 0.13 安装器。完整 goal 保持 active，Oracle
 有限浏览与图标修整不等于完整数据库工具或 1:1 UI 通过。
 
@@ -51,6 +51,22 @@ API 的 artifact ZIP digest 已保留但没有重新计算 ZIP digest；六安�
 合并 manifest，再匿名下载八个公开资产，逐文件比 API size/digest、SUMS 与正式 CI 字节，
 并对公开 ARM64 DMG 做隔离 Cocoa smoke。正式与预检摘要即便碰巧相同也必须各自核验。
 
-当前尚无正式 tag/公开八文件或公开 ARM64 smoke 资格。无发布者签名与 Apple 公证；
+当前有失败的正式 tag 尝试，但没有通过的正式集合、公开八文件或公开 ARM64 smoke 资格。无发布者签名与 Apple 公证；
 Windows ARM64 Setup 引导器为 x86，应用和依赖为原生 ARM64。完整功能/视觉、人验与
 Windows/Linux/macOS 原版对照继续开放，不能在这个里程碑后暂停完整 goal。
+
+## 保留的正式失败
+
+annotated `v0.13.0` 固定源 `81523aa4ff5b8734776f5bf0b6e7217ef0e192f7`，
+[run43487011620](https://github.com/shubolab/opennavicat/actions/runs/43487011620) 最终八 required
+success、macOS Intel failure、publisher skipped。Mac Intel 的 VM/Qt 专项先通过，默认全源
+为2632通过/663条件跳过/1 teardown error、400.81秒；后续 build/package 未完成，不将其余
+五目标产物当成完整正式集合。没有发布或匿名八文件资格。
+
+错误在 test_ui 的真实 designer 用例成功后，fixture yield-finalizer 的 idle 访问已被删除的
+QThreadPool。独立真实 pytest-qt 流程证明框架先 close/deleteLater，再进入该 finalizer；
+仅送达框架自身排队的 DeferredDelete 就复现1passed+1teardownerror，未额外删产品窗口。
+原 cleanup 正前移至 before_close_func 验证，避免依赖 native DeferredDelete 时序；不加
+invalid-object guard 来掩盖。CI另有SQLite未关闭警告，allocation未捕获，仍未知是否同因。
+原始失败、API终态与受控红证分别保留在私有 formal失败目录与 teardown-probe。后续应
+使用新补丁版本和新 tag/source/run 重新验收，保留 v0.13.0 历史，不挪动失败 tag。

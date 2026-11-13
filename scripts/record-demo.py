@@ -39,6 +39,8 @@ MONGO_DATABASE = "demo_catalog"
 MONGO_COLLECTION = "products"
 MONGO_BUCKET = "sample_files"
 MONGO_STORAGE_COLLECTION = "generated_storage"
+MONGO_BATCH_PIPELINE_NAME = "生成聚合管道"
+MONGO_BATCH_NAME = "生成批处理作业"
 MONGO_IMAGE = "mongo:8.0.34@sha256:b9924c330a8bbc5800fe9c69f04a84e221eca7b28fd049a0354147d9908fa142"
 MONGO_STORAGE_TEXT = '{ wiredTiger: { configString: "block_compressor=zlib" } }'
 MONGO_INDEX_DEFAULTS_TEXT = '{ storageEngine: { wiredTiger: { configString: "prefix_compression=false" } } }'
@@ -146,6 +148,99 @@ def verify_mongo_query_values(tree, rows):
             or any(len(row) != 2 or row[0] != "Canonical Extended JSON" for row in rows)
             or raw([canonical_loads(row[1]) for row in rows]) != raw(expected)):
         raise RuntimeError("The JavaScript demo results did not preserve the exact generated BSON values.")
+
+
+def read_mongo_batch_source(database):
+    """Fingerprint only the generated source with native reads on its owner."""
+    from bson import BSON, Binary
+    from opennavicat.mongodb_session import BSON_CODEC, RAW_CODEC
+
+    if threading.get_ident() == threading.main_thread().ident:
+        raise RuntimeError("Independent demo batch verification needs its background owner.")
+    with database.list_collections(filter={"name": MONGO_COLLECTION}) as cursor:
+        catalogs = []
+        for record in cursor:
+            if catalogs:
+                raise RuntimeError("The generated batch source catalog is ambiguous.")
+            catalogs.append(record)
+    if len(catalogs) != 1:
+        raise RuntimeError("The generated batch source collection is missing.")
+    identity = catalogs[0].get("info", {}).get("uuid")
+    if not isinstance(identity, Binary) or identity.subtype != 4 or len(identity) != 16:
+        raise RuntimeError("The generated batch source has no exact collection identity.")
+    digest, count, size = hashlib.sha256(), 0, 0
+    cursor = database.get_collection(MONGO_COLLECTION, codec_options=RAW_CODEC).find({}).sort("_id", 1).limit(7)
+    try:
+        for document in cursor:
+            raw = document.raw
+            size += len(raw)
+            if count >= 6 or size > 1024 * 1024:
+                raise RuntimeError("The generated batch source exceeded its six-row/1MiB verification bound.")
+            digest.update(len(raw).to_bytes(4, "big")); digest.update(raw)
+            count += 1
+    finally:
+        cursor.close()
+    if count != 6:
+        raise RuntimeError("The generated batch source does not contain the six sample documents.")
+    return {"documents": count, "document_bson_sha256": digest.hexdigest(),
+            "source_uuid_bson": BSON.encode({"uuid": identity}, codec_options=BSON_CODEC)}
+
+
+def verify_mongo_batch_values(result, history, before, after):
+    """Require actual run/history facts and independent source readback."""
+    import math
+
+    try:
+        counts = {"total": 2, "success": 2, "failed": 0, "skipped": 0, "cancelled": 0}
+        logs = result["logs"]
+        started = datetime.fromisoformat(result["start_time"])
+        ended = datetime.fromisoformat(result["end_time"])
+        duration = result["duration_ms"]
+        matches = (result["status"] == "success" and result["execute"] == "Manual"
+            and type(result["execution_id"]) is int and result["execution_id"] == 1
+            and all(type(result[key]) is int and result[key] == expected for key, expected in counts.items())
+            and type(result.get("event_delivery_failures")) is int and result["event_delivery_failures"] == 0
+            and type(duration) in (int, float) and math.isfinite(duration) and duration >= 0
+            and started.tzinfo is not None and ended.tzinfo is not None and ended >= started
+            and type(logs) is list
+            and [(event["status"], event["job_index"]) for event in logs]
+                == [("running", 0), ("success", 0), ("running", 1), ("success", 1)]
+            and all(event["name"] == MONGO_BATCH_PIPELINE_NAME for event in logs)
+            and all(event.get("execution_completed") is True and event.get("cancel_requested") is False
+                    for event in logs if event["status"] == "success")
+            and type(history) is list and len(history) == 1 and history[0] == result
+            and before == after and before["documents"] == 6
+            and isinstance(before["source_uuid_bson"], bytes) and bool(before["source_uuid_bson"])
+            and re.fullmatch(r"[0-9a-f]{64}", before["document_bson_sha256"]) is not None)
+    except Exception:
+        matches = False
+    if not matches:
+        raise RuntimeError("The generated Batch Job execution, persisted history or exact source BSON was not verified.")
+    return {"tasks": 2, "success": 2, "failed": 0, "skipped": 0, "cancelled": 0,
+            "execution_id": 1, "execute": "Manual", "ordered_duplicate_references_verified": True,
+            "history_persisted": True, "source_documents": 6,
+            "source_exact_bson_unchanged": True, "source_collection_identity_unchanged": True}
+
+
+def _batch_history_snapshot(store):
+    from opennavicat.storage import Store
+
+    proxy = object.__new__(Store)
+    proxy.state, proxy.history_path = deepcopy(store.state), store.history_path
+    return proxy
+
+
+def _batch_history_io(store, job_id, result=None):
+    """The recorder's local history SQLite stays on the existing I/O owner."""
+    from opennavicat.storage import Store
+
+    if threading.get_ident() == threading.main_thread().ident:
+        raise RuntimeError("Generated demo batch history needs its background owner.")
+    try:
+        return (Store.batch_job_history(store, job_id) if result is None
+                else Store.record_batch_job_run(store, job_id, result))
+    except Exception:
+        raise OSError("The generated demo batch history I/O failed.") from None
 
 
 def dependencies(include_mongodb=False):
@@ -343,6 +438,25 @@ class OwnedMongoDemo:
             # Native exception text can include the private loopback endpoint.
             raise RuntimeError("Independent generated collection storage verification failed.") from None
 
+    def batch_source_snapshot(self):
+        """Use a new native client, separate from the window and Batch sessions."""
+        from pymongo import MongoClient, timeout as mongo_timeout
+        from opennavicat.mongodb_session import BSON_CODEC
+
+        if threading.get_ident() == threading.main_thread().ident:
+            raise RuntimeError("Independent demo batch verification needs its background owner.")
+        self.inspect()
+        try:
+            with MongoClient(host=self.host, port=self.port, username=self.username,
+                    password=self.password, authSource="admin", directConnection=True,
+                    serverSelectionTimeoutMS=3000, connectTimeoutMS=3000) as client:
+                with mongo_timeout(8):
+                    snapshot = read_mongo_batch_source(client.get_database(MONGO_DATABASE, codec_options=BSON_CODEC))
+            self.inspect()
+            return snapshot
+        except Exception:
+            raise RuntimeError("Independent generated batch source verification failed.") from None
+
     def receipt(self):
         return {"image": MONGO_IMAGE, "server_version": self.server_version,
             "image_architecture": self.architecture, "loopback_only": True,
@@ -529,6 +643,12 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
             proxy.path, proxy.state = self.path, deepcopy(self.state)
             background_io(Store.flush, proxy)
 
+        def record_batch_job_run(self, job_id, result):
+            return background_io(_batch_history_io, _batch_history_snapshot(self), job_id, deepcopy(result)).result()
+
+        def batch_job_history(self, job_id):
+            return background_io(_batch_history_io, _batch_history_snapshot(self), job_id).result()
+
     denied_keyring = ModuleType("keyring")
     def deny_keyring(*_args, **_kwargs):
         raise RuntimeError("The generated demo forbids credential-vault access.")
@@ -573,6 +693,7 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
              "mongo_page": None, "gridfs_page": None, "mongo_query": None,
              "mongo_index_page": None, "sqlite_closed_in_worker": False,
              "mongo_storage_page": None, "mongo_storage_verification": None,
+             "mongo_batch_page": None, "mongo_batch_verification": None,
              "capture_target": window}
     deadline = time.monotonic() + 120
     capture_timer = QTimer(app)
@@ -1209,7 +1330,107 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
             raise RuntimeError("The generated aggregation pipeline returned unexpected results.")
         state["mongo_pipeline_results"] = len(page.last_rows)
         phase("mongodb_aggregation_pipeline_results")
-        hold(2.2, finish)
+        hold(2.2, open_mongo_batch_job)
+
+    def open_mongo_batch_job():
+        from opennavicat.ui.batch_jobs import BatchJobPage
+
+        capture(); capture_timer.stop()
+        pipeline_page = state["mongo_pipeline_page"]
+        pipeline = pipeline_page.draft()
+        pipeline.name = MONGO_BATCH_PIPELINE_NAME
+        entry = window.save_mongo_pipeline(pipeline_page, pipeline)
+        if entry is None or entry["name"] != MONGO_BATCH_PIPELINE_NAME:
+            raise RuntimeError("The generated Batch Job pipeline was not actually saved.")
+        page = window.batch_job_controller.new_job()
+        if not isinstance(page, BatchJobPage):
+            raise RuntimeError("The actual Batch Job editor did not open.")
+        state["mongo_batch_page"] = page
+        state["mongo_batch_main_session"] = window.sessions[MONGO_CONNECTION_ID]
+        page.select_job_type("aggregationpipeline")
+        matches = [row for row in range(page.available_table.rowCount())
+                   if page.available_table.item(row, 0).text() == MONGO_BATCH_PIPELINE_NAME]
+        if len(matches) != 1:
+            raise RuntimeError("The generated saved pipeline is missing or ambiguous in the Batch Job editor.")
+        page.available_table.selectRow(matches[0])
+        page.add_selected_jobs(); page.add_selected_jobs()
+        selected = page.draft()
+        if (len(selected.jobs) != 2 or any(reference.reference_name != MONGO_BATCH_PIPELINE_NAME
+                or reference.server != MONGO_CONNECTION_NAME or reference.schema != MONGO_DATABASE
+                for reference in selected.jobs)):
+            raise RuntimeError("The Batch Job did not retain the two ordered generated references.")
+        page.name = MONGO_BATCH_NAME
+        saved = window.batch_job_controller.save(page, selected)
+        if saved is None or page.job_id != saved["id"] or page.dirty:
+            raise RuntimeError("The generated Batch Job was not actually saved.")
+        page.tabs.setCurrentWidget(page.general_page)
+        phase("mongodb_batch_job_general")
+        capture(); capture_timer.start()
+        hold(2.4, prepare_mongo_batch_run)
+
+    def prepare_mongo_batch_run():
+        capture(); capture_timer.stop()
+        window.submit(mongo.batch_source_snapshot, mongo_batch_baseline, fail,
+                      label="独立读取批处理示例源 BSON")
+
+    def mongo_batch_baseline(snapshot):
+        state["mongo_batch_before"] = snapshot
+        wait_for(idle, run_mongo_batch, "finishing the independent generated Batch Job baseline")
+
+    def run_mongo_batch():
+        page = state["mongo_batch_page"]
+        if window.sessions.get(MONGO_CONNECTION_ID) is not state["mongo_batch_main_session"]:
+            raise RuntimeError("The Batch Job replaced the generated main-window session before execution.")
+        page.request_start()
+        wait_for(lambda: page.last_result is not None and not page.running and idle()
+                 and not window.batch_job_controller.runs,
+                 mongo_batch_executed, "executing both generated saved-pipeline references")
+
+    def mongo_batch_executed():
+        page = state["mongo_batch_page"]
+        if page.history_pending or window.batch_job_controller.unsaved_history.get(id(page)):
+            raise RuntimeError("The generated Batch Job history was not persisted.")
+        state["mongo_batch_result"] = deepcopy(page.last_result)
+        state["mongo_batch_history"] = store.batch_job_history(page.job_id)
+        session = state["mongo_batch_main_session"]
+        def verify_source():
+            snapshot = mongo.batch_source_snapshot()
+            reopened = session.fetch_documents(MONGO_DATABASE, MONGO_COLLECTION, limit=7)
+            if len(reopened.documents) != 6 or reopened.has_more:
+                raise RuntimeError("The original generated main-window session no longer reads the source documents.")
+            return snapshot
+        window.submit(verify_source, mongo_batch_verified, fail,
+                      label="独立核验批处理结果与未变的示例源 BSON")
+
+    def mongo_batch_verified(snapshot):
+        if window.sessions.get(MONGO_CONNECTION_ID) is not state["mongo_batch_main_session"]:
+            raise RuntimeError("The Batch Job replaced the generated main-window session.")
+        verification = verify_mongo_batch_values(state["mongo_batch_result"], state["mongo_batch_history"],
+                                                state["mongo_batch_before"], snapshot)
+        verification["main_window_session_preserved_and_readable"] = True
+        state["mongo_batch_verification"] = verification
+        wait_for(idle, show_mongo_batch_messages, "finishing independent generated Batch Job verification")
+
+    def show_mongo_batch_messages():
+        page = state["mongo_batch_page"]
+        page.tabs.setCurrentWidget(page.messages)
+        if "Success: 2" not in page.messages.toPlainText():
+            raise RuntimeError("The actual Batch Job messages did not display the successful run counts.")
+        phase("mongodb_batch_job_messages")
+        capture(); capture_timer.start()
+        hold(2.4, show_mongo_batch_history)
+
+    def show_mongo_batch_history():
+        page = state["mongo_batch_page"]
+        page.tabs.setCurrentWidget(page.history_page)
+        if page.history_table.rowCount() != 1 or page.history_table.item(0, 0).text() != "1":
+            raise RuntimeError("The actual Batch Job history did not display its persisted execution.")
+        page.history_table.selectRow(0)
+        if page.history_log.toPlainText().count("[success]") != 2:
+            raise RuntimeError("The persisted Batch Job history did not display both successful tasks.")
+        phase("mongodb_batch_job_history")
+        capture(); capture_timer.start()
+        hold(2.4, finish)
 
     def finish():
         capture()
@@ -1229,6 +1450,8 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
                     raise RuntimeError("The index preview unexpectedly changed the generated database.")
                 if not state["mongo_storage_verification"]:
                     raise RuntimeError("The generated collection's actual storage save was not verified.")
+                if not state["mongo_batch_verification"]:
+                    raise RuntimeError("The generated Batch Job's actual execution and persisted history were not verified.")
         window.submit(verify_preview, lambda _result: shutdown(), label="验证生成的演示数据")
 
     def shutdown():
@@ -1250,6 +1473,9 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
                     current = state.get("gridfs_page")
                     if state["error"] and current is not None and current.loading:
                         current.cancel_transfer()
+                    batch_page = state.get("mongo_batch_page")
+                    if state["error"] and batch_page is not None and batch_page.running:
+                        batch_page.request_cancel()
                 elif not window._closed:
                     if not discarded:
                         page = state.get("designer")
@@ -1276,6 +1502,13 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
                             index = window.tabs.indexOf(page)
                             if index >= 0:
                                 window.tabs.removeTab(index)
+                                page.deleteLater()
+                        page = state.get("mongo_batch_page")
+                        if page is not None:
+                            index = window.tabs.indexOf(page)
+                            if index >= 0:
+                                window.tabs.removeTab(index)
+                                window.batch_job_controller.unsaved_history.pop(id(page), None)
                                 page.deleteLater()
                         discarded = True
                     elif CONNECTION_ID in window.sessions:
@@ -1321,7 +1554,7 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
         raise RuntimeError(state["error"] or "Demo application failed.")
     if not window._closed or not idle():
         raise RuntimeError("The demo exited before its native sessions and window had closed.")
-    if state["count"] < 2 or len(state["phases"]) != (25 if mongo is not None else 6):
+    if state["count"] < 2 or len(state["phases"]) != (28 if mongo is not None else 6):
         raise RuntimeError("The demo did not capture all required workflows.")
     for index, item in enumerate(state["phases"]):
         stop = state["phases"][index + 1]["first_frame"] if index + 1 < len(state["phases"]) else state["count"]
@@ -1365,6 +1598,7 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
         "mongodb_aggregation_pipeline_preview": state.get("mongo_pipeline_preview"),
         "mongodb_aggregation_pipeline_explain": state.get("mongo_pipeline_explain"),
         "mongodb_aggregation_pipeline_results": state.get("mongo_pipeline_results"),
+        "mongodb_batch_job": state["mongo_batch_verification"],
         "visible_text_privacy_guard": "labels, editors, titles, actions, combos, tree/table display fields; paths/endpoints/credentials rejected before frame save",
         "sqlite_closed_in_worker": state["sqlite_closed_in_worker"],
         "native_window_closed_before_quit": bool(window._closed),

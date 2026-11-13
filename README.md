@@ -10,13 +10,16 @@ Python + Qt Widgets（PySide6），数据库连接、SQL 和结果均在本机�
 下面是一段 OpenNavicat 实际运行演示：浏览示例表、编写并执行查询、查看结果、编辑表结构、
 检查 SQL 预览，再查看 MongoDB 文档网格、精确 BSON 类型树、GridFS 图像预览、JavaScript 查询、集合内嵌索引与键编辑，
 以及集合选项、存储配置、结构化排序规则、保存命名与重新打开，
-最后打开 MongoDB 聚合管线查看阶段模板、选项、阶段预览、脚本、视觉 Explain 和真实结果。
+再打开 MongoDB 聚合管线查看阶段模板、选项、阶段预览、脚本、视觉 Explain 和真实结果，
+最后运行两次已保存管线引用，查看批处理消息与持久历史。
 连接名、客户、邮箱、日期、订单、商品、BSON、SQL 和图像均由隔离演示工作区生成，
-不读取本机真实连接或业务数据库。单段 GIF 对应当前 main 的实际 Qt 界面，包含 0.10.0 之后的验证器、集合内嵌索引、集合选项、结构化排序规则和聚合管线开发，25 个阶段、326 帧、约 54 秒；
+不读取本机真实连接或业务数据库。单段 GIF 对应 **0.11.0 候选**的实际 Qt 界面，
+28 个阶段、371 帧、约 62 秒；
 最新公开安装器仍为 **v0.10.0**；
 SQLite 结构和 MongoDB 索引部分展示预览，集合选项、存储与排序规则实际保存并独立核验服务器配置后重新打开；
 聚合管线的阶段模板、选项、分阶段预览、脚本、Explain 和最终结果均由隔离 MongoDB 实际执行或返回。
-验证范围见 [0.10 验证记录](docs/validation-0.10.md)。
+批处理使用两个独立会话真实执行，历史实际落盘，独立客户端确认源文档的精确 BSON 与集合 UUID 未变。
+验证范围见 [0.11 候选记录](docs/validation-0.11.md)。
 
 ![OpenNavicat 示例数据工作流演示](docs/assets/opennavicat-demo.gif)
 
@@ -25,7 +28,10 @@ SQLite 结构和 MongoDB 索引部分展示预览，集合选项、存储与排�
 并保留未知规则、原始类型与顺序。正式 tag 流水线完成六个原生目标的测试、安装、运行、卸载及真实数据库安全门禁，
 随后公开发布 [OpenNavicat v0.10.0](https://github.com/shubolab/opennavicat/releases/tag/v0.10.0)。
 八个公开资产已匿名下载，并分别核对 GitHub 大小/digest 与 `SHA256SUMS`。
-当前验证、复现 fixture 和剩余差距见 [持续开发快照](docs/snapshot/2026-11-12-progress.md)、
+正在准备的 **v0.11.0** 加入聚合管线批处理引用、独立会话串行执行、错误继续/跳过和持久历史，
+并修复管线脚本 BSON/参数、预览和连接树入口；本版六目标安装器与发布门禁尚未完成。
+当前验证、复现 fixture 和剩余差距见 [持续开发快照](docs/snapshot/2026-11-13-goal-resume.md)、
+[0.11 候选记录](docs/validation-0.11.md)、
 [0.10 验证记录](docs/validation-0.10.md)、[集合存储页记录](docs/mongodb-collection-storage.md)和
 [验证器 UI 记录](docs/mongodb-validator-ui.md)。
 

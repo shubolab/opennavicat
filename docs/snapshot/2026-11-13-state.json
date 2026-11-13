@@ -349,6 +349,15 @@
       "skipped": 0,
       "seconds": 10.64
     },
-    "single_gif": "28_phase_script_qualified_60_tests; actual_recording_in_progress_not_reviewed"
+    "single_gif": {
+      "recorded_and_reviewed": true,
+      "phase_count": 28,
+      "frames": 371,
+      "duration_seconds": 61.84,
+      "sha256": "5f46313db93fbc3e1bd9b9cc6ffb8a0d89cda748b10c23e434ebf223582b2b4e",
+      "batch_tasks_executed": 2,
+      "history_persisted": true,
+      "source_bson_and_uuid_unchanged": true
+    }
   }
 }

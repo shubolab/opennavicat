@@ -115,14 +115,16 @@ def test_real_demo_storage_verifier_reads_owned_collection_and_default_id_index(
             and receipt['collection_options_verified'] and receipt['collation_verified'])
 
 
-def test_demo_storage_independent_client_never_runs_on_gui_thread(recorder, monkeypatch):
+@pytest.mark.parametrize('method', ['verify_storage_collection', 'batch_source_snapshot'])
+def test_demo_storage_independent_client_never_runs_on_gui_thread(recorder, monkeypatch, method):
     service = recorder.OwnedMongoDemo()
     monkeypatch.setattr(service, 'inspect', lambda: pytest.fail('No Docker access belongs on the GUI thread'))
     with pytest.raises(RuntimeError, match='background owner'):
-        service.verify_storage_collection()
+        getattr(service, method)()
 
 
-def test_demo_storage_native_client_failure_does_not_expose_endpoint_or_password(recorder, monkeypatch):
+@pytest.mark.parametrize('method', ['verify_storage_collection', 'batch_source_snapshot'])
+def test_demo_storage_native_client_failure_does_not_expose_endpoint_or_password(recorder, monkeypatch, method):
     from concurrent.futures import ThreadPoolExecutor
     import pymongo
     service = recorder.OwnedMongoDemo()
@@ -133,7 +135,7 @@ def test_demo_storage_native_client_failure_does_not_expose_endpoint_or_password
     monkeypatch.setattr(pymongo, 'MongoClient', unavailable)
     with ThreadPoolExecutor(max_workers=1) as pool:
         with pytest.raises(RuntimeError) as captured:
-            pool.submit(service.verify_storage_collection).result()
+            pool.submit(getattr(service, method)).result()
     rendered = ''.join(traceback.format_exception(captured.value))
     assert service.password not in rendered and service.host not in rendered and str(service.port) not in rendered
     assert captured.value.__suppress_context__ is True
@@ -346,3 +348,178 @@ def test_real_pymongo_server_info_wait_is_bounded_by_remaining_budget(recorder):
         for connection in sockets:
             connection.close()
         assert not thread.is_alive()
+
+
+def _batch_facts(recorder):
+    from bson import BSON, Binary
+    result = dict(status='success', execute='Manual', execution_id=1, total=2,
+        success=2, failed=0, skipped=0, cancelled=0, event_delivery_failures=0,
+        start_time='2026-01-01T00:00:00+00:00', end_time='2026-01-01T00:00:01+00:00',
+        duration_ms=1000.0, logs=[])
+    for index in range(2):
+        for status in ('running', 'success'):
+            event = dict(status=status, job_index=index, name=recorder.MONGO_BATCH_PIPELINE_NAME)
+            if status == 'success':
+                event.update(execution_completed=True, cancel_requested=False)
+            result['logs'].append(event)
+    before = dict(documents=6, document_bson_sha256='a' * 64,
+                  source_uuid_bson=BSON.encode({'uuid': Binary(b'\x01' * 16, 4)}))
+    return result, [deepcopy(result)], before, deepcopy(before)
+
+
+@pytest.mark.parametrize('corruption', [None, 'failed', 'skip', 'bool_count', 'log_order',
+    'incomplete_execution', 'cancelled', 'wrong_name', 'missing_history', 'different_history',
+    'different_bson', 'different_uuid', 'wrong_rows', 'missing_time', 'infinite_duration', 'event_delivery'])
+def test_batch_demo_requires_real_ordered_success_history_and_exact_source_facts(recorder, corruption):
+    result, history, before, after = _batch_facts(recorder)
+    if corruption == 'failed': result['status'] = 'failed'
+    elif corruption == 'skip': result.update(success=1, skipped=1)
+    elif corruption == 'bool_count': result['failed'] = False
+    elif corruption == 'log_order': result['logs'][2]['job_index'] = 0
+    elif corruption == 'incomplete_execution': result['logs'][3]['execution_completed'] = False
+    elif corruption == 'cancelled': result['logs'][3]['cancel_requested'] = True
+    elif corruption == 'wrong_name': result['logs'][0]['name'] = 'not_the_generated_pipeline'
+    elif corruption == 'missing_history': history.clear()
+    elif corruption == 'different_history': history[0]['execution_id'] = 2
+    elif corruption == 'different_bson': after['document_bson_sha256'] = 'b' * 64
+    elif corruption == 'different_uuid': after['source_uuid_bson'] = b'changed-identity'
+    elif corruption == 'wrong_rows': before['documents'] = after['documents'] = 5
+    elif corruption == 'missing_time': result['start_time'] = ''
+    elif corruption == 'infinite_duration': result['duration_ms'] = float('inf')
+    elif corruption == 'event_delivery': result['event_delivery_failures'] = 1
+    if corruption is None:
+        receipt = recorder.verify_mongo_batch_values(result, history, before, after)
+        assert receipt['tasks'] == receipt['success'] == 2
+        assert receipt['history_persisted'] and receipt['ordered_duplicate_references_verified']
+        assert receipt['source_exact_bson_unchanged'] and receipt['source_collection_identity_unchanged']
+        assert 'source_uuid_bson' not in receipt and 'logs' not in receipt
+    else:
+        with pytest.raises(RuntimeError, match='Batch Job execution, persisted history or exact source BSON'):
+            recorder.verify_mongo_batch_values(result, history, before, after)
+
+
+def test_batch_demo_history_sqlite_requires_io_owner_and_returns_actual_persisted_record(recorder, tmp_path, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from opennavicat.batch_jobs import new_batch_job, to_nbatpremium
+    from opennavicat.storage import Store
+    store = Store(tmp_path)
+    entry = store.save_batch_job('生成批处理作业', to_nbatpremium(new_batch_job()))
+    proxy = recorder._batch_history_snapshot(store)
+    record = _batch_facts(recorder)[0]
+    record.pop('execution_id')
+    with pytest.raises(RuntimeError, match='background owner'):
+        recorder._batch_history_io(proxy, entry['id'], record)
+    observed = []
+    original = Store.record_batch_job_run
+    def write_on_owner(*args):
+        observed.append(threading.get_ident())
+        return original(*args)
+    monkeypatch.setattr(Store, 'record_batch_job_run', write_on_owner)
+    with ThreadPoolExecutor(max_workers=1) as owner:
+        written = owner.submit(recorder._batch_history_io, proxy, entry['id'], record).result()
+        history = owner.submit(recorder._batch_history_io, proxy, entry['id']).result()
+    assert observed and observed[0] != threading.main_thread().ident
+    assert written['execution_id'] == 1 and history == [written]
+    assert 'execution_id' not in record
+
+
+def test_batch_demo_history_failure_suppresses_local_private_exception_text(recorder, tmp_path, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from opennavicat.storage import Store
+    store = Store(tmp_path)
+    proxy = recorder._batch_history_snapshot(store)
+    private = 'generated-sensitive-history-value'
+    def unavailable(*args):
+        raise OSError(str(tmp_path) + ' ' + private)
+    monkeypatch.setattr(Store, 'batch_job_history', unavailable)
+    with ThreadPoolExecutor(max_workers=1) as owner:
+        with pytest.raises(OSError) as captured:
+            owner.submit(recorder._batch_history_io, proxy, 'generated-id').result()
+    text = ''.join(traceback.format_exception(captured.value))
+    assert private not in text and str(tmp_path) not in text
+    assert captured.value.__suppress_context__ is True
+
+
+@pytest.mark.parametrize('surface', ['references', 'messages', 'history'])
+def test_batch_page_privacy_checks_actual_task_and_log_surfaces(qtbot, recorder, tmp_path, surface):
+    from opennavicat.batch_jobs import new_batch_job, new_pipeline_reference
+    from opennavicat.ui.batch_jobs import BatchJobPage
+    service = recorder.OwnedMongoDemo(); service.port = 54321
+    page = BatchJobPage()
+    qtbot.addWidget(page)
+    definition = new_batch_job()
+    definition.jobs = [new_pipeline_reference('MongoDB · 生成示例', 'demo_catalog', '生成聚合管道')]
+    if surface == 'references':
+        definition.jobs[0].server = service.password
+    page.load_definition(definition)
+    if surface == 'messages':
+        page.append_log({'status': 'success', 'message': service.password})
+        page.tabs.setCurrentWidget(page.messages)
+    elif surface == 'history':
+        page.load_history([{'execution_id': 1, 'logs': [{'status': 'success', 'message': service.password}]}])
+        page.tabs.setCurrentWidget(page.history_page)
+        page.history_table.selectRow(0)
+    page.show(); qtbot.waitExposed(page)
+    with pytest.raises(RuntimeError, match='endpoint or credential'):
+        recorder.assert_visible_privacy(page, tmp_path, service)
+
+
+def test_real_batch_demo_runs_two_native_sessions_persists_history_and_detects_bson_or_uuid_change(recorder, session, tmp_path, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from dataclasses import replace
+    from bson import Decimal128, Int64
+    from opennavicat.batch_jobs import (
+        new_batch_job, new_pipeline_reference, resolve_pipeline_reference, to_nbatpremium,
+    )
+    from opennavicat.batch_job_runtime import BatchRunControl, PreparedPipelineJob, run_batch_job
+    from opennavicat.database import DatabaseSession
+    from opennavicat.mongodb_pipeline import PipelineDefinition, PipelineStage, to_nagg
+    from opennavicat.storage import Store
+    monkeypatch.setattr(recorder, 'MONGO_DATABASE', session.config.database)
+    config = replace(session.config, id=recorder.MONGO_CONNECTION_ID, name=recorder.MONGO_CONNECTION_NAME)
+    store = Store(tmp_path)
+    pipeline = PipelineDefinition(source=recorder.MONGO_COLLECTION, stages=[PipelineStage('$match', {})])
+    store.save_mongo_pipeline(config.id, config.database, recorder.MONGO_BATCH_PIPELINE_NAME, to_nagg(pipeline))
+    definition = new_batch_job()
+    definition.jobs = [new_pipeline_reference(config.name, config.database, recorder.MONGO_BATCH_PIPELINE_NAME) for _ in range(2)]
+    entry = store.save_batch_job(recorder.MONGO_BATCH_NAME, to_nbatpremium(definition))
+    resolved = resolve_pipeline_reference(definition.jobs[0], [config], store.mongo_pipelines())
+    prepared = [PreparedPipelineJob(reference, resolved, config) for reference in definition.jobs]
+    service = recorder.OwnedMongoDemo()
+    service.host, service.port, service.username, service.password = config.host, config.port, config.username, config.password
+    # This distinct fixture's module already verifies exact ownership/cleanup;
+    # its labels differ from a recorder-created service, so do not claim them.
+    monkeypatch.setattr(service, 'inspect', lambda: None)
+    documents = [{'_id': number, 'stock': Int64(10 + number), 'price': Decimal128('1.00')}
+                 for number in range(6)]
+    collection = session.connection[config.database][recorder.MONGO_COLLECTION]
+    created, events = [], []
+    def actual_session(configuration):
+        value = DatabaseSession(configuration)
+        created.append(value)
+        return value
+    with ThreadPoolExecutor(max_workers=1) as owner:
+        owner.submit(collection.insert_many, deepcopy(documents)).result()
+        before = owner.submit(service.batch_source_snapshot).result()
+        outcome = owner.submit(run_batch_job, definition, prepared, control=BatchRunControl(),
+                               emit=events.append, session_factory=actual_session).result()
+        proxy = recorder._batch_history_snapshot(store)
+        written = owner.submit(recorder._batch_history_io, proxy, entry['id'], outcome).result()
+        history = owner.submit(recorder._batch_history_io, proxy, entry['id']).result()
+        after = owner.submit(service.batch_source_snapshot).result()
+        receipt = recorder.verify_mongo_batch_values(written, history, before, after)
+        assert receipt['success'] == 2 and len(created) == 2 and created[0] is not created[1]
+        assert all(value.connection is None for value in created)
+        assert owner.submit(session.fetch_documents, config.database, recorder.MONGO_COLLECTION).result().documents
+        owner.submit(collection.replace_one, {'_id': 0}, {**documents[0], 'stock': 10.0}).result()
+        changed = owner.submit(service.batch_source_snapshot).result()
+        assert before['document_bson_sha256'] != changed['document_bson_sha256']
+        with pytest.raises(RuntimeError, match='not verified'):
+            recorder.verify_mongo_batch_values(written, history, before, changed)
+        owner.submit(collection.drop).result()
+        owner.submit(collection.insert_many, deepcopy(documents)).result()
+        recreated = owner.submit(service.batch_source_snapshot).result()
+        assert recreated['document_bson_sha256'] == before['document_bson_sha256']
+        assert recreated['source_uuid_bson'] != before['source_uuid_bson']
+        with pytest.raises(RuntimeError, match='not verified'):
+            recorder.verify_mongo_batch_values(written, history, before, recreated)

@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 )
 
 from opennavicat.database import ConnectionConfig
+from .icons import tool_icon, toggle_icon
 
 
 def _hint(text: str) -> QLabel:
@@ -237,7 +238,9 @@ class ConnectionDialog(QDialog):
                               ("SQL Server", "sqlserver"), ("Redis", "redis"), ("MongoDB", "mongodb")]:
             self.driver_combo.addItem(label, driver)
         self.driver_combo.hide()
-        self.new_profile_button = QPushButton("＋ 新建连接配置文件")
+        self.new_profile_button = QPushButton("新建连接配置文件")
+        self.new_profile_button.setIcon(tool_icon("profile_add", 16))
+        self.new_profile_button.setIconSize(QSize(16, 16))
         self.new_profile_button.setObjectName("newConnectionProfile")
         self.new_profile_button.setEnabled(False)
         self.new_profile_button.setToolTip("多个连接配置文件尚未实现；当前连接使用 Main Profile。")
@@ -576,7 +579,11 @@ class ConnectionDialog(QDialog):
         footer_layout = QHBoxLayout(footer)
         footer_layout.setContentsMargins(18, 12, 20, 14)
         footer_layout.setSpacing(12)
-        self.profile_toggle = QPushButton("▤")
+        self.profile_toggle = QPushButton()
+        self.profile_toggle.setIcon(toggle_icon("profile_pane", 16))
+        self.profile_toggle.setIconSize(QSize(16, 16))
+        self.profile_toggle.setStyleSheet("QPushButton { padding: 0px; }")
+        self.profile_toggle.setAccessibleName("显示或隐藏连接配置文件")
         self.profile_toggle.setFixedWidth(26)
         self.profile_toggle.setCheckable(True)
         self.profile_toggle.setAutoDefault(False)

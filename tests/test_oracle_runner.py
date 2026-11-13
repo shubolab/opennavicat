@@ -86,7 +86,8 @@ def test_wrong_owner_never_reaches_container_removal(tmp_path, monkeypatch):
     calls = []
     def docker(*args, **kwargs):
         calls.append(args)
-        return SimpleNamespace(stdout=json.dumps([{"Id": fixture.cid, "Image": support.IMAGE_CONFIG,
+        fixture.image_config = support.PINS["arm64"]["config"]
+        return SimpleNamespace(stdout=json.dumps([{"Id": fixture.cid, "Image": fixture.image_config,
             "Config": {"Labels": {"owner": "someone-else"}}}]))
     monkeypatch.setattr(fixture, "docker", docker)
     with pytest.raises(AssertionError):
@@ -99,8 +100,108 @@ def test_non_native_engine_is_rejected_before_container_creation(tmp_path, monke
     calls = []
     def docker(*args, **kwargs):
         calls.append(args)
-        return SimpleNamespace(stdout=json.dumps({"Architecture": "x86_64", "OSType": "linux"}))
+        return SimpleNamespace(stdout=json.dumps({"Architecture": "riscv64", "OSType": "linux"}))
     monkeypatch.setattr(fixture, "docker", docker)
     with pytest.raises(RuntimeError, match="native"):
         fixture.start()
     assert fixture.cid is None and [call[0] for call in calls] == ["info"]
+
+
+@pytest.mark.parametrize("reported,expected", [("x86_64", "amd64"), ("amd64", "amd64"),
+                                             ("aarch64", "arm64"), ("arm64", "arm64")])
+def test_native_engine_architecture_selects_its_own_exact_child(reported, expected):
+    assert support.native_architecture({"Architecture": reported, "OSType": "linux"}) == expected
+    pin = support.PINS[expected]
+    assert pin["image"].startswith("docker.io/gvenzl/oracle-free@sha256:")
+    assert len(pin["config"].removeprefix("sha256:")) == 64
+
+
+@pytest.mark.parametrize("engine", [{"Architecture": "amd64", "OSType": "windows"},
+    {"Architecture": "ppc64le", "OSType": "linux"}, {"Architecture": None, "OSType": "linux"}])
+def test_unsupported_os_or_architecture_has_no_emulation_fallback(engine):
+    with pytest.raises(RuntimeError, match="native"):
+        support.native_architecture(engine)
+
+
+def cleanup_ledger(tmp_path, *, provisional=False):
+    out = tmp_path / "evidence"
+    fixture = support.OwnedOracle(out / "owned-fixture")
+    pin = support.PINS["amd64"]
+    fixture.cid = "c" * 64
+    fixture.receipt.update(image=pin["image"], image_config=pin["config"], platform="linux/amd64")
+    if not provisional:
+        fixture.receipt["container_id"] = fixture.cid
+    fixture.save()
+    container = {"Id": fixture.cid, "Image": pin["config"], "Name": "/" + fixture.name,
+        "Config": {"Labels": dict(fixture.labels)}, "HostConfig": {"Binds": None, "VolumesFrom": None},
+        "Mounts": [{"Type": "tmpfs", "Destination": support.SECRET_DIR}]}
+    return out, fixture, container
+
+
+@pytest.mark.parametrize("provisional", [False, True])
+def test_cleanup_only_exact_ledger_removes_without_db_or_start_and_preserves_receipt(tmp_path, monkeypatch, provisional):
+    out, fixture, container = cleanup_ledger(tmp_path, provisional=provisional)
+    ledger = fixture.out / "fixture.json"
+    before = ledger.read_bytes()
+    calls = []
+    def run(command, **kwargs):
+        args = command[command.index(str(out / "cleanup-docker-anonymous")) + 1:]
+        calls.append(args)
+        if args[0] == "inspect" and len(calls) == 1:
+            return SimpleNamespace(returncode=0, stdout=json.dumps([container]))
+        if args[0] == "inspect":
+            return SimpleNamespace(returncode=1, stderr="No such object")
+        assert args[0] in {"stop", "rm"}
+        return SimpleNamespace(returncode=0)
+    monkeypatch.setattr(support.subprocess, "run", run)
+    monkeypatch.setattr(support.oracledb, "connect", lambda **kwargs: pytest.fail("cleanup must never connect"))
+    result = support.cleanup_interrupted(out)
+    assert result["passed"] and result["no_start"] and result["no_database_connection"]
+    assert calls == [["inspect", fixture.name if provisional else fixture.cid],
+        ["stop", "--time", "30", fixture.cid], ["rm", "--force", fixture.cid], ["inspect", fixture.cid]]
+    assert ledger.read_bytes() == before
+
+
+@pytest.mark.parametrize("tamper", ["owner", "image", "name", "bind", "volume", "id"])
+def test_cleanup_only_mismatch_never_stops_or_removes(tmp_path, monkeypatch, tamper):
+    out, fixture, container = cleanup_ledger(tmp_path)
+    if tamper == "owner":
+        container["Config"]["Labels"]["run"] = "d" * 32
+    elif tamper == "image":
+        container["Image"] = "sha256:" + "e" * 64
+    elif tamper == "name":
+        container["Name"] = "/unrelated"
+    elif tamper == "bind":
+        container["HostConfig"]["Binds"] = ["/existing:/data"]
+    elif tamper == "volume":
+        container["Mounts"] = [{"Type": "volume", "Destination": "/data"}]
+    elif tamper == "id":
+        container["Id"] = "f" * 64
+    calls = []
+    def run(command, **kwargs):
+        calls.append(command)
+        assert command[-2] == "inspect"
+        return SimpleNamespace(returncode=0, stdout=json.dumps([container]))
+    monkeypatch.setattr(support.subprocess, "run", run)
+    with pytest.raises(RuntimeError, match="refused"):
+        support.cleanup_interrupted(out)
+    assert len(calls) == 1
+
+
+def test_cleanup_only_missing_ledger_cannot_start_or_connect(tmp_path, monkeypatch):
+    monkeypatch.setattr(support.subprocess, "run", lambda *args, **kwargs: pytest.fail("no resources known"))
+    monkeypatch.setattr(support.oracledb, "connect", lambda **kwargs: pytest.fail("no DB"))
+    result = support.cleanup_interrupted(tmp_path / "new")
+    assert result["passed"] and result["no_owned_ledger"] and not result["ledger_found"]
+
+
+def test_atomic_receipt_retains_prior_exact_ledger_if_replace_is_interrupted(tmp_path, monkeypatch):
+    fixture = support.OwnedOracle(tmp_path / "new-fixture")
+    before = (fixture.out / "fixture.json").read_bytes()
+    fixture.receipt["container_id"] = "d" * 64
+    def interrupted(*args, **kwargs):
+        raise KeyboardInterrupt
+    monkeypatch.setattr(Path, "replace", interrupted)
+    with pytest.raises(KeyboardInterrupt):
+        fixture.save()
+    assert (fixture.out / "fixture.json").read_bytes() == before

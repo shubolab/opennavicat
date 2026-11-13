@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Run Oracle adapter tests against a new native ARM64 pinned container only.
+"""Run Oracle adapter tests against a new native amd64/arm64 pinned container.
 
 Example (Docker engine endpoint is explicit when using a named context):
   .venv/bin/python scripts/test-oracle.py --docker-host unix:///path/docker.sock
-The public gvenzl ARM64 image must already be pulled by its exact digest. No
+The public gvenzl image is selected from the native engine architecture only.
+Use --pull-image for an anonymous exact-digest pull into that engine's cache. No
 Oracle account, system Instant Client, existing TNS/wallet or profile is used.
 """
 from __future__ import annotations
@@ -27,7 +28,8 @@ ROOT = Path(__file__).resolve().parents[1]
 TARGET = "tests/test_oracle_integration.py"
 SOURCE_PATHS = ("opennavicat/database.py", "opennavicat/oracle_session.py", "pyproject.toml", "uv.lock",
                 "tests/test_oracle_session.py", "tests/test_oracle_runner.py", TARGET,
-                "tests/oracle_owned_fixture.py", "scripts/test-oracle.py")
+                "tests/oracle_owned_fixture.py", "tests/oracle_images.json", "scripts/test-oracle.py",
+                ".github/workflows/build.yml", ".github/workflows/oracle-native.yml")
 
 
 def hashes():
@@ -57,13 +59,27 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--docker-host")
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--pull-image", action="store_true")
+    parser.add_argument("--cleanup-interrupted", action="store_true")
     args = parser.parse_args()
+    if args.cleanup_interrupted and (args.output is None or args.pull_image):
+        parser.error("cleanup requires --output and cannot pull an image")
     suffix = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid.uuid4().hex[:8]
     out = (args.output or ROOT / "artifacts" / "oracle-basic-backend" / ("actual-" + suffix)).resolve()
-    out.mkdir(parents=True, exist_ok=False)
     spec = importlib.util.spec_from_file_location("oracle_owned_fixture", ROOT / "tests/oracle_owned_fixture.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    if args.cleanup_interrupted:
+        out.mkdir(parents=True, exist_ok=True)
+        try:
+            cleanup = module.cleanup_interrupted(out, docker_host=args.docker_host)
+        except BaseException as error:
+            cleanup = {"passed": False, "cleanup_only": True, "no_start": True,
+                       "no_database_connection": True, "error_class": type(error).__name__}
+        (out / "cleanup-only.json").write_text(json.dumps(cleanup, indent=2) + "\n")
+        print(json.dumps(cleanup))
+        return 0 if cleanup["passed"] else 1
+    out.mkdir(parents=True, exist_ok=False)
     fixture = module.OwnedOracle(out / "owned-fixture", docker_host=args.docker_host)
     before = hashes()
     (out / "source-before.json").write_text(json.dumps(before, indent=2) + "\n")
@@ -77,7 +93,7 @@ def main():
         if collect.returncode or not nodeids:
             raise RuntimeError("Oracle scope collection failed")
         receipt["expected_cases"] = nodeids
-        fixture.start()
+        fixture.start(pull=args.pull_image)
         env = {key: value for key, value in os.environ.items() if not key.startswith("OPENNAVICAT_TEST_ORACLE_")}
         env.update(fixture.environment())
         env["QT_QPA_PLATFORM"] = "offscreen"

@@ -1,0 +1,19 @@
+{
+  "publisher": "gvenzl (not Oracle official)",
+  "source": "https://github.com/gvenzl/oci-oracle-free",
+  "registry": "https://registry-1.docker.io/v2/gvenzl/oracle-free",
+  "version_tag": "23.26.3-slim-faststart",
+  "index_digest": "sha256:f5ff19033860d662c821cb04eb10483fa94f14f78eae252d054291ea07028093",
+  "platforms": {
+    "amd64": {
+      "image": "docker.io/gvenzl/oracle-free@sha256:d86d09794ae138a8951e97d7ee010778dcd43088e8d0f83a51002abab8c6d7fd",
+      "config": "sha256:aa50ebd33906bb70dead1c7d435daa2900bf09344fea133701ca39a9d122f931",
+      "uname": "x86_64"
+    },
+    "arm64": {
+      "image": "docker.io/gvenzl/oracle-free@sha256:b0c7703767ca9403b50c8408d4c6aa824ee6bd93fbed8dc765a9073acf087740",
+      "config": "sha256:ce865b4992bd4ba70f0042cd01403068111965583f0c4ed9bf0627022da89849",
+      "uname": "aarch64"
+    }
+  }
+}

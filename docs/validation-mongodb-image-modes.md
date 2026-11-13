@@ -116,3 +116,27 @@ No native Cocoa run, six-target CI, installer or release qualification is
 claimed for this slice. Retention expiry, deleted/concurrent images, other
 topologies and permissions, broader recovery, successful Preview/Explain and
 complete reference-backed parity remain open.
+
+## Main integration
+
+The six-path checkpoint was committed and pushed as
+`b53f60e7e7792c1c6af326c77bce637f52ea46a9`. Independent review verified its
+296 earlier tracked Git blobs, separate new documentation hash, all scope
+manifests/results and the exact four containers/eight anonymous volumes from
+the red, development and final fixture runs as absent.
+
+It was merged with the later reference documentation and the separate native-JS
+semantic-test budget correction as `53cce32`. All eleven declared Window/backend
+source paths still match the qualified image checkpoint, including their Git
+blobs; all application and native-helper sources remain identical to it. Six
+earlier tracked files differ: five documentation records and the independently
+qualified `test_js_engine.py` budget correction. The 2243/645 full-source result
+belongs to the image checkpoint; it was not rerun under the merged test budget.
+The seven actual delayed-native semantic-error cases separately qualify that
+test change. The new main CI must bind to the combined source; neither earlier
+failed CI run nor the published v0.12.0 tag supplies that qualification.
+
+The version, README GIF, public tag and eight release assets remain unchanged.
+This is unreleased development. Private integration binding is
+`artifacts/stream-variants/image-integration/source-binding.json` in the
+`mongodb-stream-variants` tree. The complete parity goal remains active.

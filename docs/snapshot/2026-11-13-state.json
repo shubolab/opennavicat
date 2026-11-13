@@ -2032,5 +2032,57 @@
     "receipt_tree": "mongodb-finite-stream/opennavicat",
     "receipt": "artifacts/next-stream-image-reference/actual-r1/final-verification.json",
     "full_parity_open": true
+  },
+  "post_release_image_mode_integration": {
+    "development_status": "unreleased",
+    "checkpoint": "b53f60e7e7792c1c6af326c77bce637f52ea46a9",
+    "integration_merge": "53cce32",
+    "runtime_change": "two observed missing-required-pre/post-image getMore47 update errors use separate typed reference display sentinel; no real script position invented",
+    "changed_runtime_files": [
+      "opennavicat/mongodb_pipeline_stream.py",
+      "opennavicat/ui/mongo_pipeline.py"
+    ],
+    "successful_on_output_not_changed_or_qualified": true,
+    "red_six_cases": {
+      "passed": 4,
+      "failed_missing_sentinel": 2
+    },
+    "backend_passed": 74,
+    "backend_skipped": 0,
+    "window_passed": 25,
+    "window_skipped": 0,
+    "checkpoint_full_source": {
+      "passed": 2243,
+      "conditional_skipped": 645,
+      "failed": 0,
+      "errors": 0,
+      "collected": 2888,
+      "seconds": 94.07,
+      "tracked_paths_unchanged_and_git_blob_matched": 296,
+      "not_rerun_under_merged_js_test_budget": true
+    },
+    "root_merged_source_binding": {
+      "declared_window_backend_paths": 11,
+      "all_runtime_and_native_sources_identical_to_checkpoint": true,
+      "differences_from_checkpoint": [
+        "five documentation records",
+        "independently qualified JS semantic test budget"
+      ]
+    },
+    "owned_containers_independently_absent": 4,
+    "owned_anonymous_volumes_independently_absent": 8,
+    "new_main_ci": "pending combined-source push; previous failedruns retained",
+    "native_cocoa_and_six_installer_qualification": false,
+    "published_version_tag_gif_and_assets_unchanged": "v0.12.0/b6e1da4",
+    "receipt_trees": {
+      "qualification": "mongodb-image-modes/opennavicat",
+      "integration": "mongodb-stream-variants/opennavicat"
+    },
+    "receipts": [
+      "artifacts/image-modes/final-verification.json",
+      "artifacts/image-modes/independent-review.json",
+      "artifacts/stream-variants/image-integration/source-binding.json"
+    ],
+    "full_parity_open": true
   }
 }

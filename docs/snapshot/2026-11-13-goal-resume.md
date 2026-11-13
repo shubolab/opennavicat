@@ -44,6 +44,11 @@ pending Promise语义断言与100ms总启动/执行预算竞争；产品parent d
 已在自有pre/post-images OFF/ON集合完成六次实际Run：WA1/2、required-pre/post ON各2、OFF各getMore47＋0/0 UI哨兵。
 三个成功ON的Output像素确为空、原因unknown，首WA_OFF仍script+OK；完整initialcallunknown/overallinconclusive，
 normalQuit后4idle/0active，exactCID/两卷清除，不复制遗留行为。不是完整image/resume/Preview/三平台通过。
+后续未发布源码`b53f60e`已实际补六种toolbar/serial-owner回归，并只给已观察的两种required-image getMore47显示typed 0/0哨兵；真实script_location仍None，安全errmsg/状态优先及正坐标校验未松。
+backend74/0、Window25/0分别在fresh auth nativeARM64 RS严格执行，默认2243/645、94.07秒/2888 exact cases和296源前后相同且绑定b53。
+源检查点与JS仅测试预算修正合为`53cce32`，11份声明源/全部runtime和native源未变；默认全源未在合流测试预算下重跑，七native错误case资格另记，不冒称同轮。
+独立审查另核4CID/8卷absence。新main CI尚需推送后的exact source资格；版本/GIF/tag/公开0.12安装器保持不变。
+详见[image验证与集成](../validation-mongodb-image-modes.md)。
 
 非Mongo源码审计确认Oracle/Snowflake适配器缺失，而九族/14供应商选择器及SQLite七页设计器已存在。
 [OR18-01](../ui-reference-18-oracle.md)已实际枚举Oracle五页、Basic/TNS/service/SID/三角色/OS认证切换、

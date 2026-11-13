@@ -219,3 +219,30 @@ def test_failed_docker_diagnostic_is_bounded_and_scrubs_all_generated_credential
     failure = json.loads(body)["docker_failure"]
     assert failure["operation"] == "info" and failure["exit_code"] == 1
     assert len(failure["stderr"]) <= 8192 and failure["stderr"].count("[REDACTED]") == 3
+
+
+@pytest.mark.parametrize("value", [[], None, "terminal output", ["tests/other.py::test_unknown"],
+    ["tests/test_oracle_integration.py::test_a", "tests/test_oracle_integration.py::test_a"]])
+def test_required_case_manifest_rejects_empty_foreign_duplicate_or_malformed_scope(tmp_path, value):
+    path = tmp_path / "required-cases.json"
+    path.write_text(json.dumps(value))
+    with pytest.raises(RuntimeError, match="manifest"):
+        runner.read_required(path)
+
+
+def test_required_manifest_preserves_nodeids_without_terminal_reporter_parsing(tmp_path):
+    expected = ["tests/test_oracle_integration.py::test_a[param::value]",
+                "tests/test_oracle_integration.py::Group::test_b"]
+    path = tmp_path / "required-cases.json"
+    path.write_text(json.dumps(expected))
+    assert runner.read_required(path) == expected
+
+
+def test_exact_junit_accepts_nested_class_and_parameter_nodeids(tmp_path):
+    suite = ET.Element("testsuite")
+    ET.SubElement(suite, "testcase", classname="tests.test_oracle_integration.Group", name="test_b")
+    ET.SubElement(suite, "testcase", classname="tests.test_oracle_integration", name="test_a[param::value]")
+    path = tmp_path / "class-results.xml"
+    ET.ElementTree(suite).write(path)
+    expected = ["tests/test_oracle_integration.py::Group::test_b", "tests/test_oracle_integration.py::test_a[param::value]"]
+    assert runner.strict_junit(path, expected)["passed"] == 2

@@ -29,7 +29,14 @@ TARGET = "tests/test_oracle_integration.py"
 SOURCE_PATHS = ("opennavicat/database.py", "opennavicat/oracle_session.py", "pyproject.toml", "uv.lock",
                 "tests/test_oracle_session.py", "tests/test_oracle_runner.py", TARGET,
                 "tests/oracle_owned_fixture.py", "tests/oracle_images.json", "scripts/test-oracle.py",
-                ".github/workflows/build.yml", ".github/workflows/oracle-native.yml")
+                "scripts/install-linux-dependencies.py", ".github/workflows/build.yml", ".github/workflows/oracle-native.yml")
+COLLECT = '''import json,sys,pytest
+from pathlib import Path
+class Collect:
+ def pytest_collection_finish(self,session):
+  Path(sys.argv[1]).write_text(json.dumps([item.nodeid for item in session.items],indent=2)+chr(10))
+raise SystemExit(pytest.main([sys.argv[2],'--collect-only','-q','--color=no'],plugins=[Collect()]))
+'''
 
 
 def hashes():
@@ -46,13 +53,27 @@ def redact_output(text, secrets):
 def strict_junit(path, nodeids):
     root = ET.parse(path).getroot()
     cases = root.findall(".//testcase")
-    expected = Counter((node.split("::")[0][:-3].replace("/", "."), node.split("::", 1)[1]) for node in nodeids)
-    actual = Counter((case.get("classname"), case.get("name")) for case in cases)
-    if expected != actual or not cases:
+    module = TARGET[:-3].replace("/", ".")
+    actual = []
+    for case in cases:
+        classname = case.get("classname", "")
+        if classname != module and not classname.startswith(module + "."):
+            raise RuntimeError("Oracle JUnit contains another module")
+        suffix = classname[len(module):].lstrip(".").replace(".", "::")
+        actual.append(TARGET + "::" + (suffix + "::" if suffix else "") + case.get("name", ""))
+    if Counter(nodeids) != Counter(actual) or not cases or len(set(nodeids)) != len(nodeids):
         raise RuntimeError("Oracle JUnit does not match the exact collected cases")
     if any(case.find(tag) is not None for case in cases for tag in ("skipped", "failure", "error")):
         raise RuntimeError("Oracle actual-server scope requires every case passed with zero skips")
     return {"passed": len(cases), "skipped": 0, "failed": 0, "exact_cases": nodeids}
+
+
+def read_required(path):
+    expected = json.loads(Path(path).read_text())
+    if (type(expected) is not list or not expected or any(type(n) is not str or not n.startswith(TARGET + "::") for n in expected)
+            or len(set(expected)) != len(expected)):
+        raise RuntimeError("Oracle required-case manifest is invalid")
+    return expected
 
 
 def main():
@@ -88,14 +109,15 @@ def main():
                "platform": platform.platform(), "module": TARGET, "passed": False}
     try:
         receipt["phase"] = "collect"
-        collect = subprocess.run([sys.executable, "-m", "pytest", "--collect-only", "-q", TARGET],
+        required = out / "required-cases.json"
+        collect = subprocess.run([sys.executable, "-c", COLLECT, str(required), TARGET],
                                  cwd=ROOT, capture_output=True, text=True, timeout=30)
         receipt["collection_exit_code"] = collect.returncode
         (out / "collect.log").write_text(redact_output(collect.stdout + collect.stderr,
             (fixture.admin_password, fixture.app_password, fixture.denied_password))[-32768:])
-        nodeids = [line for line in collect.stdout.splitlines() if line.startswith(TARGET + "::")]
-        if collect.returncode or not nodeids:
+        if collect.returncode or not required.is_file():
             raise RuntimeError("Oracle scope collection failed")
+        nodeids = read_required(required)
         receipt["expected_cases"] = nodeids
         receipt["phase"] = "fixture_start"
         fixture.start(pull=args.pull_image)

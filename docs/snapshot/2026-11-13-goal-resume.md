@@ -22,10 +22,12 @@ Windows/Linux/macOS 的 1:1 保留 UI；本次同步、既有 Release 或下一�
 分支`codex_mongodb_finite_stream`继续，候选元数据为**0.12.0，尚未发布**。
 公开安装器仍是0.11，不能借用其六目标资格。有限UI/GIF检查点为`979d052`，
 MainWindow调用点修复为`479a811`，实际Dialog Test按钮同类局部修复为`d9bee66`，
-仅测试子进程ready握手修正为`1a6eeed`。候选应用/测试/runner完整源码已冻结为
-`1a6eeed802e20e91766b9af181f5fcca5c7d0a22`；201份默认全源文件前后相同并逐Git blob匹配。
-产品字节与`d9bee66`相同。main预检[43384833779](https://github.com/shubolab/opennavicat/actions/runs/43384833779)
-已启动，记录时为in_progress；正式tag/公开0.12仍未创建，后续doc-only提交不改变候选源码SHA。
+仅测试子进程ready握手修正为`1a6eeed`。现有本机完整源码资格绑定
+`1a6eeed802e20e91766b9af181f5fcca5c7d0a22`；201份默认全源文件前后相同并逐Git blob匹配，产品字节与`d9bee66`相同。
+该SHA的main预检[43384833779](https://github.com/shubolab/opennavicat/actions/runs/43384833779)
+已completed/failure：五原生目标和DB security成功，macOS amd64在hdiutil CREATE阶段报Resource busy，
+安装后launch未到，publisher skipped；正式tag/公开0.12仍未创建，也不是六目标资格。
+packager仅busy错误的限定重试修复进行中，新candidate源码尚未冻结或验证；旧1a6eeed本机scope不能冒充新源码完整资格。
 修复前`f0b558e`预检[43383205925](https://github.com/shubolab/opennavicat/actions/runs/43383205925)
 终态为cancelled，未tag/发布，partial产物不作新资格。
 
@@ -62,7 +64,7 @@ SHA256为`d1ec33dd15e03fa38e5749f0ff0efe01051e5b40116c12229a7113d847e33c9e`。
 GIF capture源码归属`979d052`，77份源逐Git blob核定；当前产品Window/Dialog各两行ownership不同，
 widgets及recorder未变并有两调用点后的新79＋1工作流资格，握手修正仅改测试。保留已审capture，不冒称当前SHA重新录制。
 
-当前继续顺序是推进已冻结1a6eeed的六个原生目标预检与独立安装器审查，
+当前继续顺序是完成packager的限定busy修复及必要验证，冻结新candidate SHA，再执行其六原生目标预检与独立安装器审查，
 全部交付门禁通过才可决定里程碑发布；原始崩溃因果未知与完整资源门禁保持记录。
 正常stream预览、完整partial/恢复/options/拓扑、其它工具与三平台参考门禁继续开放，goal保持active。
 

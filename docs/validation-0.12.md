@@ -10,11 +10,13 @@
 本轮接入原生Qt stream消息/输出、当前页Stop、typed结果和结构化安全错误路由，以及Batch边界状态。
 版本元数据已调整0.12.0。有限UI/GIF检查点为`979d052`，`479a811`修复MainWindow调用点，
 `d9bee66`另修复实际ConnectionDialog Test按钮的TaskSignals生命周期；`1a6eeed`只修正测试子进程ready握手。
-**候选应用/测试/runner完整源码已冻结为`1a6eeed802e20e91766b9af181f5fcca5c7d0a22`**；
-最新默认全源201份文件前后相同并逐Git blob匹配该提交，产品字节与`d9bee66`相同。
-main预检[43384833779](https://github.com/shubolab/opennavicat/actions/runs/43384833779)
-绑定该精确SHA，记录时为**in_progress**，不能预写成功；正式tag和公开0.12仍未创建。
-后续仅文档提交不改变候选源码；若预检及独立审查通过，正式tag应绑定同一`1a6eeed`。
+本机完整源码资格绑定`1a6eeed802e20e91766b9af181f5fcca5c7d0a22`：
+默认全源201份文件前后相同并逐Git blob匹配该提交，产品字节与`d9bee66`相同。
+该SHA的main预检[43384833779](https://github.com/shubolab/opennavicat/actions/runs/43384833779)
+现已**completed/failure**：五个原生目标和DB security成功，macOS amd64在
+`Package and verify native installer`中的`hdiutil CREATE`报`Resource busy`，未到安装后launch；publisher skipped。
+这不是六目标资格，正式tag及公开0.12仍未创建。限定busy错误的packager重试修复进行中，
+新源码尚未冻结或验证；下列1a6eeed本机结果不能冒充该修改后的完整源码资格。
 此前第二调用点修复前的`f0b558e`预检[43383205925](https://github.com/shubolab/opennavicat/actions/runs/43383205925)
 终态为**cancelled**，未tag/发布，partial产物不作新资格。
 
@@ -154,7 +156,7 @@ codeName或事件文档。有效aggregate位置必须对应本次冻结脚本；
 
 ## 待完成的交付门禁
 
-完整候选源码`1a6eeed`已冻结并启动main预检43384833779；仍需该精确SHA的完整协议/安全CI、六原生目标产物和独立审查。
+main预检43384833779已失败；packager限定busy重试修复进行中，新候选SHA待冻结，并须完成对应六原生目标与独立审查。
 唯一GIF已刷新为实际0.12候选应用的31阶段、411帧、68.5秒，1,712,746字节，
 SHA256 `d1ec33dd15e03fa38e5749f0ff0efe01051e5b40116c12229a7113d847e33c9e`。
 31阶段均检查首/中/尾编码帧（93帧）并补充全尺寸视觉检查，自动逐帧guard为411/411；

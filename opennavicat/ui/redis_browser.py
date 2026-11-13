@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..redis_session import RedisValuePage, display_redis_bytes, quote_redis_bytes
-from .icons import tool_icon
+from .icons import tool_icon, toggle_icon
 
 
 TYPES = ("string", "hash", "list", "set", "zset", "stream")
@@ -355,7 +355,8 @@ class RedisBrowserPage(_RedisPage):
         self.refresh_action = self._action("刷新", "refresh", self.refresh)
         self.editor_action = self._action("编辑器", "design", lambda: None)
         self.editor_action.setCheckable(True); self.editor_action.setChecked(True)
-        self.focus_action = self._action("专注模式", "navigation", lambda: None)
+        self.focus_action = self._action("专注模式", "focus", lambda: None)
+        self.focus_action.setIcon(toggle_icon("focus", 18))
         self.focus_action.setCheckable(True); self.focus_action.toggled.connect(self.focusRequested)
         controls = QHBoxLayout(); controls.setContentsMargins(8, 4, 8, 4)
         self.type_filter = QComboBox(); self.type_filter.addItems(["所有类型", *TYPES])

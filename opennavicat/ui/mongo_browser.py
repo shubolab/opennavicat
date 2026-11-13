@@ -30,7 +30,7 @@ from shiboken6 import isValid
 from ..mongodb_session import BSON_CODEC, MongoDocument, MongoPage, canonical_dumps, canonical_loads
 from .editor import SqlEditor
 from .grid import DataGrid
-from .icons import tool_icon
+from .icons import tool_icon, toggle_icon
 
 
 _MISSING = object()
@@ -223,22 +223,23 @@ class MongoCollectionPage(QWidget):
         self.toolbar.setFixedHeight(36); self.toolbar.setIconSize(QSize(18,18)); layout.addWidget(self.toolbar)
         self.profile_action = self._action("集合配置文件（尚未实现）", "query", enabled=False)
         self.edit_action = self._action("单元格编辑器 · Extended JSON", "design", self.edit_document)
-        self.filter_action = self._action("筛选和排序", "filter")
+        self.filter_action = self._action("筛选和排序", "filter_sort")
         self.filter_action.setCheckable(True)
         self.columns_action = self._action("列", "table", self.choose_columns)
         self._action("历史（尚未实现）", "history", enabled=False)
         self.collapse_action = self._action("全部折叠", "list", lambda:self.tree.collapseAll())
         self.color_action = self._action("类型颜色", "format")
         self.color_action.setCheckable(True); self.color_action.toggled.connect(self._set_type_colors)
-        self._action("分析（尚未实现）", "chart", enabled=False)
+        self._action("分析（尚未实现）", "analysis", enabled=False)
         self.toolbar.addSeparator()
         self._action("导入文档（尚未实现）", "import", enabled=False)
         self.export_action = self._action("导出选中文档", "export", self.export_document)
-        self._action("生成数据（尚未实现）", "database", enabled=False)
-        self._action("数据脱敏（尚未实现）", "user", enabled=False)
+        self._action("生成数据（尚未实现）", "generate", enabled=False)
+        self._action("数据脱敏（尚未实现）", "mask", enabled=False)
         stretch = QWidget(); stretch.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.toolbar.addWidget(stretch)
-        self.focus_action = self._action("专注模式", "design")
+        self.focus_action = self._action("专注模式", "focus")
+        self.focus_action.setIcon(toggle_icon("focus", 18))
         self.focus_action.setCheckable(True); self.focus_action.toggled.connect(self.focusRequested)
         self.filter_bar = QWidget(); filters = QHBoxLayout(self.filter_bar); filters.setContentsMargins(8,3,8,3)
         self.filter_edit, self.sort_edit, self.projection_edit = QLineEdit("{}"), QLineEdit("{}"), QLineEdit("{}")

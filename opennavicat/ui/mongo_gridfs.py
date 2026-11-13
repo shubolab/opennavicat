@@ -26,7 +26,7 @@ from shiboken6 import isValid
 
 from ..database import DatabaseError
 from .grid import DataGrid
-from .icons import tool_icon
+from .icons import tool_icon, toggle_icon
 from .mongo_browser import MongoDocumentModel
 
 
@@ -112,7 +112,8 @@ class MongoGridFSPage(QWidget):
         stretch = QWidget()
         stretch.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.toolbar.addWidget(stretch)
-        self.focus_action = self._action("专注模式", "design")
+        self.focus_action = self._action("专注模式", "focus")
+        self.focus_action.setIcon(toggle_icon("focus", 18))
         self.focus_action.setCheckable(True)
         self.focus_action.toggled.connect(self.focusRequested)
 

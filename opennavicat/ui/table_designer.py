@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
 )
 
 from .editor import SqlEditor
-from .icons import tool_icon
+from .icons import tool_icon, toggle_icon
 
 
 CONFLICTS = ["", "ROLLBACK", "ABORT", "FAIL", "IGNORE", "REPLACE"]
@@ -383,7 +383,8 @@ class TableDesignerPage(QWidget):
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.toolbar.addWidget(spacer)
-        self.focus_action = self._action("专注模式", "design", None)
+        self.focus_action = self._action("专注模式", "focus", None)
+        self.focus_action.setIcon(toggle_icon("focus", 18))
         self.focus_action.setCheckable(True)
         self.focus_action.toggled.connect(self.focusRequested)
         layout.addWidget(self.toolbar)

@@ -19,7 +19,7 @@ from opennavicat.database import DatabaseError
 from opennavicat.schema import IndexTerm
 
 from .editor import SqlEditor
-from .icons import tool_icon
+from .icons import tool_icon, toggle_icon
 from .table_designer import COLLATIONS, TableSaveDialog
 
 
@@ -125,7 +125,8 @@ class _ObjectDesignerPage(QWidget):
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.toolbar.addWidget(spacer)
-        self.focus_action = self._action("专注模式", "design", None)
+        self.focus_action = self._action("专注模式", "focus", None)
+        self.focus_action.setIcon(toggle_icon("focus", 18))
         self.focus_action.setCheckable(True)
         self.focus_action.toggled.connect(self.focusRequested)
         preview = QWidget()

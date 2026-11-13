@@ -32,7 +32,7 @@ from opennavicat.mongodb_pipeline_stream import (
 )
 from opennavicat.mongodb_stage_templates import CREATE_TOOL_STAGES, STAGE_EDITOR_TEMPLATES
 
-from .icons import icon, tool_icon
+from .icons import tool_icon, toggle_icon
 from .mongo_collation import LOCALE_SUGGESTIONS
 
 
@@ -1361,15 +1361,15 @@ class MongoPipelinePage(QWidget):
         self.import_action = self._action("导入查询", "import", self.importRequested.emit)
         self.preview_all_action = self._action("预览全部", "run", self.request_preview_all)
         self.run_action = self._action("运行", "run", self.request_run)
-        self.explain_action = self._action("解释", "query", self.request_explain)
+        self.explain_action = self._action("解释", "explain", self.request_explain)
         self.stop_action = self._action("停止", "stop", self.request_stop)
         self.stop_action.setObjectName("mongoPipelineStop")
-        self.stop_action.setIcon(icon("stop", 18))
         self.export_action = self._action("导出结果", "export", self.exportRequested.emit)
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.toolbar.addWidget(spacer)
-        self.focus_action = self._action("进入专注模式", "design", None)
+        self.focus_action = self._action("进入专注模式", "focus", None)
+        self.focus_action.setIcon(toggle_icon("focus", 18))
         self.focus_action.setCheckable(True)
         self.focus_action.toggled.connect(self.focusRequested)
 

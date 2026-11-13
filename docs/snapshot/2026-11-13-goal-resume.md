@@ -22,12 +22,12 @@ Windows/Linux/macOS 的 1:1 保留 UI；本次同步、既有 Release 或下一�
 分支`codex_mongodb_finite_stream`继续，候选元数据为**0.12.0，尚未发布**。
 公开安装器仍是0.11，不能借用其六目标资格。有限UI/GIF检查点为`979d052`，
 MainWindow调用点修复为`479a811`，实际Dialog Test按钮同类局部修复为`d9bee66`，
-仅测试子进程ready握手修正为`1a6eeed`。现有本机完整源码资格绑定
-`1a6eeed802e20e91766b9af181f5fcca5c7d0a22`；201份默认全源文件前后相同并逐Git blob匹配，产品字节与`d9bee66`相同。
-该SHA的main预检[43384833779](https://github.com/shubolab/opennavicat/actions/runs/43384833779)
-已completed/failure：五原生目标和DB security成功，macOS amd64在hdiutil CREATE阶段报Resource busy，
-安装后launch未到，publisher skipped；正式tag/公开0.12仍未创建，也不是六目标资格。
-packager仅busy错误的限定重试修复进行中，新candidate源码尚未冻结或验证；旧1a6eeed本机scope不能冒充新源码完整资格。
+仅测试子进程ready握手修正为`1a6eeed`。当前限定DMG CREATE busy重试修复后的完整候选源码为
+`b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7`；默认全源2197/636，201份文件前后相同并逐Git blob匹配，产品字节仍与`d9bee66`相同。
+新main预检[43388068691](https://github.com/shubolab/opennavicat/actions/runs/43388068691)绑定该SHA，当前in_progress；
+部分job（含macOS ARM64）成功不能写成六目标全绿。后续doc-only提交不改候选源码；正式tag若新预检及独立审查通过将精确绑定b6e1da4，当前tag/公开0.12仍none。
+旧`1a6eeed`的main预检[43384833779](https://github.com/shubolab/opennavicat/actions/runs/43384833779)
+保持completed/failure：五原生目标和DB security成功，macOS amd64在hdiutil CREATE报Resource busy，安装后launch未到、publisher skipped；不是六目标资格。
 修复前`f0b558e`预检[43383205925](https://github.com/shubolab/opennavicat/actions/runs/43383205925)
 终态为cancelled，未tag/发布，partial产物不作新资格。
 
@@ -39,7 +39,7 @@ Batch手动任务已区分row/time/byte/cleanup失败，不读取errmsg写历史
 参考Preview/PreviewAll曾在独立sample后stream各出现一次崩溃，AP18-11未重放，
 不能复制原版故障或据此移除正常预览门禁。原版已退出，自有fixture/卷精确清理。
 
-当前各scope独立测量（不相加）：默认全源**2186通过/636条件跳过，82.59秒**，201份源前后相同且匹配`1a6eeed`；
+当前各scope独立测量（不相加）：默认全源**2197通过/636条件跳过，82.81秒**，201份源前后相同且匹配`b6e1da4`；其余下列UI/DB scope产品源码未变，按原执行来源及未变声明源重绑，不冒称本次重跑；
 实际Cocoa **100/0**（Window16+组件78+4 Window/2 Dialog生命周期，actual Cocoa、Darwin arm64、0.12、16声明源相同），
 修后fresh Window **16/0**（11声明源及额外2 Dialog文件），caller连接UI **110/0**。
 Window22项生命周期及Dialog真实有效/损坏SQLite两项回归均通过，native TaskSignals在GUI线程destroyed、Task/Signals弱引用最终释放；
@@ -50,6 +50,14 @@ stream TLS仅standalone transport及40573拒绝，cleanup零start/零DB，普通
 两调用点后fresh recorder offline **79通过/3条件跳过**、own-RS另 **1/0**，各79源及补充Dialog回归文件绑定`d9bee66`，
 握手修正未变这些字节；真实Run2个typed事件，BSON/UUID/主连接不变，自有容器/两卷独立absent，没有录制GUI。
 Cocoa源smoke6×4 exit0。完整回执见 [0.12候选验证](../validation-0.12.md)。
+
+
+打包合同79/0skip含11新增，per-command timeout600秒、最多3次create与1/2秒backoff，create最多1803秒另加stage/verify，不是总600秒。
+本机真实native ARM64 build＋包内Cocoa6×4/all probes＋新DMG只读mount/隔离安装launch卸载均绿，
+`local-installer-dmg-fix/independent-check.json`八检查通过，owned mount及image目录不存在；
+DMG51,441,633字节，SHA256 `00732b3c536d17c0e94f6f7a194f37a0e88cb32b3847dffd097b83784d1786da`。
+真实create首试成功，不冒称实际busy恢复；这是local ARM64，不代替IntelCI/其它目标或公开下载。
+旧1a6eeed默认2186/636继续保历史，不能替代b6打包源资格。
 
 更早parallel collection SIGSEGV失败仍保留，串行507或后续资格通过均不能证明其原因；
 真实发现的两个TaskSignals调用点缺陷分别局部修复，不宣称与SIGSEGV同因。
@@ -64,7 +72,7 @@ SHA256为`d1ec33dd15e03fa38e5749f0ff0efe01051e5b40116c12229a7113d847e33c9e`。
 GIF capture源码归属`979d052`，77份源逐Git blob核定；当前产品Window/Dialog各两行ownership不同，
 widgets及recorder未变并有两调用点后的新79＋1工作流资格，握手修正仅改测试。保留已审capture，不冒称当前SHA重新录制。
 
-当前继续顺序是完成packager的限定busy修复及必要验证，冻结新candidate SHA，再执行其六原生目标预检与独立安装器审查，
+当前继续顺序是推进已冻结b6e1da4的新六原生目标预检43388068691与独立安装器审查，
 全部交付门禁通过才可决定里程碑发布；原始崩溃因果未知与完整资源门禁保持记录。
 正常stream预览、完整partial/恢复/options/拓扑、其它工具与三平台参考门禁继续开放，goal保持active。
 

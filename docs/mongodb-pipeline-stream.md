@@ -228,22 +228,23 @@ ownership/deferred-delete repair to the actual ConnectionDialog Test caller.
 Native TaskSignals QObject destruction occurs on the GUI thread and Task/Signals
 weak references eventually clear. QRunnable still uses pool autoDelete; this is
 not a claim that all native runnables or Python wrappers are GUI-destroyed.
-`1a6eeed` then changes only a subprocess test readiness handshake. The complete
-candidate application/test/runner source is frozen at
-`1a6eeed802e20e91766b9af181f5fcca5c7d0a22`; production bytes equal `d9bee66`.
+`1a6eeed` then changes only a subprocess test readiness handshake. The current
+complete candidate application/test/runner/packaging source is frozen at
+`b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7`, which adds the limited DMG CREATE
+busy retry and installer contracts. Application product bytes still equal `d9bee66`.
 These scopes are separate and are not summed:
 
 | Scope | Result | Qualification boundary |
 | --- | --- | --- |
 | Native Window runner | **16 passed / zero skipped**, fresh after the Dialog fix | Eleven declared source hashes plus two supplemental Dialog files unchanged; real toolbar/wire, Stop, exact BSON, message/location and two Batch paths. One owned RS container and two volumes independently absent. |
 | Native Cocoa components + Window + both caller regressions | **100 passed / zero skipped**, 30.36 seconds (stdout) | 16 Window +78 components +4 Window lifecycle +2 real SQLite Dialog lifecycle; actual Cocoa, Darwin arm64, v0.12.0, sixteen source hashes unchanged. Executed on `d9bee66` product bytes, unchanged by the test-only handshake commit. One owned RS container and two volumes independently absent. |
-| Default source suite | **2,186 passed / 636 conditional skips**, 82.59 seconds (stdout) | Built native helper; 201 runtime/test/runner/native/workflow/project paths unchanged and independently matched to immutable `1a6eeed` blobs. Conditional skips are not service execution. |
+| Default source suite | **2,197 passed / 636 conditional skips**, 82.81 seconds (stdout) | Built native helper; 201 runtime/test/runner/native/workflow/project paths unchanged and independently matched to immutable `b6e1da4` blobs. Conditional skips are not service execution. |
 | Ordinary collection runner | **511 passed / zero skipped**, unchanged declared-source qualification rebound | Its 48 declared source files are unchanged; prior exact cleanup of eight containers and sixteen volumes remains scoped to that run. No fresh 511-case run is claimed. The old outer 198-file snapshot includes the previous Dialog and is historical only. |
 | Recorder qualification | **79 passed / 3 conditional skips** offline; separately **1 passed / zero skipped** own-RS | Fresh after both caller fixes; each binds 79 sources plus supplemental Dialog tests to `d9bee66`, unchanged by the test-only handshake fix. Two typed events, exact BSON/UUID and original session preserved; owned service/two volumes independently absent. These offscreen scopes made no GUI capture. |
 | Unchanged declared-source qualifications | Backend **46 / zero skipped**; ordinary TLS **24 / zero skipped**; stream transport **2 / zero skipped**; stopped cleanup **13 / zero skipped** | Rebound by matching each scope's declared source bytes, not represented as post-fix re-executions. Backend is 32 pure +14 RS. Stream transport is standalone TLS/SSH with 40573 rejection; cleanup starts no containers and connects to no DB. Ordinary TLS's incomplete outer volume-ID record remains a limit. |
 
 The post-fix receipts are under `artifacts/release-012/`, notably
-`final-default-two-callers-readiness/verification.json`,
+`final-default-dmg-create-fix/verification.json`,
 `final-native-cocoa-two-callers/verification.json`,
 `final-window-dialog-owner-fix/summary.json`, and
 `final-collections-owner-fix/declared-scope-after-dialog-binding.json`. The related
@@ -252,7 +253,8 @@ receipts are in the separate
 `final-recorder-two-callers-{offline,own-rs}-20261113T071112Z-222717/` directories.
 The earlier **2,180 / 636**, **94 Cocoa** and serial **507** collection results
 remain the pre-ownership checkpoint. **2,184 / 636** and **98 Cocoa** belong to
-the MainWindow-only repair at `479a811`. None is relabelled as a later whole-source
+the MainWindow-only repair at `479a811`; **2,186 / 636** belongs to `1a6eeed` before
+the packaging repair. None is relabelled as a later whole-source
 measurement. The 78 component cases comprise 57 stream and
 21 existing pipeline cases. Counts across scopes are not added.
 The [0.12 validation record](validation-0.12.md) retains all checkpoint and demo
@@ -263,11 +265,24 @@ ready-before-try handshake gap, without proving that run's exact timing.
 `1a6eeed` moves ready inside try, leaves production stop/finalizer/reap assertions
 unchanged, and passes the ten-case offline module plus the fresh default suite.
 The cancelled `f0b558e` main run 43383205925 contributes no partial-artifact
-qualification. The exact `1a6eeed` main precheck
+qualification. The `1a6eeed` main precheck
 [43384833779](https://github.com/shubolab/opennavicat/actions/runs/43384833779)
-is in progress at this checkpoint, not qualified success. No formal tag or 0.12
-release exists yet; later documentation-only commits do not change the frozen
-candidate source. Six-target CI/installers and independent audit remain open.
+finished failure at macOS amd64 hdiutil CREATE Resource busy; installed launch
+was not reached. The replacement `b6e1da4` precheck
+[43388068691](https://github.com/shubolab/opennavicat/actions/runs/43388068691)
+is in progress, not six-target qualified success. No formal tag or 0.12 release
+exists yet; later documentation-only commits do not change the frozen candidate.
+
+The packaging-only repair passed **79 installer contracts / zero skips**, including
+11 new cases. Each command retains a 600-second timeout; at most three CREATE
+attempts plus 1/2-second backoff permit 1803 seconds for CREATE, before additional
+stage/verify work. The local native ARM64 build, bundled Cocoa 6×4/all probes,
+read-only DMG mount and isolated install/launch/uninstall passed; all eight
+`local-installer-dmg-fix/independent-check.json` checks passed and owned mounts/
+image directories are absent. CREATE succeeded first attempt, so this does not
+claim live busy recovery or Intel CI acceptance. UI/DB/recorder scopes retain
+their actual execution provenance and are rebound only through unchanged declared
+bytes. Six-target installers and independent audit remain open.
 
 An initial parallel collection run ended in SIGSEGV; the separate fresh serial
 retry passed 507 cases with eight containers and sixteen volumes independently

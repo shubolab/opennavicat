@@ -10,13 +10,15 @@
 本轮接入原生Qt stream消息/输出、当前页Stop、typed结果和结构化安全错误路由，以及Batch边界状态。
 版本元数据已调整0.12.0。有限UI/GIF检查点为`979d052`，`479a811`修复MainWindow调用点，
 `d9bee66`另修复实际ConnectionDialog Test按钮的TaskSignals生命周期；`1a6eeed`只修正测试子进程ready握手。
-本机完整源码资格绑定`1a6eeed802e20e91766b9af181f5fcca5c7d0a22`：
-默认全源201份文件前后相同并逐Git blob匹配该提交，产品字节与`d9bee66`相同。
-该SHA的main预检[43384833779](https://github.com/shubolab/opennavicat/actions/runs/43384833779)
-现已**completed/failure**：五个原生目标和DB security成功，macOS amd64在
-`Package and verify native installer`中的`hdiutil CREATE`报`Resource busy`，未到安装后launch；publisher skipped。
-这不是六目标资格，正式tag及公开0.12仍未创建。限定busy错误的packager重试修复进行中，
-新源码尚未冻结或验证；下列1a6eeed本机结果不能冒充该修改后的完整源码资格。
+当前完整候选源码已冻结为**`b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7`**：
+只新增限定`hdiutil CREATE Resource busy`的打包修复及合同测试，应用产品字节仍与`d9bee66`相同。
+默认全源2197通过/636条件跳过，201份文件前后相同并逐Git blob匹配`b6e1da4`。
+新main预检[43388068691](https://github.com/shubolab/opennavicat/actions/runs/43388068691)
+绑定该精确SHA，当前**in_progress**；已有macOS ARM64等部分job成功，不能预写六目标全绿。
+后续仅文档提交不改冻结源码；正式tag若新预检及独立审查通过，将精确绑定`b6e1da4`。正式tag及公开0.12仍未创建。
+旧`1a6eeed`预检[43384833779](https://github.com/shubolab/opennavicat/actions/runs/43384833779)
+保持**completed/failure**：五原生目标和DB security成功，macOS amd64的hdiutil CREATE报Resource busy，
+未到安装后launch，publisher skipped；其2186本机结果不替代新打包源码资格。
 此前第二调用点修复前的`f0b558e`预检[43383205925](https://github.com/shubolab/opennavicat/actions/runs/43383205925)
 终态为**cancelled**，未tag/发布，partial产物不作新资格。
 
@@ -28,7 +30,24 @@
 源、采样、数量和operator在忙时禁用；其它未执行的状态继续开放。
 原版退出与临时服务/卷清理有独立证据，原版遗留idle游标不作为期望产品行为复制。
 
-## 两个实际调用点修复与测试握手修正后的检查点
+## 当前打包修复检查点（b6e1da4）
+
+默认全源为**2197通过 / 636条件跳过，82.81秒（stdout；JUnit82.788秒）**，
+201份源码前后相同并逐Git blob匹配`b6e1da4`；证据为`artifacts/release-012/final-default-dmg-create-fix/verification.json`。
+installer合同独立**79通过 / 零跳过**，含11项新增合同及原失败红证据，见`dmg-create-fix/`。
+修复仅匹配观察到的busy stderr，最多三次create，间隔1/2秒；每次命令超时仍为600秒，
+create阶段最多1803秒，另有stage/verify工作，不能写成全流程总600秒。
+非busy/timeout立即失败；同文件系统私有image目录中处理partial，只有成功且非空regular产物才原子替换目标。
+
+本机native macOS ARM64实际build、包内Cocoa 6×4/all probes，以及新DMG只读mount、隔离安装/launch/卸载全部通过；
+`local-installer-dmg-fix/independent-check.json`八项独立检查通过，挂载和自有image临时目录均已不存在。
+DMG为51,441,633字节，SHA256 `00732b3c536d17c0e94f6f7a194f37a0e88cb32b3847dffd097b83784d1786da`。
+真实create第一次成功；没有实际触发busy重试恢复，重试边界由11项合同测试覆盖。
+这是本机ARM64范围，不代替Intel CI、其它目标安装器、匿名公开下载或完整参考验收。
+应用UI/DB源码未变；下节Cocoa100、Window16、caller110、DB各scope和recorder79＋1
+仍按各自实际执行来源及未变声明源重新绑定，不冒称在`b6e1da4`重新执行。
+
+## 两个实际调用点修复与测试握手检查点（1a6eeed历史测量及未变scope）
 
 Window与Dialog各两行产品改动只安排信号native生命周期：将TaskSignals归属调用widget，
 并在既有finished清理之后安排该signals的`deleteLater`。真实回归确认native
@@ -156,7 +175,7 @@ codeName或事件文档。有效aggregate位置必须对应本次冻结脚本；
 
 ## 待完成的交付门禁
 
-main预检43384833779已失败；packager限定busy重试修复进行中，新候选SHA待冻结，并须完成对应六原生目标与独立审查。
+旧main预检43384833779已失败；新候选b6e1da4的main预检43388068691进行中，仍须完成六原生目标与独立审查。
 唯一GIF已刷新为实际0.12候选应用的31阶段、411帧、68.5秒，1,712,746字节，
 SHA256 `d1ec33dd15e03fa38e5749f0ff0efe01051e5b40116c12229a7113d847e33c9e`。
 31阶段均检查首/中/尾编码帧（93帧）并补充全尺寸视觉检查，自动逐帧guard为411/411；

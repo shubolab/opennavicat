@@ -230,7 +230,7 @@
 | G03 | macOS完整打包对照验收 | ◐ | native/Cocoa smoke之外，逐个适用UI/工具门禁通过，干净机器安装/启动/升级/真实密钥交互。 |
 | G04 | Linux完整桌面对照验收 | ◐ | R03已有amd64/arm64原生安装/X11运行卸载与最终发布ARM包clean Ubuntu/CJK/加密实测；18参考UI/完整工具、其它目标发行版/显示协议/DPI仍需同范围通过。 |
 | G05 | Windows完整打包对照验收 | ◐ | R03已有amd64/arm64原生包的Windows进程/安装/运行/卸载和架构验收；仍缺18参考UI及全部工具逐项验收，不能将已执行的原生CI降格成仅配置，也不能据此宣布完整对齐。 |
-| G06 | 大数据量、资源、恢复与性能 | ◐ | 按参考实际规模建立表/结果/文件/模型/图表基线；内存/分页或流式/取消/失败/恢复可用，现有硬上限不默认为完整规格。另已确认MainWindow完成Task/TaskSignals留存及实际ConnectionDialog信号worker析构，分别以局部GUI parent/deferred delete修复；native TaskSignals在GUI线程destroyed、弱引用最终释放，不泛称QRunnable/Python wrapper均GUI销毁。当前总源码1a6eeed默认2186/636、产品d9原生100/Window16和caller110，collection511仅48未变声明源重绑、旧outer198只作历史；另保留d9全源2185+1fail、孤立pass、受控ready握手证明与test-only修正10pass。首次parallel SIGSEGV是否同因仍未定，重跑通过不能证明原因或关闭完整资源门禁。 |
+| G06 | 大数据量、资源、恢复与性能 | ◐ | 按参考实际规模建立表/结果/文件/模型/图表基线；内存/分页或流式/取消/失败/恢复可用，现有硬上限不默认为完整规格。另已确认MainWindow完成Task/TaskSignals留存及实际ConnectionDialog信号worker析构，分别以局部GUI parent/deferred delete修复；native TaskSignals在GUI线程destroyed、弱引用最终释放，不泛称QRunnable/Python wrapper均GUI销毁。当前总源码b6e1da4默认2197/636；限定busy的打包修复有79合同及本机ARM64 DMG安装/launch/卸载证据，新六目标预检43388068691仍进行中、不能代替Intel资格，真实create首试成功不冒称busy恢复；产品d9原生100/Window16和caller110，collection511仅48未变声明源重绑、旧outer198只作历史；另保留d9全源2185+1fail、孤立pass、受控ready握手证明与test-only修正10pass。首次parallel SIGSEGV是否同因仍未定，重跑通过不能证明原因或关闭完整资源门禁。 |
 | G07 | 数据/配置安全及不可逆动作 | ◐ | 所有新工具保持绑定/引用/冲突/原子性基础，备份/删除/部署等交互对齐；秘密/权限/取消完整验证。 |
 | G08 | 中文/英文、键盘、原生行为、无障碍和设置 | ◐ | 全部参考语言/快捷键/设置封闭清单，三OS字体/输入法/DPI/焦点/读屏/持久化通过。 |
 | G09 | 产品账号排除、数据库及AI工具功能保留 | ✓ 范围已核实 | 用户明确排除产品账号/订阅/授权/云账号系统；保留DB认证/角色/权限/云DB，独立AI provider/API设置，BI/自动运行/本地模型。完成时复查无错误缩减。 |

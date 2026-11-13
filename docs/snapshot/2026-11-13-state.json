@@ -21,21 +21,21 @@
   },
   "repository": {
     "remote": "git@github.com:shubolab/opennavicat.git",
-    "synced_origin_main_sha": "1a6eeed802e20e91766b9af181f5fcca5c7d0a22",
+    "synced_origin_main_sha": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
     "working_branch": "codex_mongodb_finite_stream",
     "working_branch_base_sha": "87df5cd70f9293c4585637b1eab6e00e37810097",
     "workspace": "/Users/wangshubo/.codex/worktrees/mongodb-finite-stream/opennavicat",
     "original_main_workspace": "/Users/wangshubo/develop/opennavicat",
     "other_branches_or_unmerged_work_removed": false,
     "application_release_source_sha": "87df5cd70f9293c4585637b1eab6e00e37810097",
-    "documentation_receipt_scope": "Local qualification remains bound to1a6eeed/productd9bee66; main precheck43384833779 completed/failure at macos-amd64 hdiutil CREATE Resourcebusy. Packager-only fix in progress, new candidate source not frozen; public0.11 unchanged",
+    "documentation_receipt_scope": "Frozen candidateb6e1da4:201 default source files match Git blobs, productd9bee66 unchanged. Main precheck43388068691 in_progress. Old1a run43384833779 failure and f0 cancelled retained. Public0.11 unchanged",
     "next_working_branch": "codex_mongodb_finite_stream",
     "next_workspace": "/Users/wangshubo/.codex/worktrees/mongodb-finite-stream/opennavicat",
-    "origin_main_verification_scope": "Parent verified main push/sourceSHA and started exactSHA run43384833779; no old asset downloads by this subtask",
-    "local_head_at_candidate_measurement": "1a6eeed802e20e91766b9af181f5fcca5c7d0a22",
-    "candidate_final_source_sha": null,
+    "origin_main_verification_scope": "Exact new main precheck API metadata independently read for candidateb6; no old public assets re-downloaded by this subtask",
+    "local_head_at_candidate_measurement": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
+    "candidate_final_source_sha": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
     "candidate_tested_application_source_sha": "d9bee6649d66542ea94dfd077a567dafd42c6224",
-    "candidate_tested_total_source_sha": "1a6eeed802e20e91766b9af181f5fcca5c7d0a22",
+    "candidate_tested_total_source_sha": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
     "original_main_workspace_head": "1a6eeed802e20e91766b9af181f5fcca5c7d0a22",
     "original_main_workspace_clean": true
   },
@@ -173,20 +173,20 @@
   },
   "latest_reported_local_validation": {
     "version": "0.12.0",
-    "measurement_scope": "Existing1a6eeed qualification after both caller signal-ownership fixes and test-only readiness repair. Fresh default201 files match1a6eeed/productd9bee66. Does not qualify the in-progress packager change; other scopes retain original execution/rebinding boundaries.",
-    "base_head": "1a6eeed802e20e91766b9af181f5fcca5c7d0a22",
+    "measurement_scope": "Fresh b6e1da4 default201 source paths match immutable Git blobs after packaging-only limited busy retry. Application productd9bee66 unchanged; UI/DB/recorder scopes retain actual older execution provenance and only unchanged declared bytes are rebound.",
+    "base_head": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
     "full_source": {
-      "passed": 2186,
+      "passed": 2197,
       "conditionally_skipped": 636,
       "failed": 0,
       "errors": 0,
-      "seconds": 82.569,
+      "seconds": 82.788,
       "source_paths_hashed": 201,
       "source_hashes_before_after_match": true,
-      "receipt": "artifacts/release-012/final-default-two-callers-readiness/verification.json",
-      "stdout_seconds": 82.59,
+      "receipt": "artifacts/release-012/final-default-dmg-create-fix/verification.json",
+      "stdout_seconds": 82.81,
       "source_paths_matched_git_commit": 201,
-      "tested_source_commit": "1a6eeed802e20e91766b9af181f5fcca5c7d0a22"
+      "tested_source_commit": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7"
     },
     "backend": {
       "passed": 46,
@@ -195,7 +195,8 @@
       "real_rs_cases": 14,
       "declared_source_hashes": 6,
       "receipt": "artifacts/stream-structured-errors-backend-qualification/summary.json",
-      "source_binding": "Declared source bytes unchanged after both caller fixes and test-only readiness repair; rebound, not represented as re-execution"
+      "source_binding": "Declared source bytes unchanged after both caller fixes and test-only readiness repair; rebound, not represented as re-execution",
+      "current_candidate_binding": "Original execution provenance retained; declared source bytes checked unchanged againstb6e1da4, not rerun due to packaging-only fix"
     },
     "real_window": {
       "passed": 16,
@@ -205,7 +206,8 @@
       "receipt": "artifacts/release-012/final-window-dialog-owner-fix/summary.json",
       "exact_container_and_two_volumes_independently_absent": true,
       "source_binding": "Fresh after Dialog fix;11 declared+2 supplemental Dialog source/test hashes unchanged; test-only readiness fix outside this scope",
-      "supplemental_dialog_files": 2
+      "supplemental_dialog_files": 2,
+      "current_candidate_binding": "Original execution provenance retained; declared source bytes checked unchanged againstb6e1da4, not rerun due to packaging-only fix"
     },
     "qt_components": {
       "passed": 78,
@@ -238,7 +240,8 @@
       "independent_cleanup": "artifacts/release-012/final-native-cocoa-two-callers/independent-cleanup.json",
       "new_dialog_lifecycle_cases": 2,
       "executed_product_commit": "d9bee6649d66542ea94dfd077a567dafd42c6224",
-      "source_binding": "16 declared bytes unchanged by test-only readiness fix; rebound, not rerun after1a6eeed"
+      "source_binding": "16 declared bytes unchanged by test-only readiness fix; rebound, not rerun after1a6eeed",
+      "current_candidate_binding": "Original execution provenance retained; declared source bytes checked unchanged againstb6e1da4, not rerun due to packaging-only fix"
     },
     "stream_tls_transport": {
       "passed": 2,
@@ -246,7 +249,8 @@
       "replica_set_event_acceptance": false,
       "exact_container_and_anonymous_volume_cleanup": true,
       "receipt": "artifacts/release-012/final-security-stream/summary.json",
-      "source_binding": "Declared source bytes unchanged after both caller fixes and test-only readiness repair; rebound, not represented as re-execution"
+      "source_binding": "Declared source bytes unchanged after both caller fixes and test-only readiness repair; rebound, not represented as re-execution",
+      "current_candidate_binding": "Original execution provenance retained; declared source bytes checked unchanged againstb6e1da4, not rerun due to packaging-only fix"
     },
     "ordinary_tls": {
       "passed": 24,
@@ -269,7 +273,8 @@
         "all_recorded_cases_cleaned": true
       },
       "receipt": "artifacts/release-012/final-stopped-cleanup/summary.json",
-      "source_binding": "Declared source bytes unchanged after both caller fixes and test-only readiness repair; rebound, not represented as re-execution"
+      "source_binding": "Declared source bytes unchanged after both caller fixes and test-only readiness repair; rebound, not represented as re-execution",
+      "current_candidate_binding": "Original execution provenance retained; declared source bytes checked unchanged againstb6e1da4, not rerun due to packaging-only fix"
     },
     "collections_first_attempt": {
       "qualified": false,
@@ -298,7 +303,7 @@
       "test_only_readiness_commit_does_not_change_product": true
     },
     "overlapping_scopes_not_added": true,
-    "tested_source_commit": "1a6eeed802e20e91766b9af181f5fcca5c7d0a22",
+    "tested_source_commit": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
     "lifecycle": {
       "passed": 22,
       "skipped": 0,
@@ -321,7 +326,8 @@
       "independent_receipt": "artifacts/release-012/final-collections-owner-fix/independent-check.json",
       "execution_scope": "Previous511 run,48 unchanged declared source files rebound after Dialog fix; not fresh execution; prior outer198 snapshot is historical and cannot qualify current Dialog",
       "binding_receipt": "artifacts/release-012/final-collections-owner-fix/declared-scope-after-dialog-binding.json",
-      "old_outer_198_snapshot_current": false
+      "old_outer_198_snapshot_current": false,
+      "current_candidate_binding": "Original execution provenance retained; declared source bytes checked unchanged againstb6e1da4, not rerun due to packaging-only fix"
     },
     "recorder": {
       "tested_source_commit": "d9bee6649d66542ea94dfd077a567dafd42c6224",
@@ -344,7 +350,8 @@
       },
       "native_gui_recorded_by_these_scopes": false,
       "source_binding": "Fresh after two caller fixes;79 sources plus supplemental tests/test_dialogs.py matchd9bee66; unchanged declared bytes rebound after test-only readiness fix",
-      "supplemental_dialog_test_files": 1
+      "supplemental_dialog_test_files": 1,
+      "current_candidate_binding": "Original execution provenance retained; declared source bytes checked unchanged againstb6e1da4, not rerun due to packaging-only fix"
     },
     "production_source_commit": "d9bee6649d66542ea94dfd077a567dafd42c6224",
     "dialog_lifecycle": {
@@ -392,7 +399,49 @@
       "controlled_gate_receipt": "artifacts/release-012/slow-child-readiness-proof/controlled-gate.json",
       "module_receipt": "artifacts/release-012/slow-child-readiness-proof/fixed-offline-scope.xml"
     },
-    "mainwindow_ownership_handoff": "artifacts/release-012/owner-fix-validation.json"
+    "mainwindow_ownership_handoff": "artifacts/release-012/owner-fix-validation.json",
+    "installer_contract": {
+      "passed": 79,
+      "skipped": 0,
+      "new_cases": 11,
+      "red_observed_busy_contract_failed_before_fix": true,
+      "receipt": "artifacts/release-012/dmg-create-fix/verification.json",
+      "junit": "artifacts/release-012/dmg-create-fix/green-installer-contract.xml",
+      "per_command_timeout_seconds": 600,
+      "max_create_attempts": 3,
+      "backoff_seconds": [
+        1,
+        2
+      ],
+      "create_only_maximum_seconds": 1803,
+      "stage_verify_work_additional": true,
+      "only_observed_busy_stderr_retried": true,
+      "nonbusy_or_timeout_fails_immediately": true,
+      "same_filesystem_private_image_and_atomic_replace": true
+    },
+    "local_native_arm64_dmg": {
+      "passed": true,
+      "candidate_source": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
+      "host": "Darwin",
+      "machine": "arm64",
+      "native_build_product_hashes_unchanged": true,
+      "packaged_cocoa_smoke_rows": 6,
+      "packaged_cocoa_smoke_columns": 4,
+      "all_runtime_probes_passed": true,
+      "create_succeeded_first_attempt": true,
+      "real_busy_recovery_exercised": false,
+      "read_only_mount": true,
+      "isolated_installed_launched_uninstalled": true,
+      "independent_checks_passed": 8,
+      "owned_mount_and_image_directories_absent": true,
+      "bytes": 51441633,
+      "sha256": "00732b3c536d17c0e94f6f7a194f37a0e88cb32b3847dffd097b83784d1786da",
+      "receipt": "artifacts/release-012/local-installer-dmg-fix/independent-check.json",
+      "installed_receipt": "artifacts/release-012/local-installer-dmg-fix/OpenNavicat-0.12.0-macos-arm64.installed-smoke.json",
+      "qualifies_intel_ci_or_other_targets": false,
+      "public_release_qualification": false
+    },
+    "unchanged_scopes_binding": "artifacts/release-012/final-default-dmg-create-fix/unchanged-scopes-binding.json"
   },
   "latest_main_demo": {
     "receipt": "../assets/opennavicat-demo.json",
@@ -481,8 +530,8 @@
     "finite_stream_successful_preview_accepted": false
   },
   "next_steps": [
-    "Completed local fixes:Window and Dialog native TaskSignals lifetime plus test-only child readiness. Default201 source files bind frozen1a6eeed; productd9bee66. Preserve failed d9 full/isolated retry/controlled gate and original parallel SIGSEGV unresolved causality; no completed full goal claim.",
-    "Finish and verify the limited hdiutil busy-only retry fix; freeze a new exact candidate SHA, rerun required source/package scopes and six native targets, then independently audit installers/checksums. Failed43384833779/1a6eeed is retained and no formal tag/publication exists.",
+    "Completed local caller/readiness fixes; current b6 packaging-only fix adds79 installer contracts and fresh2197/636 default source qualification with201 Gitblob matches. Productd9 unchanged; preserve failed d9 full, controlled gate and original parallel SIGSEGV unresolved causality; full goal remains active.",
+    "Follow exact frozenb6e1da4 main precheck43388068691 currently in_progress, then independently audit all six native installers/checksums before deciding tag/publication. Formal tag if qualified must bindb6; doc-only commits do not change candidate. Keep old1a failed43384833779 and f0 cancelled43383205925 historical.",
     "Retain the refreshed single actual application GIF and its31-phase privacy review with exact source ownership; no reference screenshots or private data",
     "Keep successful stream Preview/PreviewAll, complete partial/recovery/options/topologies/permissions and Windows/Linux reference UI gates open; do not copy reference crashes or invent continuous-watch applicability",
     "Continue branched/sharded/replica Explain shapes/cost formulas, validator unknown/external conversion, all remaining database objects/authentication/query/wizard/AI/model/BI/backup/automation functions",
@@ -527,12 +576,12 @@
     "batch_job_workflow": "released0.11 savedMongoPipeline slice; other15categories/scheduler/SMTP/fullUIopen",
     "change_stream": "Unpublished0.12 bounded text-only Qt/typed backend/structured-error candidate, post-ownership local qualification; complete preview/options/platform/tool gates remain open",
     "qt_task_lifecycle": "Two actual caller native TaskSignals lifecycle defects locally fixed in479a811/d9bee66. Native signals destroyed on GUI thread; Task/Signals weakrefs finally clear; no assertion all QRunnable/Python wrapper destruction is GUI. Original parallel SIGSEGV same cause remains unproven.",
-    "macos_installer_packaging": "Run43384833779 failed hdiutil CREATE Resourcebusy onmacos-amd64 before installed launch. Limited busy-only retry fix in progress; no new source freeze/qualification yet."
+    "macos_installer_packaging": "Limited observed hdiutil CREATE Resourcebusy retry committedb6,79contracts including11new passed. Native localARM64 DMG created first attempt and isolated install/launch/uninstall passed; no actual busy recovery exercised. New sameSHA six-target precheck43388068691 in_progress; Intel qualification pending."
   },
   "candidate_release": {
     "version": "0.12.0",
-    "status": "main_precheck_failed_packager_fix_in_progress_unpublished",
-    "frozen_source_sha": null,
+    "status": "packager_fix_source_frozen_main_precheck_in_progress_unpublished",
+    "frozen_source_sha": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
     "working_tree_base_head": "7e8032e9c0a3e7c9f28ee34b4c93c9b905e757c2",
     "six_target_ci_started": true,
     "tag_created": false,
@@ -540,12 +589,12 @@
     "final_local_validation": "latest_reported_local_validation",
     "single_gif_recorded_reviewed_and_copied": true,
     "single_gif_sha256": "d1ec33dd15e03fa38e5749f0ff0efe01051e5b40116c12229a7113d847e33c9e",
-    "source_stability_gate": "Window and Dialog native TaskSignals ownership locally fixed/qualified; default2186/native100/Window16/caller110/recorder79+1. Test-only readiness gap fixed after retained d9 default1fail. Original parallel SIGSEGV same cause unproven; full resource/exact six-target installer gates remain open.",
+    "source_stability_gate": "Productd9bee66 unchanged. Limited hdiutil CREATE busy retry committedb6; default2197/636 and installer79/0 pass; native localARM64 build/packagedsmoke/DMG first-attempt install-launch-uninstall pass. New sameSHA six-target precheck43388068691 in_progress; no all-target or release qualification. Original parallel SIGSEGV same cause unproven.",
     "all_native_and_full_parity_gates_complete": false,
     "tested_application_source_sha": "d9bee6649d66542ea94dfd077a567dafd42c6224",
     "prior_ui_gif_checkpoint_sha": "979d0522f11cae3a8094f93c424bad558ed83298",
     "measured_source_paths_matched_git_commit": 201,
-    "tested_total_source_sha": "1a6eeed802e20e91766b9af181f5fcca5c7d0a22",
+    "tested_total_source_sha": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
     "previous_frozen_source_sha": "1a6eeed802e20e91766b9af181f5fcca5c7d0a22"
   },
   "resume_baseline": {
@@ -773,7 +822,7 @@
     "branch": "codex_mongodb_finite_stream",
     "base_release_source_sha": "87df5cd70f9293c4585637b1eab6e00e37810097",
     "head_before_candidate_commit": "7e8032e9c0a3e7c9f28ee34b4c93c9b905e757c2",
-    "final_source_sha": null,
+    "final_source_sha": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
     "validation": "../validation-0.12.md",
     "finite_stream_contract": "../mongodb-pipeline-stream.md",
     "reference_observations": "../ui-reference-18-mongodb-pipeline.md",
@@ -783,9 +832,9 @@
     "full_goal_stays_active": true,
     "tested_application_source_sha": "d9bee6649d66542ea94dfd077a567dafd42c6224",
     "ui_gif_checkpoint_sha": "979d0522f11cae3a8094f93c424bad558ed83298",
-    "tested_total_source_sha": "1a6eeed802e20e91766b9af181f5fcca5c7d0a22",
+    "tested_total_source_sha": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
     "previous_failed_precheck_source_sha": "1a6eeed802e20e91766b9af181f5fcca5c7d0a22",
-    "next_source_status": "packager_busy_only_retry_fix_in_progress_not_frozen"
+    "next_source_status": "packager_fix_frozen_new_main_precheck_in_progress"
   },
   "historical_candidate_release_0_11": {
     "version": "0.11.0",
@@ -1000,18 +1049,79 @@
     "ui_integration": "in_progress_after_frozen_backend; text-only messages/output, page-local Stop and explicit partial/row/time boundary handling; no parity claimed",
     "new_six_installer_ci_or_release_complete": false
   },
-  "captured_at_utc": "2026-11-13T07:40:15.837801+00:00",
+  "captured_at_utc": "2026-11-13T07:54:03.687785+00:00",
   "candidate_ci": {
     "version": "0.12.0",
-    "source_sha": "1a6eeed802e20e91766b9af181f5fcca5c7d0a22",
-    "status": "completed",
+    "source_sha": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
+    "run_id": 43388068691,
+    "url": "https://github.com/shubolab/opennavicat/actions/runs/43388068691",
+    "status": "in_progress",
+    "conclusion": "",
+    "jobs": [
+      {
+        "name": "Real database TLS and SSH",
+        "status": "in_progress",
+        "conclusion": ""
+      },
+      {
+        "name": "macos-amd64",
+        "status": "in_progress",
+        "conclusion": ""
+      },
+      {
+        "name": "windows-amd64",
+        "status": "in_progress",
+        "conclusion": ""
+      },
+      {
+        "name": "linux-amd64",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "windows-arm64",
+        "status": "in_progress",
+        "conclusion": ""
+      },
+      {
+        "name": "linux-arm64",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "macos-arm64",
+        "status": "completed",
+        "conclusion": "success"
+      }
+    ],
     "six_native_targets_qualified": false,
     "formal_tag_created": false,
     "public_release_created": false,
-    "run_id": 43384833779,
-    "url": "https://github.com/shubolab/opennavicat/actions/runs/43384833779",
-    "application_source_frozen": false,
+    "application_source_frozen": true,
     "later_documentation_only_commits_change_candidate_source": false,
+    "status_receipt": "artifacts/release-012/main-precheck-43388068691/current-metadata.json",
+    "previous_failed_main_precheck": {
+      "version": "0.12.0",
+      "source_sha": "1a6eeed802e20e91766b9af181f5fcca5c7d0a22",
+      "run_id": 43384833779,
+      "url": "https://github.com/shubolab/opennavicat/actions/runs/43384833779",
+      "status": "completed",
+      "conclusion": "failure",
+      "successful_native_targets": 5,
+      "security_successful": true,
+      "publisher": "skipped",
+      "six_native_targets_qualified": false,
+      "formal_tag_created": false,
+      "public_release_created": false,
+      "failure": {
+        "job": "macos-amd64",
+        "step": "Package and verify native installer",
+        "phase": "hdiutil CREATE",
+        "reported_error": "Resource busy",
+        "installed_launch_reached": false
+      },
+      "status_receipt": "artifacts/release-012/main-precheck-43384833779-failure/final-verification.json"
+    },
     "previous_cancelled_main_precheck": {
       "run_id": 43383205925,
       "source_sha": "f0b558e95ed64a5d1d9628189307343e80007437",
@@ -1020,82 +1130,7 @@
       "url": "https://github.com/shubolab/opennavicat/actions/runs/43383205925",
       "partial_artifacts_used_for_qualification": false,
       "tag_or_release_created": false
-    },
-    "conclusion": "failure",
-    "jobs": [
-      {
-        "name": "Real database TLS and SSH",
-        "id": 131750757051,
-        "status": "completed",
-        "conclusion": "success",
-        "failed_steps": []
-      },
-      {
-        "name": "windows-amd64",
-        "id": 131750757282,
-        "status": "completed",
-        "conclusion": "success",
-        "failed_steps": []
-      },
-      {
-        "name": "macos-amd64",
-        "id": 131750757333,
-        "status": "completed",
-        "conclusion": "failure",
-        "failed_steps": [
-          "Package and verify native installer"
-        ]
-      },
-      {
-        "name": "windows-arm64",
-        "id": 131750757368,
-        "status": "completed",
-        "conclusion": "success",
-        "failed_steps": []
-      },
-      {
-        "name": "linux-amd64",
-        "id": 131750757379,
-        "status": "completed",
-        "conclusion": "success",
-        "failed_steps": []
-      },
-      {
-        "name": "linux-arm64",
-        "id": 131750757380,
-        "status": "completed",
-        "conclusion": "success",
-        "failed_steps": []
-      },
-      {
-        "name": "macos-arm64",
-        "id": 131750757437,
-        "status": "completed",
-        "conclusion": "success",
-        "failed_steps": []
-      },
-      {
-        "name": "Publish complete six-target release",
-        "id": 131755729232,
-        "status": "completed",
-        "conclusion": "skipped",
-        "failed_steps": []
-      }
-    ],
-    "successful_native_targets": 5,
-    "security_successful": true,
-    "publisher": "skipped",
-    "qualified": false,
-    "next_source_sha": null,
-    "next_source_status": "packager_busy_only_retry_fix_in_progress_not_frozen",
-    "failure": {
-      "job": "macos-amd64",
-      "step": "Package and verify native installer",
-      "phase": "hdiutil CREATE",
-      "reported_error": "Resource busy",
-      "installed_launch_reached": false
-    },
-    "status_receipt": "artifacts/release-012/main-precheck-43384833779-failure/final-verification.json"
+    }
   },
   "task_ownership_probe": {
     "status": "completed_task_and_signal_retention_confirmed; GUI-parent/deferred-delete production fix in479a811 and real Qt regressions qualified",
@@ -1430,5 +1465,25 @@
     "weakrefs_eventually_released": true,
     "original_sigsegv_same_cause_proven": false,
     "private_evidence_directory": "artifacts/release-012/dialog-task-ownership-probe/"
+  },
+  "historical_two_caller_readiness_validation_1a6eeed": {
+    "version": "0.12.0",
+    "measurement_scope": "Existing1a6eeed qualification after both caller signal-ownership fixes and test-only readiness repair. Fresh default201 files match1a6eeed/productd9bee66. Does not qualify the in-progress packager change; other scopes retain original execution/rebinding boundaries.",
+    "tested_source_commit": "1a6eeed802e20e91766b9af181f5fcca5c7d0a22",
+    "production_source_commit": "d9bee6649d66542ea94dfd077a567dafd42c6224",
+    "full_source": {
+      "passed": 2186,
+      "conditionally_skipped": 636,
+      "failed": 0,
+      "errors": 0,
+      "seconds": 82.569,
+      "source_paths_hashed": 201,
+      "source_hashes_before_after_match": true,
+      "receipt": "artifacts/release-012/final-default-two-callers-readiness/verification.json",
+      "stdout_seconds": 82.59,
+      "source_paths_matched_git_commit": 201,
+      "tested_source_commit": "1a6eeed802e20e91766b9af181f5fcca5c7d0a22"
+    },
+    "other_scope_provenance": "Unchanged product/UI/DB scopes retain their original d9/earlier receipt provenance under latest_reported_local_validation; not relabelled as new execution."
   }
 }

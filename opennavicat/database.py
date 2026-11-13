@@ -18,12 +18,18 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, time as datetime_time
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Iterator, TypedDict, Literal
 
 import sqlparse
 
 
-SUPPORTED_DRIVERS = frozenset({"sqlite", "postgresql", "mysql", "mariadb", "sqlserver", "redis", "mongodb"})
+SUPPORTED_DRIVERS = frozenset({"sqlite", "postgresql", "mysql", "mariadb", "sqlserver", "redis", "mongodb", "oracle"})
+
+
+class OracleDatabaseListEntry(TypedDict):
+    active: bool
+    name: str
+    auto_open: bool
 
 
 @dataclass
@@ -63,6 +69,26 @@ class ConnectionConfig:
     mongo_read_preference: str = "primary"
     mongo_retry_reads: bool = True
     mongo_retry_writes: bool = True
+    # Oracle service identifies the endpoint, never the selected schema.  These
+    # fields retain unsupported reference options without silently activating a
+    # different authentication or transport path.
+    oracle_connection_type: Literal["basic", "tns"] = "basic"
+    oracle_service_type: Literal["service", "sid"] = "service"
+    oracle_service_identifier: str = "ORCL"
+    oracle_role: Literal["default", "sysdba", "sysoper"] = "default"
+    oracle_os_auth: bool = False
+    oracle_tns_alias: str = ""
+    oracle_settings_directory: str = ""
+    oracle_auto_connect: bool = False
+    oracle_session_limit_enabled: bool = False
+    oracle_session_limit: int = 0
+    oracle_keepalive_enabled: bool = False
+    oracle_keepalive_seconds: int = 240
+    oracle_client_charset: str = ""
+    oracle_initial_query: str = ""
+    oracle_custom_database_list_enabled: bool = False
+    oracle_custom_database_list: list[OracleDatabaseListEntry] = field(default_factory=list)
+    oracle_notes: str = ""
 
 
 @dataclass
@@ -142,6 +168,9 @@ def _tls_context(config):
 class DatabaseSession:
     def __new__(cls, config):
         if cls is DatabaseSession:
+            if config.driver == "oracle":
+                from .oracle_session import OracleSession
+                return object.__new__(OracleSession)
             if config.driver == "redis":
                 from .redis_session import RedisSession
                 return object.__new__(RedisSession)

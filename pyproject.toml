@@ -23,6 +23,7 @@ dependencies = [
   "certifi==2026.10.23",
   "redis==8.1.0",
   "pymongo==4.19.0",
+  "oracledb==26.1.0",
 ]
 
 [project.optional-dependencies]

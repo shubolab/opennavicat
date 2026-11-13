@@ -1,6 +1,7 @@
 """GridFS worker boundaries, transfer lifecycle and owned native-service flows."""
 from copy import deepcopy
 from datetime import datetime, timezone
+import gc
 from pathlib import Path
 import json
 import hashlib
@@ -10,6 +11,7 @@ import subprocess
 import threading
 from types import SimpleNamespace
 import uuid
+import weakref
 
 from bson import BSON, Binary, ObjectId
 from PySide6.QtCore import QThreadPool, QTimer, Qt
@@ -115,6 +117,7 @@ class SerialHost(QWidget):
 
     def submit(self, work, success=None, failure=None, label="", pool=None, finished=None):
         task = Task(work)
+        task.signals.setParent(self)
         self.tasks.add(task)
         if success:
             task.signals.succeeded.connect(success)
@@ -124,6 +127,7 @@ class SerialHost(QWidget):
             if finished:
                 finished()
         task.signals.finished.connect(done)
+        task.signals.finished.connect(task.signals.deleteLater)
         (pool or self.pool).start(task)
 
     def when_idle(self, callback):
@@ -680,3 +684,78 @@ def test_pytestqt_cleanup_waits_for_both_pools_and_native_owner_close_before_del
         assert not isValid(host) and not isValid(pool)
         shutdown()
     finally:release.set()
+
+
+@pytest.mark.parametrize("payload_kind", ["image", "unsupported"])
+def test_preview_host_retires_native_signals_on_gui_before_worker_collection(
+        qtbot, ui, monkeypatch, tmp_path, payload_kind):
+    """The fake serial owner must preserve the real window's signal lifetime."""
+    host, session = ui
+    if payload_kind == "image":
+        source = tmp_path / "generated.png"
+        image = QImage(8, 6, QImage.Format.Format_RGB32)
+        image.fill(QColor("#2864a0"))
+        assert image.save(str(source), "PNG")
+        payload = source.read_bytes()
+        identity = session.files[0].document["_id"]
+        session.files[0] = file_document(source.name, payload, identity)
+        session.data[identity] = payload
+    widget = page(qtbot, ui)
+    gui, original_task = threading.get_ident(), Task
+    tail_entered, release_tail = threading.Event(), threading.Event()
+    references, destroyed, collections = [], [], []
+    was_enabled = gc.isenabled()
+    gc.disable()
+
+    class TailTask(original_task):
+        def run(self):
+            super().run()
+            tail_entered.set()
+            assert release_tail.wait(5)
+
+    def observed_task(function):
+        index = len(references)
+        task = TailTask(function) if index == 0 else original_task(function)
+        task.signals.destroyed.connect(
+            lambda *_args, number=index: destroyed.append((number, threading.get_ident())),
+            Qt.ConnectionType.DirectConnection)
+        references.append((weakref.ref(task), weakref.ref(task.signals)))
+        return task
+
+    monkeypatch.setitem(globals(), "Task", observed_task)
+    try:
+        widget.preview_action.setChecked(True)
+        qtbot.waitUntil(lambda: tail_entered.is_set() and not host.tasks and not widget.loading)
+        assert host.pool.activeThreadCount() == 1 and not widget.running
+        assert widget.page is not None and widget.selected_file() is session.files[0]
+        if payload_kind == "image":
+            assert widget._preview_image is not None and not widget.message.text()
+        else:
+            assert widget._preview_image is None and "小于 1 MB 的图像" in widget.message.text()
+        # Queue a new preview while the completed native runnable is held at
+        # its tail. Retiring the old signals must not delete this new task.
+        widget.preview_action.setChecked(False)
+        widget.preview_action.setChecked(True)
+        assert widget.loading and len(references) == 2
+        assert isValid(references[1][1]())
+        release_tail.set()
+        ready(qtbot, host, widget)
+        assert len(references) == 2
+
+        def collect_in_worker():
+            collections.append(threading.get_ident())
+            return gc.collect()
+
+        host.submit(collect_in_worker)
+        qtbot.waitUntil(lambda: not host.tasks and not host.pool.activeThreadCount())
+        qtbot.waitUntil(lambda: all(task() is None and signals() is None
+                                  for task, signals in references), timeout=2000)
+        assert len(references) == 3 and collections and collections[0] != gui
+        assert sorted(destroyed) == [(0, gui), (1, gui), (2, gui)]
+        assert not widget.loading and not widget.running and not host.errors
+        assert [name for name, _args in session.calls].count("download") == 2
+    finally:
+        release_tail.set()
+        qtbot.waitUntil(lambda: not host.tasks and not host.pool.activeThreadCount())
+        if was_enabled:
+            gc.enable()

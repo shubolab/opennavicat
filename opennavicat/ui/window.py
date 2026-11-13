@@ -4097,14 +4097,18 @@ class MainWindow(QMainWindow):
                 self.category_actions["query"].setEnabled(False)
             other = self.category_actions["other"]
             user = self.category_actions["user"]
-            self.main_toolbar.removeAction(other)
-            self.main_toolbar.removeAction(user)
-            before = self.category_actions["query"]
             if mongo:
-                self.main_toolbar.insertAction(self.category_actions["index"], user)
-                self.main_toolbar.insertAction(self.mongo_pipeline_action, other)
+                placements = ((user, self.category_actions["index"]),
+                              (other, self.mongo_pipeline_action))
             else:
-                for action in ([user, other] if sqlite else [other, user]):
+                first, second = (user, other) if sqlite else (other, user)
+                placements = ((second, self.category_actions["query"]), (first, second))
+            for action, before in placements:
+                actions = self.main_toolbar.actions()
+                index = actions.index(before)
+                # Moving a QAction rebuilds its QToolButton, which remains
+                # hidden until a later layout event. Preserve settled widgets.
+                if index == 0 or actions[index - 1] is not action:
                     self.main_toolbar.insertAction(before, action)
         self.query_action.setEnabled(self.active_id in self.configs and self.configs[self.active_id].driver in SUPPORTED_DRIVERS
                                      and self.configs[self.active_id].driver != "oracle")

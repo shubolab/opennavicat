@@ -2,7 +2,7 @@
 import threading
 
 from PySide6.QtCore import QRect, QSize, Qt
-from PySide6.QtGui import QFontMetrics, QIcon, QImage
+from PySide6.QtGui import QFontDatabase, QFontMetrics, QIcon, QImage
 from PySide6.QtTest import QSignalSpy
 import pytest
 
@@ -40,9 +40,14 @@ def artwork_calls(monkeypatch):
     return requested, paints
 
 
-def test_driver_grid_and_compact_list_use_real_50_and_16_pixel_delegate_targets(qtbot, artwork_calls):
+@pytest.mark.parametrize('label_font', ['default', 'fixed'])
+def test_driver_grid_and_compact_list_use_real_50_and_16_pixel_delegate_targets(qtbot, artwork_calls, label_font):
     requested, paints = artwork_calls
     dialog = show_manager(qtbot, supported_kinds={'mysql'})
+    if label_font == 'fixed':
+        dialog.connection_list.setFont(QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont))
+        qtbot.mouseClick(dialog.list_button, Qt.MouseButton.LeftButton)
+        qtbot.mouseClick(dialog.grid_button, Qt.MouseButton.LeftButton)
     assert dialog.size() == QSize(900, 700)
     grid_size = dialog.connection_list.gridSize()
     assert grid_size.width() == 126 and grid_size.height() >= 96
@@ -62,6 +67,7 @@ def test_driver_grid_and_compact_list_use_real_50_and_16_pixel_delegate_targets(
         assert natural.height() <= label_area.height(), item.text()
     assert dialog.connection_list.iconSize() == QSize(50, 50)
     assert dialog.filter_tree.iconSize() == QSize(16, 16)
+    paints.clear()
     dialog.grab()
     driver_paints = [rect for (family, _name), rect, _mode, _state in paints if family == 'driver']
     assert driver_paints and any(rect.size() == QSize(50, 50) for rect in driver_paints)

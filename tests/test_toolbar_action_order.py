@@ -20,7 +20,15 @@ def toolbar_host(qtbot, tmp_path, monkeypatch):
     monkeypatch.setattr(window_module, "discover_navicat_profiles",
                         lambda: pytest.fail("No existing profiles may be read"))
     window = MainWindow(store)
-    qtbot.addWidget(window, before_close_func=lambda _widget: window.sessions.clear())
+
+    def before_close(_widget):
+        # pytest-qt may deliver deleteLater before fixture finalizers run.
+        # Keep all Qt reads here, while the registered widget is still alive.
+        assert not window.tasks and not window.pool.activeThreadCount()
+        assert not window.cancel_pool.activeThreadCount()
+        window.sessions.clear()  # Fake sessions have no network/close API.
+
+    qtbot.addWidget(window, before_close_func=before_close)
     window.show()
 
     def context(driver, connected=True):
@@ -36,11 +44,7 @@ def toolbar_host(qtbot, tmp_path, monkeypatch):
         return window
 
     yield context
-    # The fake session has no network/close API and never enters the work queue.
-    assert not window.tasks and not window.pool.activeThreadCount()
-    window.sessions.clear()
-    window.close()
-    qtbot.waitUntil(lambda: window._closed)
+    assert window._closed  # Pure Python state; Qt owns close/deleteLater.
 
 
 def _assert_order(window, driver):

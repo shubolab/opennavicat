@@ -60,8 +60,10 @@ def test_actual_native_bigint_variables_functions_loops_async(engine, offline):
     ("import('os')","load"),
     ("'x'.repeat(300000)","output")])
 def test_actual_native_failure_limits_and_cleanup(engine, offline, text, fragment):
+    # Diagnostic errors need enough total budget for native spawn/bootstrap.
+    # The infinite loop and dedicated watchdog/cancel cases retain short bounds.
     with pytest.raises(JavaScriptError) as raised:
-        engine.execute(offline,text,limits=ExecutionLimits(timeout_ms=1500 if fragment in {'memory','output'} else 100,heap_bytes=4*1024*1024))
+        engine.execute(offline,text,limits=ExecutionLimits(timeout_ms=1500 if fragment else 100,heap_bytes=4*1024*1024))
     assert fragment in str(raised.value).lower()
     assert_clean(raised.value.result)
     assert raised.value.result.elapsed_ms < 2500

@@ -132,8 +132,38 @@ The application and cleanup runner are unchanged. Private receipts are under
 `artifacts/stream-variants/cleanup-order-fix/`; a new CI run is required for the
 corrected test source.
 
-`fullDocumentBeforeChange`, `whenAvailable`, `required`, image enablement and
-retention, unavailable/deleted lookup documents, broader resume and invalidation
+That correction was pushed as `5fcf99c`. Its distinct
+[run 43397137741](https://github.com/shubolab/opennavicat/actions/runs/43397137741)
+passed the database-security job and five native-target jobs. The selected
+security artifact independently qualified Window **19/0**, backend **46/0**,
+ordinary TLS **24/0**, stream TLS **2/0**, stopped cleanup **13/0** and ordinary
+collections **511/0**, each with its own exact manifest, Git blobs and cleanup
+receipts. The complete run still failed: macOS Intel's source suite had
+**2,195 passed / 1 failed / 640 conditional skips**. Its pending-Promise test
+expected a semantic diagnostic under a 100 ms total execution budget but
+actually received the safe cancellation diagnostic. The original result is
+retained, not relabelled as a transient success.
+
+The parent deadline begins before native child creation and bootstrap. A
+controlled 180 ms startup delay before executing the same verified native
+helper reproduced the classification/deadline race without a database or UI:
+the original pending test failed, and the corrected pending test passed.
+Semantic diagnostics now use the existing 1,500 ms total budget; the infinite
+loop and separate 100 ms watchdog/blocked-host tests keep their short limits.
+The elapsed-time, exact-child cleanup and memory assertions are unchanged;
+neither the runtime nor its cancellation deadline was relaxed. All **seven**
+actual native error cases passed with that startup delay. A separate native-VM
+scope passed **103/0**; that scope does not include the modified
+`test_js_engine.py` module. Private verification and an independent source/JUnit
+check are under `artifacts/stream-variants/js-diagnostic-budget-fix/`.
+The original CI did not record startup phases, so the controlled reproduction
+does not establish which phase was slow in that particular CI failure.
+
+The later [AP18-13 reference slice](ui-reference-18-mongodb-pipeline.md#ap18-13-collection-images-offon-and-required-image-errors)
+separately observes six image OFF/ON cases and two zero-position error sentinels.
+It does not establish complete initial-call cardinality or resolve its blank
+Output states. Full `fullDocumentBeforeChange`, `whenAvailable`, `required`,
+image enablement and retention, unavailable/deleted lookup documents, broader resume and invalidation
 behavior, permission failures, other topologies, successful Preview workflows,
 and reference-backed acceptance on Windows/Linux/macOS remain open. The
 existing [parity matrix](parity-matrix.md) remains authoritative for the complete

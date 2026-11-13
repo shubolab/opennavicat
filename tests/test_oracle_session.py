@@ -390,3 +390,73 @@ def test_profile_edit_during_connect_closes_unpublished_connection(monkeypatch):
         session.execute("SELECT 1 FROM DUAL")
     assert connection.closed and connection.sql == []
     assert session.connection is None and session.current_operation_marker is None
+
+
+@pytest.mark.parametrize("scope_id", [
+    pytest.param("lo0)(HOST=unowned.invalid", id="descriptor-host"),
+    pytest.param("lo0)(PROTOCOL=tcps", id="descriptor-protocol"),
+    pytest.param('lo0"', id="quote"),
+    pytest.param("lo0(", id="open-parenthesis"),
+    pytest.param("lo0)", id="close-parenthesis"),
+    pytest.param("lo0=other", id="assignment"),
+    pytest.param("lo 0", id="space"),
+    pytest.param("lo0\tother", id="tab"),
+    pytest.param("lo0\nother", id="newline"),
+    pytest.param("lo0\rother", id="carriage-return"),
+    pytest.param("lo0\x00other", id="control-null"),
+    pytest.param("lo0\x7fother", id="control-del"),
+    pytest.param("lo0\u2028other", id="unicode-line-separator"),
+    pytest.param("lo0/other", id="slash"),
+    pytest.param("lo0\\other", id="backslash"),
+    pytest.param("lo0:other", id="colon"),
+    pytest.param("lo0@other", id="at-sign"),
+    pytest.param("lo0[other]", id="brackets"),
+])
+def test_ipv6_zone_rejects_descriptor_whitespace_and_control_before_network(monkeypatch, scope_id):
+    config = profile(host="fe80::1%" + scope_id)
+    calls = []
+    def unexpected_connect(**options):
+        calls.append(options["host"])
+        pytest.fail("Malformed Oracle host reached the driver connect call")
+    monkeypatch.setattr(oracledb, "connect", unexpected_connect)
+    for operation in (lambda: validate_oracle_execution(config),
+                      lambda: DatabaseSession(config).connect()):
+        with pytest.raises(ValueError, match="Oracle host"):
+            operation()
+    assert calls == []
+
+
+def test_ipv6_descriptor_zone_is_rejected_by_connect_without_prompt_validation(monkeypatch):
+    calls = []
+    def unexpected_connect(**options):
+        calls.append(options["host"])
+        pytest.fail("Malformed Oracle host reached the driver connect call")
+    monkeypatch.setattr(oracledb, "connect", unexpected_connect)
+    with pytest.raises(ValueError, match="Oracle host"):
+        DatabaseSession(profile(host="::1%lo0)(HOST=unowned.invalid")).connect()
+    assert calls == []
+
+
+@pytest.mark.parametrize("host", [
+    "127.0.0.1", "192.0.2.42", "generated.example.invalid", "generated_host-1.invalid",
+    "::1", "2001:db8::1", "fe80::1%lo0", "fe80::1%en0", "fe80::1%12",
+    "fe80::1%eth0.100", "fe80::1%veth_0-test",
+])
+def test_plain_and_scoped_hosts_preserve_one_host_in_public_driver_descriptor(monkeypatch, host):
+    monkeypatch.setattr(oracledb, "connect", lambda **_options: pytest.fail("No network in host validation"))
+    config = profile(host=host)
+    validate_oracle_execution(config)
+    options = OracleSession(config)._connection_options()
+    params = oracledb.ConnectParams(**options)
+    descriptor = params.get_connect_string()
+    restored = oracledb.ConnectParams()
+    restored.parse_connect_string(descriptor)
+    assert options["host"] == host and restored.host == host
+    assert descriptor.count("(HOST=") == 1
+    assert restored.port == config.port and restored.service_name == config.oracle_service_identifier
+    assert restored.protocol == options["protocol"] == "tcp"
+
+
+def test_ipv6_zone_character_validation_does_not_invent_an_interface_length_limit():
+    # This is character validation only, not proof such an OS interface exists.
+    validate_oracle_execution(profile(host="fe80::1%" + "generated_interface_" * 32))

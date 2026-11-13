@@ -58,6 +58,7 @@ messages.
 | Owned native ARM64 Oracle backend | same `b8f3f8a` | 14 passed, zero skips, 3.47 s. Catalog, columns, table/view delivery, NUMBER, access denial, safe errors, bounds, exact live cancellation and reuse. No Qt window acceptance. |
 | Dedicated form and related source scope | `45e57e3e5a129e72c03f748e08ce0b1f3490ab92` | 246 passed, zero skips, 4.44 s; 27 form cases and 18 actual MainWindow cases with strict fake Oracle sessions, plus related regressions. |
 | Full default source suite | same `45e57e3` | 2,382 passed, 659 conditional skips, zero failures/errors, 89.59 s; 217 declared inputs unchanged and matched to Git. Conditional skips are not real database execution. |
+| Later complete default source attempt | `6af3109664ef291e8de608d9d2e2bf0814aae3f5` | 2,470 passed, 659 conditional skips, **1 failure**, zero errors, 113.17 s; exact 3,130-case multiset and 223 runtime/test/build inputs unchanged and matched to Git. A GridFS preview-layout case timed out waiting for ready after toggling preview. The cause is under controlled investigation; this is not a passing aggregate candidate qualification. WIP workflows/docs and the unmerged real-Window runner are outside this measured input scope. |
 | Native Oracle probe and installer/publisher contracts | `1cb6bc12159a1b1d4c3989f50491183cbafd5d1c` | 192 passed, zero skips, independently repeated. Exact 26.1.0 metadata, actual native extension imports and public parameter roundtrip without a network connection. |
 | Local packaged macOS ARM64 smoke | same `1cb6bc1` | Actual app exits 0; asynchronous isolated SQLite 6 rows × 4 columns, existing driver/crypto/JS probes and all four new Oracle flags pass. Offscreen; no Oracle endpoint. |
 | Local native app static audit | app built at `1cb6bc1`, unchanged app-source bytes rebound to `65abe89278462ee62ec31db07207a298c9d44b66` | 77 own modules and entry code match source; main executable and four Oracle extensions are ARM64; extension machine code and driver metadata/licenses match the verified official wheel. No installer or six-target claim. |
@@ -106,25 +107,103 @@ offscreen Qt and writes an explicit required-case JSON manifest. It does not
 disable pytest-qt or reduce the database case list.
 
 New run [43415040482](https://github.com/shubolab/opennavicat/actions/runs/43415040482)
-at `64226493cdf7feb87b7a6b53482b93003c865e79` reports both native jobs successful.
-Independent artifact/source/JUnit/image/cleanup audit is tracked separately;
-job status alone is not its completion. This is backend qualification, not
-actual Oracle Window, six desktop installers or a public release.
+at `64226493cdf7feb87b7a6b53482b93003c865e79` completed successfully. Independent
+artifact audit verified **14 passed, zero skips on each architecture**, exact
+required-case/JUnit multisets and 13 declared source paths against that Git
+revision. The two artifact ZIPs' actual sizes and SHA256 match GitHub's API
+digests and were independently rehashed again by the root agent. The native
+Docker/image/uname evidence, pinned child/config identities, actual driver and
+server versions, generated users, CPU observer binding and session reuse cases
+were checked. Each job's normal finalizer and subsequent cleanup-only step
+reported the same exact container ID absent, with zero application sessions.
+The local Docker daemon cannot independently inspect those disposed CI hosts.
+
+The same 14-case backend scope was repeated on two architectures; this is not
+28 distinct accepted functions. The audit receipt is
+`oracle-ci-native/opennavicat/artifacts/oracle-ci-native/ci-43415040482-independent-audit.json`.
+It is backend qualification, not actual Oracle Window, six desktop installers
+or a public release.
 
 ## Open acceptance gates
+
+The later default-suite GridFS failure is retained at
+`artifacts/oracle-integration/default-source-6af/`. Its 15-second wait must be
+diagnosed; a wider timeout or an unexamined rerun does not close the gate.
+The investigation did not reproduce that timeout in 200 isolated attempts,
+the original module or the original 938-case prefix. It independently proved
+that the fake serial host retained completed Task/TaskSignals objects instead
+of using the production Window's GUI parent and deferred deletion. Test-only
+fix `859a6980cd631b7030045a83cf034a17f7846dba` mirrors those two production lines
+and adds image/non-image preview regressions with a real runnable tail and
+worker garbage collection. All three native signal objects are destroyed on
+the GUI thread and weak references retire. The module passed 24 cases with
+four database opt-in skips; the unchanged original prefix passed 651 with 287
+skips. Its 223 declared inputs match Git. Product GridFS code is unchanged;
+the original timeout's causal link to the host defect remains unproved. A new
+aggregate run remains necessary.
+
+Separate backend fix `f63d16dd3e1b3388d6ac90edc5540695f977b3e6` restricts the
+IPv6 scope identifier to ordinary ASCII interface/index characters without
+adding a length cap. `ipaddress` had accepted descriptor delimiters inside
+scope text, and a pure public `ConnectParams` descriptor roundtrip changed its
+host value. No actual endpoint change or network exploit was demonstrated.
+The same new cases gave 14 failures / 17 passes against old source; the fixed
+Oracle unit module passed 111 cases without skips. Valid IPv4, DNS, IPv6 and
+zone values retain exact public parameter roundtrips; malformed values fail
+before the driver connection call. Five inputs and an independent review bind
+that source. Root Cocoa, app-bundle and CI qualifications must use the new
+backend source rather than inheriting the earlier backend hash.
 
 Independent source review reproduced a shared Window defect: removing a
 connection treats an asynchronously queued disconnect as a completed close,
 so a later close failure can leave a live session after its profile was
-deleted. A separate, narrow fix is in progress. This candidate must not reach
-main/release qualification until deletion commits only after successful close,
-failures retain the profile, and stale callbacks cannot delete a replacement
-profile. The earlier app/Cocoa receipts remain bound to their stated sources.
+deleted. The narrow fix `5de453e873f75b39ad2bde94d8b25074a64b709e` now commits
+deletion only after successful close. It preserves the profile and credential
+flags on failure and rejects callbacks whose configuration, Store state,
+remembered-credential choice or session binding has changed. The same final
+12-case module produced **9 failures / 3 passes against old source**, then
+**30 passes / zero skips** with the fix and the existing 18 Oracle-window cases.
+No actual database or real keychain is used in these regressions.
 
-Actual GUI-to-Oracle Test/save/reopen/Open/schema/table/view/Stop acceptance is
-being added with an owned generated fixture; the earlier fake-session GUI and
-driver-only scopes cannot substitute for it. Actual Cocoa database acceptance
-remains separate from offscreen execution.
+After merging the fix at `3351083cf7cc4fe71f8f7273e1b8f22e8a199662`, root ran
+the 27 form, 18 window and 12 delete-lifecycle cases using actual **Cocoa**:
+**57 passed, zero skips/failures/errors**, exact collection/JUnit multiset and
+83 tracked runtime/test/dependency paths unchanged and matched to Git. The
+receipt is `artifacts/oracle-integration/native-cocoa-tests-post-close-fix/verification.json`.
+These cases use strict fake driver sessions. The earlier app/CUA receipts remain
+bound to their earlier source. Root then rebuilt the actual ARM64 app at
+`3351083` and ran its isolated asynchronous 6×4 SQLite smoke with Cocoa selected,
+all driver/crypto/JS and four Oracle native probe flags passing. Its sample
+image was visually reviewed. A separate static audit again passed all 21
+checks: 77 own modules including the changed Window match source, 61 Mach-O
+images support ARM64 and four Oracle extensions match the official wheel's
+ARM64 machine code and metadata/license payloads. These are local app-bundle
+checks; actual Oracle Window, aggregate source and installer gates remain open.
+The new receipts are
+`artifacts/oracle-integration/local-native-post-close-fix/packaged-cocoa-verification.json`
+and `artifacts/oracle-packaging-review/native-app-post-close-fix/verification.json`.
+
+Real Window checkpoint `9d488349988dc1d6b6c13d6e1ae5994857cc766a` adds the owned
+Dialog Test/save/Edit/Open/schema/28-column table/13-column view/typed-data path
+and two live compute-view Stop/reuse/Disconnect-or-Shutdown cases. Its final
+offscreen scope passed three cases with zero skips; 24 inputs match Git and
+six historical exact container IDs were independently absent. Its independent
+review includes server SQL_ID/child/SID/SERIAL#/username ownership, serial and
+control threads, unchanged rows, zero remaining app sessions, native image,
+secret scans and process/FD cleanup. This checkpoint predates root's close
+fix and IPv6 fix; fresh root Cocoa acceptance remains a distinct gate.
+
+The runner's 14 offline contracts include real owned fork cases where the
+leader exits before a descendant that holds, or closes, inherited pipes. It
+uses bounded nonblocking reads, preserves the unreaped leader identity through
+group cleanup and requires actual ESRCH in post-reap read-only checks. XNU's
+EPERM for groups without non-zombie members is recorded as pending, never as
+absence. The old harness failures and historical UI attempts remain retained.
+One final qualification attempt failed while seeding a materialized view,
+before pytest/cases; its DatabaseError code was not captured, so the cause
+remains unknown. The diagnostic follow-up passed without changing the shared
+fixture or dropping that object. Root source/GUI/packaging qualification is not
+inherited from that successful follow-up.
 
 The remaining Basic/TNS/SID/roles/OS/Thick/TLS/SSH/advanced settings, query
 semantics, transactions, all types, writes and conflict handling, designers,

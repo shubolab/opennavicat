@@ -31,12 +31,19 @@ jobs:
       - run: python -m pip install -e ".[dev]"
       - name: Verify dedicated Oracle adapter on a fresh native pinned server
         run: python scripts/test-oracle.py --pull-image --output artifacts/oracle-native
+      - name: Verify Oracle dialog and window workflow on a fresh owned native server
+        run: python scripts/test-oracle-window.py --output artifacts/oracle-window-native
       - name: Verify exact Oracle fixture cleanup without starting or connecting
         if: always()
         run: python scripts/test-oracle.py --cleanup-interrupted --output artifacts/oracle-native
+      - name: Verify exact Oracle window fixture cleanup without starting or connecting
+        if: always()
+        run: python scripts/test-oracle-window.py --cleanup-interrupted --output artifacts/oracle-window-native
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: validation-oracle-native-${{ matrix.arch }}
-          path: artifacts/oracle-native/
+          path: |
+            artifacts/oracle-native/
+            artifacts/oracle-window-native/
           if-no-files-found: error

@@ -24,14 +24,25 @@ packaged smoke和全部Oracle native探针已过；独立审核77应用模块、
 其最后一次偶然AX观察不纳入证据或演示，也未在其窗口操作。
 
 Oracle双原生backend CI [43415040482](https://github.com/shubolab/opennavicat/actions/runs/43415040482)
-报告amd64/arm64成功，正在独立下载核对source/JUnit/image/cleanup；不得只凭job成功关闭资格。
+在amd64/arm64各14通过零跳过，两个validation ZIP实际字节与GitHub size/digest一致，root另重hash。
+13声明源逐642 Gitblob、required/JUnit精确multiset、image/config/uname/driver/server和CPU observer绑定均独立核对；
+各job正常finalizer及之后cleanup-only步都确认同精确CID absent、appsession0，本机daemon未跨CI host检查。
+同一14case重复两平台，不冒称28项独立功能，也不是窗口/六安装器资格。
 前三次失败保留，只有第三次保留了明确`libEGL.so.1`缺失trace；前两次仅知collect阶段失败。
 现正以独立owned Oracle补真实Dialog Test、Save/Edit/Open、schema/table/view、实际Stop后复用及
 Disconnect/Close，并将该Window runner接入两native job后重新验证。暂未合入main，合流默认全源、
 actual Cocoa真库窗口和六目标新安装器均仍待做；server SLEEP及时取消和完整Oracle工具/认证等门禁仍开放。
 独立审计另复现共用Remove在异步Close完成前删profile、失败后留下session的问题；
-`codex_oracle_delete_close_fix`正在做成功continuation/失败保留/同ID替换保护的最小修复，
-合流前不得进入main或release资格，既有原生包和Cocoa收据只绑定各自旧源码。
+最小修复`5de453e`已合流为`3351083`：成功continuation才删、失败保留、同ID替换保护。
+相同最终12case旧源码9fail/3pass，修后连同18旧Window为30pass/0skip；root在335另actual
+Cocoa重跑全部27表单+18窗口+12删除合同，共57pass/0skip，83源前后/Gitblob及精确JUnit匹配。
+这些仍是严格fake数据库；旧原生包/CUA只绑定旧源码，重建和合流整轮/真库窗口资格仍待完成。
+
+后续候选`6af3109`合入单GIF的真实Oracle三页录制准备，尚未替换资产。
+该候选完整默认源码尝试为2470通过/659条件跳过/**1失败**、113.17秒；3130精确case与223份
+runtime/test/build输入前后及Gitblob匹配，WIP workflow/docs与尚未合入的Window runner不在此scope。
+失败是GridFS preview-layout在切换Preview后等待ready15秒超时，原因待控复现，不能当作整轮通过或盲目放宽时限。
+独立`codex_oracle_gridfs_regression`负责该模块及测试的最小诊断/修复；合流main和release门禁暂未关闭。
 
 ## 当前已完成的发布与继续入口
 

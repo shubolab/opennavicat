@@ -64,7 +64,7 @@
     "focused_user_workspace_clean": true,
     "next_parallel_ui_branch": "codex_oracle_connection_ui",
     "next_parallel_ui_workspace": "/Users/wangshubo/.codex/worktrees/oracle-connection-ui/opennavicat",
-    "current_candidate_revision_at_measurement": "65abe89278462ee62ec31db07207a298c9d44b66",
+    "current_candidate_revision_at_measurement": "d8dfcce6444b9154aaa708ec4b88453799fb87a1",
     "next_parallel_ci_branch": "codex_oracle_ci_native",
     "next_parallel_ci_workspace": "/Users/wangshubo/.codex/worktrees/oracle-ci-native/opennavicat"
   },
@@ -654,13 +654,12 @@
     "oracle_published": false
   },
   "next_steps": [
-    "Keep complete retained Navicat18 UI/database-tool goal active; public0.12/b6 and full parity gates remain separate from candidate qualification.",
-    "Integrate and qualify the separately reproduced Remove/asyncClose failure and same-ID replacement fix before main/release; earlier app/Cocoa scopes retain their original source binding.",
-    "Complete independent backend CI artifact audit and real Oracle Window Test/save-reopen/Open/schema/table/view/live Stop/reuse/disconnect/close scope; integrate runner and require both native Linux jobs to execute it anew.",
-    "Review/merge candidate, run exact merged default suite, then qualify actual Cocoa DB window flow. Do not substitute fake-session Cocoa widgets or backend-only tests.",
-    "Before usable0.13 release refresh/privacy-review one actual-app GIF and requalify six native desktop installers/checksums plus formal/public bytes; do not reuse0.12 installer evidence.",
-    "Keep Oracle Query/TNS/SID/roles/OS/Thick/TLS/SSH/advanced/types/transactions/writes/DataPump/Other tools and prompt serverSLEEP cancellation open.",
-    "Continue unresolved AP18-13 ONblankOutput/initial-call counts, Preview/resume/retention/topology/permissions and WinLinux reference/human gates, plus Snowflake and all remaining matrix functions."
+    "Keep complete Navicat18 retained UI/database-tool goal active, independently from published0.12/b6 and the0.13 candidate.",
+    "Run fresh actual Cocoa OracleWindow3 on final mergedbackend/window/runner/workflows; inspect every generatedphase, independently recheck exact ownedfixture/child resources and source binding.",
+    "Rebuild nativeARM64 app after IPv6 guard fix; smoke with actualOracle native probes and audit current app modules/licenses/native payload. Earlier335 app receipt remains historical.",
+    "Run complete final merged default suite with external DB opt-ins cleared, source/node/JUnit binding and no competing Oraclefixture; retain6af GridFS timeout as historical/unattributed, testhost lifecycle fix separately proven.",
+    "Record/review the single actualappGIF with all34 phases and generated data only; then qualify six native installers and both Linux Oracle backend14/Window3 scopes in required CI, download/hash actualsix bytes before any tag/release.",
+    "Publish only after formal six native installers/checksums/publicbytes audits. Continue Oracle Query/transactions/auth/security/types/designers/DataPump/Other, Snowflake, Mongo unresolvedstream and full three-platform reference/human gates."
   ],
   "new_reference_or_implementation_work_claimed_by_this_snapshot": true,
   "limits": [
@@ -1188,7 +1187,7 @@
     "ui_integration": "in_progress_after_frozen_backend; text-only messages/output, page-local Stop and explicit partial/row/time boundary handling; no parity claimed",
     "new_six_installer_ci_or_release_complete": false
   },
-  "captured_at_utc": "2026-11-13T11:22:28.574532+00:00",
+  "captured_at_utc": "2026-11-13T14:53:59.261667+00:00",
   "historical_candidate_ci_0_12": {
     "version": "0.12.0",
     "source_sha": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
@@ -2261,30 +2260,58 @@
   },
   "latest_reported_local_validation": {
     "candidate_revision_at_measurement": "65abe89278462ee62ec31db07207a298c9d44b66",
-    "cocoa_source_passed": 45,
+    "cocoa_source_passed": 57,
     "cocoa_source_skipped": 0,
     "fake_oracle_sessions": true,
     "local_arm64_packaged_smoke_passed": true,
     "actual_oracle_window_scope": "in progress in independent offscreen tree",
     "see": "oracle_candidate_qualification",
-    "not_complete_reference_or_tool_parity": true
+    "not_complete_reference_or_tool_parity": true,
+    "post_close_fix_revision": "3351083cf7cc4fe71f8f7273e1b8f22e8a199662",
+    "local_arm64_app_rebuilt_after_close_fix": true,
+    "default_source_attempt": {
+      "passed": false,
+      "revision": "6af3109664ef291e8de608d9d2e2bf0814aae3f5",
+      "counts": {
+        "passed": 2470,
+        "failed": 1,
+        "errors": 0,
+        "skipped": 659
+      },
+      "seconds": 113.17,
+      "source_count": 223,
+      "source_before_after_identical": true,
+      "source_git_blobs_match": true,
+      "collection_junit_multiset_exact": true,
+      "collected": 3130,
+      "qualification": "Current6af complete default source suite; runtime/test/build inputs only. WIP CI workflow/docs excluded. New Oracle actual-window runner not yet merged; all external DB opt-ins cleared.",
+      "receipt": "artifacts/oracle-integration/default-source-6af/verification.json",
+      "failure_case": "tests.test_mongo_gridfs_ui::test_preview_and_progress_are_below_table_and_pagination_with_reference_toolbar_order",
+      "failure": "15-second ready wait after preview toggle timed out; cause unproved; controlled investigation ongoing",
+      "fix_branch": "codex_oracle_gridfs_regression"
+    }
   },
   "current_resume_validation": {
-    "candidate_revision_at_measurement": "65abe89278462ee62ec31db07207a298c9d44b66",
+    "candidate_revision_at_measurement": "d8dfcce6444b9154aaa708ec4b88453799fb87a1",
     "qualified_scopes": "oracle_candidate_qualification",
     "default_full_source_scope_revision": "45e57e3e5a129e72c03f748e08ce0b1f3490ab92",
     "merged_candidate_full_suite_not_yet_run": true,
     "main_ci_scope": "ci_current (fab image-mode CI; noOracle qualification)",
     "candidate_backend_ci_scope": "ci_oracle_backend_candidate",
-    "full_parity_complete": false
+    "full_parity_complete": false,
+    "root_finalsource_cocoa_pending": true
   },
   "next_unreleased_checkpoint": {
-    "revision_at_measurement": "65abe89278462ee62ec31db07207a298c9d44b66",
+    "revision_at_measurement": "d8dfcce6444b9154aaa708ec4b88453799fb87a1",
     "version": "0.13.0 candidate",
-    "scope": "Dedicated Oracle backend/form/catalog, native probes and pinned two-arch DB CI integrated locally; real window and aggregate qualification pending",
+    "scope": "Dedicated Oracle/form/catalog plus safe deletion, literal IPv6 scope validation, actual Window runner and demo preparation merged; root finalsource Cocoa/native/default/GIF/six-target checks pending",
     "merged_to_main": false,
     "six_target_oracle_ci_receipts_qualified": false,
-    "six_installer_byte_or_new_public_release_qualification": false
+    "six_installer_byte_or_new_public_release_qualification": false,
+    "aggregate_source_qualification": false,
+    "gridfs_preview_failure_open": true,
+    "scoped_ipv6_fix_merged": true,
+    "actual_window_runner_merged": true
   },
   "historical_image_mode_current_resume_validation": {
     "source_sha": "fab0419fd47ad49378f3c2481bee0dca46fe7a43",
@@ -2463,8 +2490,67 @@
     "delete_after_close_defect": {
       "reproduced": true,
       "fix_branch": "codex_oracle_delete_close_fix",
-      "fixed_and_qualified": false,
-      "release_gate": "Only delete after successful close; retain profiles/credential flags on failure; protect same-ID replacements."
+      "fixed_and_qualified": true,
+      "release_gate": "Only delete after successful close; retain profiles/credential flags on failure; protect same-ID replacements.",
+      "fix_revision": "5de453e873f75b39ad2bde94d8b25074a64b709e",
+      "integration_revision": "3351083cf7cc4fe71f8f7273e1b8f22e8a199662",
+      "same_final_old_source_failed": 9,
+      "same_final_old_source_passed": 3,
+      "focused_fixed_passed": 30,
+      "focused_fixed_skipped": 0,
+      "receipt_tree": "oracle-delete-close-fix/opennavicat",
+      "receipt": "artifacts/oracle-delete-close-fix/verification.json",
+      "qualification_scope": "Source/fake-session focused tests and root actual Cocoa57; no actualDB deletion or newapp/release claim."
+    },
+    "actual_cocoa_after_close_fix": {
+      "revision": "3351083cf7cc4fe71f8f7273e1b8f22e8a199662",
+      "passed": 57,
+      "skipped": 0,
+      "failed": 0,
+      "qt_platform": "cocoa",
+      "declared_sources": 83,
+      "exact_collection_junit": true,
+      "oracle_database": "strict fake sessions; no actual endpoint",
+      "receipt": "artifacts/oracle-integration/native-cocoa-tests-post-close-fix/verification.json"
+    },
+    "local_arm64_app_after_close_fix": {
+      "build_revision": "3351083cf7cc4fe71f8f7273e1b8f22e8a199662",
+      "version": "0.13.0",
+      "oracledb": "26.1.0",
+      "native_static_checks_passed": 21,
+      "own_modules_matched": 77,
+      "native_macho_images_arm64": 61,
+      "oracle_native_extensions_arm64_only": 4,
+      "packaged_smoke_exit": 0,
+      "isolated_async_sqlite_rows": 6,
+      "isolated_async_sqlite_columns": 4,
+      "requested_qt_platform": "cocoa",
+      "actual_oracle_endpoint": false,
+      "root_sample_screenshot_reviewed": true,
+      "receipt": "artifacts/oracle-integration/local-native-post-close-fix/packaged-cocoa-verification.json",
+      "static_receipt": "artifacts/oracle-packaging-review/native-app-post-close-fix/verification.json",
+      "installer_or_six_target_acceptance": false
+    },
+    "later_default_source_attempt": {
+      "passed": false,
+      "revision": "6af3109664ef291e8de608d9d2e2bf0814aae3f5",
+      "counts": {
+        "passed": 2470,
+        "failed": 1,
+        "errors": 0,
+        "skipped": 659
+      },
+      "seconds": 113.17,
+      "source_count": 223,
+      "source_before_after_identical": true,
+      "source_git_blobs_match": true,
+      "collection_junit_multiset_exact": true,
+      "collected": 3130,
+      "qualification": "Current6af complete default source suite; runtime/test/build inputs only. WIP CI workflow/docs excluded. New Oracle actual-window runner not yet merged; all external DB opt-ins cleared.",
+      "receipt": "artifacts/oracle-integration/default-source-6af/verification.json",
+      "failure_case": "tests.test_mongo_gridfs_ui::test_preview_and_progress_are_below_table_and_pagination_with_reference_toolbar_order",
+      "failure": "15-second ready wait after preview toggle timed out; cause unproved; controlled investigation ongoing",
+      "fix_branch": "codex_oracle_gridfs_regression"
     }
   },
   "ci_oracle_backend_candidate": {
@@ -2478,8 +2564,8 @@
       "arm64"
     ],
     "url": "https://github.com/shubolab/opennavicat/actions/runs/43415040482",
-    "independent_artifact_audit_complete": false,
-    "scope": "backend only; exact-source/image/JUnit/cleanup audit in progress; not complete candidate/six-target/window qualification",
+    "independent_artifact_audit_complete": true,
+    "scope": "Exact642 backend on native Linuxamd64 and arm64; same14 cases repeated, not28 distinct functions. ActualWindow/sixdesktop/nativehuman/fullparity gates open.",
     "failed_diagnostic_runs": [
       {
         "run_id": 43411174075,
@@ -2496,6 +2582,104 @@
         "phase": "collection beforeDocker",
         "precise_cause": "retained QtGui import trace: missing libEGL.so.1 on both runners"
       }
-    ]
+    ],
+    "exact_collection_junit_multiset": true,
+    "source_paths_each": 13,
+    "zero_skip_cases_each": 14,
+    "artifact_api_byte_digests_verified": true,
+    "root_rehashed_two_artifact_zips": true,
+    "normal_finalizer_and_later_cleanup_only_same_cid_absent": true,
+    "ci_docker_host_inspected_by_local_daemon": false,
+    "receipt_tree": "oracle-ci-native/opennavicat",
+    "receipt": "artifacts/oracle-ci-native/ci-43415040482-independent-audit.json"
+  },
+  "oracle_window_development": {
+    "branch": "codex_oracle_window_actual",
+    "tree": "/Users/wangshubo/.codex/worktrees/oracle-window-actual/opennavicat",
+    "product_files_changed": false,
+    "new_files": [
+      "scripts/test-oracle-window.py",
+      "tests/test_oracle_window_integration.py"
+    ],
+    "historical_offscreen_actual_scopes": {
+      "actual-r1": "failed: QTest double-click missing preceding click; fixed actual event sequence, not product",
+      "actual-r2": "2passed/1failed: unordered view wrongly expected table PK ordering; fixture-ID typed multiset fixed, not product",
+      "actual-r3": "3passed/0skip, historical24source pre-final harness; exactCID absent",
+      "actual-final": "3passed/0skip with earlier selectors harness; source bound to that receipt, not finalsource"
+    },
+    "final_offline_review": {
+      "passed": 14,
+      "skipped": 0,
+      "real_owned_fork_held_and_closed_pipes_probes_passed": true,
+      "source_review_approved": true,
+      "receipt": "artifacts/oracle-window-review/verification.json",
+      "actual_final_pending": true
+    },
+    "resolved_harness_findings": [
+      "Direct parent exits while descendant keeps stdout/JUnit FDs: old drain thread hung; nonblocking selectors and unreaped leader identity fixed.",
+      "Descendant closes both pipes then lives: must clean exact original process group before reaping leader.",
+      "XNU excludes zombie members and may return EPERM; record pending and after reap use bounded signal0 checks, require actual ESRCH for absence.",
+      "POSIX-only fixture CLI contracts are skipped on Windows; app native driver tests remain separate."
+    ],
+    "latest_qualified_attempt": {
+      "directory": "artifacts/oracle-window-actual/actual-qualified",
+      "passed": false,
+      "error_class": "DatabaseError",
+      "phase": "shared fixture create_materialized_view before any pytest/testcases",
+      "precise_driver_code": "unknown; not recorded in that source",
+      "source_stable": true,
+      "exact_fixture_absent": true,
+      "application_sessions": 0,
+      "secret_scan_passed": true,
+      "cause_not_attributed_to_window_harness_or_resource_contention": true
+    },
+    "diagnostic_followup": "Completed3/0; unchanged sharedfixture, code remains unknown for prior MV seed failure. Root finalsource Cocoa3/native/default qualification next.",
+    "merged_to_root_candidate": true,
+    "final_cocoa_or_six_target_qualification": false,
+    "leaf_revision": "9d488349988dc1d6b6c13d6e1ae5994857cc766a",
+    "final_offscreen_passed": 3,
+    "final_offscreen_skipped": 0,
+    "declared_sources": 24,
+    "independent_review_passed": true,
+    "all_historical_owned_cids_independently_absent": 6,
+    "remote_leaf_push_pending": true,
+    "final_actual_receipt": "artifacts/oracle-window-actual/actual-qualified-r2/verification.json",
+    "independent_receipt": "artifacts/oracle-window-review/verification.json"
+  },
+  "gridfs_test_host_lifecycle": {
+    "source_fix_revision": "859a6980cd631b7030045a83cf034a17f7846dba",
+    "integration_revision": "ee6cc8e53d9dda18967e5cd4140875050cacbecc",
+    "product_changed": false,
+    "test_host_now_matches_mainwindow_gui_signal_parent_and_deferred_delete": true,
+    "new_real_worker_lifetime_cases": 2,
+    "module_passed": 24,
+    "module_conditional_skipped": 4,
+    "original_prefix_passed": 651,
+    "original_prefix_skipped": 287,
+    "declared_sources": 223,
+    "before_after_git_blob_bound": true,
+    "old_preview_timeout_reproduced": false,
+    "old_preview_timeout_causally_explained": false,
+    "receipt_tree": "oracle-gridfs-regression/opennavicat",
+    "receipt": "artifacts/gridfs-regression/verification.json"
+  },
+  "oracle_scoped_ipv6_review": {
+    "fix_branch": "codex_oracle_scope_id_fix",
+    "reproduced_support_validation_and_public_descriptor_mismatch": true,
+    "network_exploit_or_changed_actual_endpoint_proved": false,
+    "evidence_tree": "oracle-window-actual/opennavicat",
+    "evidence": "artifacts/oracle-window-review/scoped-ipv6-descriptor.json",
+    "fix_scope": "Restrict IPv6 scope_id to normal interface/index syntax while preserving ordinary IP/DNS/valid zone literals; fail before driver/network.",
+    "fixed": true,
+    "root_cocoa_and_new_native_app_after_fix_pending": true,
+    "fix_revision": "f63d16dd3e1b3388d6ac90edc5540695f977b3e6",
+    "unit_passed": 111,
+    "unit_skipped": 0,
+    "old_new_cases_failed": 14,
+    "old_new_cases_passed": 17,
+    "declared_sources": 5,
+    "independent_review_passed": true,
+    "receipt_tree": "oracle-scope-id-fix/opennavicat",
+    "receipt": "artifacts/oracle-scope-id-fix/verification.json"
   }
 }

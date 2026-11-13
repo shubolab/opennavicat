@@ -21,7 +21,7 @@ from opennavicat.database import DatabaseError
 from opennavicat.mongodb_pipeline import (
     REFERENCE_OPTION_DEFAULTS, STAGE_NAMES, PipelineDefinition, PipelineExplain,
     PipelinePreview, PipelineStage,
-    explain_pipeline, from_nagg, parse_mql, pipeline_script, preview_pipeline,
+    explain_pipeline, format_mql, from_nagg, parse_mql, pipeline_script, preview_pipeline,
     to_nagg, validate_pipeline,
 )
 from opennavicat.mongodb_session import BSON_CODEC, canonical_dumps, canonical_loads
@@ -1510,7 +1510,7 @@ class MongoPipelinePage(QWidget):
     def load_definition(self, definition, *, pipeline_id=None):
         self.definition = deepcopy(definition)
         if not self.definition.stages:
-            self.definition.stages = [PipelineStage()]
+            self.definition.stages = [PipelineStage(reference_mql=STAGE_EDITOR_TEMPLATES['$match'])]
         self.definition.selected_stage = min(
             max(0, self.definition.selected_stage or 0), len(self.definition.stages) - 1)
         self.pipeline_id = pipeline_id
@@ -1662,11 +1662,20 @@ class MongoPipelinePage(QWidget):
         self.stage_editor.blockSignals(True)
         self.stage_editor.setPlainText(
             stage.reference_mql if stage.reference_mql is not None else
-            STAGE_EDITOR_TEMPLATES.get(stage.operator, _stage_value_text(stage.body)))
+            format_mql(stage.body))
         self.stage_editor.blockSignals(False)
         tool = self.stage_tools.get(stage.operator)
         if tool is not None:
-            tool.load(stage.body)
+            try:
+                tool.load(stage.body)
+                original = BSON.encode({'body': stage.body}, codec_options=BSON_CODEC)
+                projected = BSON.encode({'body': tool.document()}, codec_options=BSON_CODEC)
+                if original != projected:
+                    tool.setEnabled(False)
+            except (DatabaseError, TypeError, ValueError, OverflowError):
+                # A convenience form must never replace an imported BSON value
+                # or collapse a query it cannot represent. Keep the raw editor.
+                tool.setEnabled(False)
         can_create = tool is not None and tool.isEnabled()
         self.stage_mode.setEnabled(can_create)
         self.stage_mode.setVisible(can_create)
@@ -1714,7 +1723,7 @@ class MongoPipelinePage(QWidget):
             else:
                 reference_mql = self.stage_editor.toPlainText()
                 body = parse_mql(reference_mql)
-                canonical_dumps(body)
+                format_mql(body)
         except Exception as error:
             self._invalid = "Stage body is not valid Canonical Extended JSON: " + str(error)
             return
@@ -1797,7 +1806,7 @@ class MongoPipelinePage(QWidget):
     def add_stage_after(self, index):
         self._commit_stage_editor()
         insert = min(len(self.definition.stages), max(0, index + 1))
-        self.definition.stages.insert(insert, PipelineStage())
+        self.definition.stages.insert(insert, PipelineStage(reference_mql=STAGE_EDITOR_TEMPLATES['$match']))
         self.definition.selected_stage = insert
         self._render_graph()
         self._render_stage_editor()
@@ -1811,7 +1820,7 @@ class MongoPipelinePage(QWidget):
             return
         self.definition.stages.pop(index)
         if not self.definition.stages:
-            self.definition.stages.append(PipelineStage())
+            self.definition.stages.append(PipelineStage(reference_mql=STAGE_EDITOR_TEMPLATES['$match']))
         self.definition.selected_stage = min(index, len(self.definition.stages) - 1)
         self._render_graph()
         self._render_stage_editor()
@@ -1954,7 +1963,11 @@ class MongoPipelinePage(QWidget):
         if self.suppress_save_preview and definition.name:
             self.saveRequested.emit(definition)
             return
-        dialog = MongoPipelineSaveDialog(definition, self)
+        try:
+            dialog = MongoPipelineSaveDialog(definition, self)
+        except DatabaseError as error:
+            self.show_error(error)
+            return
         dialog._definition = definition
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self.suppress_save_preview = dialog.suppress_check.isChecked()

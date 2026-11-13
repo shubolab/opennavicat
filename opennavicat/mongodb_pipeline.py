@@ -11,6 +11,7 @@ from bson import BSON, json_util
 from pymongo import timeout
 
 from .database import DatabaseError
+from .mongodb_index_script import bson_literal
 from .mongodb_session import (
     BSON_CODEC, JSON_OPTIONS, RAW_CODEC, _MAX_PAGE_BYTES,
     canonical_dumps, canonical_loads,
@@ -475,22 +476,22 @@ def pipeline_aggregate_options(definition):
 def pipeline_script(definition):
     validate_pipeline(definition)
     stages = pipeline_documents(definition)
-    lines = [f"db.getCollection({json.dumps(definition.source)}).aggregate(["]
-    for index, stage in enumerate(stages):
-        operation, body = next(iter(stage.items()))
-        text = canonical_dumps(body).replace("\n", "\n  ")
-        comma = "," if index + 1 < len(stages) else ""
-        lines.append(f"  {{{operation}: {text}}}{comma}")
+    # Extended JSON is a data interchange format, not executable shell BSON:
+    # e.g. {$numberLong: "5"} is an ordinary object in JavaScript. Reuse the
+    # qualified constructors and refuse values the shell cannot express exactly.
+    if stages:
+        rendered = []
+        for stage in stages:
+            operation, body = next(iter(stage.items()))
+            rendered.append(f"  {{{operation}: {bson_literal(body, 1)}}}")
+        stage_text = "[\n" + ",\n".join(rendered) + "\n]"
+    else:
+        stage_text = "[]"
+    text = f"db.getCollection({json.dumps(definition.source)}).aggregate({stage_text}"
     options = pipeline_aggregate_options(definition)
     if options:
-        option_text = json.dumps(options, ensure_ascii=False, indent=2).replace("\n", "\n")
-        if stages:
-            lines[-1] += ","
-        else:
-            lines[0] += "],"
-        lines.extend(option_text.splitlines())
-    lines.append("]);")
-    return "\n".join(lines)
+        text += ",\n" + bson_literal(options)
+    return text + ");"
 
 
 def _stage_value_dumps(value):
@@ -555,6 +556,7 @@ def _stage_value_loads(text):
 
 
 parse_mql = _stage_value_loads
+format_mql = _stage_value_dumps
 
 
 def to_nagg(definition):
@@ -734,6 +736,10 @@ def _aggregate_rows(session, database, definition, pipeline, limit, *, allow_wri
 
 def preview_pipeline(session, database, definition, *, limit=50):
     validate_pipeline(definition)
+    # A $limit bounds delivered events, not the time spent waiting for one.
+    # Reject the complete enabled stream before even fetching source previews.
+    if any(stage.operator in STREAM_STAGES for stage in definition.stages if stage.enabled):
+        raise DatabaseError("Preview does not execute change-stream stages; use a dedicated streaming workflow")
     if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= MAX_PREVIEW_ROWS:
         raise DatabaseError("Pipeline preview row limit is invalid")
     sample = _sample_prefix(definition)

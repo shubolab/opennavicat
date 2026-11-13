@@ -1,9 +1,13 @@
 """Aggregation pipeline model and real-server qualification on owned MongoDB."""
 from __future__ import annotations
 
-from bson import Decimal128, Int64
+from bson import BSON, Binary, Code, Decimal128, Int64, Timestamp
+from contextlib import nullcontext
 import hashlib
 import json
+import os
+from pathlib import Path
+from types import SimpleNamespace
 import pytest
 
 from opennavicat.database import DatabaseError
@@ -50,7 +54,7 @@ def test_nagg_roundtrip_preserves_bson_and_disabled_stages():
     assert document["Collection"] == "docs"
     assert document["PreviewSourceOption"] == {"SampleMode": 1, "SampleSize": 25}
     assert document["Stages"][0]["MQL"].startswith('{"_id":{"$numberLong":"5"}}')
-    assert '"$numberLong": "5"' in pipeline_script(definition)
+    assert 'Long("5")' in pipeline_script(definition)
 
 
 def test_reference_version_0_nagg_imports_observed_lookup_and_sample_modes():
@@ -162,7 +166,7 @@ def test_reference_options_map_to_aggregate_arguments_and_script():
     assert '"allowDiskUse": false' in script
     assert '"readConcern": {' in script and '"majority"' in script
     assert '"hint": "active_1"' in script
-    assert '"wtimeout": 500' in script
+    assert '"wtimeout": Int32("500")' in script
 
 
 def test_reference_options_reject_unsupported_enum_values():
@@ -180,6 +184,130 @@ def test_pipeline_script_with_options_and_no_stages_is_valid():
     script = pipeline_script(definition)
     assert "db.getCollection(\"sales\").aggregate([]," in script
     assert '"comment": "generated_empty"' in script
+
+
+@pytest.fixture(scope="module")
+def pipeline_native():
+    from opennavicat.js_engine.runtime import NativeJavaScript
+
+    name = "opennavicat-js.exe" if os.name == "nt" else "opennavicat-js"
+    helper = Path(os.environ.get("OPENNAVICAT_TEST_JS_HELPER",
+        Path(__file__).resolve().parents[1] / "artifacts/js-engine" / name))
+    if not helper.exists():
+        pytest.skip("Build the pinned native JavaScript helper before script qualification")
+    return NativeJavaScript(helper)
+
+
+@pytest.mark.parametrize("case", ["stage", "empty_with_options", "typed_let"])
+def test_generated_script_executes_in_native_vm_and_passes_exact_aggregate_arguments(pipeline_native, case):
+    from opennavicat.mongodb_session import BSON_CODEC
+
+    source = 'generated_"collection'
+    stages = [PipelineStage("$match", {"long": Int64(9007199254740995),
+                                          "decimal": Decimal128("12.5000"), "int": 7})]
+    expected_stages = [{"$match": {"long": Int64(9007199254740995),
+                                    "decimal": Decimal128("12.5000"), "int": 7}}]
+    options, expected_options = {}, None
+    if case == "empty_with_options":
+        stages, expected_stages = [], []
+        options = {"comment": "generated_empty"}
+        expected_options = {"comment": "generated_empty"}
+    elif case == "typed_let":
+        options = {"maxTimeMS": 1200, "let": (
+            '{"long":{"$numberLong":"9007199254740995"},'
+            '"decimal":{"$numberDecimal":"12.5000"},'
+            '"int":{"$numberInt":"7"},'
+            '"binary":{"$binary":{"base64":"AP8=","subType":"80"}}}')}
+        expected_options = {"maxTimeMS": 1200, "let": {
+            "long": Int64(9007199254740995), "decimal": Decimal128("12.5000"),
+            "int": 7, "binary": Binary(b"\0\xff", 128)}}
+    definition = PipelineDefinition(source=source, stages=stages,
+        selected_stage=0 if stages else None, reference_options=options)
+    # A lexical synthetic db captures the generated call without granting a
+    # database capability or claiming unimplemented host aggregate options.
+    script = """const captured=[];
+(function(db){
+""" + pipeline_script(definition) + """
+})({getCollection(name){return {aggregate(...args){captured.push({name,args});}};}});
+captured;
+"""
+    result = pipeline_native.evaluate(script)
+    expected_args = [expected_stages]
+    if expected_options is not None:
+        expected_args.append(expected_options)
+    expected = [{"name": source, "args": expected_args}]
+    assert BSON.encode({"captured": result.value}, codec_options=BSON_CODEC) == BSON.encode(
+        {"captured": expected}, codec_options=BSON_CODEC)
+    assert result.child_reaped and result.commands == ()
+
+
+@pytest.mark.parametrize("value", [Code("return 1"), Timestamp(1, 2), {"__proto__": 1}])
+@pytest.mark.parametrize("placement", ["stage", "let"])
+def test_script_refuses_unqualified_shell_bson_without_losing_the_draft(value, placement):
+    from opennavicat.mongodb_session import canonical_dumps
+
+    definition = PipelineDefinition(source="generated", stages=[PipelineStage("$match", {"value": value})])
+    if placement == "let":
+        definition.stages = [PipelineStage("$match", {})]
+        definition.reference_options = {"let": canonical_dumps({"value": value})}
+    original = to_nagg(definition)
+    with pytest.raises(DatabaseError, match="retained|cannot safely"):
+        pipeline_script(definition)
+    assert to_nagg(definition) == original
+
+
+@pytest.mark.parametrize("operator", ["$changeStream", "$changeStreamSplitLargeEvent"])
+@pytest.mark.parametrize("mode", ["all", "first", "random"])
+@pytest.mark.parametrize("read_only", [False, True])
+def test_stream_preview_is_rejected_before_any_source_or_stage_io(operator, mode, read_only):
+    class NoIO:
+        config = SimpleNamespace(read_only=read_only)
+
+        def _validate_namespace(self, *_args):
+            pytest.fail("A stream preview must be refused before source dispatch")
+
+    definition = PipelineDefinition(source="generated", sample_mode=mode,
+        stages=[PipelineStage(operator, {})])
+    with pytest.raises(DatabaseError, match="Preview does not execute change-stream"):
+        preview_pipeline(NoIO(), "generated", definition)
+
+
+@pytest.mark.parametrize("operation", [preview_pipeline, execute_pipeline])
+@pytest.mark.parametrize("read_only", [False, True])
+def test_disabled_stream_stage_does_not_block_ordinary_pipeline(operation, read_only):
+    from bson.raw_bson import RawBSONDocument
+    from opennavicat.mongodb_session import BSON_CODEC, RAW_CODEC
+
+    calls, closed = [], []
+
+    class Cursor:
+        def __iter__(self):
+            return iter([RawBSONDocument(BSON.encode({"generated": True}, codec_options=BSON_CODEC),
+                                        codec_options=RAW_CODEC)])
+
+        def close(self):
+            closed.append(True)
+
+    class Endpoint:
+        def get_database(self, *_args, **_kwargs):
+            return self
+
+        def __getitem__(self, _name):
+            return self
+
+        def aggregate(self, pipeline, **_kwargs):
+            calls.append(pipeline)
+            return Cursor()
+
+    session = SimpleNamespace(config=SimpleNamespace(read_only=read_only), connection=Endpoint(),
+        _validate_namespace=lambda *_args: None, _operation=lambda *_args: nullcontext("owned-marker"))
+    definition = PipelineDefinition(source="generated", sample_mode="all", stages=[
+        PipelineStage("$match", {}), PipelineStage("$changeStream", {}, enabled=False),
+        PipelineStage("$changeStreamSplitLargeEvent", {}, enabled=False)])
+    result = operation(session, "generated", definition)
+    assert result is not None and calls and len(closed) == len(calls)
+    assert all(not any(set(stage) & {"$changeStream", "$changeStreamSplitLargeEvent"}
+                       for stage in pipeline) for pipeline in calls)
 
 
 def test_reference_nagg_preserves_stage_extensions_and_exact_bson():

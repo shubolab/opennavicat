@@ -93,7 +93,7 @@ and Windows/Linux reference layout remains a parity gate.
 ## Safety and execution boundary
 
 Preview never runs `$out` or `$merge` and never executes `$changeStream` as an
-unbounded stream. Runs are bounded to 1000 rows and 1 MiB of delivered BSON.
+unbounded stream. Runs are bounded to 1000 rows and 16 MiB of delivered BSON.
 Cancellation uses the MongoDB connection's exact operation marker through the
 existing separate cancellation worker. Read-only connections reject write and
 streaming stages.

@@ -190,14 +190,30 @@ def test_real_aggregation_pipeline_preview_run_explain_and_saved_object(qtbot, m
     saved = window.save_mongo_pipeline(page, definition)
     assert saved is not None and page.pipeline_id == saved['id']
     assert window.store.mongo_pipeline(saved['id'])['source'] == 'docs'
-    window.show_objects('mongo_pipeline')
+    categories = {schema.child(i).data(0, Qt.ItemDataRole.UserRole)['kind']: schema.child(i)
+                  for i in range(schema.childCount())}
+    category = categories['mongo_pipeline']
+    assert not category.isDisabled()
+    assert categories['mongo_function'].isDisabled()
+    assert categories['mongo_mapreduce'].isDisabled()
+    window.tree.scrollToItem(category)
+    qtbot.mouseClick(window.tree.viewport(), Qt.MouseButton.LeftButton,
+                     pos=window.tree.visualItemRect(category).center())
     qtbot.waitUntil(lambda: any(entry['name'] == 'generated_pipeline' for entry in window.object_page.records), timeout=15000)
     idle(qtbot, window)
     assert window.object_page.table.columnCount() == 7
     assert [window.object_page.table.horizontalHeaderItem(i).text() for i in range(7)] == [
         '名称', '文件大小', '创建的用户', '创建日期', '修改的用户', '修改日期', '访问时间']
     window.close_tab(window.tabs.indexOf(page))
-    reopened = window.open_mongo_pipeline(config.id, config.database, pipeline_id=saved['id'])
+    table = window.object_page.table
+    row = next(i for i, entry in enumerate(window.object_page.records) if entry['pipeline_id'] == saved['id'])
+    table.scrollToItem(table.item(row, 0))
+    qtbot.mouseClick(table.viewport(), Qt.MouseButton.LeftButton,
+                     pos=table.visualItemRect(table.item(row, 0)).center())
+    qtbot.mouseDClick(table.viewport(), Qt.MouseButton.LeftButton,
+                      pos=table.visualItemRect(table.item(row, 0)).center())
+    qtbot.waitUntil(lambda: isinstance(window.tabs.currentWidget(), MongoPipelinePage), timeout=15000)
+    reopened = window.tabs.currentWidget()
     assert reopened is not None and reopened is not page
     assert reopened.definition.name == 'generated_pipeline'
     assert reopened.definition.source == 'docs'

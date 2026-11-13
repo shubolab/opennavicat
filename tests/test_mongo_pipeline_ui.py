@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+import pytest
 from PySide6.QtGui import QImage
 from PySide6.QtWidgets import QMessageBox
 
@@ -172,7 +173,78 @@ def test_pipeline_options_page_preserves_reference_ids_and_unknown_fields(qtbot)
         "let": '{"tenant":"generated"}',
     }
     assert '"hint": "generated_index"' in page.script_editor.toPlainText()
-    assert '"wtimeout": 500' in page.script_editor.toPlainText()
+    assert '"wtimeout": Int32("500")' in page.script_editor.toPlainText()
+
+
+def test_pipeline_save_action_keeps_unscriptable_bson_draft_and_reports_error(qtbot):
+    from bson import Code
+    from opennavicat.mongodb_pipeline import to_nagg
+
+    definition = PipelineDefinition(source='docs', stages=[
+        PipelineStage('$match', {'generated': Code('return 1')})])
+    page = MongoPipelinePage('generated', 'demo_catalog')
+    qtbot.addWidget(page)
+    page.load_definition(definition)
+    before = to_nagg(page.draft())
+    saved = []
+    page.saveRequested.connect(saved.append)
+    page.save_action.trigger()
+    assert not saved
+    assert page.tabs.currentWidget() is page.messages
+    assert 'Code' in page.messages.toPlainText()
+    assert to_nagg(page.draft()) == before
+
+
+def test_loading_pipeline_without_reference_mql_keeps_actual_stage_in_editor(qtbot):
+    from bson import BSON, Int64
+    from opennavicat.mongodb_pipeline import parse_mql
+    from opennavicat.mongodb_session import BSON_CODEC
+
+    body = {'from': 'generated_customers', 'localField': 'customer',
+            'foreignField': 'customer', 'as': 'generated_matches',
+            'let': {'exact': Int64(9007199254740993)}}
+    definition = PipelineDefinition(source='docs', stages=[PipelineStage('$lookup', body)])
+    page = MongoPipelinePage('generated', 'demo_catalog')
+    qtbot.addWidget(page)
+    page.load_definition(definition)
+    assert page.stage_stack.currentWidget() is page.stage_editor
+    encoded = lambda value: BSON.encode(value, codec_options=BSON_CODEC)
+    assert encoded(parse_mql(page.stage_editor.toPlainText())) == encoded(body)
+    assert encoded(page.draft().stages[0].body) == encoded(body)
+
+
+@pytest.mark.parametrize('body', [
+    {'name': 'generated'},
+    {'$or': [{'score': {'$gte': 10}}, {'score': {'$lt': 0}}]},
+    {'$or': [{'generated': True, 'active': True}, {'score': 0}]},
+])
+def test_unprojectable_match_uses_raw_editor_without_rewriting_conditions(qtbot, body):
+    from bson import BSON
+    from opennavicat.mongodb_session import BSON_CODEC
+
+    definition = PipelineDefinition(source='docs', stages=[PipelineStage('$match', body)])
+    page = MongoPipelinePage('generated', 'demo_catalog')
+    qtbot.addWidget(page)
+    page.load_definition(definition)
+    assert page.stage_stack.currentWidget() is page.stage_editor
+    before = BSON.encode(body, codec_options=BSON_CODEC)
+    assert BSON.encode(page.draft().stages[0].body, codec_options=BSON_CODEC) == before
+    page.refresh()
+    assert BSON.encode(page.draft().stages[0].body, codec_options=BSON_CODEC) == before
+
+
+@pytest.mark.parametrize('operator,body', [('$unset', ['generated', 'other']),
+                                          ('$count', 'generated_count')])
+def test_loading_scalar_and_array_stages_keeps_the_actual_mql_value(qtbot, operator, body):
+    from opennavicat.mongodb_pipeline import parse_mql
+
+    page = MongoPipelinePage('generated', 'demo_catalog')
+    qtbot.addWidget(page)
+    page.load_definition(PipelineDefinition(source='docs', stages=[PipelineStage(operator, body)]))
+    assert parse_mql(page.stage_editor.toPlainText()) == body
+    assert page.draft().stages[0].body == body
+    page.refresh()
+    assert page.draft().stages[0].body == body
 
 
 def test_common_stage_create_tools_generate_exact_documents(qtbot):

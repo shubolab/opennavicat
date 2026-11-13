@@ -3228,7 +3228,7 @@ class MainWindow(QMainWindow):
                 category.setData(0, Qt.ItemDataRole.UserRole, {"type": "category", "id": info["id"], "schema": info["schema"], "kind": kind})
                 item.addChild(category)
                 category.setExpanded(label in expanded)
-                if kind in {"mongo_function", "mongo_mapreduce", "mongo_pipeline"}:
+                if kind in {"mongo_function", "mongo_mapreduce"}:
                     category.setDisabled(True)
                     category.setToolTip(0, "此专用工具尚未实现，仍在完整对齐范围内。")
                 if kind == "redis_data":

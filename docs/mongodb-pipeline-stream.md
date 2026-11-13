@@ -222,39 +222,60 @@ Completed stream Messages/Output keep Save, grey Run and focus; returning to
 Pipeline restores its action group. Busy Import and other unexecuted graph/raw
 editor mutations are not claimed as accepted merely from their visible state.
 
-The finite UI/GIF checkpoint is committed as `979d052`; the subsequent
-`479a811` parents TaskSignals to MainWindow and defers their deletion after the
-existing finished cleanup. Four new real Qt regressions plus the prior eighteen
-lifecycle cases pass. The post-fix measurements below remain separate scopes:
+The finite UI/GIF checkpoint is committed as `979d052`. `479a811` repairs the
+MainWindow TaskSignals lifecycle; `d9bee66` applies the same two-line local
+ownership/deferred-delete repair to the actual ConnectionDialog Test caller.
+Native TaskSignals QObject destruction occurs on the GUI thread and Task/Signals
+weak references eventually clear. QRunnable still uses pool autoDelete; this is
+not a claim that all native runnables or Python wrappers are GUI-destroyed.
+`1a6eeed` then changes only a subprocess test readiness handshake. The complete
+candidate application/test/runner source is frozen at
+`1a6eeed802e20e91766b9af181f5fcca5c7d0a22`; production bytes equal `d9bee66`.
+These scopes are separate and are not summed:
 
 | Scope | Result | Qualification boundary |
 | --- | --- | --- |
-| Native Window runner | **16 passed / zero skipped** | Eleven declared source hashes match the repaired source. Real toolbar-to-wire Run, local/queued/cold/late Stop, exact private BSON, invalid-stage message/location and two real Batch workflows. One owned RS container and two volumes independently absent. |
-| Native Cocoa components + Window + new lifecycle regressions | **98 passed / zero skipped**, 28.60 seconds (stdout) | 16 Window +78 components +4 new lifecycle cases; actual Cocoa, Darwin arm64, v0.12.0, fourteen source hashes unchanged. One owned RS container and two volumes independently absent. Scoped UI checks do not establish complete platform parity. |
-| Default source suite | **2,184 passed / 636 conditional skips**, 84.67 seconds (stdout) | Built native helper; 201 runtime/test/runner/native/workflow/project paths unchanged and independently matched to immutable `479a811` blobs. The old HEAD at test start is not the tested-source identity. |
-| Ordinary collection runner | **511 passed / zero skipped** | Strict manifest, 198 outer-observed source hashes unchanged, 48 declared source hashes matched; eight containers and sixteen volumes independently absent. Includes the complete 22-case lifecycle module. |
-| Recorder qualification | **79 passed / 3 conditional skips** offline; separately **1 passed / zero skipped** own-RS | Each scope binds 79 unchanged source files to `479a811`. Real toolbar Run delivered two typed events with exact BSON/UUID and preserved original session; owned service and both volumes independently absent. No GUI capture was made by these offscreen scopes. |
+| Native Window runner | **16 passed / zero skipped**, fresh after the Dialog fix | Eleven declared source hashes plus two supplemental Dialog files unchanged; real toolbar/wire, Stop, exact BSON, message/location and two Batch paths. One owned RS container and two volumes independently absent. |
+| Native Cocoa components + Window + both caller regressions | **100 passed / zero skipped**, 30.36 seconds (stdout) | 16 Window +78 components +4 Window lifecycle +2 real SQLite Dialog lifecycle; actual Cocoa, Darwin arm64, v0.12.0, sixteen source hashes unchanged. Executed on `d9bee66` product bytes, unchanged by the test-only handshake commit. One owned RS container and two volumes independently absent. |
+| Default source suite | **2,186 passed / 636 conditional skips**, 82.59 seconds (stdout) | Built native helper; 201 runtime/test/runner/native/workflow/project paths unchanged and independently matched to immutable `1a6eeed` blobs. Conditional skips are not service execution. |
+| Ordinary collection runner | **511 passed / zero skipped**, unchanged declared-source qualification rebound | Its 48 declared source files are unchanged; prior exact cleanup of eight containers and sixteen volumes remains scoped to that run. No fresh 511-case run is claimed. The old outer 198-file snapshot includes the previous Dialog and is historical only. |
+| Recorder qualification | **79 passed / 3 conditional skips** offline; separately **1 passed / zero skipped** own-RS | Fresh after both caller fixes; each binds 79 sources plus supplemental Dialog tests to `d9bee66`, unchanged by the test-only handshake fix. Two typed events, exact BSON/UUID and original session preserved; owned service/two volumes independently absent. These offscreen scopes made no GUI capture. |
 | Unchanged declared-source qualifications | Backend **46 / zero skipped**; ordinary TLS **24 / zero skipped**; stream transport **2 / zero skipped**; stopped cleanup **13 / zero skipped** | Rebound by matching each scope's declared source bytes, not represented as post-fix re-executions. Backend is 32 pure +14 RS. Stream transport is standalone TLS/SSH with 40573 rejection; cleanup starts no containers and connects to no DB. Ordinary TLS's incomplete outer volume-ID record remains a limit. |
 
 The post-fix receipts are under `artifacts/release-012/`, notably
-`final-default-ownership/verification.json`,
-`final-native-cocoa-ownership/verification.json`,
-`final-window-owner-fix/summary.json`, `final-collections-owner-fix/summary.json`
-and `owner-fix-validation.json`. Recorder receipts are in the separate
-`final-recorder-ownership-{offline,own-rs}-20261113T065926Z-9dc0cd/` directories.
+`final-default-two-callers-readiness/verification.json`,
+`final-native-cocoa-two-callers/verification.json`,
+`final-window-dialog-owner-fix/summary.json`, and
+`final-collections-owner-fix/declared-scope-after-dialog-binding.json`. The related
+Dialog/lifecycle/connection UI scope passed **110 / zero skipped**. Recorder
+receipts are in the separate
+`final-recorder-two-callers-{offline,own-rs}-20261113T071112Z-222717/` directories.
 The earlier **2,180 / 636**, **94 Cocoa** and serial **507** collection results
-remain the pre-ownership checkpoint; their old source hashes are not relabelled
-as repaired-runtime measurements. The 78 component cases comprise 57 stream and
+remain the pre-ownership checkpoint. **2,184 / 636** and **98 Cocoa** belong to
+the MainWindow-only repair at `479a811`. None is relabelled as a later whole-source
+measurement. The 78 component cases comprise 57 stream and
 21 existing pipeline cases. Counts across scopes are not added.
 The [0.12 validation record](validation-0.12.md) retains all checkpoint and demo
-source ownership. Exact final-candidate six-target CI/installers remain pending.
+source ownership. A first `d9bee66` default run had **2,185 passed / one failed /
+636 skipped**: the slow subprocess test missed its finalizer marker. An isolated
+pass did not erase that failure. An explicit file-gate experiment proved the
+ready-before-try handshake gap, without proving that run's exact timing.
+`1a6eeed` moves ready inside try, leaves production stop/finalizer/reap assertions
+unchanged, and passes the ten-case offline module plus the fresh default suite.
+The cancelled `f0b558e` main run 43383205925 contributes no partial-artifact
+qualification. The exact `1a6eeed` main precheck
+[43384833779](https://github.com/shubolab/opennavicat/actions/runs/43384833779)
+is in progress at this checkpoint, not qualified success. No formal tag or 0.12
+release exists yet; later documentation-only commits do not change the frozen
+candidate source. Six-target CI/installers and independent audit remain open.
 
 An initial parallel collection run ended in SIGSEGV; the separate fresh serial
 retry passed 507 cases with eight containers and sixteen volumes independently
 absent. That retry does not establish the crash's cause. A separate real
 `MainWindow.submit` experiment confirmed completed Task/TaskSignals Python
-objects retained by native callback closures. The `479a811` ownership fix and
-post-fix regression/qualification above address that confirmed defect. Its
+objects retained by native callback closures. The local Window and Dialog
+ownership fixes and post-fix regressions above address their confirmed native
+signal lifecycle defects. Their
 relationship to the original SIGSEGV remains unproven; successful reruns do not
 establish causality or close the broader resource/performance gate.
 

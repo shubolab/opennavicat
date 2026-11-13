@@ -549,8 +549,8 @@
   },
   "source_capture_commit": "979d0522f11cae3a8094f93c424bad558ed83298",
   "post_capture_compatibility": {
-    "verified_against_commit": "479a811adfc78549e3982c8338c3dc9eb3d28be6",
-    "change": "Task signal ownership and deferred deletion; displayed UI and demonstrated database behavior unchanged",
+    "verified_against_commit": "d9bee6649d66542ea94dfd077a567dafd42c6224",
+    "change": "Task signal ownership and deferred deletion in MainWindow and ConnectionDialog; displayed UI and demonstrated database behavior unchanged",
     "demonstrated_workflow_reverified": true,
     "recaptured": false
   }

@@ -20,10 +20,14 @@ Windows/Linux/macOS 的 1:1 保留 UI；本次同步、既有 Release 或下一�
 
 当前工作在独立工作树 `/Users/wangshubo/.codex/worktrees/mongodb-finite-stream/opennavicat`、
 分支`codex_mongodb_finite_stream`继续，候选元数据为**0.12.0，尚未发布**。
-公开安装器仍是0.11，不能借用其六目标资格。有限UI/GIF检查点已提交`979d052`，
-Task ownership最小修复及四项回归另提交`479a811`；默认全源201项前后文件哈希
-逐Git blob匹配`479a811`，不能用测试开始时旧HEAD替代实际源码身份。
-包含最新验证文档的最终候选提交及其六目标CI尚待完成。
+公开安装器仍是0.11，不能借用其六目标资格。有限UI/GIF检查点为`979d052`，
+MainWindow调用点修复为`479a811`，实际Dialog Test按钮同类局部修复为`d9bee66`，
+仅测试子进程ready握手修正为`1a6eeed`。候选应用/测试/runner完整源码已冻结为
+`1a6eeed802e20e91766b9af181f5fcca5c7d0a22`；201份默认全源文件前后相同并逐Git blob匹配。
+产品字节与`d9bee66`相同。main预检[43384833779](https://github.com/shubolab/opennavicat/actions/runs/43384833779)
+已启动，记录时为in_progress；正式tag/公开0.12仍未创建，后续doc-only提交不改变候选源码SHA。
+修复前`f0b558e`预检[43383205925](https://github.com/shubolab/opennavicat/actions/runs/43383205925)
+终态为cancelled，未tag/发布，partial产物不作新资格。
 
 AP18-11在新owned RS同页确认busy两页、空/错误三页、事件四页、再次空跑移除Output；
 稳定消息/输出仅为script+状态+实际elapsed，无事件网格。源码已接该有限text-only路径、
@@ -33,28 +37,32 @@ Batch手动任务已区分row/time/byte/cleanup失败，不读取errmsg写历史
 参考Preview/PreviewAll曾在独立sample后stream各出现一次崩溃，AP18-11未重放，
 不能复制原版故障或据此移除正常预览门禁。原版已退出，自有fixture/卷精确清理。
 
-修后各scope独立测量（不相加）：默认全源**2184通过/636条件跳过**，201源路径前后相同并逐Git blob绑定`479a811`；
-真实Window **16/0**、实际原生Cocoa **98/0**（Window16+组件78+新增4生命周期，版本0.12、Darwin arm64、14源哈希相同）；
-完整生命周期模块 **22/0**；普通collection **511/0**，198源路径outer前后相同、48声明源匹配，8容器/16卷独立absent。
-后端**46/0**（32纯/14真实RS）、普通TLS **24/0**、stream TLS **2/0**、stopped cleanup **13/0**
-沿用各自未变声明源的资格并重新绑定，不冒称修后重跑；stream TLS仅standalone transport及40573拒绝，cleanup零start/零DB。
-普通TLS首wave未独立留齐每个卷ID的边界继续保留。修后源smoke6×4通过。
-recorder专项offline **79通过/3条件跳过**，own-RS另 **1/0**，各79文件前后相同并绑定`479a811`；
-真实Run得到2个typed事件，BSON/UUID及主连接不变，容器/两卷独立absent；没有录制GUI。
-完整回执归属、旧检查点和限制见 [0.12候选验证](../validation-0.12.md)。
+当前各scope独立测量（不相加）：默认全源**2186通过/636条件跳过，82.59秒**，201份源前后相同且匹配`1a6eeed`；
+实际Cocoa **100/0**（Window16+组件78+4 Window/2 Dialog生命周期，actual Cocoa、Darwin arm64、0.12、16声明源相同），
+修后fresh Window **16/0**（11声明源及额外2 Dialog文件），caller连接UI **110/0**。
+Window22项生命周期及Dialog真实有效/损坏SQLite两项回归均通过，native TaskSignals在GUI线程destroyed、Task/Signals弱引用最终释放；
+QRunnable仍由pool autoDelete，不能泛称所有Python wrapper/QRunnable均GUI销毁。
+collection **511/0**仅重新绑定48份未变声明源，未重新执行；旧198份outer快照含旧Dialog仅历史，原8容器/16卷独立absent资格有其范围。
+后端**46/0**、普通TLS **24/0**、stream TLS **2/0**、stopped cleanup **13/0**同样按未变声明源重绑，不冒称新执行；
+stream TLS仅standalone transport及40573拒绝，cleanup零start/零DB，普通TLS外层卷ID不完整限制保留。
+两调用点后fresh recorder offline **79通过/3条件跳过**、own-RS另 **1/0**，各79源及补充Dialog回归文件绑定`d9bee66`，
+握手修正未变这些字节；真实Run2个typed事件，BSON/UUID/主连接不变，自有容器/两卷独立absent，没有录制GUI。
+Cocoa源smoke6×4 exit0。完整回执见 [0.12候选验证](../validation-0.12.md)。
 
-集合runner首次parallel SIGSEGV的失败记录继续保留；修复前fresh串行r2为507/0，不能据通过证明崩溃原因。
-另已真实确认的Task/TaskSignals正常完成后被native闭包环保留，已由`479a811`的GUI parent＋finished后deleteLater修复，
-真实Qt回归及上述修后资格通过；该retention是否与首次SIGSEGV同因仍未建立。
-修复前2180/636、Cocoa94和collection507只作为历史，不冒充新源码验证。
+更早parallel collection SIGSEGV失败仍保留，串行507或后续资格通过均不能证明其原因；
+真实发现的两个TaskSignals调用点缺陷分别局部修复，不宣称与SIGSEGV同因。
+MainWindow单调用点修后2184/636、Cocoa98属于479历史；更早2180/636、94和507也不冒称当前源资格。
+`d9bee66`首轮默认全源另有2185通过/1失败/636跳过（慢child缺finalizer），原node独立重跑通过仍保留失败；
+受控file-gate证明ready在try前可绕过finalizer，移入try则执行且进程回收，不证明该次失败的具体时序。
+`1a6eeed`仅修测试握手、未改生产stop或放宽断言，独立offline10项及fresh默认全源均通过。
 唯一候选GIF已完成31阶段/411帧/68.5秒、1,712,746字节并复制到`docs/assets/`。
 31阶段首/中/尾93帧及额外全尺寸视觉检查完成，自动逐帧guard411/411通过；
 SHA256为`d1ec33dd15e03fa38e5749f0ff0efe01051e5b40116c12229a7113d847e33c9e`。
 录制为新认证RS的真实工作流，不渲染事件payload，不代表0.12已公开。
-GIF capture源码归属`979d052`，77份源逐Git blob核定；修后Window仅两行ownership不同，
-widgets及recorder未变并有新79＋1工作流资格。保留原已审capture，不冒称`479a811`重新录制。
+GIF capture源码归属`979d052`，77份源逐Git blob核定；当前产品Window/Dialog各两行ownership不同，
+widgets及recorder未变并有两调用点后的新79＋1工作流资格，握手修正仅改测试。保留已审capture，不冒称当前SHA重新录制。
 
-当前继续顺序是冻结包含修后资格文档的完整候选SHA，执行该SHA六个原生目标CI与独立安装器审查，
+当前继续顺序是推进已冻结1a6eeed的六个原生目标预检与独立安装器审查，
 全部交付门禁通过才可决定里程碑发布；原始崩溃因果未知与完整资源门禁保持记录。
 正常stream预览、完整partial/恢复/options/拓扑、其它工具与三平台参考门禁继续开放，goal保持active。
 

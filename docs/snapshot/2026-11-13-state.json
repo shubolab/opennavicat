@@ -21,20 +21,23 @@
   },
   "repository": {
     "remote": "git@github.com:shubolab/opennavicat.git",
-    "synced_origin_main_sha": "ee876b5c42e02e82baebd1739602d8810980e502",
+    "synced_origin_main_sha": "1a6eeed802e20e91766b9af181f5fcca5c7d0a22",
     "working_branch": "codex_mongodb_finite_stream",
     "working_branch_base_sha": "87df5cd70f9293c4585637b1eab6e00e37810097",
     "workspace": "/Users/wangshubo/.codex/worktrees/mongodb-finite-stream/opennavicat",
     "original_main_workspace": "/Users/wangshubo/develop/opennavicat",
     "other_branches_or_unmerged_work_removed": false,
     "application_release_source_sha": "87df5cd70f9293c4585637b1eab6e00e37810097",
-    "documentation_receipt_scope": "Unpublished0.12 post-ownership local qualification; tested201 source files bound to479a811, final documentation commit and exact six-target CI pending; public0.11 remains87df5cd",
+    "documentation_receipt_scope": "Frozen0.12 source1a6eeed:201 default source files match Git blobs, productd9bee66. SameSHA native precheck43384833779 in_progress; later doc-only commits do not change release source. Public0.11 remains87df5cd",
     "next_working_branch": "codex_mongodb_finite_stream",
     "next_workspace": "/Users/wangshubo/.codex/worktrees/mongodb-finite-stream/opennavicat",
-    "origin_main_verification_scope": "Local tracking ref observed for this documentation pass; no new remote fetch or old-release download was performed by this subtask",
-    "local_head_at_candidate_measurement": "479a811adfc78549e3982c8338c3dc9eb3d28be6",
-    "candidate_final_source_sha": null,
-    "candidate_tested_application_source_sha": "479a811adfc78549e3982c8338c3dc9eb3d28be6"
+    "origin_main_verification_scope": "Parent verified main push/sourceSHA and started exactSHA run43384833779; no old asset downloads by this subtask",
+    "local_head_at_candidate_measurement": "1a6eeed802e20e91766b9af181f5fcca5c7d0a22",
+    "candidate_final_source_sha": "1a6eeed802e20e91766b9af181f5fcca5c7d0a22",
+    "candidate_tested_application_source_sha": "d9bee6649d66542ea94dfd077a567dafd42c6224",
+    "candidate_tested_total_source_sha": "1a6eeed802e20e91766b9af181f5fcca5c7d0a22",
+    "original_main_workspace_head": "1a6eeed802e20e91766b9af181f5fcca5c7d0a22",
+    "original_main_workspace_clean": true
   },
   "reference": {
     "path": "/Users/wangshubo/Downloads/Navicat Premium.app",
@@ -170,20 +173,20 @@
   },
   "latest_reported_local_validation": {
     "version": "0.12.0",
-    "measurement_scope": "Post Task ownership fix: each scope independently byte-bound; default201 source paths match immutable479a811 Git blobs; not six native installers or full reference parity",
-    "base_head": "979d0522f11cae3a8094f93c424bad558ed83298",
+    "measurement_scope": "Both actual caller signal-ownership fixes and test-only readiness repair. Fresh default201 files match1a6eeed; production bytes equald9bee66. Other scopes separated into fresh execution or unchanged declared-byte rebinding.",
+    "base_head": "1a6eeed802e20e91766b9af181f5fcca5c7d0a22",
     "full_source": {
-      "passed": 2184,
+      "passed": 2186,
       "conditionally_skipped": 636,
       "failed": 0,
       "errors": 0,
-      "seconds": 84.65,
+      "seconds": 82.569,
       "source_paths_hashed": 201,
       "source_hashes_before_after_match": true,
-      "receipt": "artifacts/release-012/final-default-ownership/verification.json",
-      "stdout_seconds": 84.67,
+      "receipt": "artifacts/release-012/final-default-two-callers-readiness/verification.json",
+      "stdout_seconds": 82.59,
       "source_paths_matched_git_commit": 201,
-      "tested_source_commit": "479a811adfc78549e3982c8338c3dc9eb3d28be6"
+      "tested_source_commit": "1a6eeed802e20e91766b9af181f5fcca5c7d0a22"
     },
     "backend": {
       "passed": 46,
@@ -192,16 +195,17 @@
       "real_rs_cases": 14,
       "declared_source_hashes": 6,
       "receipt": "artifacts/stream-structured-errors-backend-qualification/summary.json",
-      "source_binding": "Declared source bytes unchanged and re-bound after ownership fix; not represented as post-fix re-execution"
+      "source_binding": "Declared source bytes unchanged after both caller fixes and test-only readiness repair; rebound, not represented as re-execution"
     },
     "real_window": {
       "passed": 16,
       "skipped": 0,
       "declared_source_hashes": 11,
       "includes_two_real_batch_cases": true,
-      "receipt": "artifacts/release-012/final-window-owner-fix/summary.json",
+      "receipt": "artifacts/release-012/final-window-dialog-owner-fix/summary.json",
       "exact_container_and_two_volumes_independently_absent": true,
-      "source_binding": "Post-fix eleven declared source hashes match"
+      "source_binding": "Fresh after Dialog fix;11 declared+2 supplemental Dialog source/test hashes unchanged; test-only readiness fix outside this scope",
+      "supplemental_dialog_files": 2
     },
     "qt_components": {
       "passed": 78,
@@ -209,29 +213,32 @@
       "stream_component_cases": 57,
       "existing_pipeline_component_cases": 21,
       "receipt": "artifacts/release-012/structured-ui-qt-final.xml",
-      "scope_note": "57stream+21existing; unchanged component source and included in post-fix nativeCocoa98"
+      "scope_note": "57stream+21existing; unchanged component source and included in two-caller nativeCocoa100"
     },
     "native_cocoa": {
-      "passed": 98,
+      "passed": 100,
       "skipped": 0,
       "failed": 0,
       "errors": 0,
-      "seconds": 28.564,
-      "receipt": "artifacts/release-012/final-native-cocoa-ownership/results.xml",
+      "seconds": 30.362,
+      "receipt": "artifacts/release-012/final-native-cocoa-two-callers/results.xml",
       "actual_qt_platforms": [
         "cocoa"
       ],
       "host": "Darwin",
       "machine": "arm64",
-      "declared_source_hashes": 14,
+      "declared_source_hashes": 16,
       "source_hashes_before_after_match": true,
       "exact_container_and_two_volumes_independently_absent": true,
-      "verification": "artifacts/release-012/final-native-cocoa-ownership/verification.json",
-      "stdout_seconds": 28.6,
+      "verification": "artifacts/release-012/final-native-cocoa-two-callers/verification.json",
+      "stdout_seconds": 30.36,
       "window_cases": 16,
       "component_cases": 78,
       "new_lifecycle_cases": 4,
-      "independent_cleanup": "artifacts/release-012/final-native-cocoa-ownership/independent-cleanup.json"
+      "independent_cleanup": "artifacts/release-012/final-native-cocoa-two-callers/independent-cleanup.json",
+      "new_dialog_lifecycle_cases": 2,
+      "executed_product_commit": "d9bee6649d66542ea94dfd077a567dafd42c6224",
+      "source_binding": "16 declared bytes unchanged by test-only readiness fix; rebound, not rerun after1a6eeed"
     },
     "stream_tls_transport": {
       "passed": 2,
@@ -239,7 +246,7 @@
       "replica_set_event_acceptance": false,
       "exact_container_and_anonymous_volume_cleanup": true,
       "receipt": "artifacts/release-012/final-security-stream/summary.json",
-      "source_binding": "Declared source bytes unchanged and re-bound after ownership fix; not represented as post-fix re-execution"
+      "source_binding": "Declared source bytes unchanged after both caller fixes and test-only readiness repair; rebound, not represented as re-execution"
     },
     "ordinary_tls": {
       "passed": 24,
@@ -247,7 +254,7 @@
       "fixture_owned_removal_and_container_absence": true,
       "all_volume_ids_independently_recorded": false,
       "scope_note": "This round passed; first-wave observer did not retain every ordinary TLS volume ID, so do not claim independent per-volume absence",
-      "source_binding": "Declared source bytes unchanged and re-bound after ownership fix; not represented as post-fix re-execution"
+      "source_binding": "Declared source bytes unchanged after both caller fixes and test-only readiness repair; rebound, not represented as re-execution"
     },
     "stopped_cleanup": {
       "passed": 13,
@@ -262,7 +269,7 @@
         "all_recorded_cases_cleaned": true
       },
       "receipt": "artifacts/release-012/final-stopped-cleanup/summary.json",
-      "source_binding": "Declared source bytes unchanged and re-bound after ownership fix; not represented as post-fix re-execution"
+      "source_binding": "Declared source bytes unchanged after both caller fixes and test-only readiness repair; rebound, not represented as re-execution"
     },
     "collections_first_attempt": {
       "qualified": false,
@@ -286,17 +293,21 @@
       "rows": 6,
       "columns": 4,
       "packaged": false,
-      "receipt": "artifacts/release-012/final-source-smoke-ownership.json"
+      "receipt": "artifacts/release-012/final-source-smoke-two-callers.json",
+      "executed_product_commit": "d9bee6649d66542ea94dfd077a567dafd42c6224",
+      "test_only_readiness_commit_does_not_change_product": true
     },
     "overlapping_scopes_not_added": true,
-    "tested_source_commit": "479a811adfc78549e3982c8338c3dc9eb3d28be6",
+    "tested_source_commit": "1a6eeed802e20e91766b9af181f5fcca5c7d0a22",
     "lifecycle": {
       "passed": 22,
       "skipped": 0,
       "new_regressions": 4,
       "first_case_red_before_fix": true,
-      "actual_gui_thread_destruction": true,
-      "receipt": "artifacts/release-012/owner-fix-validation.json"
+      "receipt": "artifacts/release-012/owner-fix-validation.json",
+      "native_task_signals_destroyed_on_gui_thread": true,
+      "task_and_signals_weakrefs_eventually_released": true,
+      "all_qrunnable_or_python_wrappers_destroyed_on_gui_thread_claimed": false
     },
     "collection_runner": {
       "passed": 511,
@@ -304,21 +315,23 @@
       "owned_containers": 8,
       "owned_volumes": 16,
       "declared_source_hashes": 48,
-      "outer_source_paths_hashed": 198,
-      "source_hashes_before_after_match": true,
       "exact_ids_independently_absent": true,
       "cause_of_first_failure_established": false,
       "receipt": "artifacts/release-012/final-collections-owner-fix/summary.json",
-      "independent_receipt": "artifacts/release-012/final-collections-owner-fix/independent-check.json"
+      "independent_receipt": "artifacts/release-012/final-collections-owner-fix/independent-check.json",
+      "execution_scope": "Previous511 run,48 unchanged declared source files rebound after Dialog fix; not fresh execution; prior outer198 snapshot is historical and cannot qualify current Dialog",
+      "binding_receipt": "artifacts/release-012/final-collections-owner-fix/declared-scope-after-dialog-binding.json",
+      "old_outer_198_snapshot_current": false
     },
     "recorder": {
-      "tested_source_commit": "479a811adfc78549e3982c8338c3dc9eb3d28be6",
+      "tested_source_commit": "d9bee6649d66542ea94dfd077a567dafd42c6224",
       "source_files_each_scope": 79,
       "source_before_after_and_exact_git_blobs_match": true,
       "offline": {
         "passed": 79,
         "conditionally_skipped": 3,
-        "receipt": "artifacts/release-012/final-recorder-ownership-offline-20261113T065926Z-9dc0cd/verification.json"
+        "receipt": "artifacts/release-012/final-recorder-two-callers-offline-20261113T071112Z-222717/verification.json",
+        "git_blob_binding": "artifacts/release-012/final-recorder-two-callers-offline-20261113T071112Z-222717/final-revision-binding.json"
       },
       "own_rs": {
         "passed": 1,
@@ -326,11 +339,60 @@
         "events": 2,
         "typed_bson_and_original_session_preserved": true,
         "container_and_two_volumes_independently_absent": true,
-        "receipt": "artifacts/release-012/final-recorder-ownership-own-rs-20261113T065926Z-9dc0cd/verification.json"
+        "receipt": "artifacts/release-012/final-recorder-two-callers-own-rs-20261113T071112Z-222717/verification.json",
+        "git_blob_binding": "artifacts/release-012/final-recorder-two-callers-own-rs-20261113T071112Z-222717/final-revision-binding.json"
       },
-      "native_gui_recorded_by_these_scopes": false
+      "native_gui_recorded_by_these_scopes": false,
+      "source_binding": "Fresh after two caller fixes;79 sources plus supplemental tests/test_dialogs.py matchd9bee66; unchanged declared bytes rebound after test-only readiness fix",
+      "supplemental_dialog_test_files": 1
     },
-    "ownership_handoff": "artifacts/release-012/owner-fix-validation.json"
+    "production_source_commit": "d9bee6649d66542ea94dfd077a567dafd42c6224",
+    "dialog_lifecycle": {
+      "passed": 2,
+      "skipped": 0,
+      "real_sqlite_valid_and_corrupt_cases": true,
+      "actual_test_button": true,
+      "queued_retry_while_old_native_tail_active": true,
+      "old_deleter_does_not_delete_new_task": true,
+      "native_signals_destroyed_on_gui_thread": true,
+      "task_and_signal_weakrefs_eventually_released": true,
+      "red_green_receipts": "artifacts/release-012/dialog-task-ownership-probe/{red-regression,green-regression}.xml"
+    },
+    "caller_related_scope": {
+      "passed": 110,
+      "skipped": 0,
+      "receipt": "artifacts/release-012/dialog-task-ownership-probe/green-caller-scopes.xml"
+    },
+    "default_after_dialog_first_attempt": {
+      "tested_source_commit": "d9bee6649d66542ea94dfd077a567dafd42c6224",
+      "passed": 2185,
+      "failed": 1,
+      "conditionally_skipped": 636,
+      "stdout_seconds": 88.77,
+      "source_paths_hashed_and_git_blob_matched": 201,
+      "failed_case": "tests/test_mongodb_stream_cleanup_runner.py::test_real_slow_child_receives_interrupt_finishes_finalizer_and_is_reaped",
+      "failure": "Missing finalizer marker",
+      "isolated_retry_passed": 1,
+      "isolated_retry_erases_failure": false,
+      "receipt": "artifacts/release-012/final-default-dialog-ownership/verification.json",
+      "isolated_receipt": "artifacts/release-012/final-default-dialog-ownership/isolated-slow-child.xml"
+    },
+    "test_child_readiness_repair": {
+      "commit": "1a6eeed802e20e91766b9af181f5fcca5c7d0a22",
+      "product_changed": false,
+      "production_stop_process_changed": false,
+      "finalizer_and_reap_assertions_weakened": false,
+      "controlled_gate_proves_ready_before_try_gap": true,
+      "exact_failed_run_timing_proven": false,
+      "new_ready_is_inside_try": true,
+      "offline_module_passed": 10,
+      "skipped": 0,
+      "containers_started": 0,
+      "db_connections": 0,
+      "controlled_gate_receipt": "artifacts/release-012/slow-child-readiness-proof/controlled-gate.json",
+      "module_receipt": "artifacts/release-012/slow-child-readiness-proof/fixed-offline-scope.xml"
+    },
+    "mainwindow_ownership_handoff": "artifacts/release-012/owner-fix-validation.json"
   },
   "latest_main_demo": {
     "receipt": "../assets/opennavicat-demo.json",
@@ -374,11 +436,12 @@
       "main_window_session_preserved_and_readable": true
     },
     "owned_service_and_anonymous_volumes_removed": true,
-    "recorded_source_scope": "Capture belongs to979d052; subsequent479a811 changes only two Window ownership lines among demonstration runtime. Widgets/recorder unchanged; new79+1 offscreen qualification supports retained capture, not a new479 recording or matching old Window hash.",
+    "recorded_source_scope": "Capture979d052,77 capture files match exact Git blobs; current productiond9bee66 differs only Window/Dialog each2 ownership lines among demonstration runtime. Stream widgets/recorder unchanged; new two-caller79+1 workflow qualification, not a new current-SHA recording.1a6eeed changes only test readiness.",
     "recorded_source_commit": "979d0522f11cae3a8094f93c424bad558ed83298",
     "capture_source_files_matched_git_blobs": 77,
-    "post_ownership_workflow_compatibility_receipt": "artifacts/release-012/final-recorder-ownership-compatibility-20261113T065926Z-9dc0cd.json",
-    "post_ownership_capture_rerecorded": false
+    "post_ownership_workflow_compatibility_receipt": "artifacts/release-012/final-recorder-two-callers-compatibility-20261113T071112Z-222717.json",
+    "post_ownership_capture_rerecorded": false,
+    "compatibility_verified_product_commit": "d9bee6649d66542ea94dfd077a567dafd42c6224"
   },
   "current_implementation": {
     "embedded_index_editor": true,
@@ -418,8 +481,8 @@
     "finite_stream_successful_preview_accepted": false
   },
   "next_steps": [
-    "Completed:479a811 fixes confirmed Task/TaskSignals retention and is locally qualified by post-fix default/native/Window/collection/lifecycle/recorder scopes; preserve original parallel SIGSEGV unresolved causality and full resource gates",
-    "Freeze a complete0.12 candidate commit and qualify that exact SHA on all six native OS/architecture targets plus separate exact stream/backend/window/security/cleanup manifests; independently audit installers/checksums before deciding publication",
+    "Completed local fixes:Window and Dialog native TaskSignals lifetime plus test-only child readiness. Default201 source files bind frozen1a6eeed; productd9bee66. Preserve failed d9 full/isolated retry/controlled gate and original parallel SIGSEGV unresolved causality; no completed full goal claim.",
+    "Follow exact frozen1a6eeed main precheck43384833779 currently in_progress; qualify all six native targets and separate stream/backend/window/security/cleanup manifests, independently audit installers/checksums. Formal tag, if qualified, must bind1a6eeed; doc-only main commits do not change candidate source.",
     "Retain the refreshed single actual application GIF and its31-phase privacy review with exact source ownership; no reference screenshots or private data",
     "Keep successful stream Preview/PreviewAll, complete partial/recovery/options/topologies/permissions and Windows/Linux reference UI gates open; do not copy reference crashes or invent continuous-watch applicability",
     "Continue branched/sharded/replica Explain shapes/cost formulas, validator unknown/external conversion, all remaining database objects/authentication/query/wizard/AI/model/BI/backup/automation functions",
@@ -463,24 +526,25 @@
     "pipeline_safety_and_navigation": "released0.11; fullparityopen",
     "batch_job_workflow": "released0.11 savedMongoPipeline slice; other15categories/scheduler/SMTP/fullUIopen",
     "change_stream": "Unpublished0.12 bounded text-only Qt/typed backend/structured-error candidate, post-ownership local qualification; complete preview/options/platform/tool gates remain open",
-    "qt_task_lifecycle": "Confirmed completed Task/TaskSignals retention fixed by GUI parent and finished deferred delete in479a811;22 lifecycle regressions and post-fix full/native/Window/collection scopes pass. Relationship to first parallel SIGSEGV remains unproven."
+    "qt_task_lifecycle": "Two actual caller native TaskSignals lifecycle defects locally fixed in479a811/d9bee66. Native signals destroyed on GUI thread; Task/Signals weakrefs finally clear; no assertion all QRunnable/Python wrapper destruction is GUI. Original parallel SIGSEGV same cause remains unproven."
   },
   "candidate_release": {
     "version": "0.12.0",
-    "status": "post_task_ownership_fix_locally_qualified_unpublished",
-    "frozen_source_sha": null,
+    "status": "source_frozen_main_precheck_in_progress_unpublished",
+    "frozen_source_sha": "1a6eeed802e20e91766b9af181f5fcca5c7d0a22",
     "working_tree_base_head": "7e8032e9c0a3e7c9f28ee34b4c93c9b905e757c2",
-    "six_target_ci_started": false,
+    "six_target_ci_started": true,
     "tag_created": false,
     "public_release_created": false,
     "final_local_validation": "latest_reported_local_validation",
     "single_gif_recorded_reviewed_and_copied": true,
     "single_gif_sha256": "d1ec33dd15e03fa38e5749f0ff0efe01051e5b40116c12229a7113d847e33c9e",
-    "source_stability_gate": "Confirmed Task/TaskSignals retention fixed in479a811; default2184/native98/Window16/collection511/lifecycle22 and recorder79+1 qualified. Original parallel SIGSEGV same cause unproven; broader resource and exact six-target installer gates remain open.",
+    "source_stability_gate": "Window and Dialog native TaskSignals ownership locally fixed/qualified; default2186/native100/Window16/caller110/recorder79+1. Test-only readiness gap fixed after retained d9 default1fail. Original parallel SIGSEGV same cause unproven; full resource/exact six-target installer gates remain open.",
     "all_native_and_full_parity_gates_complete": false,
-    "tested_application_source_sha": "479a811adfc78549e3982c8338c3dc9eb3d28be6",
+    "tested_application_source_sha": "d9bee6649d66542ea94dfd077a567dafd42c6224",
     "prior_ui_gif_checkpoint_sha": "979d0522f11cae3a8094f93c424bad558ed83298",
-    "measured_source_paths_matched_git_commit": 201
+    "measured_source_paths_matched_git_commit": 201,
+    "tested_total_source_sha": "1a6eeed802e20e91766b9af181f5fcca5c7d0a22"
   },
   "resume_baseline": {
     "published": {
@@ -707,7 +771,7 @@
     "branch": "codex_mongodb_finite_stream",
     "base_release_source_sha": "87df5cd70f9293c4585637b1eab6e00e37810097",
     "head_before_candidate_commit": "7e8032e9c0a3e7c9f28ee34b4c93c9b905e757c2",
-    "final_source_sha": null,
+    "final_source_sha": "1a6eeed802e20e91766b9af181f5fcca5c7d0a22",
     "validation": "../validation-0.12.md",
     "finite_stream_contract": "../mongodb-pipeline-stream.md",
     "reference_observations": "../ui-reference-18-mongodb-pipeline.md",
@@ -715,8 +779,9 @@
     "demo": "latest_main_demo",
     "six_native_installer_ci_or_release_complete": false,
     "full_goal_stays_active": true,
-    "tested_application_source_sha": "479a811adfc78549e3982c8338c3dc9eb3d28be6",
-    "ui_gif_checkpoint_sha": "979d0522f11cae3a8094f93c424bad558ed83298"
+    "tested_application_source_sha": "d9bee6649d66542ea94dfd077a567dafd42c6224",
+    "ui_gif_checkpoint_sha": "979d0522f11cae3a8094f93c424bad558ed83298",
+    "tested_total_source_sha": "1a6eeed802e20e91766b9af181f5fcca5c7d0a22"
   },
   "historical_candidate_release_0_11": {
     "version": "0.11.0",
@@ -931,14 +996,27 @@
     "ui_integration": "in_progress_after_frozen_backend; text-only messages/output, page-local Stop and explicit partial/row/time boundary handling; no parity claimed",
     "new_six_installer_ci_or_release_complete": false
   },
-  "captured_at_utc": "2026-11-13T07:04:08.824579+00:00",
+  "captured_at_utc": "2026-11-13T07:22:36.255575+00:00",
   "candidate_ci": {
     "version": "0.12.0",
-    "source_sha": null,
-    "status": "not_started_for_final_candidate",
+    "source_sha": "1a6eeed802e20e91766b9af181f5fcca5c7d0a22",
+    "status": "in_progress",
     "six_native_targets_qualified": false,
     "formal_tag_created": false,
-    "public_release_created": false
+    "public_release_created": false,
+    "run_id": 43384833779,
+    "url": "https://github.com/shubolab/opennavicat/actions/runs/43384833779",
+    "application_source_frozen": true,
+    "later_documentation_only_commits_change_candidate_source": false,
+    "previous_cancelled_main_precheck": {
+      "run_id": 43383205925,
+      "source_sha": "f0b558e95ed64a5d1d9628189307343e80007437",
+      "status": "completed",
+      "conclusion": "cancelled",
+      "url": "https://github.com/shubolab/opennavicat/actions/runs/43383205925",
+      "partial_artifacts_used_for_qualification": false,
+      "tag_or_release_created": false
+    }
   },
   "task_ownership_probe": {
     "status": "completed_task_and_signal_retention_confirmed; GUI-parent/deferred-delete production fix in479a811 and real Qt regressions qualified",
@@ -1098,5 +1176,180 @@
     "overlapping_scopes_not_added": true,
     "source_index_blobs_matched_by_root": 201,
     "source_checkpoint": "979d0522f11cae3a8094f93c424bad558ed83298"
+  },
+  "historical_mainwindow_only_ownership_validation": {
+    "version": "0.12.0",
+    "measurement_scope": "Post Task ownership fix: each scope independently byte-bound; default201 source paths match immutable479a811 Git blobs; not six native installers or full reference parity",
+    "base_head": "979d0522f11cae3a8094f93c424bad558ed83298",
+    "full_source": {
+      "passed": 2184,
+      "conditionally_skipped": 636,
+      "failed": 0,
+      "errors": 0,
+      "seconds": 84.65,
+      "source_paths_hashed": 201,
+      "source_hashes_before_after_match": true,
+      "receipt": "artifacts/release-012/final-default-ownership/verification.json",
+      "stdout_seconds": 84.67,
+      "source_paths_matched_git_commit": 201,
+      "tested_source_commit": "479a811adfc78549e3982c8338c3dc9eb3d28be6"
+    },
+    "backend": {
+      "passed": 46,
+      "skipped": 0,
+      "pure_cases": 32,
+      "real_rs_cases": 14,
+      "declared_source_hashes": 6,
+      "receipt": "artifacts/stream-structured-errors-backend-qualification/summary.json",
+      "source_binding": "Declared source bytes unchanged and re-bound after ownership fix; not represented as post-fix re-execution"
+    },
+    "real_window": {
+      "passed": 16,
+      "skipped": 0,
+      "declared_source_hashes": 11,
+      "includes_two_real_batch_cases": true,
+      "receipt": "artifacts/release-012/final-window-owner-fix/summary.json",
+      "exact_container_and_two_volumes_independently_absent": true,
+      "source_binding": "Post-fix eleven declared source hashes match"
+    },
+    "qt_components": {
+      "passed": 78,
+      "skipped": 0,
+      "stream_component_cases": 57,
+      "existing_pipeline_component_cases": 21,
+      "receipt": "artifacts/release-012/structured-ui-qt-final.xml",
+      "scope_note": "57stream+21existing; unchanged component source and included in post-fix nativeCocoa98"
+    },
+    "native_cocoa": {
+      "passed": 98,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0,
+      "seconds": 28.564,
+      "receipt": "artifacts/release-012/final-native-cocoa-ownership/results.xml",
+      "actual_qt_platforms": [
+        "cocoa"
+      ],
+      "host": "Darwin",
+      "machine": "arm64",
+      "declared_source_hashes": 14,
+      "source_hashes_before_after_match": true,
+      "exact_container_and_two_volumes_independently_absent": true,
+      "verification": "artifacts/release-012/final-native-cocoa-ownership/verification.json",
+      "stdout_seconds": 28.6,
+      "window_cases": 16,
+      "component_cases": 78,
+      "new_lifecycle_cases": 4,
+      "independent_cleanup": "artifacts/release-012/final-native-cocoa-ownership/independent-cleanup.json"
+    },
+    "stream_tls_transport": {
+      "passed": 2,
+      "skipped": 0,
+      "replica_set_event_acceptance": false,
+      "exact_container_and_anonymous_volume_cleanup": true,
+      "receipt": "artifacts/release-012/final-security-stream/summary.json",
+      "source_binding": "Declared source bytes unchanged and re-bound after ownership fix; not represented as post-fix re-execution"
+    },
+    "ordinary_tls": {
+      "passed": 24,
+      "skipped": 0,
+      "fixture_owned_removal_and_container_absence": true,
+      "all_volume_ids_independently_recorded": false,
+      "scope_note": "This round passed; first-wave observer did not retain every ordinary TLS volume ID, so do not claim independent per-volume absence",
+      "source_binding": "Declared source bytes unchanged and re-bound after ownership fix; not represented as post-fix re-execution"
+    },
+    "stopped_cleanup": {
+      "passed": 13,
+      "skipped": 0,
+      "containers_started": 0,
+      "db_connections": 0,
+      "ledger_totals": {
+        "cases": 13,
+        "containers": 15,
+        "volumes": 30,
+        "exact_ids_independently_absent": true,
+        "all_recorded_cases_cleaned": true
+      },
+      "receipt": "artifacts/release-012/final-stopped-cleanup/summary.json",
+      "source_binding": "Declared source bytes unchanged and re-bound after ownership fix; not represented as post-fix re-execution"
+    },
+    "collections_first_attempt": {
+      "qualified": false,
+      "observed_process_failure": "SIGSEGV",
+      "runner_error_type": "FileNotFoundError after missing completed JUnit; not a diagnosis of SIGSEGV cause",
+      "receipt": "artifacts/release-012/final-collections/summary.json"
+    },
+    "collections_fresh_serial_r2": {
+      "passed": 507,
+      "skipped": 0,
+      "owned_containers": 8,
+      "owned_volumes": 16,
+      "exact_ids_independently_absent": true,
+      "cause_of_first_failure_established": false,
+      "receipt": "artifacts/release-012/final-collections-r2/independent-check.json",
+      "scope_note": "Historical pre-ownership retry; not the current source qualification"
+    },
+    "source_smoke": {
+      "passed": true,
+      "version": "0.12.0",
+      "rows": 6,
+      "columns": 4,
+      "packaged": false,
+      "receipt": "artifacts/release-012/final-source-smoke-ownership.json"
+    },
+    "overlapping_scopes_not_added": true,
+    "tested_source_commit": "479a811adfc78549e3982c8338c3dc9eb3d28be6",
+    "lifecycle": {
+      "passed": 22,
+      "skipped": 0,
+      "new_regressions": 4,
+      "first_case_red_before_fix": true,
+      "actual_gui_thread_destruction": true,
+      "receipt": "artifacts/release-012/owner-fix-validation.json"
+    },
+    "collection_runner": {
+      "passed": 511,
+      "skipped": 0,
+      "owned_containers": 8,
+      "owned_volumes": 16,
+      "declared_source_hashes": 48,
+      "outer_source_paths_hashed": 198,
+      "source_hashes_before_after_match": true,
+      "exact_ids_independently_absent": true,
+      "cause_of_first_failure_established": false,
+      "receipt": "artifacts/release-012/final-collections-owner-fix/summary.json",
+      "independent_receipt": "artifacts/release-012/final-collections-owner-fix/independent-check.json"
+    },
+    "recorder": {
+      "tested_source_commit": "479a811adfc78549e3982c8338c3dc9eb3d28be6",
+      "source_files_each_scope": 79,
+      "source_before_after_and_exact_git_blobs_match": true,
+      "offline": {
+        "passed": 79,
+        "conditionally_skipped": 3,
+        "receipt": "artifacts/release-012/final-recorder-ownership-offline-20261113T065926Z-9dc0cd/verification.json"
+      },
+      "own_rs": {
+        "passed": 1,
+        "skipped": 0,
+        "events": 2,
+        "typed_bson_and_original_session_preserved": true,
+        "container_and_two_volumes_independently_absent": true,
+        "receipt": "artifacts/release-012/final-recorder-ownership-own-rs-20261113T065926Z-9dc0cd/verification.json"
+      },
+      "native_gui_recorded_by_these_scopes": false
+    },
+    "ownership_handoff": "artifacts/release-012/owner-fix-validation.json"
+  },
+  "dialog_task_ownership_probe": {
+    "status": "Native TaskSignals worker-thread destruction confirmed on real ConnectionDialog Test caller, local GUI-parent/deferred-delete fix and two real regressions pass",
+    "production_fix_commit": "d9bee6649d66542ea94dfd077a567dafd42c6224",
+    "real_sqlite_and_actual_test_button": true,
+    "native_tail_gate_after_gui_complete": true,
+    "queued_retry_does_not_delete_new_signals": true,
+    "native_signals_destroyed_on_gui_thread": true,
+    "weakrefs_eventually_released": true,
+    "original_sigsegv_same_cause_proven": false,
+    "private_evidence_directory": "artifacts/release-012/dialog-task-ownership-probe/"
   }
 }

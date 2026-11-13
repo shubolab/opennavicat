@@ -2,13 +2,15 @@
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 import json
+import secrets
 import threading
 import time
 import uuid
 
-from bson import BSON, Binary, Decimal128, Int64, Timestamp
+from bson import BSON, Binary, Decimal128, Int64, ObjectId, Timestamp
 from pymongo import MongoClient
 from pymongo.errors import InvalidOperation
+from pymongo.write_concern import WriteConcern
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QMessageBox
 from shiboken6 import isValid
@@ -36,7 +38,7 @@ def owned_read(qtbot, executor, function):
 
 
 @pytest.fixture
-def stream_window(qtbot, tmp_path, monkeypatch, replica_service):
+def stream_window(qtbot, tmp_path, monkeypatch, replica_service, request):
     import keyring
     import opennavicat.ui.window as window_module
 
@@ -58,6 +60,15 @@ def stream_window(qtbot, tmp_path, monkeypatch, replica_service):
         return client
 
     native = executor.submit(native_setup).result(5)
+    reader = None
+    if getattr(request, 'param', None) == 'read-role':
+        reader, password = 'generated_reader_' + uuid.uuid4().hex, secrets.token_urlsafe(24)
+        executor.submit(native.admin.command, 'createUser', reader, pwd=password,
+            roles=[{'role': 'read', 'db': config.database}], mechanisms=['SCRAM-SHA-256']).result(5)
+        config = replace(config, username=reader, password=password,
+            mongo_auth_source='admin', mongo_auth_mechanism='SCRAM-SHA-256')
+    else:
+        assert getattr(request, 'param', None) is None
     wire, errors, owner_threads, cancel_threads = Wire(config.database), [], {}, []
     options = MongoSession._connection_options
 
@@ -112,6 +123,8 @@ def stream_window(qtbot, tmp_path, monkeypatch, replica_service):
         yield window, config, native, executor, wire, errors, owner_threads, cancel_threads
     finally:
         before_close(window)
+        if reader is not None:
+            executor.submit(native.admin.command, 'dropUser', reader).result(5)
         executor.submit(native.drop_database, config.database).result(5)
         executor.submit(native.close).result(5)
         executor.shutdown(wait=True, cancel_futures=True)
@@ -207,6 +220,138 @@ def test_real_two_events_keep_exact_bson_private_and_messages_output_match(qtbot
     page.tabs.setCurrentWidget(page.stream_output)
     assert '> OK' in page.stream_output.toPlainText()
     assert_no_cursors(qtbot, stream_window)
+
+
+@pytest.mark.parametrize('stream_window', ['read-role'], indirect=True)
+@pytest.mark.parametrize('lookup,filter_full_document,expected_count', [
+    pytest.param(False, False, 2, id='default-update-and-barrier'),
+    pytest.param(False, True, 1, id='default-full-document-filter-and-barrier'),
+    pytest.param(True, True, 2, id='update-lookup-filter-and-barrier'),
+])
+def test_real_toolbar_full_document_update_variants_keep_typed_events_private(
+        qtbot, stream_window, lookup, filter_full_document, expected_count):
+    window, config, native, executor, wire, errors, owners, _cancels = stream_window
+    session = window.sessions[config.id]
+    target_id, barrier_id = ObjectId(), 'generated_barrier_' + uuid.uuid4().hex
+    private = 'generated_event_payload_' + uuid.uuid4().hex
+    initial = {'_id': target_id, 'counter': Int64(9007199254740993), 'private': private,
+        'decimal': Decimal128('1.250'), 'binary': Binary(b'\x00\xff', 128),
+        'timestamp': Timestamp(9, 2), 'padding': 'generated ' * 128}
+    expected = dict(initial, counter=Int64(9007199254740994))
+    barrier = {'_id': barrier_id, 'barrier': True, 'private': private, 'sourceId': target_id,
+        'n': Int64(9007199254740995), 'd': Decimal128('2.500'),
+        'b': Binary(b'\xff\x00', 128), 't': Timestamp(10, 3)}
+    owned_read(qtbot, executor, lambda: native[config.database].sales.insert_one(initial))
+    before_control = owned_read(qtbot, executor, lambda: native[config.database].sales.find_one({'_id': 0}))
+    update_match = {'operationType': 'update', 'documentKey._id': target_id}
+    if filter_full_document:
+        update_match['fullDocument.counter'] = {'$exists': True}
+    body = {'fullDocument': 'updateLookup'} if lookup else {}
+    comment = 'generated_full_document_' + uuid.uuid4().hex
+    page = page_for(qtbot, stream_window)
+    page.load_definition(PipelineDefinition(source='sales', stages=[
+        PipelineStage('$changeStream', body), PipelineStage('$match', {'$or': [
+            update_match, {'operationType': 'insert', 'documentKey._id': barrier_id}]})],
+        reference_options={'cursorBatchSize': 0, 'maxTimeMS': 5000, 'comment': comment}))
+    frozen, script = to_nagg(page.draft()), pipeline_script(page.draft())
+    wire.commands.clear()
+
+    def produce():
+        # The independent owner can see this read user's operation. A generic
+        # listener event or another cursor is not sufficient to arm the writes.
+        deadline = time.monotonic() + 8
+        while time.monotonic() < deadline:
+            marker = session.cancellation_marker()
+            if isinstance(marker, dict) and marker.get('userComment') == comment:
+                with native.admin.aggregate([{'$currentOp': {'allUsers': True}},
+                    {'$match': {'active': True, 'ns': config.database + '.sales',
+                        'command.getMore': {'$exists': True}, 'command.comment': marker}}]) as cursor:
+                    if tuple(cursor):
+                        break
+            time.sleep(.005)
+        else:
+            raise AssertionError('This toolbar Run never reached its exact owned getMore')
+        collection = native.get_database(config.database, codec_options=BSON_CODEC).get_collection(
+            'sales', write_concern=WriteConcern(w='majority', wtimeout=3000))
+        update = collection.update_one({'_id': target_id, 'counter': initial['counter']},
+            {'$set': {'counter': expected['counter']}})
+        assert update.matched_count == update.modified_count == 1
+        assert collection.insert_one(barrier).inserted_id == barrier_id
+        return marker
+
+    producer = executor.submit(produce)
+    run_button = page.toolbar.widgetForAction(page.run_action)
+    assert run_button.isVisible() and run_button.isEnabled()
+    with qtbot.waitSignal(page.runRequested, timeout=1000) as request:
+        qtbot.mouseClick(run_button, Qt.MouseButton.LeftButton)
+    assert to_nagg(request.args[0]) == frozen
+    finish(qtbot, window, page)
+    marker = producer.result(2)
+    result = page._last_stream_result
+    assert result.completion == 'empty_batch' and len(result.events) == expected_count
+    events = [canonical_loads(event.canonical_json) for event in result.events]
+    assert [event['operationType'] for event in events] == (
+        ['insert'] if expected_count == 1 else ['update', 'insert'])
+    assert BSON.encode(events[-1]['fullDocument'], codec_options=BSON_CODEC) == BSON.encode(
+        barrier, codec_options=BSON_CODEC)
+    if expected_count == 2:
+        update_event = events[0]
+        assert update_event['documentKey'] == {'_id': target_id}
+        assert update_event['updateDescription']['updatedFields'] == {'counter': expected['counter']}
+        if lookup:
+            assert BSON.encode(update_event['fullDocument'], codec_options=BSON_CODEC) == BSON.encode(
+                expected, codec_options=BSON_CODEC)
+        else:
+            assert 'fullDocument' not in update_event
+    assert all(BSON.encode(canonical_loads(event.canonical_json), codec_options=BSON_CODEC) == event.raw_bson
+               for event in result.events)
+
+    aggregates = [command for command in wire.commands if command.get('aggregate') == 'sales']
+    assert len(aggregates) == 1  # Our own public listener observes initial calls directly.
+    aggregate = aggregates[0]
+    assert aggregate['pipeline'] == [{'$changeStream': body}, {'$match': {'$or': [
+        update_match, {'operationType': 'insert', 'documentKey._id': barrier_id}]}}]
+    assert aggregate['comment'] == marker and aggregate['cursor']['batchSize'] == 0
+    assert 0 < aggregate['maxTimeMS'] <= 5000
+    assert 'resumeAfter' not in aggregate['pipeline'][0]['$changeStream']
+    assert 'startAfter' not in aggregate['pipeline'][0]['$changeStream']
+    assert all(command['comment'] == marker for command in wire.commands if 'getMore' in command)
+    assert to_nagg(page.draft()) == frozen and not errors
+    assert page.stream_output.toPlainText() == page.messages.toPlainText()
+    assert script in page.messages.toPlainText() and '> OK' in page.messages.toPlainText()
+    assert private not in page.messages.toPlainText() and private not in page.stream_output.toPlainText()
+    assert [page.tabs.tabText(index) for index in range(page.tabs.count())
+            if page.tabs.isTabVisible(index)] == ['管道', '脚本预览', '消息', '输出']
+    assert page.last_rows == [] and page.results.rowCount() == 0 and not page.export_action.isEnabled()
+
+    # Reuse the original application session on its serial owner after cursor
+    # cleanup; neither a stream-only replacement nor a privileged app login passes.
+    followup = []
+
+    def read_on_original_owner():
+        assert threading.get_ident() == owners[id(session)]
+        roles = session.connection.admin.command('connectionStatus')['authInfo']['authenticatedUserRoles']
+        assert roles == [{'role': 'read', 'db': config.database}]
+        database = session.connection.get_database(config.database, codec_options=BSON_CODEC)
+        return database.sales.find_one({'_id': target_id})
+
+    window.submit(read_on_original_owner, followup.append, label='Generated original-session read')
+    idle(qtbot, window)
+    assert window.sessions[config.id] is session and followup == [expected] and not errors
+
+    def independent_readback():
+        collection = native.get_database(config.database, codec_options=BSON_CODEC).sales
+        assert BSON.encode(collection.find_one({'_id': target_id}), codec_options=BSON_CODEC) == BSON.encode(
+            expected, codec_options=BSON_CODEC)
+        assert collection.find_one({'_id': barrier_id}) == barrier
+        assert collection.find_one({'_id': 0}) == before_control
+        assert collection.count_documents({}) == 3
+        with native.admin.aggregate([{'$currentOp': {'allUsers': True, 'idleCursors': True}},
+            {'$match': {'$or': [{'ns': config.database + '.sales'}, {'command.comment': marker},
+                {'cursor.originatingCommand.comment': marker}, {'originatingCommand.comment': marker}]}}]) as cursor:
+            assert not tuple(cursor)
+
+    owned_read(qtbot, executor, independent_readback)
 
 
 def test_real_local_stop_uses_independent_control_worker_and_retains_draft(qtbot, stream_window):

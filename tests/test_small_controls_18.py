@@ -1,14 +1,19 @@
 """Small Oracle controls: input safety and real Qt icon/state behavior, no DB."""
 from dataclasses import asdict, replace
 import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
 
 import pytest
 from PySide6.QtCore import QPoint, QSize, Qt
-from PySide6.QtGui import QIcon, QImage
+from PySide6.QtGui import QFont, QIcon, QImage, QPalette
 from PySide6.QtTest import QSignalSpy, QTest
 from PySide6.QtWidgets import (
     QAbstractSpinBox, QDialogButtonBox, QInputDialog, QLineEdit, QMessageBox,
-    QStyleFactory, QWidget,
+    QStyleFactory,
 )
 
 from opennavicat.database import ConnectionConfig
@@ -298,16 +303,44 @@ def _check_oracle_form_widths(qtbot, dialog):
         _assert_full_horizontal_visibility(qtbot, field, dialog)
 
 
+def _run_style_case_in_isolated_process(qapp, nodeid):
+    """Keep native style/palette changes out of the shared pytest application."""
+    style, stylesheet = qapp.style(), qapp.styleSheet()
+    palette, font = QPalette(qapp.palette()), QFont(qapp.font())
+    env = {key: value for key, value in os.environ.items()
+           if not key.startswith("OPENNAVICAT_TEST_") and key != "PYTEST_ADDOPTS"}
+    env["OPENNAVICAT_STYLE_CHANGE_CHILD"] = nodeid
+    env["QT_QPA_PLATFORM"] = qapp.platformName()
+    with tempfile.TemporaryDirectory(prefix="opennavicat-style-case-") as directory:
+        env["OPENNAVICAT_DATA_DIR"] = directory
+        result = subprocess.run(
+            [sys.executable, "-m", "pytest", "-q", "-W", "error", nodeid],
+            cwd=Path(__file__).resolve().parents[1], env=env,
+            capture_output=True, text=True, timeout=90,
+        )
+    # Qt may resolve previously implicit palette roles differently after a
+    # native style switch. Isolating the whole cycle preserves both the actual
+    # parent palette and its resolution behavior, not just visible colors.
+    assert qapp.style() is style and qapp.styleSheet() == stylesheet
+    assert qapp.palette() == palette and qapp.font() == font
+    assert result.returncode == 0, (result.stdout + result.stderr)[-16000:]
+
+
 @pytest.mark.parametrize("stylesheet", [LIGHT_STYLESHEET, STYLESHEET], ids=["light", "dark"])
-def test_oracle_fields_keep_full_horizontal_width_through_ancestor_clips_and_style_changes(qtbot, stylesheet):
+def test_oracle_fields_keep_full_horizontal_width_through_ancestor_clips_and_style_changes(qtbot, qapp, request, stylesheet):
+    if os.environ.get("OPENNAVICAT_STYLE_CHANGE_CHILD") != request.node.nodeid:
+        _run_style_case_in_isolated_process(qapp, request.node.nodeid)
+        return
     dialog = _dialog(qtbot)
     dialog.setStyleSheet(stylesheet)
     assert dialog.font().pixelSize() == 12
     _check_oracle_form_widths(qtbot, dialog)
-    for name in QStyleFactory.keys():
-        style = QStyleFactory.create(name)
-        assert style is not None
-        style.setParent(dialog)  # QWidget does not own explicitly selected styles.
-        for widget in [dialog, *dialog.findChildren(QWidget)]:
-            widget.setStyle(style)
+    styles = QStyleFactory.keys()
+    assert styles
+    for name in styles:
+        # Qt propagates StyleChange and owns the selected style. Internal
+        # widgets may be replaced during that propagation, so never walk a
+        # previously captured findChildren() list and call setStyle on it.
+        assert qapp.setStyle(name) is not None
+        assert qapp.style().objectName().casefold() == name.casefold()
         _check_oracle_form_widths(qtbot, dialog)

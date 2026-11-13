@@ -23,7 +23,13 @@ helper bundled/image arch通过、未读真实profile，最终detached且不再�
 验证默认update、默认fullDocument字段过滤及updateLookup过滤的2/1/2事件；精确typed BSON、原serial session复用、
 文本页不含事件数据和cursor清理均有各自断言。19 Window/46 backend的11份声明源在合流后逐Git blob复核未变。
 新集成默认全源为2197通过/639条件跳过，96.92秒；215份运行/测试/构建/packaging/workflow输入前后相同且匹配3012d3e。
-默认跳过不算真库执行。新的main CI资格需单独记录，不能沿用0.12 tag的六安装器证据；此变更不构成新发布。
+默认跳过不算真库执行。集成已以`dfbbf5e`推到main，新CI
+[43395784419](https://github.com/shubolab/opennavicat/actions/runs/43395784419)
+在stopped cleanup断言失败；下载的Window19/0、backend46/0已独立核对exact source/node/JUnit/owned cleanup，
+这些局部成功不算整轮成功。两次Docker inspect同一个容器和两个卷，仅Mounts次序相反，测试错误要求同序。
+已仅将该断言改成exact record/CID及Counter卷身份；受控新owned fixture的第二次inspect逆序使旧断言红、新断言绿。
+完整cleanup13/0、零容器start/零DB连接，15CID/30卷逐ID独立确认absent；实际cleanup runner和应用未改。
+此修正需新CI资格，原失败保留，不能沿用0.12 tag的六安装器证据；此变更不构成新发布。
 详见[variant验证记录](../validation-mongodb-stream-variants.md)。
 
 下一实际参考观察在自有pre/post-images OFF/ON集合上核whenAvailable/required，尚在进行中，不能预写成功。

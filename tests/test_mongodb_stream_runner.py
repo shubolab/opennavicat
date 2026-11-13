@@ -6,6 +6,7 @@ runner metadata, and never discovers containers by a broad label/name search.
 """
 from __future__ import annotations
 
+from collections import Counter
 import hashlib
 import importlib.util
 import json
@@ -201,7 +202,13 @@ def test_exact_stopped_container_and_exclusive_anonymous_volumes_are_removed(own
     assert len(value["volumes"]) == 2 and all(re.fullmatch(r"[0-9a-f]{64}", name) for name in value["volumes"])
     receipt(tmp_path, value)
     removed = runner.cleanup_interrupted(tmp_path, owned_stopped.run_id)
-    assert removed == [{"container_id": value["container_id"], "anonymous_volumes": value["volumes"]}]
+    # Docker may return Mounts in a different order on the next inspect.
+    # Require the exact resource identities and multiplicities, independently
+    # of that presentation order.
+    assert len(removed) == 1
+    assert removed[0].keys() == {"container_id", "anonymous_volumes"}
+    assert removed[0]["container_id"] == value["container_id"]
+    assert Counter(removed[0]["anonymous_volumes"]) == Counter(value["volumes"])
     assert inspect("container", value["container_id"]) is None
     assert all(inspect("volume", name) is None for name in value["volumes"])
     assert runner.cleanup_interrupted(tmp_path, owned_stopped.run_id) == []

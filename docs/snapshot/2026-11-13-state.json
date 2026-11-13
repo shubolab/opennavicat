@@ -1877,12 +1877,50 @@
       "git_blob_match": true,
       "external_database_opt_in": false
     },
-    "new_main_ci": "pending integration push; do not use old tag evidence",
+    "new_main_ci": {
+      "run_id": 43395784419,
+      "source_sha": "dfbbf5e4f34ddae4322c9c559b3f39f88bc057e1",
+      "qualified": false,
+      "failure_step": "Verify interrupted stream fixture cleanup ownership boundaries",
+      "failure_node": "tests/test_mongodb_stream_runner.py::test_exact_stopped_container_and_exclusive_anonymous_volumes_are_removed",
+      "reason": "Same container and two volume identities, opposite Docker Mounts order; order-sensitive test assertion",
+      "window_passed": 19,
+      "backend_passed": 46,
+      "component_sources_nodes_junit_cleanup_independently_verified": true,
+      "cleanup_passed": 12,
+      "cleanup_failed": 1,
+      "cleanup_errors": 0,
+      "cleanup_skipped": 0,
+      "all_13_cleanup_ledgers_completed": true,
+      "exact_containers_absent": 15,
+      "exact_volumes_absent": 30,
+      "receipt_tree": "mongodb-finite-stream/opennavicat",
+      "receipt": "artifacts/stream-variants/main-ci-43395784419/failure-review.json"
+    },
     "receipts": [
       "artifacts/stream-variants/merged-source-binding.json",
       "artifacts/stream-variants/full-merged/verification.json"
     ],
-    "limits": "Local nativeARM64/offscreen ownedMongo8.0.34 scope; reference initialcallcardinality unknown, otherimage/resume/topology/permission/Preview/allplatform gates remain open"
+    "limits": "Local nativeARM64/offscreen ownedMongo8.0.34 scope; reference initialcallcardinality unknown, otherimage/resume/topology/permission/Preview/allplatform gates remain open",
+    "pushed_main_commit": "dfbbf5e4f34ddae4322c9c559b3f39f88bc057e1",
+    "cleanup_assertion_correction": {
+      "application_and_runner_unchanged": true,
+      "assertion": "one exact result record and container ID; Counter of complete volume identities",
+      "controlled_second_inspect_mount_permutation": {
+        "old_assertion_failed": true,
+        "corrected_assertion_passed": true
+      },
+      "full_scope_passed": 13,
+      "skipped": 0,
+      "containers_started": 0,
+      "database_connections": 0,
+      "exact_containers_absent": 15,
+      "exact_volumes_absent": 30,
+      "source_sha256": "9ec521d915acec8c4ad473a491886680f5e213d00c0154b15126d0b5123af8a7",
+      "receipt_tree": "mongodb-stream-variants/opennavicat",
+      "receipt": "artifacts/stream-variants/cleanup-order-fix/full-cleanup/summary.json",
+      "new_main_ci": "required_after_push"
+    }
   },
   "parallel_next_major_scope": {
     "audit": "Oracle and Snowflake dedicated adapters missing; existing nine-family chooser and SQLite seven-page designer must not be recreated",

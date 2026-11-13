@@ -106,7 +106,31 @@ Actual Window/backend service qualification remains the separately recorded
 
 This is a test/documentation integration after the published v0.12.0 source
 `b6e1da4`; it does not replace that tag, installer bytes or release evidence.
-The main CI result for this later integration must be recorded separately.
+The integration was pushed to main as `dfbbf5e`. Its separate
+[CI run 43395784419](https://github.com/shubolab/opennavicat/actions/runs/43395784419)
+failed the stopped-container cleanup test. The downloaded Window **19/0** and
+backend **46/0** receipts independently match that commit's exact Git blobs,
+collected nodes, JUnit cases and owned fixture cleanup. These successful scopes
+do not make the complete run successful.
+
+The cleanup failure was an order-sensitive test assertion: two successive
+Docker inspections returned the same container and the same two anonymous
+volumes in opposite orders. The runner already checks volume identity as a set;
+the test additionally assumed a stable `Mounts` order. All thirteen case ledgers
+completed cleanup, and an independent exact-ID audit confirmed absence of all
+fifteen new stopped containers and thirty volumes. The failure remains recorded.
+
+The correction changes only that assertion to require one exact result record,
+the exact container ID and the full `Counter` of volume IDs. Existing ownership,
+refusal, exact absence and idempotence checks remain in place. A private
+deterministic reproducer permuted only the runner's second Docker inspection of
+a fresh owned container: the original assertion failed and the corrected one
+passed. Both runs finalized their own resources. The full stopped-cleanup scope
+then passed **13/0**, starting zero containers and connecting to zero databases;
+its fifteen container and thirty volume IDs were independently confirmed absent.
+The application and cleanup runner are unchanged. Private receipts are under
+`artifacts/stream-variants/cleanup-order-fix/`; a new CI run is required for the
+corrected test source.
 
 `fullDocumentBeforeChange`, `whenAvailable`, `required`, image enablement and
 retention, unavailable/deleted lookup documents, broader resume and invalidation

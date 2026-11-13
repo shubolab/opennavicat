@@ -1,12 +1,14 @@
 """Accepted connection settings survive asynchronous document saves and close."""
 from contextlib import closing
 from dataclasses import replace
+import gc
 import json
 import sqlite3
 import sys
 import threading
 from types import ModuleType, SimpleNamespace
 import uuid
+import weakref
 
 import pytest
 from PySide6.QtCore import QTimer, Qt
@@ -532,3 +534,99 @@ def test_all_four_network_secret_preferences_are_captured_before_settings_deleti
     assert len(memory) == 4 and not host.errors and not w._connection_edit_tokens
     text = host.store.path.read_text()
     assert all(secret not in text for secret in ('GENERATED-DB-SECRET','GENERATED-SSH-SECRET','GENERATED-KEY-SECRET','GENERATED-TLS-SECRET'))
+
+
+@pytest.mark.parametrize('pool_name', ['pool', 'cancel_pool'])
+@pytest.mark.parametrize('outcome', ['success', 'failure'])
+def test_completed_window_tasks_release_callbacks_and_signals_on_gui_thread(
+        qtbot, host, monkeypatch, pool_name, outcome):
+    window, gui = host.window, threading.get_ident()
+    pool = getattr(window, pool_name)
+    tail_entered, release_tail = threading.Event(), threading.Event()
+    references, events, workers = [], [], []
+    original_task = window_module.Task
+    was_enabled = gc.isenabled()
+    gc.disable()
+
+    class TailTask(original_task):
+        def run(self):
+            # Real Task.run has emitted finished, but this QRunnable remains
+            # active until the GUI explicitly releases its tail.
+            super().run()
+            tail_entered.set()
+            assert release_tail.wait(5)
+
+    def observed_task(function):
+        index = len(references)
+        task = TailTask(function) if index == 0 else original_task(function)
+        assert task.signals.thread() == window.thread()
+        # The observation keeps no strong Task/Signals/window reference.
+        task.signals.destroyed.connect(
+            lambda *_args, number=index: events.append(('destroyed', number, threading.get_ident())),
+            Qt.ConnectionType.DirectConnection)
+        references.append((weakref.ref(task), weakref.ref(task.signals)))
+        return task
+
+    monkeypatch.setattr(window_module, 'Task', observed_task)
+
+    def work():
+        workers.append(threading.get_ident())
+        assert workers[-1] != gui
+        if outcome == 'failure':
+            raise RuntimeError('generated task failure')
+        return 'generated task result'
+
+    def succeeded(value):
+        assert value == 'generated task result'
+        events.append(('success', 0, threading.get_ident()))
+
+    def failed(error):
+        assert type(error) is RuntimeError and str(error) == 'generated task failure'
+        events.append(('failure', 0, threading.get_ident()))
+
+    def followed(value):
+        assert value == 'generated follow-up'
+        events.append(('success', 1, threading.get_ident()))
+
+    def finished():
+        events.append(('finished', 0, threading.get_ident()))
+        # A real GUI completion callback may submit the next job before the
+        # preceding runnable has returned to its pool.
+        window.submit(lambda: 'generated follow-up', followed,
+            finished=lambda: events.append(('finished', 1, threading.get_ident())), pool=pool)
+
+    try:
+        window.submit(work, succeeded, failed, finished=finished, pool=pool)
+        qtbot.waitUntil(lambda: tail_entered.is_set()
+            and any(phase == 'finished' and number == 0 for phase, number, _thread in events), timeout=5000)
+        assert pool.activeThreadCount() > 0
+        assert [(phase, thread) for phase, number, thread in events if number == 0 and phase != 'destroyed'] == [
+            (outcome, gui), ('finished', gui)]
+        release_tail.set()
+        qtbot.waitUntil(lambda: not window.tasks and not window.pool.activeThreadCount()
+            and not window.cancel_pool.activeThreadCount(), timeout=5000)
+
+        def collect_in_worker():
+            workers.append(threading.get_ident())
+            assert workers[-1] != gui
+            return gc.collect()
+
+        window.submit(collect_in_worker,
+            finished=lambda: events.append(('finished', 2, threading.get_ident())), pool=pool)
+        qtbot.waitUntil(lambda: not window.tasks and not window.pool.activeThreadCount()
+            and not window.cancel_pool.activeThreadCount(), timeout=5000)
+        qtbot.waitUntil(lambda: all(task() is None and signals() is None for task, signals in references), timeout=2000)
+        assert len(references) == 3
+        assert sorted((number, thread) for phase, number, thread in events if phase == 'destroyed') == [
+            (0, gui), (1, gui), (2, gui)]
+        for number in range(3):
+            assert next(index for index, event in enumerate(events) if event[:2] == ('finished', number)) < next(
+                index for index, event in enumerate(events) if event[:2] == ('destroyed', number))
+        assert all(thread == gui for _phase, _number, thread in events)
+        assert not host.errors
+    finally:
+        release_tail.set()
+        qtbot.waitUntil(lambda: not window.tasks and not window.pool.activeThreadCount()
+            and not window.cancel_pool.activeThreadCount(), timeout=5000)
+        if was_enabled:
+            gc.enable()

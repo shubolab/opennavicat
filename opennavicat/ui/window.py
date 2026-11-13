@@ -2756,6 +2756,7 @@ class MainWindow(QMainWindow):
         if self._closed or not isValid(self):
             return
         task = Task(function)
+        task.signals.setParent(self)
         self.tasks.add(task)
         self.status.setText(label + "…")
         self.progress.show()
@@ -2779,6 +2780,7 @@ class MainWindow(QMainWindow):
                 self.status.setText("就绪")
             self.refresh_actions()
         task.signals.finished.connect(cleanup)
+        task.signals.finished.connect(task.signals.deleteLater)
         self.refresh_actions()
         (pool or self.pool).start(task)
 

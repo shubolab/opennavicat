@@ -21,23 +21,26 @@
   },
   "repository": {
     "remote": "git@github.com:shubolab/opennavicat.git",
-    "synced_origin_main_sha": "1a6eeed802e20e91766b9af181f5fcca5c7d0a22",
+    "synced_origin_main_sha": "a189508403b92d286d8b8d82173ae4ccebaaa8c3",
     "working_branch": "codex_mongodb_finite_stream",
     "working_branch_base_sha": "87df5cd70f9293c4585637b1eab6e00e37810097",
     "workspace": "/Users/wangshubo/.codex/worktrees/mongodb-finite-stream/opennavicat",
     "original_main_workspace": "/Users/wangshubo/develop/opennavicat",
     "other_branches_or_unmerged_work_removed": false,
-    "application_release_source_sha": "87df5cd70f9293c4585637b1eab6e00e37810097",
-    "documentation_receipt_scope": "Local qualification remains bound to1a6eeed/productd9bee66; main precheck43384833779 completed/failure at macos-amd64 hdiutil CREATE Resourcebusy. Packager-only fix in progress, new candidate source not frozen; public0.11 unchanged",
-    "next_working_branch": "codex_mongodb_finite_stream",
-    "next_workspace": "/Users/wangshubo/.codex/worktrees/mongodb-finite-stream/opennavicat",
-    "origin_main_verification_scope": "Parent verified main push/sourceSHA and started exactSHA run43384833779; no old asset downloads by this subtask",
-    "local_head_at_candidate_measurement": "1a6eeed802e20e91766b9af181f5fcca5c7d0a22",
-    "candidate_final_source_sha": null,
+    "application_release_source_sha": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
+    "documentation_receipt_scope": "Current publicv0.12 prerelease exactb6 formal8/8 and anonymous eight assets verified, publicARM Cocoa smoke passed. Main precheck and earlier failures remain historical; next94de386 variant scope is local only and not tag qualification.",
+    "next_working_branch": "codex_mongodb_stream_variants",
+    "next_workspace": "/Users/wangshubo/.codex/worktrees/mongodb-stream-variants/opennavicat",
+    "origin_main_verification_scope": "Local origin/main and documentation HEAD read during final release-doc pass; release/tag source remains exactb6 and future variant94de386 is separate.",
+    "local_head_at_candidate_measurement": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
+    "candidate_final_source_sha": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
     "candidate_tested_application_source_sha": "d9bee6649d66542ea94dfd077a567dafd42c6224",
-    "candidate_tested_total_source_sha": "1a6eeed802e20e91766b9af181f5fcca5c7d0a22",
-    "original_main_workspace_head": "1a6eeed802e20e91766b9af181f5fcca5c7d0a22",
-    "original_main_workspace_clean": true
+    "candidate_tested_total_source_sha": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
+    "original_main_workspace_head": "a189508403b92d286d8b8d82173ae4ccebaaa8c3",
+    "original_main_workspace_clean": true,
+    "release_tag_source_sha": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
+    "working_tree_documentation_head": "a189508403b92d286d8b8d82173ae4ccebaaa8c3",
+    "workspace_head_scope": "Read immediately before the final release documentation commit; published application source remains exactb6, and this receipt does not claim a self-referential final documentation SHA."
   },
   "reference": {
     "path": "/Users/wangshubo/Downloads/Navicat Premium.app",
@@ -56,110 +59,187 @@
     "full_stream_options_or_platforms_accepted": false
   },
   "published": {
-    "tag": "v0.11.0",
-    "source_sha": "87df5cd70f9293c4585637b1eab6e00e37810097",
+    "tag": "v0.12.0",
+    "source_sha": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
     "draft": false,
     "prerelease": true,
-    "published_at_utc": "2026-11-13T05:07:54Z",
-    "url": "https://github.com/shubolab/opennavicat/releases/tag/v0.11.0",
+    "published_at_utc": "2026-11-13T08:17:20Z",
+    "published_at_beijing": "2026-11-13 16:17:20 +08:00",
+    "url": "https://github.com/shubolab/opennavicat/releases/tag/v0.12.0",
     "native_installers": 6,
     "public_assets": 8,
     "all_asset_metadata_uploaded": true,
     "asset_bytes_redownloaded_this_resume": true,
     "asset_bytes_rehashed_this_resume": true,
     "anonymous_download_verified": true,
+    "anonymous_download_count": 8,
     "api_digest_checksums_combined_manifest_formal_ci_bytes_match": true,
     "tag_resolves_to_source_sha": true,
-    "formal_run_id": 43368650962,
+    "annotated_tag": true,
+    "formal_run_id": 43390347592,
     "formal_jobs_successful": 8,
+    "formal_installer_hashes_differ_from_main_precheck": true,
     "assets": [
       {
         "name": "build-manifests.json",
         "size": 205707,
         "state": "uploaded",
-        "digest": "sha256:630121c8710a916ad29f438393c010ad4f5b9469b54b460183e1416a0180c2f7",
-        "browser_download_url": "https://github.com/shubolab/opennavicat/releases/download/v0.11.0/build-manifests.json"
+        "digest": "sha256:d7dd33b72b4fbfccf29a2307c6ef7fa81758730271f0d6faeee71dc8c53e2f65",
+        "browser_download_url": "https://github.com/shubolab/opennavicat/releases/download/v0.12.0/build-manifests.json"
       },
       {
-        "name": "OpenNavicat-0.11.0-linux-amd64.deb",
-        "size": 76479582,
+        "name": "OpenNavicat-0.12.0-linux-amd64.deb",
+        "size": 76484848,
         "state": "uploaded",
-        "digest": "sha256:c330f4e145d61730fbfe797afef1d6c4acfbf1bea48494c20e3ffb422c9f1b9b",
-        "browser_download_url": "https://github.com/shubolab/opennavicat/releases/download/v0.11.0/OpenNavicat-0.11.0-linux-amd64.deb"
+        "digest": "sha256:8ffde47fd6d8b06043ab14bafdd584bc416ff19972acab331c84f3f803369da1",
+        "browser_download_url": "https://github.com/shubolab/opennavicat/releases/download/v0.12.0/OpenNavicat-0.12.0-linux-amd64.deb"
       },
       {
-        "name": "OpenNavicat-0.11.0-linux-arm64.deb",
-        "size": 75119980,
+        "name": "OpenNavicat-0.12.0-linux-arm64.deb",
+        "size": 75128210,
         "state": "uploaded",
-        "digest": "sha256:c653f9d89edc7133375b1810f85842f3395af9453e9410bbb63dde438d098982",
-        "browser_download_url": "https://github.com/shubolab/opennavicat/releases/download/v0.11.0/OpenNavicat-0.11.0-linux-arm64.deb"
+        "digest": "sha256:21a07643ddae14e167e631225d2f80f632c660b5769ddf3b2570a939bf27cf89",
+        "browser_download_url": "https://github.com/shubolab/opennavicat/releases/download/v0.12.0/OpenNavicat-0.12.0-linux-arm64.deb"
       },
       {
-        "name": "OpenNavicat-0.11.0-macos-amd64.dmg",
-        "size": 50440632,
+        "name": "OpenNavicat-0.12.0-macos-amd64.dmg",
+        "size": 50457997,
         "state": "uploaded",
-        "digest": "sha256:c4b2c6f4d180f913dc45e4d22cf3b159338bed2bb09231d0262fe66ff19884e8",
-        "browser_download_url": "https://github.com/shubolab/opennavicat/releases/download/v0.11.0/OpenNavicat-0.11.0-macos-amd64.dmg"
+        "digest": "sha256:f08d3efb31e784ac1108e8d1528ffbed13b4785c4d504ddb7928fbf71be27988",
+        "browser_download_url": "https://github.com/shubolab/opennavicat/releases/download/v0.12.0/OpenNavicat-0.12.0-macos-amd64.dmg"
       },
       {
-        "name": "OpenNavicat-0.11.0-macos-arm64.dmg",
-        "size": 49775097,
+        "name": "OpenNavicat-0.12.0-macos-arm64.dmg",
+        "size": 49791328,
         "state": "uploaded",
-        "digest": "sha256:4de99c14fa3000ce5f0ced288f6e80ddd1f92061c21cf87feb796864d0ac20e8",
-        "browser_download_url": "https://github.com/shubolab/opennavicat/releases/download/v0.11.0/OpenNavicat-0.11.0-macos-arm64.dmg"
+        "digest": "sha256:8a37a8abd41fcf949a54a042449dd00ad6f2f76cf8a0ec3ee40e3067e2975c17",
+        "browser_download_url": "https://github.com/shubolab/opennavicat/releases/download/v0.12.0/OpenNavicat-0.12.0-macos-arm64.dmg"
       },
       {
-        "name": "OpenNavicat-0.11.0-windows-amd64-setup.exe",
-        "size": 43769396,
+        "name": "OpenNavicat-0.12.0-windows-amd64-setup.exe",
+        "size": 43802062,
         "state": "uploaded",
-        "digest": "sha256:b41c083c6c6b6363f26b5f549da47c40c8da3ed1ea79da51be3f2ed8e721e6d4",
-        "browser_download_url": "https://github.com/shubolab/opennavicat/releases/download/v0.11.0/OpenNavicat-0.11.0-windows-amd64-setup.exe"
+        "digest": "sha256:15b08840d89f7ad3ad247a6a1c37d8edecba524da38619e80c9556d536c3a662",
+        "browser_download_url": "https://github.com/shubolab/opennavicat/releases/download/v0.12.0/OpenNavicat-0.12.0-windows-amd64-setup.exe"
       },
       {
-        "name": "OpenNavicat-0.11.0-windows-arm64-setup.exe",
-        "size": 34715740,
+        "name": "OpenNavicat-0.12.0-windows-arm64-setup.exe",
+        "size": 34745994,
         "state": "uploaded",
-        "digest": "sha256:63d607d0331899c305c5d0466a163fe619224253a34a8f25e8e09829b9835ea2",
-        "browser_download_url": "https://github.com/shubolab/opennavicat/releases/download/v0.11.0/OpenNavicat-0.11.0-windows-arm64-setup.exe"
+        "digest": "sha256:8151d2401e63cc003829c09e2f250fa702b02e3f4191d6738882fe8083ed2fa7",
+        "browser_download_url": "https://github.com/shubolab/opennavicat/releases/download/v0.12.0/OpenNavicat-0.12.0-windows-arm64-setup.exe"
       },
       {
         "name": "SHA256SUMS",
         "size": 622,
         "state": "uploaded",
-        "digest": "sha256:eef2f190fd0b5bd280676108470d8e55d904d31c8e6fd9d38fe92100def4c7bb",
-        "browser_download_url": "https://github.com/shubolab/opennavicat/releases/download/v0.11.0/SHA256SUMS"
+        "digest": "sha256:89cd9ac515f0161a8f807557ffae33a97445c4e17924f550561d0d67e7266c71",
+        "browser_download_url": "https://github.com/shubolab/opennavicat/releases/download/v0.12.0/SHA256SUMS"
       }
     ],
-    "formal_audit_receipt": "artifacts/release-011/tag-audit-43368650962/verification.json",
-    "public_audit_receipt": "artifacts/release-011/public-43368650962/verification.json",
+    "formal_audit_receipt": "artifacts/release-012/tag-ci-audit-43390347592/verification.json",
+    "public_audit_receipt": "artifacts/release-012/public-43390347592/verification.json",
+    "independent_public_rehash_receipt": "artifacts/release-012/public-43390347592/independent-public-check.json",
+    "independent_public_rehash_new_http_requests": false,
     "public_native_mac_arm64_smoke": {
       "passed": true,
       "rows": 6,
       "columns": 4,
       "qt_platform": "cocoa",
+      "machine": "arm64",
+      "version": "0.12.0",
       "all_driver_crypto_native_js_probes": true,
+      "native_js_helper_bundled": true,
+      "image_architectures": [
+        "arm64"
+      ],
       "isolated_workspace": true,
       "reference_profiles_accessed": false,
+      "mounted_read_only": true,
       "dmg_detached": true,
-      "receipt": "artifacts/release-011/public-macos-arm64-smoke/verification.json"
-    }
+      "sha256": "8a37a8abd41fcf949a54a042449dd00ad6f2f76cf8a0ec3ee40e3067e2975c17",
+      "receipt": "artifacts/release-012/public-macos-arm64-smoke/verification.json"
+    },
+    "formal_public_targets": {
+      "linux-amd64": {
+        "installer": "OpenNavicat-0.12.0-linux-amd64.deb",
+        "bytes": 76484848,
+        "sha256": "8ffde47fd6d8b06043ab14bafdd584bc416ff19972acab331c84f3f803369da1",
+        "api_digest_matched": true,
+        "anonymous_http_status": 200,
+        "formal_ci_bytes_and_hash_matched": true,
+        "full_formal_manifest_matched": true,
+        "native_installed_receipts_matched": true
+      },
+      "linux-arm64": {
+        "installer": "OpenNavicat-0.12.0-linux-arm64.deb",
+        "bytes": 75128210,
+        "sha256": "21a07643ddae14e167e631225d2f80f632c660b5769ddf3b2570a939bf27cf89",
+        "api_digest_matched": true,
+        "anonymous_http_status": 200,
+        "formal_ci_bytes_and_hash_matched": true,
+        "full_formal_manifest_matched": true,
+        "native_installed_receipts_matched": true
+      },
+      "macos-amd64": {
+        "installer": "OpenNavicat-0.12.0-macos-amd64.dmg",
+        "bytes": 50457997,
+        "sha256": "f08d3efb31e784ac1108e8d1528ffbed13b4785c4d504ddb7928fbf71be27988",
+        "api_digest_matched": true,
+        "anonymous_http_status": 200,
+        "formal_ci_bytes_and_hash_matched": true,
+        "full_formal_manifest_matched": true,
+        "native_installed_receipts_matched": true
+      },
+      "macos-arm64": {
+        "installer": "OpenNavicat-0.12.0-macos-arm64.dmg",
+        "bytes": 49791328,
+        "sha256": "8a37a8abd41fcf949a54a042449dd00ad6f2f76cf8a0ec3ee40e3067e2975c17",
+        "api_digest_matched": true,
+        "anonymous_http_status": 200,
+        "formal_ci_bytes_and_hash_matched": true,
+        "full_formal_manifest_matched": true,
+        "native_installed_receipts_matched": true
+      },
+      "windows-amd64": {
+        "installer": "OpenNavicat-0.12.0-windows-amd64-setup.exe",
+        "bytes": 43802062,
+        "sha256": "15b08840d89f7ad3ad247a6a1c37d8edecba524da38619e80c9556d536c3a662",
+        "api_digest_matched": true,
+        "anonymous_http_status": 200,
+        "formal_ci_bytes_and_hash_matched": true,
+        "full_formal_manifest_matched": true,
+        "native_installed_receipts_matched": true
+      },
+      "windows-arm64": {
+        "installer": "OpenNavicat-0.12.0-windows-arm64-setup.exe",
+        "bytes": 34745994,
+        "sha256": "8151d2401e63cc003829c09e2f250fa702b02e3f4191d6738882fe8083ed2fa7",
+        "api_digest_matched": true,
+        "anonymous_http_status": 200,
+        "formal_ci_bytes_and_hash_matched": true,
+        "full_formal_manifest_matched": true,
+        "native_installed_receipts_matched": true
+      }
+    },
+    "full_reference_ui_function_or_human_acceptance_complete": false
   },
   "ci_current": {
-    "databaseId": 43368650962,
-    "headSha": "87df5cd70f9293c4585637b1eab6e00e37810097",
+    "databaseId": 43390347592,
+    "headSha": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
     "status": "completed",
     "conclusion": "success",
     "event": "push",
-    "ref": "v0.11.0",
-    "url": "https://github.com/shubolab/opennavicat/actions/runs/43368650962",
+    "ref": "v0.12.0",
+    "url": "https://github.com/shubolab/opennavicat/actions/runs/43390347592",
     "jobs": {
+      "Real database TLS and SSH": "success",
+      "macos-arm64": "success",
+      "windows-arm64": "success",
       "linux-amd64": "success",
       "linux-arm64": "success",
-      "windows-amd64": "success",
-      "windows-arm64": "success",
-      "Real database TLS and SSH": "success",
       "macos-amd64": "success",
-      "macos-arm64": "success",
+      "windows-amd64": "success",
       "Publish complete six-target release": "success"
     },
     "six_native_desktop_jobs_successful": 6,
@@ -168,25 +248,27 @@
     "new_public_release": true,
     "artifacts_downloaded_or_independently_audited_this_resume": true,
     "junit_counts_recomputed_this_resume": true,
-    "qualification_scope": "Exact87df5cd formal six-native-target source/build/packaged/install/launch/uninstall/helper/protocol receipts and public installer bytes; full reference UI/function gates stay open",
-    "scope_label": "Historical/current public0.11 formal release CI; not0.12 candidate qualification"
+    "qualification_scope": "Exactb6 formal six-native-target source/build/packaged/install/launch/uninstall/native helper receipts, independent13-artifact/six-installer audit and anonymous eight public asset bytes. Stream feature scopes are Linuxamd64 security job; complete reference UI/tool/human gates stay open.",
+    "scope_label": "Current published0.12 formal prerelease CI; distinct from main precheck and later variant branch",
+    "receipt": "artifacts/release-012/tag-ci-audit-43390347592/verification.json",
+    "public_receipt": "artifacts/release-012/public-43390347592/verification.json"
   },
   "latest_reported_local_validation": {
     "version": "0.12.0",
-    "measurement_scope": "Existing1a6eeed qualification after both caller signal-ownership fixes and test-only readiness repair. Fresh default201 files match1a6eeed/productd9bee66. Does not qualify the in-progress packager change; other scopes retain original execution/rebinding boundaries.",
-    "base_head": "1a6eeed802e20e91766b9af181f5fcca5c7d0a22",
+    "measurement_scope": "Fresh b6e1da4 default201 source paths match immutable Git blobs after packaging-only limited busy retry. Application productd9bee66 unchanged; UI/DB/recorder scopes retain actual older execution provenance and only unchanged declared bytes are rebound.",
+    "base_head": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
     "full_source": {
-      "passed": 2186,
+      "passed": 2197,
       "conditionally_skipped": 636,
       "failed": 0,
       "errors": 0,
-      "seconds": 82.569,
+      "seconds": 82.788,
       "source_paths_hashed": 201,
       "source_hashes_before_after_match": true,
-      "receipt": "artifacts/release-012/final-default-two-callers-readiness/verification.json",
-      "stdout_seconds": 82.59,
+      "receipt": "artifacts/release-012/final-default-dmg-create-fix/verification.json",
+      "stdout_seconds": 82.81,
       "source_paths_matched_git_commit": 201,
-      "tested_source_commit": "1a6eeed802e20e91766b9af181f5fcca5c7d0a22"
+      "tested_source_commit": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7"
     },
     "backend": {
       "passed": 46,
@@ -195,7 +277,8 @@
       "real_rs_cases": 14,
       "declared_source_hashes": 6,
       "receipt": "artifacts/stream-structured-errors-backend-qualification/summary.json",
-      "source_binding": "Declared source bytes unchanged after both caller fixes and test-only readiness repair; rebound, not represented as re-execution"
+      "source_binding": "Declared source bytes unchanged after both caller fixes and test-only readiness repair; rebound, not represented as re-execution",
+      "current_candidate_binding": "Original execution provenance retained; declared source bytes checked unchanged againstb6e1da4, not rerun due to packaging-only fix"
     },
     "real_window": {
       "passed": 16,
@@ -205,7 +288,8 @@
       "receipt": "artifacts/release-012/final-window-dialog-owner-fix/summary.json",
       "exact_container_and_two_volumes_independently_absent": true,
       "source_binding": "Fresh after Dialog fix;11 declared+2 supplemental Dialog source/test hashes unchanged; test-only readiness fix outside this scope",
-      "supplemental_dialog_files": 2
+      "supplemental_dialog_files": 2,
+      "current_candidate_binding": "Original execution provenance retained; declared source bytes checked unchanged againstb6e1da4, not rerun due to packaging-only fix"
     },
     "qt_components": {
       "passed": 78,
@@ -238,7 +322,8 @@
       "independent_cleanup": "artifacts/release-012/final-native-cocoa-two-callers/independent-cleanup.json",
       "new_dialog_lifecycle_cases": 2,
       "executed_product_commit": "d9bee6649d66542ea94dfd077a567dafd42c6224",
-      "source_binding": "16 declared bytes unchanged by test-only readiness fix; rebound, not rerun after1a6eeed"
+      "source_binding": "16 declared bytes unchanged by test-only readiness fix; rebound, not rerun after1a6eeed",
+      "current_candidate_binding": "Original execution provenance retained; declared source bytes checked unchanged againstb6e1da4, not rerun due to packaging-only fix"
     },
     "stream_tls_transport": {
       "passed": 2,
@@ -246,7 +331,8 @@
       "replica_set_event_acceptance": false,
       "exact_container_and_anonymous_volume_cleanup": true,
       "receipt": "artifacts/release-012/final-security-stream/summary.json",
-      "source_binding": "Declared source bytes unchanged after both caller fixes and test-only readiness repair; rebound, not represented as re-execution"
+      "source_binding": "Declared source bytes unchanged after both caller fixes and test-only readiness repair; rebound, not represented as re-execution",
+      "current_candidate_binding": "Original execution provenance retained; declared source bytes checked unchanged againstb6e1da4, not rerun due to packaging-only fix"
     },
     "ordinary_tls": {
       "passed": 24,
@@ -269,7 +355,8 @@
         "all_recorded_cases_cleaned": true
       },
       "receipt": "artifacts/release-012/final-stopped-cleanup/summary.json",
-      "source_binding": "Declared source bytes unchanged after both caller fixes and test-only readiness repair; rebound, not represented as re-execution"
+      "source_binding": "Declared source bytes unchanged after both caller fixes and test-only readiness repair; rebound, not represented as re-execution",
+      "current_candidate_binding": "Original execution provenance retained; declared source bytes checked unchanged againstb6e1da4, not rerun due to packaging-only fix"
     },
     "collections_first_attempt": {
       "qualified": false,
@@ -298,7 +385,7 @@
       "test_only_readiness_commit_does_not_change_product": true
     },
     "overlapping_scopes_not_added": true,
-    "tested_source_commit": "1a6eeed802e20e91766b9af181f5fcca5c7d0a22",
+    "tested_source_commit": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
     "lifecycle": {
       "passed": 22,
       "skipped": 0,
@@ -321,7 +408,8 @@
       "independent_receipt": "artifacts/release-012/final-collections-owner-fix/independent-check.json",
       "execution_scope": "Previous511 run,48 unchanged declared source files rebound after Dialog fix; not fresh execution; prior outer198 snapshot is historical and cannot qualify current Dialog",
       "binding_receipt": "artifacts/release-012/final-collections-owner-fix/declared-scope-after-dialog-binding.json",
-      "old_outer_198_snapshot_current": false
+      "old_outer_198_snapshot_current": false,
+      "current_candidate_binding": "Original execution provenance retained; declared source bytes checked unchanged againstb6e1da4, not rerun due to packaging-only fix"
     },
     "recorder": {
       "tested_source_commit": "d9bee6649d66542ea94dfd077a567dafd42c6224",
@@ -344,7 +432,8 @@
       },
       "native_gui_recorded_by_these_scopes": false,
       "source_binding": "Fresh after two caller fixes;79 sources plus supplemental tests/test_dialogs.py matchd9bee66; unchanged declared bytes rebound after test-only readiness fix",
-      "supplemental_dialog_test_files": 1
+      "supplemental_dialog_test_files": 1,
+      "current_candidate_binding": "Original execution provenance retained; declared source bytes checked unchanged againstb6e1da4, not rerun due to packaging-only fix"
     },
     "production_source_commit": "d9bee6649d66542ea94dfd077a567dafd42c6224",
     "dialog_lifecycle": {
@@ -392,13 +481,55 @@
       "controlled_gate_receipt": "artifacts/release-012/slow-child-readiness-proof/controlled-gate.json",
       "module_receipt": "artifacts/release-012/slow-child-readiness-proof/fixed-offline-scope.xml"
     },
-    "mainwindow_ownership_handoff": "artifacts/release-012/owner-fix-validation.json"
+    "mainwindow_ownership_handoff": "artifacts/release-012/owner-fix-validation.json",
+    "installer_contract": {
+      "passed": 79,
+      "skipped": 0,
+      "new_cases": 11,
+      "red_observed_busy_contract_failed_before_fix": true,
+      "receipt": "artifacts/release-012/dmg-create-fix/verification.json",
+      "junit": "artifacts/release-012/dmg-create-fix/green-installer-contract.xml",
+      "per_command_timeout_seconds": 600,
+      "max_create_attempts": 3,
+      "backoff_seconds": [
+        1,
+        2
+      ],
+      "create_only_maximum_seconds": 1803,
+      "stage_verify_work_additional": true,
+      "only_observed_busy_stderr_retried": true,
+      "nonbusy_or_timeout_fails_immediately": true,
+      "same_filesystem_private_image_and_atomic_replace": true
+    },
+    "local_native_arm64_dmg": {
+      "passed": true,
+      "candidate_source": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
+      "host": "Darwin",
+      "machine": "arm64",
+      "native_build_product_hashes_unchanged": true,
+      "packaged_cocoa_smoke_rows": 6,
+      "packaged_cocoa_smoke_columns": 4,
+      "all_runtime_probes_passed": true,
+      "create_succeeded_first_attempt": true,
+      "real_busy_recovery_exercised": false,
+      "read_only_mount": true,
+      "isolated_installed_launched_uninstalled": true,
+      "independent_checks_passed": 8,
+      "owned_mount_and_image_directories_absent": true,
+      "bytes": 51441633,
+      "sha256": "00732b3c536d17c0e94f6f7a194f37a0e88cb32b3847dffd097b83784d1786da",
+      "receipt": "artifacts/release-012/local-installer-dmg-fix/independent-check.json",
+      "installed_receipt": "artifacts/release-012/local-installer-dmg-fix/OpenNavicat-0.12.0-macos-arm64.installed-smoke.json",
+      "qualifies_intel_ci_or_other_targets": false,
+      "public_release_qualification": false
+    },
+    "unchanged_scopes_binding": "artifacts/release-012/final-default-dmg-create-fix/unchanged-scopes-binding.json"
   },
   "latest_main_demo": {
     "receipt": "../assets/opennavicat-demo.json",
     "gif": "../assets/opennavicat-demo.gif",
     "version": "0.12.0",
-    "scope": "Actual nativeCocoa isolated candidate application recording, copied to development assets; not published0.12 installer qualification",
+    "scope": "Actual nativeCocoa0.12 compatible isolated application recording; retained capture979 plus documented ownership-only runtime compatibility to releasedb6, not a newb6 recording or complete UI acceptance",
     "phases": 31,
     "frames": 411,
     "duration_seconds": 68.5,
@@ -441,7 +572,9 @@
     "capture_source_files_matched_git_blobs": 77,
     "post_ownership_workflow_compatibility_receipt": "artifacts/release-012/final-recorder-two-callers-compatibility-20261113T071112Z-222717.json",
     "post_ownership_capture_rerecorded": false,
-    "compatibility_verified_product_commit": "d9bee6649d66542ea94dfd077a567dafd42c6224"
+    "compatibility_verified_product_commit": "d9bee6649d66542ea94dfd077a567dafd42c6224",
+    "published_compatible_release": "v0.12.0",
+    "release_source_sha": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7"
   },
   "current_implementation": {
     "embedded_index_editor": true,
@@ -481,8 +614,8 @@
     "finite_stream_successful_preview_accepted": false
   },
   "next_steps": [
-    "Completed local fixes:Window and Dialog native TaskSignals lifetime plus test-only child readiness. Default201 source files bind frozen1a6eeed; productd9bee66. Preserve failed d9 full/isolated retry/controlled gate and original parallel SIGSEGV unresolved causality; no completed full goal claim.",
-    "Finish and verify the limited hdiutil busy-only retry fix; freeze a new exact candidate SHA, rerun required source/package scopes and six native targets, then independently audit installers/checksums. Failed43384833779/1a6eeed is retained and no formal tag/publication exists.",
+    "Completedv0.12 prerelease milestone exactb6:formal8/8, independent13-artifact/six-installer audit, anonymous eight public assets and publicARM Cocoa smoke; keep full goal active and all unknown/reference/tool/human gates open.",
+    "Continue separate codex_mongodb_stream_variants/94de386 local19Window+46backend and AP18-12 evidence without assigning it to0.12 tag. Resolve complete variant/images/resume/initial-call cardinality/permission/topology workflows and qualify future source/platform milestones separately.",
     "Retain the refreshed single actual application GIF and its31-phase privacy review with exact source ownership; no reference screenshots or private data",
     "Keep successful stream Preview/PreviewAll, complete partial/recovery/options/topologies/permissions and Windows/Linux reference UI gates open; do not copy reference crashes or invent continuous-watch applicability",
     "Continue branched/sharded/replica Explain shapes/cost formulas, validator unknown/external conversion, all remaining database objects/authentication/query/wizard/AI/model/BI/backup/automation functions",
@@ -525,28 +658,38 @@
   "current_work": {
     "pipeline_safety_and_navigation": "released0.11; fullparityopen",
     "batch_job_workflow": "released0.11 savedMongoPipeline slice; other15categories/scheduler/SMTP/fullUIopen",
-    "change_stream": "Unpublished0.12 bounded text-only Qt/typed backend/structured-error candidate, post-ownership local qualification; complete preview/options/platform/tool gates remain open",
-    "qt_task_lifecycle": "Two actual caller native TaskSignals lifecycle defects locally fixed in479a811/d9bee66. Native signals destroyed on GUI thread; Task/Signals weakrefs finally clear; no assertion all QRunnable/Python wrapper destruction is GUI. Original parallel SIGSEGV same cause remains unproven.",
-    "macos_installer_packaging": "Run43384833779 failed hdiutil CREATE Resourcebusy onmacos-amd64 before installed launch. Limited busy-only retry fix in progress; no new source freeze/qualification yet."
+    "change_stream": "Published0.12 bounded text-only Qt/typed backend/structured diagnostics. AP18-12 reference and later94de386 local19Window/46backend are separate follow-up evidence. Complete preview/options/images/resume/topology/permissions/platform tool gates remain open.",
+    "qt_task_lifecycle": "Local Window/Dialog native TaskSignals lifetime fixes shipped0.12; native signals destroyed on GUI thread and weakrefs clear, no claim all QRunnable/wrappers GUI-destroyed. Original parallel SIGSEGV same cause unproven.",
+    "macos_installer_packaging": "Releasedb6 limited busy retry after79contracts; localARM and main/formal native DMGs first-create success, no actual busy recovery claimed. Main/formal six installers and anonymous public bytes independently audited; publicARM Cocoa isolated smoke passed."
   },
   "candidate_release": {
     "version": "0.12.0",
-    "status": "main_precheck_failed_packager_fix_in_progress_unpublished",
-    "frozen_source_sha": null,
+    "status": "published_verified_prerelease",
+    "frozen_source_sha": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
     "working_tree_base_head": "7e8032e9c0a3e7c9f28ee34b4c93c9b905e757c2",
     "six_target_ci_started": true,
-    "tag_created": false,
-    "public_release_created": false,
+    "tag_created": true,
+    "public_release_created": true,
     "final_local_validation": "latest_reported_local_validation",
     "single_gif_recorded_reviewed_and_copied": true,
     "single_gif_sha256": "d1ec33dd15e03fa38e5749f0ff0efe01051e5b40116c12229a7113d847e33c9e",
-    "source_stability_gate": "Window and Dialog native TaskSignals ownership locally fixed/qualified; default2186/native100/Window16/caller110/recorder79+1. Test-only readiness gap fixed after retained d9 default1fail. Original parallel SIGSEGV same cause unproven; full resource/exact six-target installer gates remain open.",
+    "source_stability_gate": "Published exactb6 after all six native main/formal CI installer audits, anonymous eight assets and publicARM Cocoa smoke. Confirmed Window/Dialog signal lifecycle defects locally fixed; original parallel SIGSEGV same cause remains unproven and full resource/reference/tool/human gates remain open.",
     "all_native_and_full_parity_gates_complete": false,
     "tested_application_source_sha": "d9bee6649d66542ea94dfd077a567dafd42c6224",
     "prior_ui_gif_checkpoint_sha": "979d0522f11cae3a8094f93c424bad558ed83298",
     "measured_source_paths_matched_git_commit": 201,
-    "tested_total_source_sha": "1a6eeed802e20e91766b9af181f5fcca5c7d0a22",
-    "previous_frozen_source_sha": "1a6eeed802e20e91766b9af181f5fcca5c7d0a22"
+    "tested_total_source_sha": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
+    "previous_frozen_source_sha": "1a6eeed802e20e91766b9af181f5fcca5c7d0a22",
+    "tag": "v0.12.0",
+    "annotated_tag_target_sha": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
+    "formal_run_id": 43390347592,
+    "formal_run_status": "completed",
+    "main_precheck_and_independent_six_installer_audit_complete": true,
+    "formal_rebuilt_bytes_not_assumed_equal_to_main": true,
+    "formal_run_conclusion": "success",
+    "anonymous_public_assets_verified": true,
+    "formal_installer_independent_audit_complete": true,
+    "public_native_arm64_smoke_passed": true
   },
   "resume_baseline": {
     "published": {
@@ -761,31 +904,34 @@
     }
   },
   "main_precheck": {
-    "run_id": 43367059557,
-    "source_sha": "87df5cd70f9293c4585637b1eab6e00e37810097",
+    "run_id": 43388068691,
+    "source_sha": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
+    "status": "completed",
+    "conclusion": "success",
     "successful_jobs": 7,
     "publisher": "skipped",
     "independent_artifact_audit_passed": true,
-    "receipt": "artifacts/release-011/main-audit-43367059557/verification.json"
+    "receipt": "artifacts/release-012/main-ci-audit-43388068691/verification.json",
+    "scope": "Historical pre-tag0.12 artifacts; final public bytes differ and are separately qualified under ci_current/published"
   },
   "next_unreleased_checkpoint": {
-    "version": "0.12.0",
-    "branch": "codex_mongodb_finite_stream",
-    "base_release_source_sha": "87df5cd70f9293c4585637b1eab6e00e37810097",
-    "head_before_candidate_commit": "7e8032e9c0a3e7c9f28ee34b4c93c9b905e757c2",
-    "final_source_sha": null,
-    "validation": "../validation-0.12.md",
-    "finite_stream_contract": "../mongodb-pipeline-stream.md",
-    "reference_observations": "../ui-reference-18-mongodb-pipeline.md",
-    "local_validation": "latest_reported_local_validation",
-    "demo": "latest_main_demo",
-    "six_native_installer_ci_or_release_complete": false,
-    "full_goal_stays_active": true,
-    "tested_application_source_sha": "d9bee6649d66542ea94dfd077a567dafd42c6224",
-    "ui_gif_checkpoint_sha": "979d0522f11cae3a8094f93c424bad558ed83298",
-    "tested_total_source_sha": "1a6eeed802e20e91766b9af181f5fcca5c7d0a22",
-    "previous_failed_precheck_source_sha": "1a6eeed802e20e91766b9af181f5fcca5c7d0a22",
-    "next_source_status": "packager_busy_only_retry_fix_in_progress_not_frozen"
+    "version": null,
+    "branch": "codex_mongodb_stream_variants",
+    "workspace": "/Users/wangshubo/.codex/worktrees/mongodb-stream-variants/opennavicat",
+    "source_checkpoint": "94de386259a443fd8a2ce3e711ade58b93dfe58d",
+    "base_release_source_sha": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
+    "reference_document_commit": "a189508403b92d286d8b8d82173ae4ccebaaa8c3",
+    "reference_observation": "AP18-12",
+    "local_window_passed": 19,
+    "local_backend_passed": 46,
+    "local_scope_only": true,
+    "new_six_native_ci_qualified": false,
+    "new_public_release_created": false,
+    "part_of_0_12_tag_qualification": false,
+    "application_product_change_claimed": false,
+    "complete_variant_workflow_qualified": false,
+    "reference_overall_results": "inconclusive; per-observed-cursor2/1/2 semantics useful, exhaustive initial-call cardinality unknown",
+    "full_goal_stays_active": true
   },
   "historical_candidate_release_0_11": {
     "version": "0.11.0",
@@ -1000,18 +1146,84 @@
     "ui_integration": "in_progress_after_frozen_backend; text-only messages/output, page-local Stop and explicit partial/row/time boundary handling; no parity claimed",
     "new_six_installer_ci_or_release_complete": false
   },
-  "captured_at_utc": "2026-11-13T07:40:15.837801+00:00",
+  "captured_at_utc": "2026-11-13T08:27:30.877413+00:00",
   "candidate_ci": {
     "version": "0.12.0",
-    "source_sha": "1a6eeed802e20e91766b9af181f5fcca5c7d0a22",
+    "source_sha": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
+    "run_id": 43388068691,
+    "url": "https://github.com/shubolab/opennavicat/actions/runs/43388068691",
     "status": "completed",
-    "six_native_targets_qualified": false,
-    "formal_tag_created": false,
-    "public_release_created": false,
-    "run_id": 43384833779,
-    "url": "https://github.com/shubolab/opennavicat/actions/runs/43384833779",
-    "application_source_frozen": false,
+    "conclusion": "success",
+    "jobs": [
+      {
+        "name": "Real database TLS and SSH",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "macos-amd64",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "windows-amd64",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "linux-amd64",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "windows-arm64",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "linux-arm64",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "macos-arm64",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "Publish complete six-target release",
+        "status": "completed",
+        "conclusion": "skipped"
+      }
+    ],
+    "six_native_targets_qualified": true,
+    "formal_tag_created": true,
+    "public_release_created": true,
+    "application_source_frozen": true,
     "later_documentation_only_commits_change_candidate_source": false,
+    "status_receipt": "artifacts/release-012/main-ci-audit-43388068691/verification.json",
+    "previous_failed_main_precheck": {
+      "version": "0.12.0",
+      "source_sha": "1a6eeed802e20e91766b9af181f5fcca5c7d0a22",
+      "run_id": 43384833779,
+      "url": "https://github.com/shubolab/opennavicat/actions/runs/43384833779",
+      "status": "completed",
+      "conclusion": "failure",
+      "successful_native_targets": 5,
+      "security_successful": true,
+      "publisher": "skipped",
+      "six_native_targets_qualified": false,
+      "formal_tag_created": false,
+      "public_release_created": false,
+      "failure": {
+        "job": "macos-amd64",
+        "step": "Package and verify native installer",
+        "phase": "hdiutil CREATE",
+        "reported_error": "Resource busy",
+        "installed_launch_reached": false
+      },
+      "status_receipt": "artifacts/release-012/main-precheck-43384833779-failure/final-verification.json"
+    },
     "previous_cancelled_main_precheck": {
       "run_id": 43383205925,
       "source_sha": "f0b558e95ed64a5d1d9628189307343e80007437",
@@ -1021,81 +1233,118 @@
       "partial_artifacts_used_for_qualification": false,
       "tag_or_release_created": false
     },
-    "conclusion": "failure",
-    "jobs": [
-      {
-        "name": "Real database TLS and SSH",
-        "id": 131750757051,
-        "status": "completed",
-        "conclusion": "success",
-        "failed_steps": []
-      },
-      {
-        "name": "windows-amd64",
-        "id": 131750757282,
-        "status": "completed",
-        "conclusion": "success",
-        "failed_steps": []
-      },
-      {
-        "name": "macos-amd64",
-        "id": 131750757333,
-        "status": "completed",
-        "conclusion": "failure",
-        "failed_steps": [
-          "Package and verify native installer"
-        ]
-      },
-      {
-        "name": "windows-arm64",
-        "id": 131750757368,
-        "status": "completed",
-        "conclusion": "success",
-        "failed_steps": []
-      },
-      {
-        "name": "linux-amd64",
-        "id": 131750757379,
-        "status": "completed",
-        "conclusion": "success",
-        "failed_steps": []
-      },
-      {
-        "name": "linux-arm64",
-        "id": 131750757380,
-        "status": "completed",
-        "conclusion": "success",
-        "failed_steps": []
-      },
-      {
-        "name": "macos-arm64",
-        "id": 131750757437,
-        "status": "completed",
-        "conclusion": "success",
-        "failed_steps": []
-      },
-      {
-        "name": "Publish complete six-target release",
-        "id": 131755729232,
-        "status": "completed",
-        "conclusion": "skipped",
-        "failed_steps": []
-      }
-    ],
-    "successful_native_targets": 5,
+    "qualification_scope": "Main pre-tag native installer audit only; not formal rebuilt bytes/public downloads/full reference parity",
+    "independent_artifact_audit_passed": true,
+    "successful_native_targets": 6,
     "security_successful": true,
     "publisher": "skipped",
-    "qualified": false,
-    "next_source_sha": null,
-    "next_source_status": "packager_busy_only_retry_fix_in_progress_not_frozen",
-    "failure": {
-      "job": "macos-amd64",
-      "step": "Package and verify native installer",
-      "phase": "hdiutil CREATE",
-      "reported_error": "Resource busy",
-      "installed_launch_reached": false
+    "formal_run": {
+      "run_id": 43390347592,
+      "source_sha": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
+      "head_branch": "v0.12.0",
+      "event": "push",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/shubolab/opennavicat/actions/runs/43390347592",
+      "tag_annotated": true,
+      "local_tag_target_verified": true,
+      "formal_rebuilt_installer_audit_complete": true,
+      "public_release_created": true,
+      "anonymous_public_asset_downloads_verified": true,
+      "precheck_bytes_assumed_equal_to_formal_bytes": false,
+      "status_receipt": "artifacts/release-012/tag-ci-audit-43390347592/verification.json",
+      "jobs": {
+        "Real database TLS and SSH": "success",
+        "macos-arm64": "success",
+        "windows-arm64": "success",
+        "linux-amd64": "success",
+        "linux-arm64": "success",
+        "macos-amd64": "success",
+        "windows-amd64": "success",
+        "Publish complete six-target release": "success"
+      },
+      "all_formal_installer_hashes_differ_from_main": true,
+      "public_receipt": "artifacts/release-012/public-43390347592/verification.json",
+      "formal_targets": {
+        "linux-amd64": {
+          "installer": "OpenNavicat-0.12.0-linux-amd64.deb",
+          "bytes": 76484848,
+          "sha256": "8ffde47fd6d8b06043ab14bafdd584bc416ff19972acab331c84f3f803369da1"
+        },
+        "linux-arm64": {
+          "installer": "OpenNavicat-0.12.0-linux-arm64.deb",
+          "bytes": 75128210,
+          "sha256": "21a07643ddae14e167e631225d2f80f632c660b5769ddf3b2570a939bf27cf89"
+        },
+        "macos-amd64": {
+          "installer": "OpenNavicat-0.12.0-macos-amd64.dmg",
+          "bytes": 50457997,
+          "sha256": "f08d3efb31e784ac1108e8d1528ffbed13b4785c4d504ddb7928fbf71be27988"
+        },
+        "macos-arm64": {
+          "installer": "OpenNavicat-0.12.0-macos-arm64.dmg",
+          "bytes": 49791328,
+          "sha256": "8a37a8abd41fcf949a54a042449dd00ad6f2f76cf8a0ec3ee40e3067e2975c17"
+        },
+        "windows-amd64": {
+          "installer": "OpenNavicat-0.12.0-windows-amd64-setup.exe",
+          "bytes": 43802062,
+          "sha256": "15b08840d89f7ad3ad247a6a1c37d8edecba524da38619e80c9556d536c3a662"
+        },
+        "windows-arm64": {
+          "installer": "OpenNavicat-0.12.0-windows-arm64-setup.exe",
+          "bytes": 34745994,
+          "sha256": "8151d2401e63cc003829c09e2f250fa702b02e3f4191d6738882fe8083ed2fa7"
+        }
+      }
     },
-    "status_receipt": "artifacts/release-012/main-precheck-43384833779-failure/final-verification.json"
+    "pre_tag_audit": {
+      "passed": true,
+      "run_id": 43388068691,
+      "source_sha": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
+      "artifact_count": 13,
+      "extracted_installers_byte_hashed": 6,
+      "native_and_installed_manifest_and_sidecar_matched": true,
+      "all_six_root_rehashed": true,
+      "macos_both_first_create_succeeded": true,
+      "actual_busy_recovery_exercised": false,
+      "public_asset_qualification": false,
+      "targets": {
+        "linux-amd64": {
+          "installer": "OpenNavicat-0.12.0-linux-amd64.deb",
+          "bytes": 76483378,
+          "sha256": "105c6c5118d5ebb3d7e09a2eed69851f86cd45437f9a84a47bccb3f9dcb1e6ee"
+        },
+        "linux-arm64": {
+          "installer": "OpenNavicat-0.12.0-linux-arm64.deb",
+          "bytes": 75126808,
+          "sha256": "d96b514cf9af1d2f3aa68759ed6811d6f61feac316c7bfa657674f22c1ad4e69"
+        },
+        "macos-amd64": {
+          "installer": "OpenNavicat-0.12.0-macos-amd64.dmg",
+          "bytes": 50456506,
+          "sha256": "62e0c4fd69d84e73deab067c18caa5019a8bfd4669e56383912a6c21fbee8953"
+        },
+        "macos-arm64": {
+          "installer": "OpenNavicat-0.12.0-macos-arm64.dmg",
+          "bytes": 49793929,
+          "sha256": "a4f48c6d08607316718b445a7f6b4b2fe6601b9a35fb3cdfd38900e9c197cd15"
+        },
+        "windows-amd64": {
+          "installer": "OpenNavicat-0.12.0-windows-amd64-setup.exe",
+          "bytes": 43804383,
+          "sha256": "ec2f50af307dd732b7f1365f2189a4047a79466e7f75ee6c537bfcebe264c6b5"
+        },
+        "windows-arm64": {
+          "installer": "OpenNavicat-0.12.0-windows-arm64-setup.exe",
+          "bytes": 34749256,
+          "sha256": "af9ca674b8e52bdb8449c6c5e2f67d4898b6dfb87603eef750403844485ff8f4"
+        }
+      },
+      "verification": "artifacts/release-012/main-ci-audit-43388068691/verification.json",
+      "root_check": "artifacts/release-012/main-ci-audit-43388068691/root-before-tag-check.json",
+      "independent_check": "artifacts/release-012/main-ci-audit-43388068691/independent-completion-check.json"
+    }
   },
   "task_ownership_probe": {
     "status": "completed_task_and_signal_retention_confirmed; GUI-parent/deferred-delete production fix in479a811 and real Qt regressions qualified",
@@ -1430,5 +1679,174 @@
     "weakrefs_eventually_released": true,
     "original_sigsegv_same_cause_proven": false,
     "private_evidence_directory": "artifacts/release-012/dialog-task-ownership-probe/"
+  },
+  "historical_two_caller_readiness_validation_1a6eeed": {
+    "version": "0.12.0",
+    "measurement_scope": "Existing1a6eeed qualification after both caller signal-ownership fixes and test-only readiness repair. Fresh default201 files match1a6eeed/productd9bee66. Does not qualify the in-progress packager change; other scopes retain original execution/rebinding boundaries.",
+    "tested_source_commit": "1a6eeed802e20e91766b9af181f5fcca5c7d0a22",
+    "production_source_commit": "d9bee6649d66542ea94dfd077a567dafd42c6224",
+    "full_source": {
+      "passed": 2186,
+      "conditionally_skipped": 636,
+      "failed": 0,
+      "errors": 0,
+      "seconds": 82.569,
+      "source_paths_hashed": 201,
+      "source_hashes_before_after_match": true,
+      "receipt": "artifacts/release-012/final-default-two-callers-readiness/verification.json",
+      "stdout_seconds": 82.59,
+      "source_paths_matched_git_commit": 201,
+      "tested_source_commit": "1a6eeed802e20e91766b9af181f5fcca5c7d0a22"
+    },
+    "other_scope_provenance": "Unchanged product/UI/DB scopes retain their original d9/earlier receipt provenance under latest_reported_local_validation; not relabelled as new execution."
+  },
+  "historical_published_0_11": {
+    "tag": "v0.11.0",
+    "source_sha": "87df5cd70f9293c4585637b1eab6e00e37810097",
+    "draft": false,
+    "prerelease": true,
+    "published_at_utc": "2026-11-13T05:07:54Z",
+    "url": "https://github.com/shubolab/opennavicat/releases/tag/v0.11.0",
+    "native_installers": 6,
+    "public_assets": 8,
+    "all_asset_metadata_uploaded": true,
+    "asset_bytes_redownloaded_this_resume": true,
+    "asset_bytes_rehashed_this_resume": true,
+    "anonymous_download_verified": true,
+    "api_digest_checksums_combined_manifest_formal_ci_bytes_match": true,
+    "tag_resolves_to_source_sha": true,
+    "formal_run_id": 43368650962,
+    "formal_jobs_successful": 8,
+    "assets": [
+      {
+        "name": "build-manifests.json",
+        "size": 205707,
+        "state": "uploaded",
+        "digest": "sha256:630121c8710a916ad29f438393c010ad4f5b9469b54b460183e1416a0180c2f7",
+        "browser_download_url": "https://github.com/shubolab/opennavicat/releases/download/v0.11.0/build-manifests.json"
+      },
+      {
+        "name": "OpenNavicat-0.11.0-linux-amd64.deb",
+        "size": 76479582,
+        "state": "uploaded",
+        "digest": "sha256:c330f4e145d61730fbfe797afef1d6c4acfbf1bea48494c20e3ffb422c9f1b9b",
+        "browser_download_url": "https://github.com/shubolab/opennavicat/releases/download/v0.11.0/OpenNavicat-0.11.0-linux-amd64.deb"
+      },
+      {
+        "name": "OpenNavicat-0.11.0-linux-arm64.deb",
+        "size": 75119980,
+        "state": "uploaded",
+        "digest": "sha256:c653f9d89edc7133375b1810f85842f3395af9453e9410bbb63dde438d098982",
+        "browser_download_url": "https://github.com/shubolab/opennavicat/releases/download/v0.11.0/OpenNavicat-0.11.0-linux-arm64.deb"
+      },
+      {
+        "name": "OpenNavicat-0.11.0-macos-amd64.dmg",
+        "size": 50440632,
+        "state": "uploaded",
+        "digest": "sha256:c4b2c6f4d180f913dc45e4d22cf3b159338bed2bb09231d0262fe66ff19884e8",
+        "browser_download_url": "https://github.com/shubolab/opennavicat/releases/download/v0.11.0/OpenNavicat-0.11.0-macos-amd64.dmg"
+      },
+      {
+        "name": "OpenNavicat-0.11.0-macos-arm64.dmg",
+        "size": 49775097,
+        "state": "uploaded",
+        "digest": "sha256:4de99c14fa3000ce5f0ced288f6e80ddd1f92061c21cf87feb796864d0ac20e8",
+        "browser_download_url": "https://github.com/shubolab/opennavicat/releases/download/v0.11.0/OpenNavicat-0.11.0-macos-arm64.dmg"
+      },
+      {
+        "name": "OpenNavicat-0.11.0-windows-amd64-setup.exe",
+        "size": 43769396,
+        "state": "uploaded",
+        "digest": "sha256:b41c083c6c6b6363f26b5f549da47c40c8da3ed1ea79da51be3f2ed8e721e6d4",
+        "browser_download_url": "https://github.com/shubolab/opennavicat/releases/download/v0.11.0/OpenNavicat-0.11.0-windows-amd64-setup.exe"
+      },
+      {
+        "name": "OpenNavicat-0.11.0-windows-arm64-setup.exe",
+        "size": 34715740,
+        "state": "uploaded",
+        "digest": "sha256:63d607d0331899c305c5d0466a163fe619224253a34a8f25e8e09829b9835ea2",
+        "browser_download_url": "https://github.com/shubolab/opennavicat/releases/download/v0.11.0/OpenNavicat-0.11.0-windows-arm64-setup.exe"
+      },
+      {
+        "name": "SHA256SUMS",
+        "size": 622,
+        "state": "uploaded",
+        "digest": "sha256:eef2f190fd0b5bd280676108470d8e55d904d31c8e6fd9d38fe92100def4c7bb",
+        "browser_download_url": "https://github.com/shubolab/opennavicat/releases/download/v0.11.0/SHA256SUMS"
+      }
+    ],
+    "formal_audit_receipt": "artifacts/release-011/tag-audit-43368650962/verification.json",
+    "public_audit_receipt": "artifacts/release-011/public-43368650962/verification.json",
+    "public_native_mac_arm64_smoke": {
+      "passed": true,
+      "rows": 6,
+      "columns": 4,
+      "qt_platform": "cocoa",
+      "all_driver_crypto_native_js_probes": true,
+      "isolated_workspace": true,
+      "reference_profiles_accessed": false,
+      "dmg_detached": true,
+      "receipt": "artifacts/release-011/public-macos-arm64-smoke/verification.json"
+    }
+  },
+  "historical_formal_ci_0_11": {
+    "databaseId": 43368650962,
+    "headSha": "87df5cd70f9293c4585637b1eab6e00e37810097",
+    "status": "completed",
+    "conclusion": "success",
+    "event": "push",
+    "ref": "v0.11.0",
+    "url": "https://github.com/shubolab/opennavicat/actions/runs/43368650962",
+    "jobs": {
+      "linux-amd64": "success",
+      "linux-arm64": "success",
+      "windows-amd64": "success",
+      "windows-arm64": "success",
+      "Real database TLS and SSH": "success",
+      "macos-amd64": "success",
+      "macos-arm64": "success",
+      "Publish complete six-target release": "success"
+    },
+    "six_native_desktop_jobs_successful": 6,
+    "security_successful": true,
+    "publisher": "success",
+    "new_public_release": true,
+    "artifacts_downloaded_or_independently_audited_this_resume": true,
+    "junit_counts_recomputed_this_resume": true,
+    "qualification_scope": "Exact87df5cd formal six-native-target source/build/packaged/install/launch/uninstall/helper/protocol receipts and public installer bytes; full reference UI/function gates stay open",
+    "scope_label": "Historical/current public0.11 formal release CI; not0.12 candidate qualification"
+  },
+  "released_checkpoint_0_12": {
+    "version": "0.12.0",
+    "branch": "codex_mongodb_finite_stream",
+    "base_release_source_sha": "87df5cd70f9293c4585637b1eab6e00e37810097",
+    "head_before_candidate_commit": "7e8032e9c0a3e7c9f28ee34b4c93c9b905e757c2",
+    "final_source_sha": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
+    "validation": "../validation-0.12.md",
+    "finite_stream_contract": "../mongodb-pipeline-stream.md",
+    "reference_observations": "../ui-reference-18-mongodb-pipeline.md",
+    "local_validation": "latest_reported_local_validation",
+    "demo": "latest_main_demo",
+    "six_native_installer_ci_or_release_complete": true,
+    "full_goal_stays_active": true,
+    "tested_application_source_sha": "d9bee6649d66542ea94dfd077a567dafd42c6224",
+    "ui_gif_checkpoint_sha": "979d0522f11cae3a8094f93c424bad558ed83298",
+    "tested_total_source_sha": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
+    "previous_failed_precheck_source_sha": "1a6eeed802e20e91766b9af181f5fcca5c7d0a22",
+    "next_source_status": "released_tag_b6",
+    "main_precheck_and_independent_six_installer_audit_complete": true,
+    "formal_run_id": 43390347592,
+    "formal_run_complete": true,
+    "public_release_created": true,
+    "anonymous_public_assets_verified": true,
+    "status": "published_verified_prerelease"
+  },
+  "historical_main_precheck_0_11": {
+    "run_id": 43367059557,
+    "source_sha": "87df5cd70f9293c4585637b1eab6e00e37810097",
+    "successful_jobs": 7,
+    "publisher": "skipped",
+    "independent_artifact_audit_passed": true,
+    "receipt": "artifacts/release-011/main-audit-43367059557/verification.json"
   }
 }

@@ -6,6 +6,18 @@ Windows/Linux/macOS 的 1:1 保留 UI；本次同步、既有 Release 或下一�
 
 ## 当前已完成的发布与继续入口
 
+**最新公开版本为[v0.12.0预发布](https://github.com/shubolab/opennavicat/releases/tag/v0.12.0)**，非draft、prerelease=true，
+发布于2026-11-13 **16:17:20（北京时间；08:17:20 UTC）**，annotated tag精确绑定
+`b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7`。
+main预检43388068691为7/7，正式tag run43390347592为8/8；两轮各自13 artifact/六安装器已独立审查，
+正式六SHA全部不同于预检，未拿main字节代替正式产物。八个公开资产已匿名HTTP200下载，API size/digest、
+SUMS/合并manifest/正式CI字节全部匹配，并完成第二次独立八文件重hash。
+公开ARM64 DMG另已只读mount后实际native Cocoa/arm64/0.12隔离6×4及全部驱动/加密/native-JS探针，
+helper bundled/image arch通过、未读真实profile，最终detached且不再挂载。正式摘要与SHA见[0.12验证](../validation-0.12.md)。
+这是有限stream及生命周期/打包修复里程碑，完整UI、所有工具和三平台参考/人工门禁继续开放，goal仍active。
+
+### 历史0.11基线
+
 **v0.11.0已公开**，源码`87df5cd70f9293c4585637b1eab6e00e37810097`，
 北京时间2026-11-13 **13:07:54**。修复后的main预检
 [43367059557](https://github.com/shubolab/opennavicat/actions/runs/43367059557)7/7成功并独立审查六安装器后，
@@ -18,16 +30,23 @@ Windows/Linux/macOS 的 1:1 保留 UI；本次同步、既有 Release 或下一�
 本次发布加入已保存MongoDB Pipeline的四页Batch/独立会话/错误策略/持久历史，并修复正时限和启动取消。
 完整工具、其余Batch类别/Scheduler/SMTP、参考UI和三平台门禁仍开放，goal保持active。
 
-当前工作在独立工作树 `/Users/wangshubo/.codex/worktrees/mongodb-finite-stream/opennavicat`、
-分支`codex_mongodb_finite_stream`继续，候选元数据为**0.12.0，尚未发布**。
-公开安装器仍是0.11，不能借用其六目标资格。有限UI/GIF检查点为`979d052`，
+### 已发布0.12源码与后续入口
+
+本轮发布文档收尾在独立工作树 `/Users/wangshubo/.codex/worktrees/mongodb-finite-stream/opennavicat`、
+分支`codex_mongodb_finite_stream`，**0.12.0预发布已完成**，以其正式产物资格独立记录。有限UI/GIF检查点为`979d052`，
 MainWindow调用点修复为`479a811`，实际Dialog Test按钮同类局部修复为`d9bee66`，
-仅测试子进程ready握手修正为`1a6eeed`。现有本机完整源码资格绑定
-`1a6eeed802e20e91766b9af181f5fcca5c7d0a22`；201份默认全源文件前后相同并逐Git blob匹配，产品字节与`d9bee66`相同。
-该SHA的main预检[43384833779](https://github.com/shubolab/opennavicat/actions/runs/43384833779)
-已completed/failure：五原生目标和DB security成功，macOS amd64在hdiutil CREATE阶段报Resource busy，
-安装后launch未到，publisher skipped；正式tag/公开0.12仍未创建，也不是六目标资格。
-packager仅busy错误的限定重试修复进行中，新candidate源码尚未冻结或验证；旧1a6eeed本机scope不能冒充新源码完整资格。
+仅测试子进程ready握手修正为`1a6eeed`。本版限定DMG CREATE busy重试修复后的完整发布源码为
+`b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7`；默认全源2197/636，201份文件前后相同并逐Git blob匹配，产品字节仍与`d9bee66`相同。
+main预检[43388068691](https://github.com/shubolab/opennavicat/actions/runs/43388068691)已completed/success 7/7、publisher skipped；
+13 artifact/六安装器的实际字节、native/installed双manifest、sidecar和原生/安装执行收据独立审查通过，root另重新hash六文件。
+两个CI DMG均首试create成功，不冒称实际busy恢复。主回执在`artifacts/release-012/main-ci-audit-43388068691/`。
+据此annotated tag **v0.12.0**已创建并push，精确绑定b6e1da4；正式run
+[43390347592](https://github.com/shubolab/opennavicat/actions/runs/43390347592)为push/v0.12.0，同SHA，已completed/success 8/8。
+正式与公开字节均已按各自真实产物验收，正式六SHA与main六SHA不同；doc-only提交不改tag源码。
+正式、公开及公开ARM smoke回执分别在`artifacts/release-012/tag-ci-audit-43390347592/`、
+`public-43390347592/`和`public-macos-arm64-smoke/`。
+旧`1a6eeed`的main预检[43384833779](https://github.com/shubolab/opennavicat/actions/runs/43384833779)
+保持completed/failure：五原生目标和DB security成功，macOS amd64在hdiutil CREATE报Resource busy，安装后launch未到、publisher skipped；不是六目标资格。
 修复前`f0b558e`预检[43383205925](https://github.com/shubolab/opennavicat/actions/runs/43383205925)
 终态为cancelled，未tag/发布，partial产物不作新资格。
 
@@ -39,7 +58,7 @@ Batch手动任务已区分row/time/byte/cleanup失败，不读取errmsg写历史
 参考Preview/PreviewAll曾在独立sample后stream各出现一次崩溃，AP18-11未重放，
 不能复制原版故障或据此移除正常预览门禁。原版已退出，自有fixture/卷精确清理。
 
-当前各scope独立测量（不相加）：默认全源**2186通过/636条件跳过，82.59秒**，201份源前后相同且匹配`1a6eeed`；
+当前各scope独立测量（不相加）：默认全源**2197通过/636条件跳过，82.81秒**，201份源前后相同且匹配`b6e1da4`；其余下列UI/DB scope产品源码未变，按原执行来源及未变声明源重绑，不冒称本次重跑；
 实际Cocoa **100/0**（Window16+组件78+4 Window/2 Dialog生命周期，actual Cocoa、Darwin arm64、0.12、16声明源相同），
 修后fresh Window **16/0**（11声明源及额外2 Dialog文件），caller连接UI **110/0**。
 Window22项生命周期及Dialog真实有效/损坏SQLite两项回归均通过，native TaskSignals在GUI线程destroyed、Task/Signals弱引用最终释放；
@@ -51,21 +70,32 @@ stream TLS仅standalone transport及40573拒绝，cleanup零start/零DB，普通
 握手修正未变这些字节；真实Run2个typed事件，BSON/UUID/主连接不变，自有容器/两卷独立absent，没有录制GUI。
 Cocoa源smoke6×4 exit0。完整回执见 [0.12候选验证](../validation-0.12.md)。
 
+
+打包合同79/0skip含11新增，per-command timeout600秒、最多3次create与1/2秒backoff，create最多1803秒另加stage/verify，不是总600秒。
+本机真实native ARM64 build＋包内Cocoa6×4/all probes＋新DMG只读mount/隔离安装launch卸载均绿，
+`local-installer-dmg-fix/independent-check.json`八检查通过，owned mount及image目录不存在；
+DMG51,441,633字节，SHA256 `00732b3c536d17c0e94f6f7a194f37a0e88cb32b3847dffd097b83784d1786da`。
+真实create首试成功，不冒称实际busy恢复；这是local ARM64，不代替IntelCI/其它目标或公开下载。
+旧1a6eeed默认2186/636继续保历史，不能替代b6打包源资格。
+
 更早parallel collection SIGSEGV失败仍保留，串行507或后续资格通过均不能证明其原因；
 真实发现的两个TaskSignals调用点缺陷分别局部修复，不宣称与SIGSEGV同因。
 MainWindow单调用点修后2184/636、Cocoa98属于479历史；更早2180/636、94和507也不冒称当前源资格。
 `d9bee66`首轮默认全源另有2185通过/1失败/636跳过（慢child缺finalizer），原node独立重跑通过仍保留失败；
 受控file-gate证明ready在try前可绕过finalizer，移入try则执行且进程回收，不证明该次失败的具体时序。
 `1a6eeed`仅修测试握手、未改生产stop或放宽断言，独立offline10项及fresh默认全源均通过。
-唯一候选GIF已完成31阶段/411帧/68.5秒、1,712,746字节并复制到`docs/assets/`。
+唯一0.12兼容GIF已完成31阶段/411帧/68.5秒、1,712,746字节并复制到`docs/assets/`。
 31阶段首/中/尾93帧及额外全尺寸视觉检查完成，自动逐帧guard411/411通过；
 SHA256为`d1ec33dd15e03fa38e5749f0ff0efe01051e5b40116c12229a7113d847e33c9e`。
-录制为新认证RS的真实工作流，不渲染事件payload，不代表0.12已公开。
+录制为新认证RS的真实工作流，不渲染事件payload；演示本身不替代安装器或完整参考验收。
 GIF capture源码归属`979d052`，77份源逐Git blob核定；当前产品Window/Dialog各两行ownership不同，
 widgets及recorder未变并有两调用点后的新79＋1工作流资格，握手修正仅改测试。保留已审capture，不冒称当前SHA重新录制。
 
-当前继续顺序是完成packager的限定busy修复及必要验证，冻结新candidate SHA，再执行其六原生目标预检与独立安装器审查，
-全部交付门禁通过才可决定里程碑发布；原始崩溃因果未知与完整资源门禁保持记录。
+本轮0.12交付已完成。下一开发入口为独立工作树`/Users/wangshubo/.codex/worktrees/mongodb-stream-variants/opennavicat`、
+分支`codex_mongodb_stream_variants`，源码`94de386259a443fd8a2ce3e711ade58b93dfe58d`；
+实际19 Window/46 backend仅为后续本地范围，不进入已发布b6或本版正式资格。
+AP18-12参考文档提交a189508保留已观察游标语义及整体inconclusive/初始调用基数未知边界；继续variant/完整工作流和全部矩阵门禁。
+原始崩溃因果未知与完整资源门禁仍保留。
 正常stream预览、完整partial/恢复/options/拓扑、其它工具与三平台参考门禁继续开放，goal保持active。
 
 以下各节保留本轮恢复、初次预检和修复的时间顺序；其中0.10仍为最新/0.11待发布等

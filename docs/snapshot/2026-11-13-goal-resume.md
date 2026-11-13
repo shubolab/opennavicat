@@ -163,3 +163,22 @@ Explain正限制也未在正确层级生效，因此**该提交不发布**。
 不得追加采样或$limit，必须分别限制行、原始BSON/渲染字节与协作时限，保留显式token选项和取得的事件。
 事件显示位置、Preview All/Stage Preview、fullDocument变体、断网游标清理、其它拓扑/权限及三平台UI
 仍需实际参考与owned fixture验收。此计划不属于0.11已交付功能，须先完成当前发布安全门禁。
+
+## 后续分支的已推送后端检查点与正在进行的UI
+
+`codex_mongodb_finite_stream` 的后端检查点 **1841c01** 已提交推送，
+随后合入仅文档的main/ee876b5，合并提交 **068b1dcd60964f5e5188df25ebc4fe5bb371137a**。
+在UI整合开始前，构建固定native JS helper后的全源为 **2073 passed / 619条件跳过**，74.50秒；
+新fresh独立RS模块26项（12纯合同/14真实RS）、普通Mongo TLS24项、stream transport2项、
+stopped cleanup13项均零跳过，另10项离线strict-gate检查包含真实慢子进程SIGINT/finalizer/回收。
+四scope源码哈希仍匹配该后端检查点；20个exact container ID和36个已记录卷ID独立确认不存在。
+普通TLS fixture自己确认rm--volumes，但未记录单卷ID，不把这些卷加进独立计数。
+私有回执在新树 `artifacts/finite-stream-freeze-20261113/`；这些范围重叠，不能相加或借用0.11安装器资格。
+
+后端禁止初次aggregate隐式重试，owner按nonce清理未知初次cursor，字节超界明确失败并保留partial/undelivered事实。
+清理脚本的named64hex卷边界已红绿实测，显式/继承挂载在任何rm前拒绝；测试仅新建stopped资源，零start/零DB。
+
+UI正在该分支继续：依据AP18-10接text-only消息/输出、当前页Stop与typed返回路由，
+并让Batch明确处理row/time边界，不能把generic事件表或无条件success当作参考验收。
+本节的全源/源码哈希资格属于UI修改前的冻结后端；后续UI需重新真实Window/RS、
+本机与六目标CI验收，演示变化时重新录制/审查唯一GIF。该分支仍未发布，完整goal保持active。

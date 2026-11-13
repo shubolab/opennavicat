@@ -274,7 +274,7 @@
   "current_work": {
     "pipeline_safety_and_navigation": "released0.11; fullparityopen",
     "batch_job_workflow": "released0.11 savedMongoPipeline slice; other15categories/scheduler/SMTP/fullUIopen",
-    "change_stream": "unreleased codex_mongodb_finite_stream; ownedRS26zero-skip backend runner and separateTLS2zero-skip; normalUI/preview/platformgatesopen"
+    "change_stream": "backend_checkpoint1841pushed; UI integration active on codex_mongodb_finite_stream; not in0.11; fullpreview/platform/functiongatesopen"
   },
   "candidate_release": {
     "version": "0.11.0",
@@ -619,6 +619,49 @@
       "replica_set_event_acceptance": false
     },
     "ui_and_native_six_installer_acceptance_complete": false,
-    "reference_followup": "Run after wire event remains script+OK/time; stagePreview/PreviewAll each referencecrash after independent sample+stream; appquit and fixture/volumescleaned; followup docs in nextbranch"
+    "reference_followup": "Run after wire event remains script+OK/time; stagePreview/PreviewAll each referencecrash after independent sample+stream; appquit and fixture/volumescleaned; followup docs in nextbranch",
+    "backend_commit": "1841c01",
+    "documentation_merge_commit": "068b1dcd60964f5e5188df25ebc4fe5bb371137a",
+    "backend_checkpoint_pushed": true,
+    "checkpoint_scope": "Frozen backend/runtime/tests/runners before active native UI integration; not a release",
+    "full_default_checkpoint": {
+      "passed": 2073,
+      "conditionally_skipped": 619,
+      "seconds": 74.5,
+      "native_helper_built": true,
+      "receipt": "artifacts/finite-stream-freeze-20261113/full-source.xml"
+    },
+    "fresh_qualification_scopes": {
+      "replica_module": {
+        "passed": 26,
+        "skipped": 0,
+        "pure_cases": 12,
+        "real_rs_cases": 14
+      },
+      "regular_mongodb_tls": {
+        "passed": 24,
+        "skipped": 0
+      },
+      "stream_tls": {
+        "passed": 2,
+        "skipped": 0,
+        "replica_set_events_accepted_by_this_transport_scope": false
+      },
+      "stopped_cleanup": {
+        "passed": 13,
+        "skipped": 0,
+        "containers_started": 0,
+        "db_connections": 0
+      }
+    },
+    "strict_cleanup_gate_offline_tests": 10,
+    "independent_check": {
+      "exact_container_ids_absent": 20,
+      "recorded_volume_ids_absent": 36,
+      "all_listed_source_hashes_match": true,
+      "receipt": "artifacts/finite-stream-freeze-20261113/independent-check.json"
+    },
+    "ui_integration": "in_progress_after_frozen_backend; text-only messages/output, page-local Stop and explicit partial/row/time boundary handling; no parity claimed",
+    "new_six_installer_ci_or_release_complete": false
   }
 }

@@ -143,6 +143,9 @@ def main():
         receipt["passed"] = True
     except BaseException as error:
         receipt["error_class"] = type(error).__name__
+        startup = module.startup_diagnostic(fixture.receipt)
+        if startup:
+            receipt["fixture_startup"] = startup
         detail = error.args[0] if getattr(error, "args", ()) else None
         code = getattr(detail, "full_code", None)
         if type(code) is str and __import__("re").fullmatch(r"(?:ORA|DPY|DPI)-[0-9]{4,5}", code):

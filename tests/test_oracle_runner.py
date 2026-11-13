@@ -21,6 +21,84 @@ runner = load(ROOT / "scripts/test-oracle.py")
 support = load(ROOT / "tests/oracle_owned_fixture.py")
 
 
+@pytest.mark.parametrize("invalid_code, wrong_owner", [(False, False), (True, False), (False, True)],
+                         ids=["owned-state", "unsafe-driver-code", "unverified-state"])
+def test_readiness_failure_persists_safe_phase_and_owned_state_without_extending_budget(
+        tmp_path, monkeypatch, invalid_code, wrong_owner):
+    """Run the real startup state machine with no Docker/network and no sleep."""
+    fixture = support.OwnedOracle(tmp_path / "new-startup")
+    clock = SimpleNamespace(now=0.0, failed=False)
+    cid = "1" * 64
+    pin = support.PINS["arm64"]
+    calls = []
+    def docker(*args, **kwargs):
+        calls.append(args)
+        if args[0] == "info":
+            value = {"Architecture": "aarch64", "OSType": "linux"}
+        elif args[:2] == ("image", "inspect"):
+            value = [{"Id": pin["config"], "Architecture": "arm64", "Os": "linux", "Config": {}}]
+        elif args[0] == "create":
+            return SimpleNamespace(stdout=cid)
+        elif args[0] == "inspect":
+            assert args[1] == cid
+            labels = dict(fixture.labels)
+            if clock.failed and wrong_owner: labels["owner"] = "not-our-container"
+            value = [{"Id": cid, "Image": pin["config"], "Config": {"Labels": labels},
+                "HostConfig": {"Binds": None, "VolumesFrom": None,
+                    "Tmpfs": {support.SECRET_DIR: "rw"}, "Memory": 4 * 1024**3,
+                    "NanoCpus": 2_000_000_000, "ShmSize": 1024**3},
+                "Mounts": [{"Type": "tmpfs", "Destination": support.SECRET_DIR}],
+                "NetworkSettings": {"Ports": {"1521/tcp": [{"HostIp": "127.0.0.1", "HostPort": "31415"}]}},
+                "State": {"Status": "exited", "Running": False, "OOMKilled": True, "ExitCode": 137,
+                    "Error": fixture.admin_password,
+                    "Health": {"Log": [{"Output": fixture.app_password}]}}}]
+        else:
+            assert args[0] in {"start", "exec"}
+            return SimpleNamespace(stdout="")
+        return SimpleNamespace(stdout=json.dumps(value))
+    def unavailable(*_args, **_kwargs):
+        clock.now, clock.failed = 361.0, True
+        code = fixture.app_password if invalid_code else "DPY-6005"
+        raise support.oracledb.OperationalError(SimpleNamespace(
+            full_code=code, message=fixture.admin_password + fixture.denied_password))
+    monkeypatch.setattr(fixture, "docker", docker)
+    monkeypatch.setattr(fixture, "connect", unavailable)
+    with monkeypatch.context() as patch:
+        patch.setattr(support.time, "monotonic", lambda: clock.now)
+        patch.setattr(support.time, "sleep", lambda *_: pytest.fail("No wait or retry after deadline"))
+        with pytest.raises(RuntimeError, match="readiness deadline"):
+            fixture.start()
+    body = (fixture.out / "fixture.json").read_text()
+    assert all(secret not in body for secret in
+               (fixture.admin_password, fixture.app_password, fixture.denied_password))
+    diagnostic = json.loads(body)["startup"]
+    assert diagnostic["phase"] == "readiness" and diagnostic["status"] == "failed"
+    assert diagnostic["reason"] == "readiness_deadline" and diagnostic["error_class"] == "RuntimeError"
+    assert diagnostic["readiness_budget_seconds"] == 360 and diagnostic["readiness_attempts"] == 1
+    assert diagnostic["elapsed_ms"] == 361000
+    if invalid_code: assert "last_driver_code" not in diagnostic
+    else: assert diagnostic["last_driver_code"] == "DPY-6005"
+    if wrong_owner:
+        assert diagnostic["container_state_unavailable"] is True
+        assert "container_state" not in diagnostic
+    else:
+        assert diagnostic["container_state"] == {
+            "status": "exited", "running": False, "oom_killed": True, "exit_code": 137}
+    assert support.startup_diagnostic(fixture.receipt) == diagnostic
+    assert not any(call[0] in {"logs", "ps", "stop", "rm"} for call in calls)
+
+
+def test_startup_diagnostic_export_rejects_unknown_or_secret_bearing_metadata():
+    secret = "generated-sensitive-diagnostic-value"
+    assert support.startup_diagnostic({"startup": {
+        "phase": "readiness", "status": "failed", "reason": secret,
+        "error_class": secret, "elapsed_ms": True, "readiness_attempts": -1,
+        "last_driver_code": secret, "unknown": secret,
+        "container_state": {"status": secret, "running": "false", "oom_killed": secret,
+                            "exit_code": secret, "Config": secret}}}) == {
+                                "phase": "readiness", "status": "failed"}
+
+
 def junit(tmp_path, entries):
     root = ET.Element("testsuites")
     suite = ET.SubElement(root, "testsuite")

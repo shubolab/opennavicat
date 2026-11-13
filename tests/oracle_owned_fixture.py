@@ -21,6 +21,49 @@ IMAGE_MANIFEST = json.loads(Path(__file__).with_name("oracle_images.json").read_
 PINS = IMAGE_MANIFEST["platforms"]
 SECRET_DIR = "/run/opennavicat-owned-oracle"
 SECRET_FILE = SECRET_DIR + "/password"
+READINESS_SECONDS = 360
+STARTUP_PHASES = frozenset({"engine_probe", "image_pull", "image_inspect", "container_create",
+    "ownership_check", "container_start", "password_delivery", "endpoint_check", "readiness",
+    "password_removal", "architecture_check", "seed", "complete"})
+
+
+def _driver_code(error):
+    detail = error.args[0] if getattr(error, "args", ()) else None
+    code = getattr(detail, "full_code", None)
+    return code if type(code) is str and re.fullmatch(r"(?:ORA|DPY|DPI)-[0-9]{4,5}", code) else None
+
+
+def startup_diagnostic(receipt):
+    """Only finite classifications, bounded numbers and owned-state facts leave startup."""
+    value = receipt.get("startup", {})
+    if type(value) is not dict: return {}
+    result = {}
+    enums = {"phase": STARTUP_PHASES, "status": {"running", "failed", "ready"},
+        "reason": {"readiness_deadline", "docker_operation", "docker_deadline", "fixture_contract",
+                   "driver_error", "interrupted", "startup_failure"},
+        "error_class": {"RuntimeError", "AssertionError", "TimeoutExpired", "DatabaseError",
+                        "OperationalError", "InterfaceError", "KeyboardInterrupt", "OSError"}}
+    for key, choices in enums.items():
+        if type(value.get(key)) is str and value[key] in choices: result[key] = value[key]
+    for key in ("elapsed_ms", "readiness_attempts"):
+        if type(value.get(key)) is int and 0 <= value[key] <= 2**31 - 1: result[key] = value[key]
+    if type(value.get("readiness_budget_seconds")) is int and value["readiness_budget_seconds"] == READINESS_SECONDS:
+        result["readiness_budget_seconds"] = READINESS_SECONDS
+    for key in ("driver_code", "last_driver_code"):
+        code = value.get(key)
+        if type(code) is str and re.fullmatch(r"(?:ORA|DPY|DPI)-[0-9]{4,5}", code): result[key] = code
+    state = value.get("container_state", {})
+    safe_state = {}
+    if type(state) is dict:
+        if type(state.get("status")) is str and state["status"] in {"created", "running", "paused", "restarting", "removing", "exited", "dead"}:
+            safe_state["status"] = state["status"]
+        for key in ("running", "oom_killed"):
+            if type(state.get(key)) is bool: safe_state[key] = state[key]
+        if type(state.get("exit_code")) is int and -(2**31) <= state["exit_code"] < 2**31:
+            safe_state["exit_code"] = state["exit_code"]
+    if safe_state: result["container_state"] = safe_state
+    if value.get("container_state_unavailable") is True: result["container_state_unavailable"] = True
+    return result
 
 
 def native_architecture(engine):
@@ -79,8 +122,8 @@ class OwnedOracle:
         temporary.write_text(json.dumps(self.receipt, indent=2) + "\n")
         temporary.replace(target)
 
-    def inspect(self):
-        data = json.loads(self.docker("inspect", self.cid).stdout)[0]
+    def inspect(self, *, timeout=60):
+        data = json.loads(self.docker("inspect", self.cid, timeout=timeout).stdout)[0]
         assert data["Id"] == self.cid and data["Image"] == self.image_config
         assert all(data["Config"]["Labels"].get(k) == v for k, v in self.labels.items())
         assert not data["HostConfig"].get("Binds") and not data["HostConfig"].get("VolumesFrom")
@@ -98,7 +141,51 @@ class OwnedOracle:
         assert connection.thin
         return connection
 
+    def _startup_phase(self, phase):
+        if type(phase) is not str or phase not in STARTUP_PHASES:
+            raise ValueError("Unknown owned Oracle startup phase")
+        self.receipt["startup"].update(phase=phase,
+            elapsed_ms=max(0, int((time.monotonic() - self._startup_started) * 1000)))
+        self.save()
+
+    def _startup_failure(self, error):
+        startup = self.receipt["startup"]
+        reason = self._startup_reason or ("interrupted" if isinstance(error, KeyboardInterrupt)
+            else "docker_deadline" if isinstance(error, subprocess.TimeoutExpired)
+            else "fixture_contract" if isinstance(error, AssertionError)
+            else "docker_operation" if self.receipt.get("docker_failure")
+            else "driver_error" if isinstance(error, oracledb.Error) else "startup_failure")
+        startup.update(status="failed", reason=reason, error_class=type(error).__name__,
+            elapsed_ms=max(0, int((time.monotonic() - self._startup_started) * 1000)))
+        if _driver_code(error): startup["driver_code"] = _driver_code(error)
+        if not isinstance(error, KeyboardInterrupt) and type(self.cid) is str and re.fullmatch(r"[0-9a-f]{64}", self.cid):
+            try:
+                # Validate the same exact owner/image/mount contract before
+                # trusting any state; never retain Config, argv, logs or Error.
+                state = self.inspect(timeout=10).get("State", {})
+                if type(state) is dict:
+                    startup["container_state"] = {key: state.get(source) for key, source in (
+                        ("status", "Status"), ("running", "Running"), ("exit_code", "ExitCode"), ("oom_killed", "OOMKilled"))}
+            except Exception:
+                startup["container_state_unavailable"] = True
+        self.receipt["startup"] = startup_diagnostic(self.receipt)
+        self.save()
+
     def start(self, *, pull=False):
+        self._startup_started = time.monotonic()
+        self._startup_reason = None
+        self.receipt["startup"] = {"phase": "engine_probe", "status": "running", "elapsed_ms": 0}
+        self.save()
+        try:
+            self._start(pull=pull)
+        except BaseException as error:
+            try: self._startup_failure(error)
+            except Exception: self.receipt["startup_diagnostic_unavailable"] = True
+            raise
+        self.receipt["startup"].update(status="ready")
+        self._startup_phase("complete")
+
+    def _start(self, *, pull=False):
         engine = json.loads(self.docker("info", "--format", "{{json .}}", timeout=15).stdout)
         self.receipt["engine_probe"] = {k: engine.get(k) for k in ("Architecture", "OSType", "ServerVersion", "ServerErrors")}
         self.save()
@@ -110,7 +197,9 @@ class OwnedOracle:
                             engine_architecture=engine["Architecture"], native_architecture=self.architecture)
         self.save()
         if pull:
+            self._startup_phase("image_pull")
             self.docker("pull", "--platform", platform, self.image, timeout=600)
+        self._startup_phase("image_inspect")
         local = json.loads(self.docker("image", "inspect", self.image).stdout)[0]
         assert local["Id"] == self.image_config and local["Architecture"] == self.architecture
         assert local["Os"] == "linux" and not local["Config"].get("Volumes")
@@ -122,38 +211,53 @@ class OwnedOracle:
             "--env", "ORACLE_PASSWORD_FILE=" + SECRET_FILE]
         for key, value in self.labels.items():
             args += ["--label", key + "=" + value]
+        self._startup_phase("container_create")
         self.cid = self.docker(*args, "--entrypoint", "/bin/sh", self.image, "-c", gate).stdout.strip()
         assert re.fullmatch(r"[0-9a-f]{64}", self.cid)
         self.receipt["container_id"] = self.cid
         self.save()
+        self._startup_phase("ownership_check")
         data = self.inspect()
         caps = data["HostConfig"]
         assert caps["Memory"] == 4 * 1024 ** 3 and caps["NanoCpus"] == 2_000_000_000
         assert caps["ShmSize"] == 1024 ** 3
         self.receipt["limits"] = {k: caps[k] for k in ("Memory", "NanoCpus", "ShmSize")}
+        self._startup_phase("container_start")
         self.docker("start", self.cid)
+        self._startup_phase("password_delivery")
         self.docker("exec", "-i", self.cid, "/bin/sh", "-c", "umask 077; cat > " + SECRET_FILE,
                     input=self.admin_password)
+        self._startup_phase("endpoint_check")
         data = self.inspect()
         ports = data["NetworkSettings"]["Ports"]["1521/tcp"]
         assert len(ports) == 1 and ports[0]["HostIp"] == "127.0.0.1"
         self.port = int(ports[0]["HostPort"])
         self.receipt["loopback_endpoint"] = {"host": "127.0.0.1", "port": self.port}
         self.save()
-        deadline = time.monotonic() + 360
+        self.receipt["startup"].update(readiness_budget_seconds=READINESS_SECONDS, readiness_attempts=0)
+        self._startup_phase("readiness")
+        deadline = time.monotonic() + READINESS_SECONDS
         while True:
+            self.receipt["startup"]["readiness_attempts"] += 1
             try:
                 self.admin = self.connect("system", self.admin_password)
                 break
-            except oracledb.Error:
+            except oracledb.Error as error:
+                code = _driver_code(error)
+                if code: self.receipt["startup"]["last_driver_code"] = code
+                else: self.receipt["startup"].pop("last_driver_code", None)
                 if time.monotonic() >= deadline:
+                    self._startup_reason = "readiness_deadline"
                     raise RuntimeError("Owned Oracle readiness deadline") from None
                 time.sleep(1)
+        self._startup_phase("password_removal")
         self.docker("exec", self.cid, "rm", "--", SECRET_FILE)
+        self._startup_phase("architecture_check")
         uname = self.docker("exec", self.cid, "uname", "-m").stdout.strip()
         assert uname == pin["uname"]
         self.receipt.update(actual_architecture=uname, server_version=self.admin.version,
                             tmpfs_password_file_removed=True)
+        self._startup_phase("seed")
         self._seed()
         self.save()
 

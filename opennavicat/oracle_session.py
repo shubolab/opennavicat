@@ -154,7 +154,7 @@ class OracleSession(DatabaseSession):
         # Accept a literal IP/DNS host and plain service, never descriptor syntax
         # smuggled through these fields or an implicit Easy Connect alias.
         try:
-            ipaddress.ip_address(c.host)
+            address = ipaddress.ip_address(c.host)
         except ValueError:
             try:
                 hostname = c.host.encode("idna").decode("ascii")
@@ -162,6 +162,12 @@ class OracleSession(DatabaseSession):
                 raise ValueError("Oracle host must be a literal IP address or DNS hostname") from None
             if len(hostname) > 253 or not re.fullmatch(r"[A-Za-z0-9_.-]+", hostname):
                 raise ValueError("Oracle host must be a literal IP address or DNS hostname")
+        else:
+            # ipaddress accepts arbitrary nonempty IPv6 zone text. Keep zone
+            # IDs to interface/index characters before descriptor generation.
+            scope_id = getattr(address, "scope_id", None)
+            if scope_id is not None and not re.fullmatch(r"[A-Za-z0-9_.-]+", scope_id):
+                raise ValueError("Oracle host has an invalid IPv6 scope identifier")
         if not re.fullmatch(r"[A-Za-z0-9_.$#-]{1,512}", c.oracle_service_identifier):
             raise ValueError("Oracle Basic currently requires a plain service identifier")
         if any(ch in c.username for ch in "[]/@"):

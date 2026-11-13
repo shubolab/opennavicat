@@ -355,6 +355,88 @@ def test_stream_byte_limit_failure_skips_following_closes_session_once_and_keeps
     assert partial.events[0].raw_bson == BSON.encode(private_event)
 
 
+@pytest.mark.parametrize('completion', ['empty_batch', 'row_limit', 'deadline'])
+@pytest.mark.parametrize('continue_on_error', [False, True])
+def test_returned_stream_boundary_is_not_an_unconditional_batch_success(
+        monkeypatch, completion, continue_on_error):
+    definition, prepared = plan('stream', 'following', continue_on_error=continue_on_error)
+    document = {'private': 'generated-private-returned-stream-value'}
+    stream_result = FiniteStreamResult((StreamEvent(BSON.encode(document), json.dumps(document)),),
+        completion, .02)
+    instances, calls = [], []
+
+    def factory(config):
+        instance = FakeSession(config); instances.append(instance); return instance
+
+    def execute(*_args, **_kwargs):
+        calls.append(True)
+        return stream_result if len(calls) == 1 else ([], False)
+
+    monkeypatch.setattr(runtime, 'execute_pipeline', execute)
+    result = run_batch_job(definition, prepared, control=BatchRunControl(),
+        emit=lambda _event: None, session_factory=factory)
+    natural = completion == 'empty_batch'
+    assert result['failed'] == int(not natural)
+    assert result['status'] == ('success' if natural else 'failed')
+    assert result['success'] == (2 if natural else int(continue_on_error))
+    assert result['skipped'] == int(not natural and not continue_on_error)
+    assert len(instances) == (2 if natural or continue_on_error else 1)
+    assert all(value.calls == ['connect', 'close'] and value.closed for value in instances)
+    completed = result['logs'][1]
+    assert completed['execution_completed'] is natural
+    if not natural:
+        assert 'limit' in completed['message']
+    assert 'generated-private-returned-stream-value' not in json.dumps(result)
+
+
+def test_ordinary_truncated_tuple_keeps_its_existing_batch_success(monkeypatch):
+    definition, prepared = plan('ordinary')
+    instances = []
+
+    def factory(config):
+        value = FakeSession(config); instances.append(value); return value
+
+    monkeypatch.setattr(runtime, 'execute_pipeline', lambda *_args, **_kwargs: (['private-row'], True))
+    result = run_batch_job(definition, prepared, control=BatchRunControl(),
+        emit=lambda _event: None, session_factory=factory)
+    assert result['status'] == 'success' and result['success'] == 1 and result['failed'] == 0
+    assert result['logs'][1]['execution_completed']
+    assert instances[0].calls == ['connect', 'close']
+    assert 'private-row' not in json.dumps(result)
+
+
+@pytest.mark.parametrize('continue_on_error', [False, True])
+def test_stream_cleanup_failure_keeps_failed_task_when_cancellation_is_also_requested(
+        monkeypatch, continue_on_error):
+    definition, prepared = plan('stream', 'following', continue_on_error=continue_on_error)
+    control, instances, events = BatchRunControl(), [], []
+    document = {'private': 'generated-private-cleanup-stream-value'}
+    partial = FiniteStreamResult((StreamEvent(BSON.encode(document), json.dumps(document)),),
+        'cleanup_failed', .02)
+
+    def factory(config):
+        value = FakeSession(config); instances.append(value); return value
+
+    def execute(*_args, **_kwargs):
+        control.request_cancel()
+        raise StreamExecutionError('private exception text must not be logged', partial)
+
+    monkeypatch.setattr(runtime, 'execute_pipeline', execute)
+    result = run_batch_job(definition, prepared, control=control, emit=events.append,
+        session_factory=factory)
+    assert result['status'] == 'cancelled' and result['failed'] == 1
+    assert result['cancelled'] == result['success'] == 0 and result['skipped'] == 1
+    assert len(instances) == 1 and instances[0].calls == ['connect', 'close']
+    assert [event['status'] for event in events] == ['running', 'failed', 'skipped']
+    failed = result['logs'][1]
+    assert failed['cancel_requested'] and not failed['execution_completed']
+    assert 'cleanup could not be confirmed' in failed['message']
+    assert 'do not automatically retry' in failed['message']
+    serialized = json.dumps({'result': result, 'events': events})
+    assert 'generated-private-cleanup-stream-value' not in serialized
+    assert 'private exception text' not in serialized and 'partial_result' not in serialized
+
+
 def test_event_sink_failure_cannot_skip_cleanup_or_disclose_its_exception(monkeypatch):
     definition, prepared = plan('one')
     instances = []

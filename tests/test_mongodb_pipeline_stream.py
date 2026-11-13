@@ -11,6 +11,7 @@ import subprocess
 import threading
 import time
 from types import SimpleNamespace
+from urllib.parse import quote, quote_plus
 import uuid
 
 from bson import BSON, Binary, Decimal128, Int64, ObjectId, Timestamp
@@ -21,7 +22,7 @@ import pytest
 
 from opennavicat.database import ConnectionConfig, DatabaseError
 from opennavicat.mongodb_pipeline import PipelineDefinition, PipelineStage, execute_pipeline
-from opennavicat.mongodb_pipeline_stream import execute_finite_stream, StreamExecutionError
+from opennavicat.mongodb_pipeline_stream import execute_finite_stream, FiniteStreamResult, StreamExecutionError
 from opennavicat.mongodb_session import BSON_CODEC, RAW_CODEC, MongoSession, canonical_loads
 
 
@@ -188,6 +189,82 @@ def test_driver_secrets_are_not_copied_to_the_ui_error():
         execute_finite_stream(session, "generated", definition())
     assert "generated-secret" not in str(error.value) and "mongodb://" not in str(error.value)
     assert str(error.value.__cause__) == private
+    assert error.value.server_message is None and error.value.error_phase is None
+
+
+def aggregate_failure(error):
+    session, _commands, _kills = fake_session(Cursor())
+    with session._finite_stream_budget(120000) as (endpoint, _value):
+        def failed(*_args, **_kwargs):
+            raise error
+        endpoint.aggregate = failed
+    return session
+
+
+def test_structured_aggregate_error_redacts_only_bounded_errmsg_without_driver_text():
+    secrets = ['generated', 'generated ssh/secret+', 'generated key/phrase+', 'generated tls/secret+']
+    echoed = [value for secret in secrets for value in (secret, quote(secret, safe=''), quote_plus(secret, safe=''))]
+    message = '$limit rejected: ' + ' | '.join(echoed) + ' mongodb+srv://other:private@owned.invalid/db'
+    error = OperationFailure('private driver display and full detailed response', 20,
+        {'ok': 0.0, 'code': 20, 'errmsg': message, 'privateDetailedField': 'not an errmsg'})
+    session = aggregate_failure(error)
+    for name, value in zip(('password', 'ssh_password', 'ssh_key_passphrase', 'ssl_key_password'), secrets):
+        setattr(session.config, name, value)
+    with pytest.raises(StreamExecutionError) as caught:
+        execute_finite_stream(session, 'generated', definition())
+    failure = caught.value
+    assert failure.error_phase == 'aggregate' and failure.script_location is None
+    assert failure.server_message.startswith('$limit rejected: ')
+    assert all(value not in failure.server_message for value in echoed)
+    assert 'ssh/secret+' not in failure.server_message and 'key/phrase+' not in failure.server_message
+    assert '://' not in failure.server_message and 'owned.invalid' not in failure.server_message
+    assert 'private driver display' not in failure.server_message and 'not an errmsg' not in failure.server_message
+    assert str(failure) == 'Finite stream execution failed (server code 20)' and failure.__cause__ is error
+
+
+@pytest.mark.parametrize('value', [None, True, 17, [], {}, '', 'x' * 2049, 'a\nb', 'a\rb',
+    'a\x00b', 'a\u202eb', '\ud800'], ids=['none', 'bool', 'integer', 'array', 'document',
+        'empty', 'oversized', 'multiline', 'carriage-return', 'nul', 'bidi', 'surrogate'])
+def test_malformed_or_unqualified_server_errmsg_is_not_renderable(value):
+    error = OperationFailure('must not fall back to driver text', 20,
+        {'ok': 0, 'code': 20, 'errmsg': value})
+    session = aggregate_failure(error)
+    with pytest.raises(StreamExecutionError) as caught:
+        execute_finite_stream(session, 'generated', definition())
+    assert caught.value.server_message is None
+    assert 'driver text' not in str(caught.value)
+
+
+@pytest.mark.parametrize('details,code', [({'ok': True, 'errmsg': 'untrusted'}, 20),
+    ({'ok': False, 'errmsg': 'untrusted'}, 20), ({'errmsg': 'untrusted'}, 20),
+    ({'ok': 0, 'errmsg': 'untrusted'}, 'mongodb://generated:private@owned.invalid'),
+    ({'ok': 0, 'errmsg': 'untrusted'}, True)])
+def test_malformed_server_reply_cannot_supply_display_metadata(details, code):
+    session = aggregate_failure(OperationFailure('private driver text', code, details))
+    with pytest.raises(StreamExecutionError) as caught:
+        execute_finite_stream(session, 'generated', definition())
+    assert caught.value.server_message is None
+    assert 'private' not in str(caught.value) and 'mongodb://' not in str(caught.value)
+
+
+def test_getmore_server_error_retains_phase_without_inventing_script_location():
+    def failed():
+        raise OperationFailure('driver presentation ignored', 20,
+            {'ok': 0, 'code': 20, 'errmsg': 'Generated getMore rejection'})
+    session, _commands, _kills = fake_session(Cursor(on_more=failed))
+    with pytest.raises(StreamExecutionError) as caught:
+        execute_finite_stream(session, 'generated', definition())
+    assert caught.value.server_message == 'Generated getMore rejection'
+    assert caught.value.error_phase == 'get_more' and caught.value.script_location is None
+
+
+def test_cancellation_cleanup_limits_and_authentication_never_retain_server_text():
+    for completion, auth in [('cancelled', False), ('cleanup_failed', False), ('byte_limit', False),
+                             ('row_limit', False), ('deadline', False), ('error', True)]:
+        error = StreamExecutionError('static status', FiniteStreamResult((), completion, .01),
+            authentication_required=auth, server_message='unqualified server text',
+            error_phase='aggregate', script_location=(1, 27))
+        assert error.server_message is error.error_phase is error.script_location is None
 
 
 def test_auth_failure_keeps_safe_classification_and_cause():
@@ -265,7 +342,7 @@ def _docker(*args, check=True, env=None):
 
 
 @pytest.fixture(scope="module")
-def replica_service():
+def replica_service(request):
     if os.environ.get("OPENNAVICAT_TEST_MONGODB") != "1":
         pytest.skip("Enable new owned MongoDB services with OPENNAVICAT_TEST_MONGODB=1")
     if not shutil.which("docker"):
@@ -274,7 +351,8 @@ def replica_service():
     run_id = os.environ.get("OPENNAVICAT_MONGODB_STREAM_RUN_ID", "")
     name, replica = "opennavicat-stream-" + owner[:12], "generated_stream_rs"
     password, key = secrets.token_urlsafe(24), secrets.token_hex(48)
-    evidence = {"owner": owner, "run_id": run_id, "name": name, "image": IMAGE, "cleanup_removed": False}
+    evidence = {"owner": owner, "run_id": run_id, "module": request.module.__name__,
+                "name": name, "image": IMAGE, "cleanup_removed": False}
     directory = os.environ.get("OPENNAVICAT_MONGODB_STREAM_REPORT_DIR")
     receipt = Path(directory) / ("fixture-" + owner + ".json") if directory else None
     container, bootstrap, volumes = None, None, []
@@ -633,6 +711,8 @@ def test_real_server_rejects_limit_without_appending_own_limit(stream_session):
     with pytest.raises(StreamExecutionError) as failure:
         execute_finite_stream(session, session.config.database, draft, await_ms=50)
     assert isinstance(failure.value.__cause__, OperationFailure)
+    assert failure.value.error_phase == 'aggregate'
+    assert failure.value.server_message == '$limit is not permitted in a $changeStream pipeline'
     aggregate = next(command for command in wire.commands if command.get("aggregate") == "sales")
     assert aggregate["pipeline"] == [{"$changeStream": {}}, {"$limit": 1}]
     assert_no_owned_cursors(session)

@@ -14,17 +14,41 @@ Windows/Linux/macOS 的 1:1 保留 UI；本次同步、既有 Release 或下一�
 公开ARM64 DMG另完成本机原生Cocoa隔离6×4查询和全部驱动/加密/native-JS探针，未读真实profile，挂载已卸载。
 正式摘要、证据限制和私有回执索引见 [0.11验证记录](../validation-0.11.md)。
 
-唯一真实GIF已更新为0.11的28阶段、371帧、61.84秒，逐阶段隐私审核通过。
+公开0.11的唯一真实GIF为28阶段、371帧、61.84秒，逐阶段隐私审核通过。
 本次发布加入已保存MongoDB Pipeline的四页Batch/独立会话/错误策略/持久历史，并修复正时限和启动取消。
 完整工具、其余Batch类别/Scheduler/SMTP、参考UI和三平台门禁仍开放，goal保持active。
 
-下一条工作已在独立工作树 `/Users/wangshubo/.codex/worktrees/mongodb-finite-stream/opennavicat`、
-分支`codex_mongodb_finite_stream`继续：有限stream后端的独立认证RS runner26项零跳过
-（12纯合同、14真实RS）、独立TLS/SSH transport两项零跳过，临时服务及卷均确认清理；
-正常UI/partial错误呈现、Preview和平台验收仍开放，尚未提交为可用发布。
-参考后续实测已确认Run实际事件wire后仅显示script+OK/time；阶段Preview和PreviewAll各自
-独立sample后运行stream均出现一次原版崩溃。原版已正常退出，自有fixture及两卷逐ID清理，
-正常预览门禁保留；完整观察文档位于该新分支，不把generic网格或参考故障当UI对齐。
+当前工作在独立工作树 `/Users/wangshubo/.codex/worktrees/mongodb-finite-stream/opennavicat`、
+分支`codex_mongodb_finite_stream`继续，候选元数据为**0.12.0，尚未发布**。
+公开安装器仍是0.11，不能借用其六目标资格。HEAD `7e8032e`只是本轮工作树基点，
+不是当前未提交候选全部变化的最终源码SHA；最终提交和该SHA的CI尚待完成。
+
+AP18-11在新owned RS同页确认busy两页、空/错误三页、事件四页、再次空跑移除Output；
+稳定消息/输出仅为script+状态+实际elapsed，无事件网格。源码已接该有限text-only路径、
+当前页Stop、private typed BSON/partial、独立no-retry client/nonce清理，以及owner校验的
+有界errmsg和可选冻结脚本位置；getMore或无可靠位置时不制造line/column。
+Batch手动任务已区分row/time/byte/cleanup失败，不读取errmsg写历史。
+参考Preview/PreviewAll曾在独立sample后stream各出现一次崩溃，AP18-11未重放，
+不能复制原版故障或据此移除正常预览门禁。原版已退出，自有fixture/卷精确清理。
+
+Task ownership修复前的最近各scope独立测量（不相加）为：默认全源**2180通过/636条件跳过**，201源路径前后哈希相同；
+后端**46/0跳过**（32纯/14真实RS）、真实Window **16/0**、组件**78/0**，
+实际原生Cocoa **94/0**（Window16+组件78，版本0.12、Darwin arm64、13源哈希相同）；
+stream TLS/SSH **2/0**仍仅standalone transport＋实际40573拒绝，stopped cleanup **13/0**零start/零DB。
+源smoke6行×4列通过。完整回执归属、旧检查点和限制见 [0.12候选验证](../validation-0.12.md)。
+
+集合runner首次并行执行出现SIGSEGV，失败目录保留；fresh串行r2 **507/0**且8容器/16卷独立absent。
+r2通过不证明首次崩溃原因。另已真实确认Task/TaskSignals在正常完成后仍被native连接闭包环保留，
+worker GC不能释放；GUI parent+finished后deleteLater的私有实验已恢复GUI线程释放，最小源码修复及回归已安排。
+它是否与首次SIGSEGV同因仍未建立；修改runtime后必须重核相关范围，以上数字不能当修后源码或可发布结论。
+唯一候选GIF已完成31阶段/411帧/68.5秒、1,712,746字节并复制到`docs/assets/`。
+31阶段首/中/尾93帧及额外全尺寸视觉检查完成，自动逐帧guard411/411通过；
+SHA256为`d1ec33dd15e03fa38e5749f0ff0efe01051e5b40116c12229a7113d847e33c9e`。
+录制为新认证RS的真实工作流，不渲染事件payload，不代表0.12已公开。
+
+当前继续顺序是先解决上述源稳定性疑点并按必要改动重验相关范围，
+再冻结完整候选SHA执行六个原生目标CI/安装器审查，全部门禁通过才可决定里程碑发布。
+正常stream预览、完整partial/恢复/options/拓扑、其它工具与三平台参考门禁继续开放，goal保持active。
 
 以下各节保留本轮恢复、初次预检和修复的时间顺序；其中0.10仍为最新/0.11待发布等
 **恢复时描述已被本节及新state覆盖**，不能重复当作当前状态。
@@ -97,7 +121,7 @@ Cocoa集合设计器 **34 passed**、Cocoa管线 **14 passed**、源smoke **6行
 前序fixture、参考对象及匿名卷的清理保留各自历史归属。快照核对后，本轮另用全新owned fixture继续参考观察与源码测试，后续记录单独列明。
 CUA/REA/Ghidra的可用性也是前序交接事实，后续需要使用时再验证当前工具状态。
 
-## 本轮继续顺序
+## 恢复时继续顺序（历史）
 
 1. 以新 owned fixture 实测聚合管线自动任务引用与 change-stream 入口、参数、默认值、错误/取消/保存/重开，
    先区分实际参考行为与现有模板声明，再实现其完整工作流。本快照不预先声称该项已经观察或实现。

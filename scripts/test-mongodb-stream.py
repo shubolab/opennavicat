@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 import hashlib
 import json
 import os
@@ -17,10 +18,17 @@ import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 TARGET = "tests/test_mongodb_pipeline_stream.py"
+SCOPES = {
+    "backend": (TARGET, "test_mongodb_pipeline_stream"),
+    "window": ("tests/test_mongo_stream_window.py", "test_mongo_stream_window"),
+}
 IMAGE = "mongo:8.0.34@sha256:b9924c330a8bbc5800fe9c69f04a84e221eca7b28fd049a0354147d9908fa142"
 SOURCE_PATHS = (TARGET, "opennavicat/mongodb_pipeline.py", "opennavicat/mongodb_pipeline_stream.py",
                 "opennavicat/mongodb_session.py", "scripts/test-mongodb-stream.py",
                 ".github/workflows/build.yml")
+WINDOW_SOURCE_PATHS = ("tests/test_mongo_stream_window.py", "opennavicat/ui/window.py",
+                       "opennavicat/ui/mongo_pipeline.py", "opennavicat/batch_job_runtime.py",
+                       "opennavicat/storage.py")
 COLLECT = '''import json,sys,pytest
 from pathlib import Path
 class Collect:
@@ -98,14 +106,17 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--evidence", type=Path, required=True)
     parser.add_argument("--timeout", type=int, default=240)
+    parser.add_argument("--scope", choices=SCOPES, default="backend")
     args = parser.parse_args()
     directory = args.evidence.resolve()
     directory.mkdir(parents=True, exist_ok=False)
     fixtures = directory / "fixtures"
     fixtures.mkdir()
     run_id = uuid.uuid4().hex
-    hashes = {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest() for name in SOURCE_PATHS}
-    summary = dict(verified=False, run_id=run_id, target=TARGET, reference_endpoint_used=False,
+    target, fixture_module = SCOPES[args.scope]
+    source_paths = (*SOURCE_PATHS, *WINDOW_SOURCE_PATHS) if args.scope == "window" else SOURCE_PATHS
+    hashes = {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest() for name in source_paths}
+    summary = dict(verified=False, run_id=run_id, target=target, scope=args.scope, reference_endpoint_used=False,
                    source_sha256=hashes, emergency_removed=[])
     environment = dict(os.environ, PYTHONPATH=str(ROOT), OPENNAVICAT_TEST_MONGODB="1",
         OPENNAVICAT_MONGODB_STREAM_REPORT_DIR=str(fixtures), OPENNAVICAT_MONGODB_STREAM_RUN_ID=run_id,
@@ -122,14 +133,14 @@ def main():
     try:
         required = directory / "required-cases.json"
         with (directory / "collection.log").open("w") as output:
-            subprocess.run([sys.executable, "-c", COLLECT, str(required), TARGET], cwd=ROOT,
+            subprocess.run([sys.executable, "-c", COLLECT, str(required), target], cwd=ROOT,
                 env=environment, stdout=output, stderr=subprocess.STDOUT, check=True, timeout=60)
         expected = json.loads(required.read_text())
         if (not expected or len(set(expected)) != len(expected)
-                or any(not node.startswith(TARGET + "::") for node in expected)):
+                or any(not node.startswith(target + "::") for node in expected)):
             raise RuntimeError("Finite stream collection did not match its exact declared scope")
         with (directory / "pytest.log").open("w") as output:
-            process = subprocess.Popen([sys.executable, "-m", "pytest", "-q", "-W", "error", TARGET,
+            process = subprocess.Popen([sys.executable, "-m", "pytest", "-q", "-W", "error", target,
                 "--junitxml=" + str(directory / "results.xml")], cwd=ROOT, env=environment,
                 stdout=output, stderr=subprocess.STDOUT, start_new_session=os.name == "posix",
                 creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0)
@@ -146,8 +157,16 @@ def main():
                     except subprocess.TimeoutExpired:
                         process.kill(); process.wait()
         cases = list(ET.parse(directory / "results.xml").getroot().iter("testcase"))
+        module_prefix = target.removesuffix(".py").replace("/", ".")
+        actual = []
+        for case in cases:
+            classname = case.get("classname", "")
+            if classname != module_prefix and not classname.startswith(module_prefix + "."):
+                raise RuntimeError("Finite stream JUnit contains a case from another module")
+            suffix = classname[len(module_prefix):].lstrip(".").replace(".", "::")
+            actual.append(target + "::" + (suffix + "::" if suffix else "") + case.get("name", ""))
         if (status or len(cases) != len(expected)
-                or {case.get("name") for case in cases} != {node.split("::", 1)[1] for node in expected}
+                or Counter(actual) != Counter(expected)
                 or any(case.find(kind) is not None for case in cases for kind in ("failure", "error", "skipped"))):
             raise RuntimeError("Finite stream qualification requires its full exact scope with zero skips")
         receipts = [json.loads(path.read_text()) for path in fixtures.glob("fixture-*.json")]
@@ -156,7 +175,8 @@ def main():
         receipt, = receipts
         canonical = {"aarch64": "arm64", "arm64": "arm64", "x86_64": "amd64", "amd64": "amd64"}
         native_arch = canonical.get(receipt.get("native_image_architecture"))
-        if (receipt.get("run_id") != run_id or receipt.get("image") != IMAGE
+        if (receipt.get("run_id") != run_id or receipt.get("module") != fixture_module
+                or receipt.get("image") != IMAGE
                 or receipt.get("server_version") != "8.0.34"
                 or native_arch is None or canonical.get(receipt.get("docker_architecture")) != native_arch
                 or any(receipt.get(field) is not True for field in (

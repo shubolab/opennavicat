@@ -3,12 +3,15 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import hashlib
+import os
 from pathlib import Path
 import socket
 import subprocess
 import threading
 import time
 import traceback
+import uuid
 from copy import deepcopy
 
 import pytest
@@ -523,3 +526,227 @@ def test_real_batch_demo_runs_two_native_sessions_persists_history_and_detects_b
         assert recreated['source_uuid_bson'] != before['source_uuid_bson']
         with pytest.raises(RuntimeError, match='not verified'):
             recorder.verify_mongo_batch_values(written, history, before, recreated)
+
+
+def _stream_facts(recorder):
+    from bson import BSON, Binary, Timestamp
+    from opennavicat.mongodb_pipeline_stream import FiniteStreamResult, StreamEvent
+    from opennavicat.mongodb_session import BSON_CODEC, canonical_dumps
+    events = []
+    for number, document in enumerate(recorder.mongo_stream_documents(), 1):
+        value = {"_id": {"_data": "generated-token-" + str(number)}, "operationType": "insert",
+                 "ns": {"db": recorder.MONGO_DATABASE, "coll": recorder.MONGO_STREAM_COLLECTION},
+                 "documentKey": {"_id": document["_id"]}, "fullDocument": document,
+                 "clusterTime": Timestamp(1700000000 + number, number)}
+        events.append(StreamEvent(BSON.encode(value, codec_options=BSON_CODEC), canonical_dumps(value)))
+    result = FiniteStreamResult(tuple(events), "empty_batch", .1)
+    before = dict(documents=6, document_bson_sha256="a" * 64,
+                  source_uuid_bson=BSON.encode({"uuid": Binary(b"\x01" * 16, 4)}),
+                  stream_uuid_bson=BSON.encode({"uuid": Binary(b"\x02" * 16, 4)}))
+    readback = dict(marker_absent=True, stream_uuid_bson=before["stream_uuid_bson"],
+                    documents_raw=[BSON.encode(document, codec_options=BSON_CODEC) for document in recorder.mongo_stream_documents()])
+    return result, dict(exact_getmore_observed=True, inserted=2), readback, before, deepcopy(before)
+
+
+@pytest.mark.parametrize("corruption", [None, "missing_event", "partial", "wrong_long", "wrong_namespace",
+    "wrong_canonical", "wrong_readback", "live_marker", "missed_getmore", "source_bson", "source_uuid", "stream_uuid"])
+def test_stream_demo_requires_exact_private_bson_independent_readback_and_cleanup(recorder, corruption):
+    from dataclasses import replace
+    from bson import BSON
+    from opennavicat.mongodb_pipeline_stream import StreamEvent
+    from opennavicat.mongodb_session import BSON_CODEC, canonical_dumps, canonical_loads
+    result, production, readback, before, after = _stream_facts(recorder)
+    if corruption == "missing_event": result = replace(result, events=result.events[:1])
+    elif corruption == "partial": result = replace(result, completion="row_limit")
+    elif corruption in {"wrong_long", "wrong_namespace", "wrong_canonical"}:
+        decoded = canonical_loads(result.events[0].canonical_json)
+        if corruption == "wrong_long": decoded["fullDocument"]["stock"] = float(decoded["fullDocument"]["stock"])
+        elif corruption == "wrong_namespace": decoded["ns"]["coll"] = "other_generated_collection"
+        else: decoded["extra"] = "not in raw BSON"
+        raw = result.events[0].raw_bson if corruption == "wrong_canonical" else BSON.encode(decoded, codec_options=BSON_CODEC)
+        result = replace(result, events=(StreamEvent(raw, canonical_dumps(decoded)), result.events[1]))
+    elif corruption == "wrong_readback": readback["documents_raw"][0] = b"changed"
+    elif corruption == "live_marker": readback["marker_absent"] = False
+    elif corruption == "missed_getmore": production["exact_getmore_observed"] = False
+    elif corruption == "source_bson": after["document_bson_sha256"] = "b" * 64
+    elif corruption == "source_uuid": after["source_uuid_bson"] = b"changed identity"
+    elif corruption == "stream_uuid": readback["stream_uuid_bson"] = b"changed identity"
+    if corruption is None:
+        verified = recorder.verify_mongo_stream_values(result, production, readback, before, after)
+        assert verified["events"] == 2 and verified["raw_bson_and_canonical_verified"]
+        assert verified["cursor_cleanup_verified"] and not verified["automatic_resume_used"]
+        assert "marker" not in verified and "documents_raw" not in verified
+    else:
+        with pytest.raises(RuntimeError, match="exact BSON, readback or source identity"):
+            recorder.verify_mongo_stream_values(result, production, readback, before, after)
+
+
+@pytest.mark.parametrize("method", ["prepare_stream", "stream_readback", "produce_stream_events"])
+def test_stream_demo_independent_io_refuses_gui_thread_before_docker_or_network(recorder, monkeypatch, method):
+    service = recorder.OwnedMongoDemo(replica_set=True)
+    monkeypatch.setattr(service, "inspect", lambda: pytest.fail("No Docker inspection belongs on the GUI thread"))
+    arguments = () if method == "prepare_stream" else ({},) if method == "stream_readback" else (None, "generated", *[threading.Event() for _ in range(4)])
+    with pytest.raises(RuntimeError, match="background owner"):
+        getattr(service, method)(*arguments)
+
+
+def test_stream_cli_requires_explicit_mongodb_before_dependency_or_fixture_access(recorder, monkeypatch):
+    monkeypatch.setattr(recorder.sys, "argv", ["record-demo.py", "--include-stream", "--check-dependencies"])
+    monkeypatch.setattr(recorder, "dependencies", lambda *_args: pytest.fail("Invalid flags must not access external tools"))
+    with pytest.raises(SystemExit) as error:
+        recorder.main()
+    assert error.value.code == 2
+
+
+@pytest.mark.parametrize("method", ["prepare_stream", "stream_readback", "produce_stream_events"])
+def test_stream_native_failure_hides_generated_credentials_and_endpoint(recorder, monkeypatch, method):
+    from concurrent.futures import ThreadPoolExecutor
+    import pymongo
+    service = recorder.OwnedMongoDemo(replica_set=True); service.port = 54321
+    monkeypatch.setattr(service, "inspect", lambda: None)
+    def unavailable(**_kwargs):
+        raise OSError(" ".join(service.private_values()))
+    monkeypatch.setattr(pymongo, "MongoClient", unavailable)
+    arguments = () if method == "prepare_stream" else ({},) if method == "stream_readback" else (None, "generated", *[threading.Event() for _ in range(4)])
+    with ThreadPoolExecutor(max_workers=1) as owner:
+        with pytest.raises(RuntimeError) as error:
+            owner.submit(getattr(service, method), *arguments).result()
+    text = "".join(traceback.format_exception(error.value))
+    assert not any(value in text for value in service.private_values())
+    assert error.value.__suppress_context__ is True
+
+
+@pytest.mark.parametrize("output", [False, True])
+def test_actual_stream_text_pages_are_checked_for_private_visible_values(qtbot, recorder, tmp_path, output):
+    from opennavicat.ui.mongo_pipeline import MongoPipelinePage
+    from opennavicat.mongodb_pipeline import PipelineDefinition, PipelineStage
+    page = MongoPipelinePage("generated", recorder.MONGO_DATABASE, name="Generated")
+    qtbot.addWidget(page)
+    page.load_definition(PipelineDefinition(source=recorder.MONGO_STREAM_COLLECTION,
+                                           stages=[PipelineStage("$changeStream", {})]))
+    result, *_facts = _stream_facts(recorder)
+    page.show_stream_execution(result, 'db.getCollection("generated_stream_events").aggregate([{$changeStream:{}}]);')
+    if output: page.tabs.setCurrentWidget(page.stream_output)
+    page.show(); qtbot.waitExposed(page)
+    recorder.verify_mongo_stream_page(page, output=output)
+    service = recorder.OwnedMongoDemo(replica_set=True); service.port = 54321
+    target = page.stream_output if output else page.messages
+    target.appendPlainText(service.replica_key)
+    with pytest.raises(RuntimeError, match="endpoint or credential"):
+        recorder.assert_visible_privacy(page, tmp_path, service)
+
+
+@pytest.mark.skipif(os.environ.get("OPENNAVICAT_TEST_MONGODB_RECORDER_STREAM") != "1",
+                    reason="Recorder stream qualification creates its own authenticated pinned replica set")
+def test_real_recorder_replica_stream_uses_toolbar_run_preserves_typed_events_and_original_session(
+        qtbot, recorder, tmp_path, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from dataclasses import asdict
+    from pymongo.monitoring import CommandListener
+    from pymongo import MongoClient
+    from pymongo.errors import OperationFailure
+    from PySide6.QtWidgets import QMessageBox
+    from opennavicat.mongodb_session import MongoSession
+    from opennavicat.storage import Store
+    from opennavicat.ui.window import MainWindow
+    from shiboken6 import isValid
+
+    service = recorder.OwnedMongoDemo(replica_set=True)
+    observed_threads, errors = [], []
+    class Wire(CommandListener):
+        def started(self, event): observed_threads.append(threading.get_ident())
+        def succeeded(self, event): pass
+        def failed(self, event): pass
+    original_options = MongoSession._connection_options
+    monkeypatch.setattr(MongoSession, "_connection_options", lambda self: {**original_options(self), "event_listeners": [Wire()]})
+    monkeypatch.setattr(MainWindow, "error", lambda _self, error: errors.append(str(error)))
+    monkeypatch.setattr(MainWindow, "start_navicat_discovery", lambda *_args: pytest.fail("No existing profiles may be discovered"))
+    monkeypatch.setattr(QMessageBox, "question", lambda *_args, **_kwargs: QMessageBox.StandardButton.Discard)
+    class MemoryStore(Store):
+        def secret(self, config, field="password"):
+            return service.password if field == "password" else getattr(config, field)
+    armed, active, release, abort = [threading.Event() for _ in range(4)]
+    window = page = None
+    producer = None
+    auth_rejected = False
+    source_before = {name: hashlib.sha256((recorder.ROOT / name).read_bytes()).hexdigest() for name in (
+        "scripts/record-demo.py", "tests/test_record_demo.py", "opennavicat/mongodb_pipeline_stream.py",
+        "opennavicat/mongodb_session.py", "opennavicat/ui/window.py", "opennavicat/ui/mongo_pipeline.py")}
+    with ThreadPoolExecutor(max_workers=1, thread_name_prefix="recorder-stream-owned") as owner:
+        try:
+            config = owner.submit(service.start).result(timeout=90)
+            def verify_auth_required():
+                with MongoClient(service.host, service.port, directConnection=True,
+                                 serverSelectionTimeoutMS=2000, socketTimeoutMS=2000) as anonymous:
+                    with pytest.raises(OperationFailure) as rejected:
+                        anonymous[config.database][recorder.MONGO_COLLECTION].find_one()
+                    assert rejected.value.code == 13
+            owner.submit(verify_auth_required).result(timeout=10)
+            auth_rejected = True
+            before = owner.submit(service.prepare_stream).result(timeout=15)
+            store = MemoryStore(tmp_path / "generated-workspace")
+            store.state["connections"] = [{**asdict(config), "password": ""}]
+            store.state["navicat_auto_discover"] = False
+            window = MainWindow(store); window.show()
+            window.connect_id(config.id)
+            qtbot.waitUntil(lambda: config.id in window.sessions or bool(errors), timeout=15000)
+            qtbot.waitUntil(lambda: not window.tasks and not window.pool.activeThreadCount(), timeout=15000)
+            assert not errors
+            session = window.sessions[config.id]
+            page = window.open_mongo_pipeline(config.id, config.database)
+            qtbot.waitUntil(lambda: recorder.MONGO_STREAM_COLLECTION in page._sources and not window.tasks, timeout=15000)
+            page.source_combo.setCurrentText(recorder.MONGO_STREAM_COLLECTION)
+            page.operator_combo.setCurrentText("$changeStream"); page.stage_editor.setPlainText("{}")
+            comment = "generated recorder qualification " + uuid.uuid4().hex
+            page.options_editor.comment_edit.setText(comment)
+            assert page.draft().stages[0].body == {}  # No automatic resume option.
+            original_icon = window.tabs.tabIcon(window.tabs.indexOf(page)).cacheKey()
+            producer = owner.submit(service.produce_stream_events, session, comment, armed, active, release, abort)
+            qtbot.waitUntil(armed.is_set, timeout=10000)
+            page.run_action.trigger()
+            qtbot.waitUntil(active.is_set, timeout=10000)
+            recorder.verify_mongo_stream_page(page, busy=True)
+            assert window.tabs.tabIcon(window.tabs.indexOf(page)).cacheKey() != original_icon
+            recorder.assert_visible_privacy(window, tmp_path, service)
+            qtbot.wait(250); release.set()
+            qtbot.waitUntil(lambda: not page.running and page._last_stream_result is not None
+                           and not window.tasks and producer.done(), timeout=15000)
+            production = producer.result()
+            readback, after = owner.submit(service.stream_readback, production["marker"]).result(timeout=15)
+            verified = recorder.verify_mongo_stream_values(page._last_stream_result, production, readback, before, after)
+            recorder.verify_mongo_stream_page(page)
+            page.tabs.setCurrentWidget(page.stream_output); recorder.verify_mongo_stream_page(page, output=True)
+            recorder.assert_visible_privacy(window, tmp_path, service)
+            assert window.sessions[config.id] is session
+            ordinary = owner.submit(session.fetch_documents, config.database, recorder.MONGO_COLLECTION, limit=7).result(timeout=10)
+            assert len(ordinary.documents) == 6 and not ordinary.has_more and not errors
+            assert observed_threads and threading.main_thread().ident not in observed_threads
+            assert window.tabs.tabIcon(window.tabs.indexOf(page)).cacheKey() == original_icon
+            verified["main_window_session_preserved_and_readable"] = True
+        finally:
+            abort.set(); release.set()
+            try:
+                if page is not None and isValid(page) and page.running:
+                    window.stop_mongo_pipeline(page)
+                if producer is not None:
+                    qtbot.waitUntil(producer.done, timeout=20000)
+                if window is not None and isValid(window):
+                    qtbot.waitUntil(lambda: not window.tasks and not window.pool.activeThreadCount(), timeout=15000)
+                    if page is not None and isValid(page):
+                        index = window.tabs.indexOf(page)
+                        if index >= 0: window.tabs.removeTab(index)
+                        page.deleteLater()
+                    window.close(); qtbot.waitUntil(lambda: window._closed, timeout=15000)
+                    qtbot.waitUntil(lambda: not window.tasks and not window.pool.activeThreadCount(), timeout=15000)
+                    window.deleteLater()
+            finally:
+                owner.submit(service.cleanup).result(timeout=30)
+                directory = Path(os.environ.get("OPENNAVICAT_MONGODB_RECORDER_STREAM_REPORT_DIR",
+                                                recorder.ROOT / "artifacts/recorder-stream-owned"))
+                directory.mkdir(parents=True, exist_ok=True)
+                after_hashes = {name: hashlib.sha256((recorder.ROOT / name).read_bytes()).hexdigest() for name in source_before}
+                (directory / "fixture.json").write_text(json.dumps({**service.receipt(), "container_id": service.container_id,
+                    "volumes": service.volumes, "source_sha256": source_before, "source_unchanged": after_hashes == source_before,
+                    "anonymous_access_rejected": auth_rejected, "stream": locals().get("verified"),
+                    "all_database_io_off_gui_thread": bool(observed_threads)
+                        and threading.main_thread().ident not in observed_threads}, indent=2) + "\n")

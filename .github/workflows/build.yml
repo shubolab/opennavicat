@@ -176,6 +176,10 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: python scripts/test-mongodb-stream.py --evidence artifacts/security-integration/mongodb-stream
+      - name: Verify finite stream native MainWindow workflow and page-local cancellation
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python scripts/test-mongodb-stream.py --scope window --evidence artifacts/security-integration/mongodb-stream-window
       - name: Verify interrupted stream fixture cleanup ownership boundaries
         run: python scripts/test-mongodb-stream-cleanup.py --evidence artifacts/security-integration/mongodb-stream-cleanup
       - name: Verify ordinary MongoDB collection backend and designer

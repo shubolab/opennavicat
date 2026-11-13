@@ -8,7 +8,7 @@ OpenNavicat workspace. Only the final GIF and a path-free JSON receipt survive.
 from __future__ import annotations
 
 import argparse
-from contextlib import closing
+from contextlib import closing, contextmanager
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from dataclasses import asdict
@@ -41,6 +41,7 @@ MONGO_BUCKET = "sample_files"
 MONGO_STORAGE_COLLECTION = "generated_storage"
 MONGO_BATCH_PIPELINE_NAME = "生成聚合管道"
 MONGO_BATCH_NAME = "生成批处理作业"
+MONGO_STREAM_COLLECTION = "generated_stream_events"
 MONGO_IMAGE = "mongo:8.0.34@sha256:b9924c330a8bbc5800fe9c69f04a84e221eca7b28fd049a0354147d9908fa142"
 MONGO_STORAGE_TEXT = '{ wiredTiger: { configString: "block_compressor=zlib" } }'
 MONGO_INDEX_DEFAULTS_TEXT = '{ storageEngine: { wiredTiger: { configString: "prefix_compression=false" } } }'
@@ -230,6 +231,71 @@ def _batch_history_snapshot(store):
     return proxy
 
 
+def mongo_stream_documents():
+    from bson import Binary, Decimal128, Int64, ObjectId, Timestamp
+    return [{"_id": ObjectId(f"{number:024x}"), "generated": True, "sequence": number,
+             "stock": Int64(9007199254740993 + number), "price": Decimal128(price),
+             "payload": Binary(bytes([number, 0, 255]), 128), "at": Timestamp(1700000000 + number, number)}
+            for number, price in ((1, "1.25"), (2, "2.50"))]
+
+
+def verify_mongo_stream_values(result, production, readback, before, after):
+    """Private typed events must match actual independent source readback."""
+    from bson import BSON
+    from opennavicat.mongodb_pipeline_stream import FiniteStreamResult
+    from opennavicat.mongodb_session import BSON_CODEC, canonical_loads
+    try:
+        expected = mongo_stream_documents()
+        if (not isinstance(result, FiniteStreamResult) or result.completion != "empty_batch"
+                or result.undelivered_event_count or len(result.events) != 2
+                or production.get("exact_getmore_observed") is not True
+                or production.get("inserted") != 2 or readback.get("marker_absent") is not True
+                or before["documents"] != 6 or after["documents"] != 6
+                or before["document_bson_sha256"] != after["document_bson_sha256"]
+                or before["source_uuid_bson"] != after["source_uuid_bson"]
+                or before["stream_uuid_bson"] != readback["stream_uuid_bson"]
+                or list(readback["documents_raw"]) != [BSON.encode(doc, codec_options=BSON_CODEC) for doc in expected]):
+            raise ValueError
+        for event, document in zip(result.events, expected):
+            decoded = canonical_loads(event.canonical_json)
+            if (BSON.encode(decoded, codec_options=BSON_CODEC) != event.raw_bson
+                    or decoded.get("operationType") != "insert"
+                    or decoded.get("ns") != {"db": MONGO_DATABASE, "coll": MONGO_STREAM_COLLECTION}
+                    or BSON.encode(decoded.get("fullDocument"), codec_options=BSON_CODEC)
+                       != BSON.encode(document, codec_options=BSON_CODEC)
+                    or BSON.encode(decoded.get("documentKey"), codec_options=BSON_CODEC)
+                       != BSON.encode({"_id": document["_id"]}, codec_options=BSON_CODEC)):
+                raise ValueError
+    except Exception:
+        raise RuntimeError("The generated finite stream's exact BSON, readback or source identity was not verified.") from None
+    return {"events": 2, "completion": "empty_batch", "raw_bson_and_canonical_verified": True,
+            "typed_full_documents_independently_read_back": True, "exact_marker_getmore_observed": True,
+            "cursor_cleanup_verified": True, "source_exact_bson_unchanged": True,
+            "source_collection_identity_unchanged": True, "stream_collection_identity_unchanged": True,
+            "bson_types_checked": ["Int64", "Decimal128", "Binary", "Timestamp", "ObjectId"],
+            "automatic_resume_used": False, "event_payload_rendered": False}
+
+
+def verify_mongo_stream_page(page, *, busy=False, output=False):
+    """Inspect real widgets; private typed events must never become a grid."""
+    tabs = [page.tabs.tabText(index) for index in range(page.tabs.count()) if page.tabs.isTabVisible(index)]
+    expected = ["管道", "脚本预览"] if busy else ["管道", "脚本预览", "消息", "输出"]
+    if tabs != expected or page.last_rows or any(table.rowCount() for table in
+            (page.results, page.input_panel.table, page.output_panel.table)) or page.export_action.isEnabled():
+        raise RuntimeError("The generated finite stream did not expose its actual text-only tabs.")
+    if busy:
+        if (not page.running or not page._busy_overlay.isVisible()
+                or not page._busy_spinner.timer.isActive() or page.operator_combo.isEnabled()
+                or not page.stop_action.isEnabled() or page.tabs.currentWidget() is not page.pipeline_tab):
+            raise RuntimeError("The actual finite stream busy overlay was not visible.")
+    else:
+        text = page.messages.toPlainText()
+        if (page.running or "> OK\n" not in text or "> 查询时间:" not in text
+                or text != page.stream_output.toPlainText()
+                or page.tabs.currentWidget() is not (page.stream_output if output else page.messages)):
+            raise RuntimeError("The actual finite stream completion text was not displayed.")
+
+
 def _batch_history_io(store, job_id, result=None):
     """The recorder's local history SQLite stays on the existing I/O owner."""
     from opennavicat.storage import Store
@@ -263,7 +329,7 @@ def dependencies(include_mongodb=False):
 class OwnedMongoDemo:
     """No external endpoint input. Each service has a new identity and password."""
 
-    def __init__(self):
+    def __init__(self, *, replica_set=False):
         self.owner = uuid.uuid4().hex
         self.name = "opennavicat-readme-demo-" + self.owner[:16]
         self.container_id = None
@@ -273,6 +339,10 @@ class OwnedMongoDemo:
         self.port = None
         self.server_version = self.architecture = ""
         self.identity_verified = self.removed = False
+        self.replica_set = bool(replica_set)
+        self.replica_key = secrets.token_hex(48) if self.replica_set else ""
+        self.volumes = []
+        self.volumes_removed = False
 
     @staticmethod
     def _docker(*arguments, missing=False):
@@ -284,7 +354,7 @@ class OwnedMongoDemo:
         except OSError:
             raise RuntimeError("The owned MongoDB demo Docker command could not start.") from None
         if result.returncode:
-            if missing and any(message in result.stderr.lower() for message in ("no such object", "no such container")):
+            if missing and any(message in result.stderr.lower() for message in ("no such object", "no such container", "no such volume")):
                 return None
             # Docker argv may contain this generated service's credential.
             raise RuntimeError("The owned MongoDB demo Docker command failed.")
@@ -303,6 +373,7 @@ class OwnedMongoDemo:
                 or labels.get("opennavicat.test") != "true"
                 or labels.get("opennavicat.task") != "readme-demo"
                 or labels.get("opennavicat.owner") != self.owner
+                or self.replica_set and labels.get("opennavicat.replica-set") != "generated_demo_rs"
                 or (self.container_id is not None and entry.get("Id") != self.container_id)):
             raise RuntimeError("The demo refused to use or remove a container without its exact ownership identity.")
         self.container_id = entry["Id"]
@@ -317,13 +388,25 @@ class OwnedMongoDemo:
         if not 0 < readiness_seconds <= 120:
             raise ValueError("The generated MongoDB readiness budget must be positive and at most 120 seconds.")
 
-        identifier = self._docker("run", "--detach", "--rm", "--name", self.name,
+        arguments = ["run", "--detach", "--rm", "--name", self.name,
             "--label", "opennavicat.test=true", "--label", "opennavicat.task=readme-demo",
             "--label", "opennavicat.owner=" + self.owner, "--publish", "127.0.0.1::27017",
             "-e", "MONGO_INITDB_ROOT_USERNAME=" + self.username,
-            "-e", "MONGO_INITDB_ROOT_PASSWORD=" + self.password, MONGO_IMAGE, "--bind_ip_all")
+            "-e", "MONGO_INITDB_ROOT_PASSWORD=" + self.password]
+        if self.replica_set:
+            script = ('umask 077; printf "%s" "$OWNED_REPLICA_KEY" > /data/generated-rs.key; '
+                      'chown mongodb:mongodb /data/generated-rs.key; '
+                      'exec /usr/local/bin/docker-entrypoint.sh mongod --bind_ip_all '
+                      '--replSet generated_demo_rs --keyFile /data/generated-rs.key')
+            arguments += ["--label", "opennavicat.replica-set=generated_demo_rs",
+                          "-e", "OWNED_REPLICA_KEY=" + self.replica_key,
+                          "--entrypoint", "/bin/bash", MONGO_IMAGE, "-c", script]
+        else:
+            arguments += [MONGO_IMAGE, "--bind_ip_all"]
+        identifier = self._docker(*arguments)
         self.container_id = identifier
         entry = self.inspect()
+        self.volumes = [mount["Name"] for mount in entry.get("Mounts", []) if mount["Type"] == "volume"]
         mappings = entry.get("NetworkSettings", {}).get("Ports", {}).get("27017/tcp") or []
         if len(mappings) != 1 or mappings[0].get("HostIp") != "127.0.0.1":
             raise RuntimeError("The MongoDB demo service must expose exactly one loopback-only port.")
@@ -333,12 +416,22 @@ class OwnedMongoDemo:
             password=self.password, ssl_mode="disable", connect_timeout=3,
             mongo_auth_source="admin", mongo_auth_mechanism="SCRAM-SHA-256")
         deadline = time.monotonic()+readiness_seconds
+        replica_initiated = False
         while True:
             session = MongoSession(config)
             try:
                 with mongo_timeout(remaining_seconds(deadline)):
                     session.connect()
+                    if self.replica_set:
+                        if not replica_initiated:
+                            session.connection.admin.command({"replSetInitiate": {"_id": "generated_demo_rs",
+                                "members": [{"_id": 0, "host": "localhost:27017"}]}})
+                            replica_initiated = True
+                        if not session.connection.admin.command("hello").get("isWritablePrimary"):
+                            raise RuntimeError("The generated replica set has not elected its primary.")
                     self.server_version = str(session.connection.server_info()["version"])
+                    if self.replica_set and self.server_version != "8.0.34":
+                        raise RuntimeError("The generated replica set has the wrong MongoDB version.")
             except Exception:
                 session.close()
                 if time.monotonic() > deadline:
@@ -402,10 +495,112 @@ class OwnedMongoDemo:
     def cleanup(self):
         entry = self.inspect(missing=True)
         if entry is not None:
-            self._docker("rm", "--force", self.container_id)
+            host = entry.get("HostConfig", {})
+            volumes = [mount["Name"] for mount in entry.get("Mounts", []) if mount["Type"] == "volume"]
+            if (host.get("Binds") or host.get("Mounts") or host.get("VolumesFrom")
+                    or any(not re.fullmatch("[0-9a-f]{64}", name) for name in volumes)
+                    or self.volumes and set(self.volumes) != set(volumes)):
+                raise RuntimeError("The demo refused cleanup of unexpected or explicit storage.")
+            self.volumes = volumes
+            for name in self.volumes:
+                users = self._docker("ps", "-a", "--no-trunc", "--filter", "volume=" + name, "--format", "{{.ID}}").split()
+                if users != [self.container_id]:
+                    raise RuntimeError("The demo refused cleanup of shared storage.")
+            self._docker("rm", "--force", "--volumes", self.container_id)
             if self.inspect(missing=True) is not None:
                 raise RuntimeError("The exact owned MongoDB container still exists after cleanup.")
+        if any(self._docker("volume", "inspect", name, missing=True) is not None for name in self.volumes):
+            raise RuntimeError("An exact owned MongoDB anonymous volume remains after cleanup.")
+        self.volumes_removed = True
         self.removed = True
+
+    def private_values(self):
+        return tuple(value for value in (self.password, self.username, self.host, str(self.port) if self.port is not None else "",
+                     self.name, self.owner, self.replica_key) if value)
+
+    @contextmanager
+    def _stream_client(self):
+        from pymongo import MongoClient, timeout as mongo_timeout
+        if threading.get_ident() == threading.main_thread().ident:
+            raise RuntimeError("Independent generated stream I/O needs its background owner.")
+        if not self.replica_set:
+            raise RuntimeError("The generated stream requires its owned replica-set mode.")
+        self.inspect()
+        try:
+            with MongoClient(host=self.host, port=self.port, username=self.username,
+                    password=self.password, authSource="admin", authMechanism="SCRAM-SHA-256",
+                    directConnection=True, serverSelectionTimeoutMS=3000, connectTimeoutMS=3000) as client:
+                with mongo_timeout(30):
+                    yield client
+            self.inspect()
+        except Exception:
+            raise RuntimeError("Independent generated finite-stream I/O failed.") from None
+
+    @staticmethod
+    def _stream_uuid(database):
+        from bson import BSON
+        from opennavicat.mongodb_session import BSON_CODEC
+        with database.list_collections(filter={"name": MONGO_STREAM_COLLECTION}) as cursor:
+            rows = list(cursor)
+        if len(rows) != 1 or rows[0].get("info", {}).get("uuid") is None:
+            raise RuntimeError("The generated stream collection identity is missing.")
+        return BSON.encode({"uuid": rows[0]["info"]["uuid"]}, codec_options=BSON_CODEC)
+
+    def prepare_stream(self):
+        from opennavicat.mongodb_session import BSON_CODEC
+        with self._stream_client() as client:
+            database = client.get_database(MONGO_DATABASE, codec_options=BSON_CODEC)
+            if MONGO_STREAM_COLLECTION in database.list_collection_names():
+                raise RuntimeError("The generated stream collection must be new.")
+            database.create_collection(MONGO_STREAM_COLLECTION)
+            before = read_mongo_batch_source(database)
+            before["stream_uuid_bson"] = self._stream_uuid(database)
+        return before
+
+    def produce_stream_events(self, session, comment, armed, active, release, abort):
+        with self._stream_client() as client:
+            client.admin.command("ping")
+            armed.set()
+            deadline, marker = time.monotonic() + 15, None
+            while time.monotonic() < deadline and not abort.is_set():
+                candidate = session.cancellation_marker()
+                if isinstance(candidate, dict) and candidate.get("userComment") == comment:
+                    operations = list(client.admin.aggregate([{"$currentOp": {"allUsers": False}},
+                        {"$match": {"active": True, "ns": MONGO_DATABASE + "." + MONGO_STREAM_COLLECTION,
+                            "command.getMore": {"$exists": True}, "command.comment": candidate}}]))
+                    if operations:
+                        marker = candidate
+                        break
+                time.sleep(.01)
+            if marker is None:
+                raise RuntimeError("The actual generated finite-stream getMore was not observed.")
+            active.set()
+            while not release.wait(.01):
+                if abort.is_set() or time.monotonic() > deadline:
+                    raise RuntimeError("The generated stream producer was cancelled before insertion.")
+            if abort.is_set():
+                raise RuntimeError("The generated stream producer was cancelled before insertion.")
+            if session.cancellation_marker() != marker or not list(client.admin.aggregate([
+                    {"$currentOp": {"allUsers": False}}, {"$match": {"active": True,
+                        "ns": MONGO_DATABASE + "." + MONGO_STREAM_COLLECTION,
+                        "command.getMore": {"$exists": True}, "command.comment": marker}}])):
+                raise RuntimeError("The generated finite-stream getMore ended before event delivery.")
+            client[MONGO_DATABASE][MONGO_STREAM_COLLECTION].insert_many(mongo_stream_documents())
+            return {"marker": marker, "exact_getmore_observed": True, "inserted": 2}
+
+    def stream_readback(self, marker):
+        from opennavicat.mongodb_session import BSON_CODEC, RAW_CODEC
+        with self._stream_client() as client:
+            database = client.get_database(MONGO_DATABASE, codec_options=BSON_CODEC)
+            with database.get_collection(MONGO_STREAM_COLLECTION, codec_options=RAW_CODEC).find({}).sort("_id", 1).limit(3) as cursor:
+                documents = tuple(document.raw for document in cursor)
+            operations = list(client.admin.aggregate([{"$currentOp": {"allUsers": False, "idleCursors": True}},
+                {"$match": {"$or": [{"command.comment": marker}, {"originatingCommand.comment": marker},
+                                     {"cursor.originatingCommand.comment": marker}]}}]))
+            readback = {"documents_raw": documents, "marker_absent": not operations,
+                        "stream_uuid_bson": self._stream_uuid(database)}
+            after = read_mongo_batch_source(database)
+        return readback, after
 
     def verify_storage_collection(self):
         """Read only this run's new collection using a separate native client."""
@@ -461,7 +656,9 @@ class OwnedMongoDemo:
         return {"image": MONGO_IMAGE, "server_version": self.server_version,
             "image_architecture": self.architecture, "loopback_only": True,
             "exact_container_identity_verified": self.identity_verified,
-            "owned_container_removed": self.removed, "credentials_generated_in_memory": True}
+            "owned_container_removed": self.removed, "anonymous_volumes_removed": self.volumes_removed,
+            "replica_set": self.replica_set, "authentication": "SCRAM-SHA-256",
+            "credentials_generated_in_memory": True}
 
 
 def remaining_seconds(deadline):
@@ -522,7 +719,7 @@ def assert_visible_privacy(window, temporary, mongo=None):
                 or re.search(r"/(?:Users|home|private|tmp|var/folders|Volumes)/|[A-Za-z]:[\\/]|\\\\[^\\]+\\",text)):
             raise RuntimeError("A visible demo widget contains a local filesystem path.")
         if (re.search(r"\b(?:\d{1,3}\.){3}\d{1,3}\b|\[::1\]|localhost|host\.docker\.internal|mongodb(?:\+srv)?://",text,re.I)
-                or (mongo is not None and (any(value in text for value in (mongo.password,mongo.username,mongo.name,mongo.owner))
+                or (mongo is not None and (any(value in text for value in mongo.private_values())
                     or re.search(r"(?<!\w)"+str(mongo.port)+r"(?!\w)",text)))):
             raise RuntimeError("A visible demo widget contains a service endpoint or credential field.")
 
@@ -617,6 +814,9 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
     from opennavicat.ui.theme import apply_theme
     from opennavicat.ui.window import MainWindow, TablePage
 
+    include_stream = bool(getattr(args, "include_stream", False))
+    if include_stream and (mongo is None or not mongo.replica_set):
+        raise RuntimeError("A generated stream recording requires its new owned replica set.")
     io_jobs = []
     gui_thread = threading.get_ident()
 
@@ -694,8 +894,10 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
              "mongo_index_page": None, "sqlite_closed_in_worker": False,
              "mongo_storage_page": None, "mongo_storage_verification": None,
              "mongo_batch_page": None, "mongo_batch_verification": None,
+             "mongo_stream_page": None, "mongo_stream_verification": None,
+             "stream_abort": threading.Event(), "stream_release": threading.Event(),
              "capture_target": window}
-    deadline = time.monotonic() + 120
+    deadline = time.monotonic() + (150 if include_stream else 120)
     capture_timer = QTimer(app)
     capture_timer.setInterval(round(1000 / args.fps))
 
@@ -707,7 +909,7 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
             return
         text = str(error).replace(str(temporary), "<temporary-demo>")
         if mongo is not None:
-            for value in (mongo.password, mongo.username, mongo.host, str(mongo.port), mongo.name, mongo.owner):
+            for value in mongo.private_values():
                 text = text.replace(value, "<generated-demo-service>")
         state["error"] = text
         capture_timer.stop()
@@ -1430,6 +1632,109 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
             raise RuntimeError("The persisted Batch Job history did not display both successful tasks.")
         phase("mongodb_batch_job_history")
         capture(); capture_timer.start()
+        hold(2.4, prepare_mongo_stream if include_stream else finish)
+
+    def prepare_mongo_stream():
+        capture(); capture_timer.stop()
+        window.submit(mongo.prepare_stream, mongo_stream_prepared, fail,
+                      label="准备独立生成的有限流示例")
+
+    def mongo_stream_prepared(before):
+        state["mongo_stream_before"] = before
+        page = window.open_mongo_pipeline(MONGO_CONNECTION_ID, MONGO_DATABASE)
+        if page is None:
+            raise RuntimeError("The actual finite-stream pipeline workspace did not open.")
+        state["mongo_stream_page"] = page
+        wait_for(lambda: MONGO_STREAM_COLLECTION in page._sources and idle(),
+                 arm_mongo_stream_producer, "reading the generated finite-stream source")
+
+    def arm_mongo_stream_producer():
+        page = state["mongo_stream_page"]
+        page.source_combo.setCurrentText(MONGO_STREAM_COLLECTION)
+        page.operator_combo.setCurrentText("$changeStream")
+        page.stage_editor.setPlainText("{}")
+        comment = "generated finite stream " + uuid.uuid4().hex
+        page.options_editor.comment_edit.setText(comment)
+        page.select_stage(0)
+        session = window.sessions[MONGO_CONNECTION_ID]
+        state["mongo_stream_session"] = session
+        state["mongo_stream_original_icon"] = window.tabs.tabIcon(window.tabs.indexOf(page)).cacheKey()
+        armed, active = threading.Event(), threading.Event()
+        state["stream_active"] = active
+        state["stream_producer"] = background_io(mongo.produce_stream_events,
+            session, comment, armed, active, state["stream_release"], state["stream_abort"])
+        def producer_armed():
+            if state["stream_producer"].done():
+                state["stream_producer"].result()
+            return armed.is_set()
+        wait_for(producer_armed, run_mongo_stream, "arming the independent generated event producer")
+
+    def run_mongo_stream():
+        page = state["mongo_stream_page"]
+        page.tabs.setCurrentWidget(page.pipeline_tab)
+        page.run_action.trigger()  # Exercise the real Toolbar Run signal/queue.
+        if not page.running:
+            raise RuntimeError("The actual finite-stream Toolbar Run did not dispatch.")
+        def getmore_active():
+            if state["stream_producer"].done():
+                state["stream_producer"].result()
+            return state["stream_active"].is_set()
+        wait_for(getmore_active, capture_mongo_stream_busy, "observing this run's exact generated getMore")
+
+    def capture_mongo_stream_busy():
+        page = state["mongo_stream_page"]
+        verify_mongo_stream_page(page, busy=True)
+        if window.tabs.tabIcon(window.tabs.indexOf(page)).cacheKey() == state["mongo_stream_original_icon"]:
+            raise RuntimeError("The actual finite-stream tab busy indicator did not change.")
+        phase("mongodb_finite_stream_busy")
+        capture(); capture_timer.start()
+        # Deliver events before the real 1-second getMore wait can return empty,
+        # while retaining actual overlay/tab-ring frames rather than a fake hold.
+        hold(.45, release_mongo_stream_events)
+
+    def release_mongo_stream_events():
+        state["stream_release"].set()
+        page = state["mongo_stream_page"]
+        wait_for(lambda: not page.running and page._last_stream_result is not None
+                 and state["stream_producer"].done() and idle(),
+                 verify_mongo_stream, "finishing the generated finite stream and cursor cleanup")
+
+    def verify_mongo_stream():
+        capture(); capture_timer.stop()
+        page, session = state["mongo_stream_page"], state["mongo_stream_session"]
+        if window.sessions.get(MONGO_CONNECTION_ID) is not session:
+            raise RuntimeError("The finite stream replaced the generated main-window session.")
+        production = state["stream_producer"].result()
+        result = page._last_stream_result
+        def verify_owned_stream():
+            readback, after = mongo.stream_readback(production["marker"])
+            verified = verify_mongo_stream_values(result, production, readback,
+                                                   state["mongo_stream_before"], after)
+            source = session.fetch_documents(MONGO_DATABASE, MONGO_COLLECTION, limit=7)
+            if len(source.documents) != 6 or source.has_more:
+                raise RuntimeError("The original generated session no longer reads its source after the stream.")
+            verified["main_window_session_preserved_and_readable"] = True
+            return verified
+        window.submit(verify_owned_stream, mongo_stream_verified, fail,
+                      label="独立核验有限流 BSON、游标清理与未变的示例源")
+
+    def mongo_stream_verified(verification):
+        state["mongo_stream_verification"] = verification
+        wait_for(idle, show_mongo_stream_messages, "finishing independent finite-stream verification")
+
+    def show_mongo_stream_messages():
+        page = state["mongo_stream_page"]
+        verify_mongo_stream_page(page)
+        phase("mongodb_finite_stream_messages")
+        capture(); capture_timer.start()
+        hold(2.4, show_mongo_stream_output)
+
+    def show_mongo_stream_output():
+        page = state["mongo_stream_page"]
+        page.tabs.setCurrentWidget(page.stream_output)
+        verify_mongo_stream_page(page, output=True)
+        phase("mongodb_finite_stream_output")
+        capture(); capture_timer.start()
         hold(2.4, finish)
 
     def finish():
@@ -1452,12 +1757,16 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
                     raise RuntimeError("The generated collection's actual storage save was not verified.")
                 if not state["mongo_batch_verification"]:
                     raise RuntimeError("The generated Batch Job's actual execution and persisted history were not verified.")
+                if include_stream and not state["mongo_stream_verification"]:
+                    raise RuntimeError("The generated finite stream was not independently verified.")
         window.submit(verify_preview, lambda _result: shutdown(), label="验证生成的演示数据")
 
     def shutdown():
         if state["shutdown"]:
             return
         state["shutdown"] = True
+        state["stream_abort"].set()
+        state["stream_release"].set()
         capture_timer.stop()
         started = time.monotonic()
         discarded = False
@@ -1476,6 +1785,9 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
                     batch_page = state.get("mongo_batch_page")
                     if state["error"] and batch_page is not None and batch_page.running:
                         batch_page.request_cancel()
+                    stream_page = state.get("mongo_stream_page")
+                    if state["error"] and stream_page is not None and stream_page.running:
+                        window.stop_mongo_pipeline(stream_page)
                 elif not window._closed:
                     if not discarded:
                         page = state.get("designer")
@@ -1497,12 +1809,13 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
                                 if index >= 0:
                                     window.tabs.removeTab(index)
                                     page.deleteLater()
-                        page = state.get("mongo_pipeline_page")
-                        if page is not None:
-                            index = window.tabs.indexOf(page)
-                            if index >= 0:
-                                window.tabs.removeTab(index)
-                                page.deleteLater()
+                        for key in ("mongo_pipeline_page", "mongo_stream_page"):
+                            page = state.get(key)
+                            if page is not None:
+                                index = window.tabs.indexOf(page)
+                                if index >= 0:
+                                    window.tabs.removeTab(index)
+                                    page.deleteLater()
                         page = state.get("mongo_batch_page")
                         if page is not None:
                             index = window.tabs.indexOf(page)
@@ -1554,7 +1867,7 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
         raise RuntimeError(state["error"] or "Demo application failed.")
     if not window._closed or not idle():
         raise RuntimeError("The demo exited before its native sessions and window had closed.")
-    if state["count"] < 2 or len(state["phases"]) != (28 if mongo is not None else 6):
+    if state["count"] < 2 or len(state["phases"]) != (31 if include_stream else 28 if mongo is not None else 6):
         raise RuntimeError("The demo did not capture all required workflows.")
     for index, item in enumerate(state["phases"]):
         stop = state["phases"][index + 1]["first_frame"] if index + 1 < len(state["phases"]) else state["count"]
@@ -1599,6 +1912,7 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
         "mongodb_aggregation_pipeline_explain": state.get("mongo_pipeline_explain"),
         "mongodb_aggregation_pipeline_results": state.get("mongo_pipeline_results"),
         "mongodb_batch_job": state["mongo_batch_verification"],
+        "mongodb_finite_stream": state["mongo_stream_verification"],
         "visible_text_privacy_guard": "labels, editors, titles, actions, combos, tree/table display fields; paths/endpoints/credentials rejected before frame save",
         "sqlite_closed_in_worker": state["sqlite_closed_in_worker"],
         "native_window_closed_before_quit": bool(window._closed),
@@ -1616,8 +1930,12 @@ def main():
     parser.add_argument("--fps", type=int, choices=range(3, 11), default=6)
     parser.add_argument("--include-mongodb", action="store_true",
         help="Add actual generated BSON and GridFS workflows using a new owned Docker service")
+    parser.add_argument("--include-stream", action="store_true",
+        help="Add real finite-stream busy/messages/output using an authenticated owned replica set; requires --include-mongodb")
     parser.add_argument("--check-dependencies", action="store_true")
     args = parser.parse_args()
+    if args.include_stream and not args.include_mongodb:
+        parser.error("--include-stream requires --include-mongodb")
     ffmpeg, version = dependencies(args.include_mongodb)
     if args.check_dependencies:
         print(json.dumps({"ffmpeg": version, "palette_filters": True, "Pillow_required": False,
@@ -1635,7 +1953,7 @@ def main():
     # the fixture owner constructs a QImage for the synthetic GridFS upload.
     from PySide6.QtWidgets import QApplication
     application = QApplication(sys.argv[:1])
-    mongo = OwnedMongoDemo() if args.include_mongodb else None
+    mongo = OwnedMongoDemo(replica_set=args.include_stream) if args.include_mongodb else None
     with ThreadPoolExecutor(max_workers=1,thread_name_prefix="demo-io") as io_pool:
         with tempfile.TemporaryDirectory(prefix="opennavicat-readme-demo-") as directory:
             temporary = Path(directory)
@@ -1663,7 +1981,7 @@ def main():
         text = json.dumps(receipt,ensure_ascii=False,indent=2)+"\n"
         forbidden = [str(ROOT),directory,str(Path.home())]
         if mongo is not None:
-            forbidden.extend([mongo.password,mongo.username,mongo.host,mongo.name,mongo.owner])
+            forbidden.extend(mongo.private_values())
         if any(value in text for value in forbidden):
             raise RuntimeError("The public demo receipt contains a local path or generated service identity.")
         io_pool.submit(args.output.with_suffix(".json").write_text,text,"utf-8").result()

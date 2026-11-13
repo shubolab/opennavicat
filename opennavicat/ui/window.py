@@ -8,8 +8,8 @@ from copy import deepcopy
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 
-from PySide6.QtCore import QByteArray, QSize, Qt, QThreadPool, QTimer, Signal
-from PySide6.QtGui import QAction, QFont, QIcon, QKeySequence, QStandardItem, QStandardItemModel
+from PySide6.QtCore import QByteArray, QRectF, QSize, Qt, QThreadPool, QTimer, Signal
+from PySide6.QtGui import QAction, QColor, QFont, QIcon, QKeySequence, QPainter, QPen, QPixmap, QStandardItem, QStandardItemModel
 from PySide6.QtWidgets import (
     QApplication, QAbstractItemView, QComboBox, QDialog, QDialogButtonBox,
     QFileDialog, QFormLayout, QFrame, QHBoxLayout, QHeaderView, QInputDialog,
@@ -38,6 +38,7 @@ from .. import mongodb_collection_maintenance as mongo_maintenance_tools
 from .. import mongodb_timeseries as mongo_timeseries_tools
 from .. import mongodb_views as mongo_view_tools
 from .. import mongodb_pipeline as mongo_pipeline_tools
+from ..mongodb_pipeline_stream import FiniteStreamResult, StreamExecutionError, is_bounded_stream_message
 from ..mongodb_session import MongoConflictError
 from .connection_manager import ConnectionManagerDialog
 from .dialogs import ConnectionDialog, RowDialog, TableDesignerDialog, confirm_ssh_host_key
@@ -68,6 +69,20 @@ from .batch_job_controller import BatchJobController
 
 DESIGNER_PAGES = (TableDesignerPage, IndexDesignerPage, TriggerDesignerPage, MongoIndexDesignerPage, MongoCollectionDesignerPage, MongoTimeSeriesDesignerPage, MongoViewDesignerPage)
 MONGO_PAGES = (MongoCollectionPage, MongoGridFSPage, MongoPipelinePage)
+
+
+class _PipelineDispatchCancelled(DatabaseError):
+    """The serial owner observed cancellation before invoking pipeline work."""
+
+
+def _stream_aggregate_location(script, source):
+    """Locate only this formatter's verified aggregate call, never an error stack."""
+    if type(script) is not str or type(source) is not str:
+        return None
+    prefix = f'db.getCollection({json.dumps(source)}).'
+    if not script.startswith(prefix + 'aggregate('):
+        return None
+    return prefix.count('\n') + 1, len(prefix.rsplit('\n', 1)[-1].encode('utf-16-le')) // 2 + 1
 
 
 @dataclass(frozen=True)
@@ -2069,6 +2084,7 @@ class MainWindow(QMainWindow):
         page.suppress_save_preview = self.store.state.get("suppress_pipeline_save_preview") is True
         page.previewRequested.connect(lambda definition: self.preview_mongo_pipeline(page, definition))
         page.runRequested.connect(lambda definition: self.run_mongo_pipeline(page, definition))
+        page.stopRequested.connect(lambda: self.stop_mongo_pipeline(page))
         page.explainRequested.connect(lambda definition: self.explain_mongo_pipeline(page, definition))
         page.saveRequested.connect(lambda definition: self.save_mongo_pipeline(page, definition))
         page.importRequested.connect(lambda: self.import_mongo_pipeline(page))
@@ -2135,7 +2151,7 @@ class MainWindow(QMainWindow):
                 page.loading = False; page._update_controls(); page.show_error(error)
         self.submit(work, done, failed, label="读取聚合管线源集合")
 
-    def _run_mongo_pipeline_job(self, page, label, work, done, failed):
+    def _run_mongo_pipeline_job(self, page, label, work, done, failed, *, begin=None, animate_tab=False):
         session = self.sessions.get(page.connection_id)
         if (not self._pipeline_page_alive(page) or session is None or page.running
                 or not self._pipeline_session_current(page.connection_id, session)
@@ -2145,7 +2161,28 @@ class MainWindow(QMainWindow):
         cancelled, started = threading.Event(), threading.Event()
         owner_finished = threading.Event()
         self._mongo_pipeline_jobs[token] = (session, cancelled, started)
-        cancellation = {'inflight': False, 'last_attempt': 0.0}
+        cancellation = {'inflight': False, 'last_attempt': 0.0, 'page': page,
+                        'owner_finished': owner_finished}
+        original_icon = self.tabs.tabIcon(self.tabs.indexOf(page))
+        angle = [0]
+
+        def update_tab_busy():
+            if not animate_tab or not self._pipeline_page_alive(page):
+                return
+            pixmap = QPixmap(16, 16)
+            pixmap.fill(Qt.GlobalColor.transparent)
+            painter = QPainter(pixmap)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            painter.setPen(QPen(QColor('#b4b7bc'), 1.7))
+            painter.drawEllipse(QRectF(2, 2, 12, 12))
+            pen = QPen(QColor('#565b62'), 1.7)
+            pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+            painter.setPen(pen)
+            painter.drawArc(QRectF(2, 2, 12, 12), angle[0] * 16, 100 * 16)
+            painter.end()
+            self.tabs.setTabIcon(self.tabs.indexOf(page), QIcon(pixmap))
+            angle[0] = (angle[0] - 30) % 360
+
         timer = QTimer(self)
         timer.setInterval(100)
         def retry_cancel():
@@ -2173,22 +2210,37 @@ class MainWindow(QMainWindow):
         cancellation['retry'] = retry_cancel
         self._mongo_pipeline_cancel_states[token] = cancellation
         timer.timeout.connect(retry_cancel)
+        timer.timeout.connect(update_tab_busy)
         timer.start()
+        if begin is not None:
+            try:
+                begin(cancelled)
+            except Exception as error:
+                timer.stop()
+                timer.deleteLater()
+                self._mongo_pipeline_cancel_states.pop(token, None)
+                self._mongo_pipeline_jobs.pop(token, None)
+                failed(error)
+                self.refresh_actions()
+                return False
         page.set_running(True)
+        update_tab_busy()
         self.refresh_actions()
         def execute():
             started.set()
             try:
                 if cancelled.is_set():
-                    raise DatabaseError("The aggregation-pipeline request was cancelled before dispatch")
+                    raise _PipelineDispatchCancelled("The aggregation-pipeline request was cancelled before dispatch")
                 return work(session, cancelled)
             finally:
                 owner_finished.set()
         def success(value):
-            if self._pipeline_page_alive(page) and self._pipeline_session_current(page.connection_id, session):
+            if (token in self._mongo_pipeline_jobs and self._pipeline_page_alive(page)
+                    and self._pipeline_session_current(page.connection_id, session)):
                 done(value)
         def failure(error):
-            if self._pipeline_page_alive(page):
+            if (token in self._mongo_pipeline_jobs and self._pipeline_page_alive(page)
+                    and self._pipeline_session_current(page.connection_id, session)):
                 failed(error)
         def finished():
             owner_finished.set()
@@ -2198,9 +2250,26 @@ class MainWindow(QMainWindow):
             self._mongo_pipeline_jobs.pop(token, None)
             if self._pipeline_page_alive(page):
                 page.set_running(False)
+                if animate_tab:
+                    self.tabs.setTabIcon(self.tabs.indexOf(page), original_icon)
             self.refresh_actions()
         self.submit(execute, success, failure, label=label, finished=finished)
         return True
+
+    def stop_mongo_pipeline(self, page):
+        """Cancel only this page's captured job, including queued work."""
+        if not self._pipeline_page_alive(page):
+            return False
+        accepted = False
+        for token, state in tuple(self._mongo_pipeline_cancel_states.items()):
+            job = self._mongo_pipeline_jobs.get(token)
+            if (state.get('page') is not page or job is None
+                    or state['owner_finished'].is_set()):
+                continue
+            job[1].set()
+            state['retry']()
+            accepted = True
+        return accepted
 
     def preview_mongo_pipeline(self, page, definition):
         database = page.schema
@@ -2212,6 +2281,7 @@ class MainWindow(QMainWindow):
             page.show_preview, page.show_error)
 
     def run_mongo_pipeline(self, page, definition):
+        definition = deepcopy(definition)
         if any(stage.operator in mongo_pipeline_tools.WRITE_STAGES
                for stage in definition.stages if stage.enabled):
             if QMessageBox.question(
@@ -2219,12 +2289,51 @@ class MainWindow(QMainWindow):
                     "此管线包含 $out 或 $merge，会写入数据库。是否继续？") != QMessageBox.StandardButton.Yes:
                 return False
         database = page.schema
-        definition = deepcopy(definition)
+        is_stream = any(stage.enabled and stage.operator in mongo_pipeline_tools.STREAM_STAGES
+                        for stage in definition.stages)
+        try:
+            script = mongo_pipeline_tools.pipeline_script(definition)
+        except DatabaseError:
+            # Keep the retained BSON draft executable even if this shell
+            # formatter cannot express it exactly. Never replace the draft.
+            script = '/* Script preview is unavailable for this retained BSON draft. */'
+        state = {'elapsed': 0.0}
+
+        def begin(_cancel_event):
+            if is_stream:
+                page.begin_stream_execution(script)
+
+        def work(session, cancel_event):
+            started_at = time.monotonic()
+            try:
+                return mongo_pipeline_tools.execute_pipeline(
+                    session, database, definition, cancel_event=cancel_event)
+            finally:
+                state['elapsed'] = time.monotonic() - started_at
+
+        def done(result):
+            if isinstance(result, FiniteStreamResult):
+                page.show_stream_execution(result, script)
+            else:
+                page.show_execution(*result)
+
+        def failed(error):
+            if is_stream or isinstance(error, StreamExecutionError):
+                if isinstance(error, _PipelineDispatchCancelled):
+                    error = StreamExecutionError('Stream execution was cancelled',
+                        FiniteStreamResult((), 'cancelled', state['elapsed']))
+                if (isinstance(error, StreamExecutionError)
+                        and isinstance(error.partial_result, FiniteStreamResult)
+                        and error.partial_result.completion == 'error'
+                        and error.error_phase == 'aggregate'
+                        and is_bounded_stream_message(error.server_message)):
+                    error.script_location = _stream_aggregate_location(script, definition.source)
+                page.show_stream_error(error, script)
+            else:
+                page.show_error(error)
+
         return self._run_mongo_pipeline_job(
-            page, "运行聚合管线",
-            lambda session, cancelled: mongo_pipeline_tools.execute_pipeline(
-                session, database, definition, cancel_event=cancelled),
-            lambda result: page.show_execution(*result), page.show_error)
+            page, "运行聚合管线", work, done, failed, begin=begin, animate_tab=is_stream)
 
     def explain_mongo_pipeline(self, page, definition):
         database = page.schema

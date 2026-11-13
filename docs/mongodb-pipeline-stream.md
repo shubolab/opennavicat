@@ -5,7 +5,8 @@ stream backend. **The published v0.11.0 release does not contain it.** It is
 not a completed stream workspace, a new release acceptance record or closure of
 the UI/function gates in the [parity matrix](parity-matrix.md).
 
-The reference basis is [AP18-10 and its follow-up](ui-reference-18-mongodb-pipeline.md#ap18-10-follow-up-event-presentation-and-preview-actions).
+The reference basis is [AP18-10 and its follow-up](ui-reference-18-mongodb-pipeline.md#ap18-10-follow-up-event-presentation-and-preview-actions)
+and the later same-tab [AP18-11 observation](ui-reference-18-mongodb-pipeline.md#ap18-11-same-tab-run-presentation-and-busy-controls).
 Navicat 18.0.5 build 321 returned finitely after an empty `getMore`; a generated
 event was independently observed on the wire, while its Messages and Output
 pages showed script, OK and timing text. Stage Preview and Preview All remained
@@ -61,17 +62,31 @@ contains `completion`, `elapsed_seconds` and three known-undelivered fields:
 | `cleanup_failed` | Cursor release could not be confirmed. This is an error even if reading had otherwise finished. |
 
 `StreamExecutionError` derives from `DatabaseError` and exposes
-`partial_result`. UI-facing driver failures use fixed messages and a server
-code where available; authentication rejection keeps its typed flag. Raw driver
-text, credentials, endpoints and server-echoed document values are not copied
-into the displayed message. The original exception remains the cause for
-internal classification.
+`partial_result`. It also carries optional owner-produced `server_message`,
+`error_phase` (`aggregate` / `get_more`) and `script_location` metadata. Only
+the bounded single-line `errmsg` field is extracted from a real server error;
+it is limited to 2,048 characters / 8,192 UTF-8 bytes, excludes control/bidi/
+malformed Unicode, and has complete URI tokens and known owner-profile secrets
+redacted. Raw `str(error)`, a complete response, arbitrary codeName and event
+documents are not display-text sources. The original exception remains the
+cause for internal classification; authentication rejection keeps its flag.
+
+An actual typed error with completion `error`, a valid phase and bounded
+message can display that message. An aggregate's optional position is checked
+against the frozen dispatched script using one-based UTF-16 columns. A valid
+message without a position remains visible; no position is invented for
+`get_more` or an unavailable script formatter. Malformed metadata falls back
+to a validated numeric server code. Cancellation, cleanup failure, row/byte/
+time limits and authentication retain their static status priority. Full
+multiline diagnostics and all server-error variants remain open.
 
 The undelivered counters describe only a document already obtained by this
 invocation but not delivered. They do **not** count remaining driver-buffered
 or server events. In particular, zero does not establish that no events remain.
 The compatibility `rows`/`truncated` iteration is insufficient to present all
-completion and partial-failure facts; caller/UI handling remains an open gate.
+completion and partial-failure facts. The candidate Window now routes the typed
+result/error explicitly; complete partial-data presentation and export remain
+separate gates.
 
 ## Finite cursor and budget behavior
 
@@ -139,7 +154,7 @@ and `$merge` are rejected before dispatch even for writable sessions. A scoped
 database `read` role was tested for this stream/own-cursor cleanup path; this
 does not qualify every authentication mechanism, role or MongoDB deployment.
 
-## Separate evidence scopes
+## Historical backend-only evidence scopes
 
 The following are independent checkpoints. They are not added into a combined
 test total, and their recorded source hashes remain attached to each receipt.
@@ -160,7 +175,7 @@ the new 13-case cleanup module. The newer frozen local checkpoint below
 supersedes it; the next exact-source CI still remains to run. No installer,
 native-platform smoke or published release claim follows from these scopes.
 
-## Frozen local backend checkpoint
+## Historical frozen backend checkpoint before Qt integration
 
 With the pinned native ARM64 JS helper built, the complete default suite passed
 **2,073 cases / 619 conditional skips** in 74.50 seconds. The 619 skips do not
@@ -188,14 +203,67 @@ those volumes are not included in the independent-ID count. These are local
 working-tree measurements before the WIP commit, not six native installers,
 published behavior or complete reference acceptance.
 
-Normal reference-shaped text-only Messages/Output behavior, complete partial
-event/failure presentation, successful Stage Preview/Preview All, supported
-refresh/resume recovery, all raw stage/options variants, other permissions and
-topologies, and Windows/Linux/macOS UI acceptance remain open. The generic
-result-grid compatibility path is not proof of the AP18-10 observed UI. The
-full [original parity scope](parity-matrix.md) remains unchanged.
-In particular, interactive and Batch callers must inspect `row_limit` and
-`deadline` completions instead of treating a normally returned bounded result
-as unconditional full success. Byte-limit failures already raise and the Batch
-error/log contract is tested; returned row/time-boundary handling remains part
-of the pending end-to-end integration.
+## 0.12 candidate Qt and Window checkpoint
+
+The later candidate implements the observed finite text path. Busy stream
+execution leaves two tabs (`管道`, `脚本预览`). Completion shows three tabs for
+an empty result or error, and four for an event-bearing successful result by
+adding `输出`; another empty Run removes Output again. Messages and stable
+Output show the frozen script, status and actual elapsed time. Events remain
+in the private typed result: no ordinary event grid, `last_rows` delivery or
+unqualified event export is enabled. Ordinary preview/run/Explain restores its
+own existing views and clears the stream presentation state.
+
+The lower detail workspace has the observed busy overlay; source collection,
+sampling mode/count and operator are disabled while busy. The page-local Stop
+uses its captured job/session/nonce through the independent cancellation queue;
+the application tab's busy ring is restored to its prior icon afterwards.
+Completed stream Messages/Output keep Save, grey Run and focus; returning to
+Pipeline restores its action group. Busy Import and other unexecuted graph/raw
+editor mutations are not claimed as accepted merely from their visible state.
+
+The following local measurements precede the queued Task ownership fix and
+remain separate from the historical scopes above. They must not be reused as
+qualification of a changed runtime:
+
+| Scope | Result | Qualification boundary |
+| --- | --- | --- |
+| Structured-error backend runner | **46 passed / zero skipped** | 32 pure contracts plus the same 14 real RS cases; six declared source hashes match. Bounded message/redaction and phase handling supplement the earlier protocol checks. |
+| Native Window runner | **16 passed / zero skipped** | Eleven declared source hashes match. Real toolbar-to-wire Run, local/queued/cold/late Stop, exact private BSON, actual invalid-stage message/location, ordinary-view recovery and two real Batch workflows. |
+| Offscreen Qt components | **78 passed / zero skipped** | 57 stream-component and 21 existing pipeline cases. Typed partials, no-location diagnostics, invalid/untrusted metadata, secret causes, state priority and repeated tab restoration are included. |
+| Native Cocoa components + Window | **94 passed / zero skipped**, 28.89 seconds (JUnit) | Actual Cocoa, Darwin arm64, v0.12.0; 13 source hashes unchanged. The exact owned RS container and two volumes were independently confirmed absent. This is a scoped UI check, not complete macOS or six-platform acceptance. |
+| Final default source suite | **2,180 passed / 636 conditional skips**, 82.89 seconds | Built native helper; 201 runtime/test/runner/native/workflow/project paths unchanged. Skips are not counted as real service execution. |
+| Final stream transport / stopped cleanup | **2 / zero skipped** and **13 / zero skipped**, separate scopes | Their declared source hashes match the corresponding final paths. Transport remains standalone TLS/SSH with expected 40573 rejection; cleanup starts no containers and connects to no DB. |
+
+The latest backend and Window receipts are
+`artifacts/stream-structured-errors-backend-qualification/summary.json` and
+`artifacts/stream-structured-errors-window-qualification/summary.json`.
+Other final receipts are under `artifacts/release-012/`, especially
+`final-default/verification.json`, `final-native-cocoa/verification.json` and
+the separate stream-security/stopped-cleanup directories. These remain
+working-tree measurements before a final candidate commit; the old HEAD is not
+the SHA of all currently uncommitted changes. Counts across scopes are not added.
+The [0.12 validation record](validation-0.12.md) tracks installer/CI and demo gates.
+
+An initial parallel collection run ended in SIGSEGV; the separate fresh serial
+retry passed 507 cases with eight containers and sixteen volumes independently
+absent. That retry does not establish the crash's cause. A separate real
+`MainWindow.submit` experiment confirmed completed Task/TaskSignals Python
+objects retained by native callback closures; a minimal ownership fix and
+regression are queued. Its relationship to the SIGSEGV is unproven. Runtime
+changes require fresh relevant qualification before final source/installer
+acceptance; the measurements above remain the pre-fix checkpoint.
+
+Interactive and Batch callers now inspect returned `row_limit` and `deadline`
+instead of recording unconditional full success. Byte overflow remains an
+explicit typed partial failure. Batch history/logs classify these outcomes
+without using server-message text, and cleanup failure retains priority over
+cancellation. The two real Window Batch cases verify independent sessions after
+the main connection is Off, persisted history, and row-limit failure/skip behavior.
+This does not complete the other task categories, scheduler or automation UI.
+
+Complete partial-event workflows, successful Stage Preview/Preview All,
+supported refresh/resume recovery, remaining raw stage/options variants, other
+permissions/topologies and all three platforms' full reference UI acceptance
+remain open. No exact-source six-installer or published 0.12 qualification is
+claimed. The full [original parity scope](parity-matrix.md) remains unchanged.

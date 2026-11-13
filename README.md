@@ -11,15 +11,17 @@ Python + Qt Widgets（PySide6），数据库连接、SQL 和结果均在本机�
 检查 SQL 预览，再查看 MongoDB 文档网格、精确 BSON 类型树、GridFS 图像预览、JavaScript 查询、集合内嵌索引与键编辑，
 以及集合选项、存储配置、结构化排序规则、保存命名与重新打开，
 再打开 MongoDB 聚合管线查看阶段模板、选项、阶段预览、脚本、视觉 Explain 和真实结果，
-最后运行两次已保存管线引用，查看批处理消息与持久历史。
+再运行两次已保存管线引用，查看批处理消息与持久历史，
+最后执行有限 change-stream Run，查看忙时状态、消息与输出。
 连接名、客户、邮箱、日期、订单、商品、BSON、SQL 和图像均由隔离演示工作区生成，
-不读取本机真实连接或业务数据库。单段 GIF 对应 **0.11.0**的实际 Qt 界面，
-28 个阶段、371 帧、约 62 秒；
+不读取本机真实连接或业务数据库。单段 GIF 对应 **0.12.0 候选源码**的实际 Qt 界面，
+31 个阶段、411 帧、68.5 秒；
 最新公开安装器为 **v0.11.0**；
 SQLite 结构和 MongoDB 索引部分展示预览，集合选项、存储与排序规则实际保存并独立核验服务器配置后重新打开；
 聚合管线的阶段模板、选项、分阶段预览、脚本、Explain 和最终结果均由隔离 MongoDB 实际执行或返回。
 批处理使用两个独立会话真实执行，历史实际落盘，独立客户端确认源文档的精确 BSON 与集合 UUID 未变。
-验证范围见 [0.11 验证记录](docs/validation-0.11.md)。
+有限 stream 通过独立生产者取得两个精确 BSON 事件，owner 完成游标清理；界面按实际参考显示脚本、状态和耗时。
+候选验证范围见 [0.12 验证记录](docs/validation-0.12.md)，尚不代表公开安装器已更新。
 
 ![OpenNavicat 示例数据工作流演示](docs/assets/opennavicat-demo.gif)
 
@@ -272,9 +274,9 @@ SQL Server/MongoDB TLS context 并检查原生 BSON 和加密 cipher；这些探
 见 [0.8.1 验证记录](docs/validation-0.8.md)（[0.7](docs/validation-0.7.md)、[0.6](docs/validation-0.6.md)、[0.5](docs/validation-0.5.md)、[0.4](docs/validation-0.4.md)、[0.3](docs/validation-0.3.md)、[0.2](docs/validation-0.2.md)、[0.1 历史记录](docs/validation.md)）。Linux 容器构建可执行 `scripts/build-linux.sh`，
 它在独立环境中测试、打包并运行产物，输出到 `artifacts/linux/`。
 
-README 演示可用 `.venv/bin/python scripts/record-demo.py --include-mongodb --output docs/assets/opennavicat-demo.gif`
+在 macOS 上，README 演示可用 `.venv/bin/python scripts/record-demo.py --platform cocoa --include-mongodb --include-stream --output artifacts/demo-review/opennavicat-demo.gif`
 重新录制，需要预先构建原生 helper、本机已有 ffmpeg 和可用 Docker；脚本只创建本次独有的 loopback MongoDB 服务，结束后核验并清理。
-省略 `--include-mongodb` 可只录制 SQLite 六段。录制前后均不访问用户 Navicat 配置或系统钥匙串。
+应先审查忽略目录中的录制结果，再更新同一份公开 GIF。省略 `--include-stream` 录制原有 MongoDB 工作流；同时省略 `--include-mongodb` 可只录制 SQLite 六段。录制前后均不访问用户 Navicat 配置或系统钥匙串。
 脚本直接记录运行中 Qt 窗口的连续帧，临时样例库与 PNG 自动清理，仅输出一段 GIF 和不含个人路径的记录。
 
 ## 参考、实现与许可证

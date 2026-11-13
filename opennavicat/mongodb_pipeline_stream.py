@@ -3,7 +3,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from contextlib import contextmanager
+from collections.abc import Mapping
+import re
 import time
+import unicodedata
+from urllib.parse import quote, quote_plus
 
 from bson import BSON, Int64
 from pymongo import timeout
@@ -17,6 +21,47 @@ MAX_STREAM_ROWS = 1000
 MAX_STREAM_SECONDS = 120
 MAX_AWAIT_MS = 1000
 CLEANUP_SECONDS = 3
+MAX_STREAM_SERVER_MESSAGE_CHARS = 2048
+
+
+def is_bounded_stream_message(value):
+    """Accept the observed single-line server-message contract, without coercion.
+
+    Multiline error formatting remains unqualified. Controls, bidi format
+    characters and malformed Unicode cannot create extra UI status lines.
+    """
+    return (type(value) is str and 0 < len(value) <= MAX_STREAM_SERVER_MESSAGE_CHARS
+            and not any(unicodedata.category(char) in {'Cc', 'Cf', 'Cs', 'Zl', 'Zp'} for char in value)
+            and len(value.encode('utf-8')) <= 8192)
+
+
+def _server_message(error, session):
+    if (not isinstance(error, OperationFailure) or not isinstance(error.details, Mapping)
+            or type(error.code) is not int or not 0 <= error.code < 2**31
+            or type(error.details.get('ok')) not in (int, float) or error.details['ok'] != 0):
+        return None
+    value = error.details.get('errmsg')
+    if not is_bounded_stream_message(value):
+        return None
+    # A driver exception's display text and detailed response may contain
+    # credentials. Read only errmsg and remove complete URI tokens plus this
+    # owner profile's exact secrets and their URL-encoded representations.
+    patterns = [r'(?i:\b[a-z][a-z0-9+.-]*://[^\s<>\"\x27]+)']
+    secret_patterns = {}
+    for name in ('password', 'ssh_password', 'ssh_key_passphrase', 'ssl_key_password'):
+        secret = getattr(session.config, name, None)
+        if type(secret) is str and 0 < len(secret) <= MAX_STREAM_SERVER_MESSAGE_CHARS:
+            secret_patterns[re.escape(secret)] = len(secret)
+            try:
+                encoded_values = {quote(secret, safe=''), quote_plus(secret, safe='')}
+            except UnicodeError:
+                encoded_values = set()
+            for encoded in encoded_values:
+                if encoded != secret:
+                    secret_patterns['(?i:' + re.escape(encoded) + ')'] = len(encoded)
+    patterns.extend(sorted(secret_patterns, key=secret_patterns.get, reverse=True))
+    safe = re.sub('|'.join(patterns), '[redacted]', value)
+    return safe if is_bounded_stream_message(safe) else None
 
 
 @dataclass(frozen=True)
@@ -55,9 +100,16 @@ class FiniteStreamResult:
 
 
 class StreamExecutionError(DatabaseError):
-    def __init__(self, message, result, *, authentication_required=False):
+    def __init__(self, message, result, *, authentication_required=False,
+                 server_message=None, error_phase=None, script_location=None):
         super().__init__(message, authentication_required=authentication_required)
         self.partial_result = result
+        is_server_error = isinstance(result, FiniteStreamResult) and result.completion == 'error' and not authentication_required
+        self.server_message = server_message if is_server_error and is_bounded_stream_message(server_message) else None
+        self.error_phase = error_phase if is_server_error and type(error_phase) is str and error_phase in {'aggregate', 'get_more'} else None
+        self.script_location = script_location if (
+            is_server_error and type(script_location) is tuple and len(script_location) == 2
+            and all(type(value) is int and 1 <= value < 2**31 for value in script_location)) else None
 
 
 def _marked_operations(control, marker):
@@ -170,6 +222,7 @@ def execute_finite_stream(session, database, definition, *, limit=MAX_STREAM_ROW
     events, raw_size, rendered_size = [], 0, 0
     undelivered_count, undelivered_raw, undelivered_rendered = 0, 0, 0
     completion, cursor, cursor_ids, dispatched, client = "empty_batch", None, set(), False, None
+    phase = None
 
     def result():
         return FiniteStreamResult(tuple(events), completion, time.monotonic() - started,
@@ -182,8 +235,10 @@ def execute_finite_stream(session, database, definition, *, limit=MAX_STREAM_ROW
             with _stream_command_budget(session, options, deadline, cancel_event) as client:
                 _check_pipeline_dispatch(session, deadline, cancel_event)
                 dispatched = True
+                phase = 'aggregate'
                 cursor = client.get_database(database, codec_options=RAW_CODEC)[definition.source].aggregate(
                     documents, **options)
+                phase = None
                 cursor.batch_size(min(requested_batch or 100, limit, 100))
                 while True:
                     if _pipeline_cancelled(session, cancel_event):
@@ -201,7 +256,9 @@ def execute_finite_stream(session, database, definition, *, limit=MAX_STREAM_ROW
                     # getMore keeps its own maxAwaitTimeMS field. CSOT here
                     # bounds network wait without rewriting that field.
                     with timeout(remaining):
+                        phase = 'get_more'
                         document = cursor.try_next()
+                        phase = None
                     if document is not None:
                         undelivered_count = 1
                         undelivered_raw = len(document.raw)
@@ -250,12 +307,14 @@ def execute_finite_stream(session, database, definition, *, limit=MAX_STREAM_ROW
                 message = "Stream execution was cancelled"
             elif completion == "deadline":
                 message = "The finite stream elapsed-time budget was reached"
-            elif isinstance(error, OperationFailure):
+            elif isinstance(error, OperationFailure) and type(error.code) is int and 0 <= error.code < 2**31:
                 message = "Finite stream execution failed (server code " + str(error.code) + ")"
             else:
                 message = "Finite stream execution failed"
             raise StreamExecutionError(message, result(), authentication_required=(
-                isinstance(error, OperationFailure) and error.code == 18)) from error
+                isinstance(error, OperationFailure) and error.code == 18),
+                server_message=_server_message(error, session) if completion == 'error' else None,
+                error_phase=phase if isinstance(error, OperationFailure) else None) from error
         finally:
             try:
                 if dispatched:

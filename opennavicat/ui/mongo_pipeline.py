@@ -3,8 +3,9 @@ from __future__ import annotations
 
 from copy import deepcopy
 import json
+import math
 
-from PySide6.QtCore import QMimeData, QPoint, QPointF, QRectF, Qt, Signal
+from PySide6.QtCore import QEvent, QMimeData, QPoint, QPointF, QRectF, QThread, QTimer, Qt, Signal
 from PySide6.QtGui import QAction, QColor, QDrag, QKeySequence, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import (
     QAbstractItemView, QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
@@ -18,6 +19,7 @@ from PySide6.QtWidgets import (
 from bson import BSON
 
 from opennavicat.database import DatabaseError
+from opennavicat.js_engine.server_errors import server_failure
 from opennavicat.mongodb_pipeline import (
     REFERENCE_OPTION_DEFAULTS, STAGE_NAMES, PipelineDefinition, PipelineExplain,
     PipelinePreview, PipelineStage,
@@ -25,10 +27,70 @@ from opennavicat.mongodb_pipeline import (
     to_nagg, validate_pipeline,
 )
 from opennavicat.mongodb_session import BSON_CODEC, canonical_dumps, canonical_loads
+from opennavicat.mongodb_pipeline_stream import (
+    FiniteStreamResult, StreamExecutionError, is_bounded_stream_message,
+)
 from opennavicat.mongodb_stage_templates import CREATE_TOOL_STAGES, STAGE_EDITOR_TEMPLATES
 
-from .icons import tool_icon
+from .icons import icon, tool_icon
 from .mongo_collation import LOCALE_SUGGESTIONS
+
+
+class _PipelineBusySpinner(QWidget):
+    """Original Qt indicator inside the observed lower-workspace overlay."""
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.setFixedSize(28, 28)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.angle = 0
+        self.timer = QTimer(self)
+        self.timer.setInterval(80)
+        self.timer.timeout.connect(self._advance)
+
+    def _advance(self):
+        self.angle = (self.angle + 30) % 360
+        self.update()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(QPen(QColor("#62666c"), 3))
+        painter.drawEllipse(QRectF(3, 3, 22, 22))
+        painter.setPen(QPen(QColor("#459bd9"), 3))
+        painter.drawArc(QRectF(3, 3, 22, 22), self.angle * 16, 100 * 16)
+
+
+class _PipelineBusyOverlay(QWidget):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.spinner = _PipelineBusySpinner(self)
+        parent.installEventFilter(self)
+        self.setGeometry(parent.rect())
+        self.hide()
+
+    def eventFilter(self, target, event):
+        if target is self.parentWidget() and event.type() == QEvent.Type.Resize:
+            self.setGeometry(target.rect())
+        return super().eventFilter(target, event)
+
+    def resizeEvent(self, event):
+        self.spinner.move((self.width() - self.spinner.width()) // 2,
+                          (self.height() - self.spinner.height()) // 2)
+        super().resizeEvent(event)
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        background = self.palette().base().color()
+        background.setAlpha(225)
+        painter.fillRect(self.rect(), background)
+
+    def set_active(self, active):
+        self.setVisible(active)
+        if active:
+            self.raise_()
+            self.spinner.timer.start()
+        else:
+            self.spinner.timer.stop()
 
 
 class _PipelineStageCard(QPushButton):
@@ -1258,6 +1320,7 @@ class MongoPipelinePage(QWidget):
     dirtyChanged = Signal(bool)
     previewRequested = Signal(object)
     runRequested = Signal(object)
+    stopRequested = Signal()
     explainRequested = Signal(object)
     saveRequested = Signal(object)
     importRequested = Signal()
@@ -1284,6 +1347,10 @@ class MongoPipelinePage(QWidget):
         self._explain_count = 0
         self._sources = []
         self.last_rows = []
+        self._stream_mode = False
+        self._last_stream_result = None
+        self._normal_explain_visible = False
+        self._busy_spinner = None
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
@@ -1295,6 +1362,9 @@ class MongoPipelinePage(QWidget):
         self.preview_all_action = self._action("预览全部", "run", self.request_preview_all)
         self.run_action = self._action("运行", "run", self.request_run)
         self.explain_action = self._action("解释", "query", self.request_explain)
+        self.stop_action = self._action("停止", "stop", self.request_stop)
+        self.stop_action.setObjectName("mongoPipelineStop")
+        self.stop_action.setIcon(icon("stop", 18))
         self.export_action = self._action("导出结果", "export", self.exportRequested.emit)
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
@@ -1417,6 +1487,8 @@ class MongoPipelinePage(QWidget):
         self.detail_stack = QStackedWidget()
         self.detail_stack.addWidget(self.splitter)
         self.detail_stack.addWidget(self.options_editor)
+        self._busy_overlay = _PipelineBusyOverlay(self.detail_stack)
+        self._busy_spinner = self._busy_overlay.spinner
         pipeline_layout.addWidget(self.detail_stack, 1)
         self.tabs.addTab(self.pipeline_tab, "管道")
 
@@ -1444,6 +1516,10 @@ class MongoPipelinePage(QWidget):
         self.results.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.results.setHorizontalHeaderLabels(["Canonical Extended JSON"])
         self.tabs.addTab(self.results, "结果")
+        self.stream_output = QPlainTextEdit(self)
+        self.stream_output.setReadOnly(True)
+        self.stream_output.setObjectName("mongoPipelineStreamOutput")
+        self.stream_output.hide()
         self.explain_panel = MongoPipelineExplainPanel()
         self.explain_tab_index = self.tabs.addTab(self.explain_panel, "解释")
         self.tabs.setTabVisible(self.explain_tab_index, False)
@@ -1508,6 +1584,8 @@ class MongoPipelinePage(QWidget):
         self._source_changed(self.source_combo.currentText())
 
     def load_definition(self, definition, *, pipeline_id=None):
+        self._assert_gui_thread()
+        self._leave_stream_mode()
         self.definition = deepcopy(definition)
         if not self.definition.stages:
             self.definition.stages = [PipelineStage(reference_mql=STAGE_EDITOR_TEMPLATES['$match'])]
@@ -1592,6 +1670,8 @@ class MongoPipelinePage(QWidget):
             self.detail_stack.setCurrentWidget(self.options_editor)
         else:
             self.detail_stack.setCurrentWidget(self.splitter)
+        if self.running:
+            self._busy_overlay.raise_()
 
     def _commit_options_editor(self):
         try:
@@ -1695,6 +1775,7 @@ class MongoPipelinePage(QWidget):
     def _tab_changed(self, index):
         if self.tabs.widget(index) is self.script_tab:
             self._render_script()
+        self._update_controls()
 
     def select_stage(self, index):
         self.options_button.setChecked(False)
@@ -1892,6 +1973,8 @@ class MongoPipelinePage(QWidget):
             table.setToolTip(title)
 
     def show_preview(self, preview):
+        self._assert_gui_thread()
+        self._leave_stream_mode()
         self.options_button.setChecked(False)
         self._preview = preview
         index = self.definition.selected_stage
@@ -1914,6 +1997,8 @@ class MongoPipelinePage(QWidget):
             f"最终 {len(preview.final_rows)} 行" + ("；结果已截断" if preview.truncated else ""))
 
     def show_execution(self, rows, truncated=False):
+        self._assert_gui_thread()
+        self._leave_stream_mode()
         self.options_button.setChecked(False)
         self.last_rows = list(rows)
         self.show_rows(self.results, rows)
@@ -1922,6 +2007,8 @@ class MongoPipelinePage(QWidget):
         self._update_controls()
 
     def show_explain(self, explain):
+        self._assert_gui_thread()
+        self._leave_stream_mode()
         self.options_button.setChecked(False)
         self._explain = explain
         self._explain_count += 1
@@ -1935,6 +2022,155 @@ class MongoPipelinePage(QWidget):
         self.tabs.setTabText(self.explain_tab_index, f"解释 {self._explain_count}")
         self.tabs.setTabVisible(self.explain_tab_index, True)
         self.tabs.setCurrentWidget(self.explain_panel)
+
+    def _assert_gui_thread(self):
+        if QThread.currentThread() != self.thread():
+            raise RuntimeError("Pipeline widgets must be accessed on their GUI thread")
+
+    def _enter_stream_mode(self):
+        if not self._stream_mode:
+            self._normal_explain_visible = self.tabs.isTabVisible(self.explain_tab_index)
+            index = self.tabs.indexOf(self.results)
+            self.tabs.removeTab(index)
+            self.tabs.insertTab(index, self.stream_output, "输出")
+            self._stream_mode = True
+        self.tabs.setTabVisible(self.explain_tab_index, False)
+        self.tabs.setTabVisible(self.tabs.indexOf(self.stream_output), False)
+        self.tabs.setTabVisible(self.tabs.indexOf(self.messages), False)
+        self.last_rows = []
+        self._preview = None
+        for table in (self.results, self.input_panel.table, self.output_panel.table):
+            table.clearContents()
+            table.setRowCount(0)
+            table.setColumnCount(1)
+            table.setHorizontalHeaderLabels(["Canonical Extended JSON"])
+        self._update_controls()
+
+    def _leave_stream_mode(self):
+        if self._stream_mode:
+            index = self.tabs.indexOf(self.stream_output)
+            self.tabs.removeTab(index)
+            self.tabs.insertTab(index, self.results, "结果")
+            self.stream_output.hide()
+            self.tabs.setTabVisible(self.explain_tab_index, self._normal_explain_visible)
+            self.tabs.setTabVisible(self.tabs.indexOf(self.messages), True)
+            self.messages.clear()
+            self._stream_mode = False
+            self.tabs.setCurrentWidget(self.pipeline_tab)
+        self._last_stream_result = None
+        self.stream_output.clear()
+
+    def begin_stream_execution(self, script):
+        """Prepare a frozen script on the GUI thread; the window owns dispatch."""
+        self._assert_gui_thread()
+        self._enter_stream_mode()
+        self._last_stream_result = None
+        self.options_button.setChecked(False)
+        self.messages.setPlainText(script if isinstance(script, str) else "")
+        self.stream_output.setPlainText(self.messages.toPlainText())
+        self.tabs.setCurrentWidget(self.pipeline_tab)
+
+    @staticmethod
+    def _stream_status(result, *, failed=False, authentication_required=False, server_code=None):
+        completion = result.completion if isinstance(result, FiniteStreamResult) else None
+        # Cleanup failure retains precedence even when cancellation was also
+        # requested. No exception/cause or event payload is rendered here.
+        if completion == "cleanup_failed":
+            return "[Error] Stream cursor cleanup could not be confirmed"
+        if completion == "cancelled":
+            return "[Error] Stopped by user"
+        if completion == "byte_limit":
+            return "[Error] Byte limit reached; an obtained event was not delivered"
+        if completion == "row_limit":
+            return "[Warning] Row limit reached; the finite result is partial"
+        if completion == "deadline":
+            return "[Error] Finite stream time limit reached"
+        if authentication_required:
+            return "[Error] Database authentication was rejected"
+        if type(server_code) is int:
+            return f"[Error] Finite stream execution failed (server code {server_code})"
+        if (failed or completion != "empty_batch"
+                or result.undelivered_event_count):
+            return "[Error] Finite stream execution failed"
+        return "OK"
+
+    def _present_stream(self, result, script, status, *, output_available=False, location=None):
+        self._enter_stream_mode()
+        self.options_button.setChecked(False)
+        self._last_stream_result = result if isinstance(result, FiniteStreamResult) else None
+        prefix = script if isinstance(script, str) else ""
+        if prefix and not prefix.endswith("\n"):
+            prefix += "\n"
+        lines = ["> " + status]
+        if location is not None:
+            lines.append(f"at line {location[0]}, column {location[1]}")
+        if (isinstance(result, FiniteStreamResult)
+                and isinstance(result.elapsed_seconds, (int, float))
+                and not isinstance(result.elapsed_seconds, bool)
+                and math.isfinite(result.elapsed_seconds) and result.elapsed_seconds >= 0):
+            lines.append(f"> 查询时间: {result.elapsed_seconds:.3f}s")
+        text = prefix + "\n".join(lines) + "\n"
+        self.messages.setPlainText(text)
+        self.stream_output.setPlainText(text)
+        self.tabs.setTabVisible(self.tabs.indexOf(self.messages), True)
+        self.tabs.setTabVisible(self.tabs.indexOf(self.stream_output), output_available)
+        self.tabs.setCurrentWidget(self.messages)
+
+    def show_stream_execution(self, result, script):
+        self._assert_gui_thread()
+        self._present_stream(result, script, self._stream_status(result), output_available=bool(
+            isinstance(result, FiniteStreamResult) and result.completion == "empty_batch" and result.events))
+
+    def show_stream_error(self, error, script):
+        self._assert_gui_thread()
+        result = getattr(error, "partial_result", None)
+        diagnostic = self._stream_diagnostic(error, script)
+        if diagnostic is not None:
+            message, location = diagnostic
+            self._present_stream(result, script, "[Error] " + message, location=location)
+        else:
+            failure = server_failure(error)
+            self._present_stream(result, script, self._stream_status(
+                result, failed=True, authentication_required=bool(
+                    getattr(error, "authentication_required", False)),
+                server_code=failure.code if failure is not None else None))
+
+    @staticmethod
+    def _stream_diagnostic(error, script):
+        """Keep bounded owner messages; locations apply only to aggregates."""
+        if (not isinstance(error, StreamExecutionError)
+                or not isinstance(getattr(error, "partial_result", None), FiniteStreamResult)
+                or error.partial_result.completion != "error"
+                or error.authentication_required or not isinstance(script, str)):
+            return None
+        phase = getattr(error, "error_phase", None)
+        message = getattr(error, "server_message", None)
+        location = getattr(error, "script_location", None)
+        if (type(phase) is not str or phase not in {"aggregate", "get_more"}
+                or not is_bounded_stream_message(message)):
+            return None
+        if location is None:
+            return message, None
+        if phase != "aggregate" or type(location) is not tuple or len(location) != 2:
+            return None
+        line, column = location
+        if any(type(value) is not int or not 1 <= value <= 2**31 - 1 for value in (line, column)):
+            return None
+        lines = script.splitlines()
+        if line > len(lines):
+            return None
+        try:
+            line_length = len(lines[line - 1].encode("utf-16-le")) // 2
+        except UnicodeEncodeError:
+            return None
+        if column > line_length + 1:
+            return None
+        return message, (line, column)
+
+    def request_stop(self):
+        self._assert_gui_thread()
+        if self.running and self.stop_action.isEnabled():
+            self.stopRequested.emit()
 
     def request_preview_all(self):
         try:
@@ -1977,17 +2213,32 @@ class MongoPipelinePage(QWidget):
         self.load_definition(definition, pipeline_id=pipeline_id)
 
     def show_error(self, error):
+        self._assert_gui_thread()
+        self._leave_stream_mode()
         self.options_button.setChecked(False)
         self.messages.setPlainText(str(error))
         self.tabs.setCurrentWidget(self.messages)
+        self._update_controls()
 
     def set_running(self, value):
+        self._assert_gui_thread()
         self.running = bool(value)
+        self._busy_overlay.set_active(self.running)
         self._update_controls()
 
     def _update_controls(self):
-        self.run_action.setEnabled(not self.running and not self.loading)
-        self.export_action.setEnabled(bool(self.last_rows) and not self.running)
+        stream_text = (self._stream_mode and not self.running
+                       and self.tabs.currentWidget() in (self.messages, self.stream_output))
+        for action in (self.import_action, self.preview_all_action, self.explain_action,
+                       self.stop_action, self.export_action):
+            action.setVisible(not stream_text)
+        self.run_action.setEnabled(not self.running and not self.loading and not stream_text)
+        self.stop_action.setEnabled(self.running and not self.loading)
+        self.operator_combo.setEnabled(not self.running and not self.loading)
+        self.source_combo.setEnabled(not self.running and not self.loading)
+        self.sample_mode.setEnabled(not self.running and not self.loading)
+        self.sample_size.setEnabled(not self.running and not self.loading and self.definition.sample_mode != "all")
+        self.export_action.setEnabled(bool(self.last_rows) and not self.running and not self._stream_mode)
         self.preview_all_action.setEnabled(not self.running and not self.loading)
         self.explain_action.setEnabled(not self.running and not self.loading)
         self.save_action.setEnabled(not self.loading and (self.dirty or not self.pipeline_id))

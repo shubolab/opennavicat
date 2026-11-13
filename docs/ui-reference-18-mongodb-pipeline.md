@@ -494,3 +494,72 @@ not proof of unobserved reference behavior. The fixture was disconnected and rem
 after verifying its exact container ID, owner label and loopback port. The later
 AU18/AP18-09 observations above narrow some unknowns without closing the
 remaining automation, stream or three-platform gates.
+
+## AP18-11 Same-tab Run presentation and busy controls
+
+On 2026-11-13, reference **18.0.5 build 321** was observed through CUA with a
+new exact-owned native ARM64 MongoDB **8.0.34** single-node replica set. Only
+the existing generated, password-free Task Reference profile was repointed;
+authentication remained `None` and the exposed port was loopback-only. A fresh,
+unsaved Pipeline tab used only generated `sales` documents. Every Run below was
+started from `管道`; the Script Preview page was visited only to check a
+generated script before returning to `管道`. Neither Stage Preview nor Preview
+All was executed or retried.
+
+The same tab was observed through the following sequence. Completed messages
+were read after independent server checkpoints; initial reads sometimes still
+showed the previous execution's text and elapsed time.
+
+| Phase | Completed tabs and selection | Stable text/presentation |
+| --- | --- | --- |
+| First Run, `$changeStream: {}`, no new event | `管道`, `脚本预览`, `消息`; `消息` selected; no `输出` | Aggregate script, `> OK`, `> 查询时间: 1.034s`. Owned profiler recorded an empty getMore at **05:42:24.243 UTC**. |
+| Producer inserts only during this Run's active getMore | The same three tabs plus `输出`; `消息` selected on completion | `> OK`, **1.035 s**. Profiler recorded one event at **05:43:23.071 UTC**, then an empty batch at **05:43:24.077 UTC**. |
+| Unchanged pipeline, another Run without a new event | Returned to three tabs; `输出` removed; `消息` selected | `> OK`, **1.006 s**; an empty getMore at **05:44:08.503 UTC**. Output visibility was not sticky in this sequence. |
+| Second controlled event Run, then explicitly select `输出` | Four tabs; `输出` selected | Same-phase screenshot and AX state showed the aggregate script, `> OK`, and **1.025 s** in the selected Output page. No event-envelope fields, result grid or paging controls appeared. Profiler recorded one event at **05:44:56.192 UTC**, followed by an empty batch at **05:44:57.193 UTC**. |
+| Add `$limit: 1` after the stream and Run | Three tabs, no `输出`; `消息` selected | Script followed by `> [Error] $limit is not permitted in a $changeStream pipeline`, a separate `at line 1, column 27` line, and `> 查询时间: 0.002s`. |
+| Generated resume request plus bounded slow `$addFields`, then Stop | Three completed tabs, no `输出`; `消息` selected | Script followed by `> [Error] Stopped by user` and `> 查询时间: 23.176s`; no line/column was displayed. The owned checkpoint then had no active operation or idle stream cursor. |
+| Same slow pipeline, Source selected before Run, allowed to finish | Four completed tabs; `消息` selected | `> OK`, **41.022 s**. The JavaScript function had a generated 20-second loop per invocation; this observation does not establish its evaluation count or a 20-second total execution bound. |
+
+The first event Run's initially selected Output page briefly exposed an empty
+text area. That transient state is not a stable empty-output contract. The
+second controlled event Run explicitly selected the Run-level Output tab and
+captured its selected AX state and visible script/OK/time together. This
+corroborates AP18-10's text presentation, while separating it from both the
+preceding Message page and the stage's `输出预览` pane. It does not establish
+useful event rendering.
+
+Two busy snapshots used the same generated resume request and slow stage, with
+Stage 2 selected for the Stop run and Source preselected for the naturally
+completed run:
+
+| Control or surface | Observed busy state | After completion / qualification limit |
+| --- | --- | --- |
+| Page tabs | Only `管道` and `脚本预览` were visible; `管道` remained selected | Completed Message/Output pages were rebuilt as shown above. |
+| Save, Import Query and focus controls | Present in AX without a disabled annotation | Not invoked while busy; their complete action behavior remains untested. |
+| Preview All, Run and Explain | Not listed in the busy AX tree; their icons were visibly grey | Returning to idle Pipeline restored their AX buttons. On completed Message/Output pages the inspected toolbar showed Save, grey Run and focus, rather than the full Pipeline group. |
+| Stop | Separate `停止` AX button and bright red square | Idle Pipeline screenshots retained a dark outlined square, although AX no longer listed Stop. This is not evidence that the physical idle placeholder disappears. |
+| Stage operator | Combo explicitly `(disabled)` | Returned to `(settable)` after completion. |
+| Source collection | `sales` combo explicitly `(disabled)` | Returned to `(settable)` after completion. |
+| Source sampling method/count | `随机` popup and `1,000` field explicitly `(disabled)` | Both lost their disabled annotations after completion. |
+| Busy indicator | Large overlay in the lower detail workspace, visible over both the raw-stage editor and the Source settings in their respective snapshots; a small busy ring also appeared beside the application tab | No stage-card spinner was observed. |
+| Raw editor and graph affordances | AX retained the raw editor value under the overlay. Clicking the Source circle during the Stage-2 busy run did not change its selected detail panel. Stage-enable and insertion affordances were still drawn | Raw editing, stage toggling, insertion and drag behavior during execution were not attempted and remain unknown. Their appearance alone does not establish operability. |
+
+The unsaved tab was closed with `不保存`, returning to an empty Pipeline object
+list. The generated profile was explicitly disconnected and observed `Off`.
+A post-Quit AX read unexpectedly relaunched the selected app; that disconnected
+workspace was checked and normally quit again. The final application inventory,
+without another AX read, confirmed **not running**. After the final successful
+run and exit, the native checkpoint still found **one idle owned cursor and no
+active operation**; this is not a cursor-release guarantee. The exact container
+and its two recorded anonymous volumes were then removed and independently
+verified absent. The harmless generated profile remains Off with the removed
+fixture endpoint; no pipeline, job or other local metadata was permanently
+deleted.
+
+AP18-11 is a custom CUA observation ID, not a REA Evidence ID. Private fixture,
+profiler and observation receipts remain ignored; reference screenshots and raw
+diagnostics are not application assets. The previously observed Preview crashes
+were not replayed or copied as desired product behavior. This round does not
+close successful stream preview, live refresh, event rendering, all option or
+permission/topology variants, raw-editor/graph mutation during execution, or
+Windows/Linux reference acceptance.

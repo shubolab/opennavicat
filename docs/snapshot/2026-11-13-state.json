@@ -21,16 +21,19 @@
   },
   "repository": {
     "remote": "git@github.com:shubolab/opennavicat.git",
-    "synced_origin_main_sha": "87df5cd70f9293c4585637b1eab6e00e37810097",
-    "working_branch": "codex_mongodb_pipeline_tasks",
-    "working_branch_base_sha": "c5f4c7467f8d3296ba282bd43168a05089b987ad",
-    "workspace": "/Users/wangshubo/.codex/worktrees/release-0-10/opennavicat",
+    "synced_origin_main_sha": "ee876b5c42e02e82baebd1739602d8810980e502",
+    "working_branch": "codex_mongodb_finite_stream",
+    "working_branch_base_sha": "87df5cd70f9293c4585637b1eab6e00e37810097",
+    "workspace": "/Users/wangshubo/.codex/worktrees/mongodb-finite-stream/opennavicat",
     "original_main_workspace": "/Users/wangshubo/develop/opennavicat",
     "other_branches_or_unmerged_work_removed": false,
     "application_release_source_sha": "87df5cd70f9293c4585637b1eab6e00e37810097",
-    "documentation_receipt_scope": "Documentation-only receipt commit follows application source87df; use git log for current document revision",
+    "documentation_receipt_scope": "0.12 candidate working-tree checkpoint; final source commit/CI pending, public0.11 remains bound to87df5cd",
     "next_working_branch": "codex_mongodb_finite_stream",
-    "next_workspace": "/Users/wangshubo/.codex/worktrees/mongodb-finite-stream/opennavicat"
+    "next_workspace": "/Users/wangshubo/.codex/worktrees/mongodb-finite-stream/opennavicat",
+    "origin_main_verification_scope": "Local tracking ref observed for this documentation pass; no new remote fetch or old-release download was performed by this subtask",
+    "local_head_at_candidate_measurement": "7e8032e9c0a3e7c9f28ee34b4c93c9b905e757c2",
+    "candidate_final_source_sha": null
   },
   "reference": {
     "path": "/Users/wangshubo/Downloads/Navicat Premium.app",
@@ -39,7 +42,14 @@
     "plist_reverified_this_resume": true,
     "windows_linux_runtime_reference_acceptance_complete": false,
     "runtime_evidence": "../ui-reference-18-mongodb-pipeline.md",
-    "reference_operations_executed_by_snapshot_audit": false
+    "reference_operations_executed_by_snapshot_audit": false,
+    "latest_runtime_observations": [
+      "AP18-10 follow-up",
+      "AP18-11"
+    ],
+    "latest_runtime_scope": "CUA team observations on fresh owned ARM64 MongoDB8.0.34 RS; custom IDs, not REA Evidence IDs; native reference exited and exact fixture/volumes removed",
+    "successful_stream_preview_accepted": false,
+    "full_stream_options_or_platforms_accepted": false
   },
   "published": {
     "tag": "v0.11.0",
@@ -154,52 +164,159 @@
     "new_public_release": true,
     "artifacts_downloaded_or_independently_audited_this_resume": true,
     "junit_counts_recomputed_this_resume": true,
-    "qualification_scope": "Exact87df5cd formal six-native-target source/build/packaged/install/launch/uninstall/helper/protocol receipts and public installer bytes; full reference UI/function gates stay open"
+    "qualification_scope": "Exact87df5cd formal six-native-target source/build/packaged/install/launch/uninstall/helper/protocol receipts and public installer bytes; full reference UI/function gates stay open",
+    "scope_label": "Historical/current public0.11 formal release CI; not0.12 candidate qualification"
   },
   "latest_reported_local_validation": {
-    "source_checkpoint": "87df5cd70f9293c4585637b1eab6e00e37810097",
-    "measurement_scope": "post-fix local application/test working tree before source87df commit; overlapping scopes not added",
-    "executed_this_resume": true,
+    "version": "0.12.0",
+    "measurement_scope": "Before Task ownership fix: measured0.12 candidate source checkpoint; all201 source paths matched Git index blobs; not qualification of any subsequent runtime change",
+    "base_head": "7e8032e9c0a3e7c9f28ee34b4c93c9b905e757c2",
     "full_source": {
-      "passed": 2051,
-      "conditionally_skipped": 590
+      "passed": 2180,
+      "conditionally_skipped": 636,
+      "failed": 0,
+      "errors": 0,
+      "seconds": 82.865,
+      "source_paths_hashed": 201,
+      "source_hashes_before_after_match": true,
+      "receipt": "artifacts/release-012/final-default/verification.json"
     },
-    "collection_runner": {
-      "passed": 498,
+    "backend": {
+      "passed": 46,
       "skipped": 0,
-      "owned_fixture_count": 8,
-      "source_hashes_matched": 48,
-      "exact_ids_independently_absent": true
+      "pure_cases": 32,
+      "real_rs_cases": 14,
+      "declared_source_hashes": 6,
+      "receipt": "artifacts/stream-structured-errors-backend-qualification/summary.json"
+    },
+    "real_window": {
+      "passed": 16,
+      "skipped": 0,
+      "declared_source_hashes": 11,
+      "includes_two_real_batch_cases": true,
+      "receipt": "artifacts/stream-structured-errors-window-qualification/summary.json"
+    },
+    "qt_components": {
+      "passed": 78,
+      "skipped": 0,
+      "stream_component_cases": 57,
+      "existing_pipeline_component_cases": 21,
+      "receipt": "artifacts/release-012/structured-ui-qt-final.xml"
     },
     "native_cocoa": {
-      "passed": 56,
-      "skipped": 0
+      "passed": 94,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0,
+      "seconds": 28.888,
+      "receipt": "artifacts/release-012/final-native-cocoa/results.xml",
+      "actual_qt_platforms": [
+        "cocoa"
+      ],
+      "host": "Darwin",
+      "machine": "arm64",
+      "declared_source_hashes": 13,
+      "source_hashes_before_after_match": true,
+      "exact_container_and_two_volumes_independently_absent": true,
+      "verification": "artifacts/release-012/final-native-cocoa/verification.json"
     },
-    "mongodb_security": {
+    "stream_tls_transport": {
+      "passed": 2,
+      "skipped": 0,
+      "replica_set_event_acceptance": false,
+      "exact_container_and_anonymous_volume_cleanup": true,
+      "receipt": "artifacts/release-012/final-security-stream/summary.json"
+    },
+    "ordinary_tls": {
       "passed": 24,
-      "skipped": 0
+      "skipped": 0,
+      "fixture_owned_removal_and_container_absence": true,
+      "all_volume_ids_independently_recorded": false,
+      "scope_note": "This round passed; first-wave observer did not retain every ordinary TLS volume ID, so do not claim independent per-volume absence"
+    },
+    "stopped_cleanup": {
+      "passed": 13,
+      "skipped": 0,
+      "containers_started": 0,
+      "db_connections": 0,
+      "ledger_totals": {
+        "cases": 13,
+        "containers": 15,
+        "volumes": 30,
+        "exact_ids_independently_absent": true,
+        "all_recorded_cases_cleaned": true
+      },
+      "receipt": "artifacts/release-012/final-stopped-cleanup/summary.json"
+    },
+    "collections_first_attempt": {
+      "qualified": false,
+      "observed_process_failure": "SIGSEGV",
+      "runner_error_type": "FileNotFoundError after missing completed JUnit; not a diagnosis of SIGSEGV cause",
+      "receipt": "artifacts/release-012/final-collections/summary.json"
+    },
+    "collections_fresh_serial_r2": {
+      "passed": 507,
+      "skipped": 0,
+      "owned_containers": 8,
+      "owned_volumes": 16,
+      "exact_ids_independently_absent": true,
+      "cause_of_first_failure_established": false,
+      "receipt": "artifacts/release-012/final-collections-r2/independent-check.json"
     },
     "source_smoke": {
+      "passed": true,
+      "version": "0.12.0",
       "rows": 6,
-      "columns": 4
+      "columns": 4,
+      "packaged": false,
+      "receipt": "artifacts/release-012/final-source-smoke.json"
     },
-    "overlapping_scopes_not_added": true
+    "overlapping_scopes_not_added": true,
+    "source_index_blobs_matched_by_root": 201
   },
   "latest_main_demo": {
     "receipt": "../assets/opennavicat-demo.json",
     "gif": "../assets/opennavicat-demo.gif",
-    "scope": "Actual0.11nativeCocoa isolated application workflow; UI unchanged by later budget/cancel repair",
-    "phases": 28,
-    "frames": 371,
-    "duration_seconds": 61.84,
-    "bytes": 1631603,
-    "sha256": "5f46313db93fbc3e1bd9b9cc6ffb8a0d89cda748b10c23e434ebf223582b2b4e",
+    "version": "0.12.0",
+    "scope": "Actual nativeCocoa isolated candidate application recording, copied to development assets; not published0.12 installer qualification",
+    "phases": 31,
+    "frames": 411,
+    "duration_seconds": 68.5,
+    "bytes": 1712746,
+    "sha256": "d1ec33dd15e03fa38e5749f0ff0efe01051e5b40116c12229a7113d847e33c9e",
     "gif_bytes_match_receipt_this_resume": true,
     "recorded_each_phase_privacy_frame_count_matches": true,
+    "privacy_guard_frames": 411,
     "new_recording_this_resume": true,
     "new_visual_privacy_review_this_resume": true,
+    "visual_review_method": "First, middle and last encoded frame of every phase, with extra full-size views and visible-text privacy guards on every captured frame",
+    "all_31_phases_reviewed": true,
+    "real_private_data_found": false,
     "reference_screenshots_used": false,
-    "single_gif_only": true
+    "single_gif_only": true,
+    "finite_stream": {
+      "events": 2,
+      "completion": "empty_batch",
+      "raw_bson_and_canonical_verified": true,
+      "typed_full_documents_independently_read_back": true,
+      "exact_marker_getmore_observed": true,
+      "cursor_cleanup_verified": true,
+      "source_exact_bson_unchanged": true,
+      "source_collection_identity_unchanged": true,
+      "stream_collection_identity_unchanged": true,
+      "bson_types_checked": [
+        "Int64",
+        "Decimal128",
+        "Binary",
+        "Timestamp",
+        "ObjectId"
+      ],
+      "automatic_resume_used": false,
+      "event_payload_rendered": false,
+      "main_window_session_preserved_and_readable": true
+    },
+    "owned_service_and_anonymous_volumes_removed": true,
+    "recorded_source_scope": "Before Task ownership lifecycle fix; candidate UI capture with31-phase review; later runtime changes require their own validation and source association"
   },
   "current_implementation": {
     "embedded_index_editor": true,
@@ -228,21 +345,30 @@
     "saved_mongodb_pipeline_batch_jobs": true,
     "batch_four_tabs_and_persistent_per_job_history": true,
     "pipeline_positive_server_budget_preserved": true,
-    "window_startup_cancel_event_and_exact_marker_retry": true
+    "window_startup_cancel_event_and_exact_marker_retry": true,
+    "finite_stream_backend_in_unreleased_0_12": true,
+    "finite_stream_no_implicit_initial_retry_or_autoresume": true,
+    "finite_stream_private_typed_result_and_partial": true,
+    "finite_stream_dynamic_2_3_4_text_tabs": true,
+    "finite_stream_page_local_stop": true,
+    "finite_stream_bounded_owner_message_and_optional_frozen_utf16_location": true,
+    "finite_stream_event_grid_or_export_accepted": false,
+    "finite_stream_successful_preview_accepted": false
   },
   "next_steps": [
-    "Continue finite change-stream native UI/partial-error acceptance against AP18-10; source branch codex_mongodb_finite_stream is not in0.11",
-    "Finish helper-qualified fullsource and precise new stream protocol/security CI; do not borrow0.11 six-installer qualification",
-    "Keep stream previews and normal event presentation open after two owned reference crashes; do not reproduce crashes or invent continuouswatch applicability",
-    "Qualify larger branched/sharded/replica Explain shapes and exact cost highlighting formula",
-    "Continue validator external conversion/unknown-root-schema and all remaining MongoDB/otherdriver/authentication/object/query/wizard/AI/model/BI/backup/automation gates",
-    "Every next usable milestone still requires six native installers and exact checksums; refresh the single actual app GIF when the demonstrated UI changes"
+    "Apply and regress the confirmed completed Task/TaskSignals retention ownership fix; preserve original parallel SIGSEGV as unresolved causality and requalify changed source/native/Window/collection scopes",
+    "Freeze a complete0.12 candidate commit and qualify that exact SHA on all six native OS/architecture targets plus separate exact stream/backend/window/security/cleanup manifests; independently audit installers/checksums before deciding publication",
+    "Retain the refreshed single actual application GIF and its31-phase privacy review with exact source ownership; no reference screenshots or private data",
+    "Keep successful stream Preview/PreviewAll, complete partial/recovery/options/topologies/permissions and Windows/Linux reference UI gates open; do not copy reference crashes or invent continuous-watch applicability",
+    "Continue branched/sharded/replica Explain shapes/cost formulas, validator unknown/external conversion, all remaining database objects/authentication/query/wizard/AI/model/BI/backup/automation functions",
+    "A usable milestone or successful tests/packages do not complete the full1:1retainedNavicattool goal; continue active until the entire parity matrix is qualified"
   ],
   "new_reference_or_implementation_work_claimed_by_this_snapshot": true,
   "limits": [
-    "0.11 formal and public qualification is bound to87df5cd; nextbranch backend checks are unpublished and cannot borrow those installers",
-    "Local source/default skipped cases, owned protocol, native installers, public bytes and actual reference UI are separate evidence; overlapping scopes are not added",
-    "No complete database-tool or1:1UI gate was closed; Windows/Linux actual reference acceptance remains open"
+    "Public0.11 remains bound to87df5cd and its own six-native/public-byte evidence; unpublished0.12 cannot borrow those installers",
+    "Local default/real-owned protocol/Cocoa/installer/public-byte/reference UI are separate scopes; conditional skips and overlapping totals are not combined",
+    "The first parallel collection SIGSEGV cause remains unproven. Completed-task retention was independently confirmed and a minimal ownership fix is queued;2180/default and94/Cocoa remain pre-fix measurements, not release or post-fix qualification.",
+    "The complete retained UI/tool goal remains active; successful stream preview, unknown option/topology/permission variants and all three platforms full reference acceptance stay open"
   ],
   "current_resume_validation": {
     "baseline_sha": "c5f4c7467f8d3296ba282bd43168a05089b987ad",
@@ -274,113 +400,23 @@
   "current_work": {
     "pipeline_safety_and_navigation": "released0.11; fullparityopen",
     "batch_job_workflow": "released0.11 savedMongoPipeline slice; other15categories/scheduler/SMTP/fullUIopen",
-    "change_stream": "backend_checkpoint1841pushed; UI integration active on codex_mongodb_finite_stream; not in0.11; fullpreview/platform/functiongatesopen"
+    "change_stream": "Unpublished0.12 local bounded text-only UI/typed backend/structured error checkpoint; complete preview/options/platform/tool gates remain open",
+    "qt_task_lifecycle": "Completed Task/TaskSignals retention confirmed by real MainWindow.submit even after poolactive0/nativeQRunnableinvalid; private GUI-parent/deferred-delete candidate restores GUI-thread release; source fix/regression queued. Relationship to first parallel SIGSEGV remains unproven."
   },
   "candidate_release": {
-    "version": "0.11.0",
-    "status": "published_verified",
-    "frozen_source_sha": "87df5cd70f9293c4585637b1eab6e00e37810097",
-    "six_target_ci_started": true,
-    "tag_created": true,
-    "public_release_created": true,
-    "final_local_source": {
-      "passed": 2011,
-      "skipped": 567,
-      "failed": 0,
-      "errors": 0,
-      "seconds": 79.24,
-      "receipt": "artifacts/release-011/final-source.xml",
-      "scope": "4111d331_pre_budget_fix_worktree; overlapping_historical_local_measurement"
-    },
-    "final_local_collections": {
-      "passed": 460,
-      "skipped": 0,
-      "failed": 0,
-      "errors": 0,
-      "seconds": 53.23,
-      "owned_fixtures": 8,
-      "independently_absent_by_exact_id": true,
-      "source_hashes_matched": 48,
-      "receipt": "artifacts/release-011/final-collections/summary.json",
-      "scope": "4111d331_pre_budget_fix_worktree; overlapping_historical_local_measurement"
-    },
-    "native_cocoa": {
-      "passed": 51,
-      "skipped": 0,
-      "seconds": 10.64,
-      "scope": "4111d331_pre_budget_fix_worktree; overlapping_historical_local_measurement"
-    },
-    "single_gif": {
-      "recorded_and_reviewed": true,
-      "phase_count": 28,
-      "frames": 371,
-      "duration_seconds": 61.84,
-      "sha256": "5f46313db93fbc3e1bd9b9cc6ffb8a0d89cda748b10c23e434ebf223582b2b4e",
-      "batch_tasks_executed": 2,
-      "history_persisted": true,
-      "source_bson_and_uuid_unchanged": true,
-      "post_fix_scope": "UI_and_demonstrated_workflows_unchanged_by_budget_and_cancel_repair; previously_reviewed_capture_retained"
-    },
-    "first_precheck": {
-      "source_sha": "4111d3310e22ac6e42d72de93fa1a93e4f975118",
-      "run_id": 43362158137,
-      "conclusion": "success",
-      "successful_jobs": 7,
-      "publisher": "skipped",
-      "independent_installer_byte_audit": false,
-      "release_qualification": false,
-      "reason": "subsequent_owned_wire_and_profiler_reproduction_found_positive_maxTimeMS_replaced_by_CSOT; final_fix_requires_new_source_and_run"
-    },
-    "pipeline_budget_fix": {
-      "status": "released0.11; positive1_10_5000_wire_and_cold_and_window_cancel_regression_passed",
-      "wire_receipt": "artifacts/pipeline-maxtime-fixed-wire-20261113/receipt.json",
-      "security_receipt": "artifacts/pipeline-budget-security-final/verification.json",
-      "positive_max_time_ms": [
-        1,
-        10,
-        5000
-      ],
-      "zero_and_unset": "original_path_retained",
-      "external_ambient_CSOT": "not_inherited_by_positive_budget_clients",
-      "precise_cpu_wall_preemption_claimed": false,
-      "backend_scoped_passed": 210,
-      "batch_runtime_passed": 19,
-      "security_module_passed": 24,
-      "security_module_skipped": 0,
-      "security_final_receipt": "artifacts/pipeline-budget-security-full/verification.json"
-    },
-    "post_fix_local_source": {
-      "passed": 2051,
-      "skipped": 590,
-      "seconds": 78.6,
-      "failed": 0,
-      "errors": 0,
-      "receipt": "artifacts/release-011/budget-final-source.xml"
-    },
-    "post_fix_local_collections": {
-      "passed": 498,
-      "skipped": 0,
-      "seconds": 52.1,
-      "failed": 0,
-      "errors": 0,
-      "owned_fixtures": 8,
-      "exact_declared_targets": 48,
-      "source_hashes_matched": 48,
-      "independently_absent_by_exact_id": true,
-      "receipt": "artifacts/release-011/budget-final-collections-r2/summary.json",
-      "independent_receipt": "artifacts/release-011/budget-final-independent-cleanup.json",
-      "initial_attempt": "strict_manifest_rejection_of_unparameterized_declared_case_before_DB_execution; retained"
-    },
-    "post_fix_native_cocoa": {
-      "passed": 56,
-      "skipped": 0,
-      "seconds": 13.77,
-      "receipt": "artifacts/release-011/budget-final-cocoa.xml"
-    },
-    "main_precheck_run": 43367059557,
-    "formal_run": 43368650962,
-    "formal_native_audit_passed": true,
-    "anonymous_public_eight_assets_verified": true
+    "version": "0.12.0",
+    "status": "pre_task_ownership_fix_candidate_checkpoint_unpublished",
+    "frozen_source_sha": null,
+    "working_tree_base_head": "7e8032e9c0a3e7c9f28ee34b4c93c9b905e757c2",
+    "six_target_ci_started": false,
+    "tag_created": false,
+    "public_release_created": false,
+    "final_local_validation": "latest_reported_local_validation",
+    "single_gif_recorded_reviewed_and_copied": true,
+    "single_gif_sha256": "d1ec33dd15e03fa38e5749f0ff0efe01051e5b40116c12229a7113d847e33c9e",
+    "source_stability_gate": "Confirmed completed-task retention; candidate GUI-parent/deferred-delete source fix/regression pending. Original parallel SIGSEGV same cause unproven; fresh source/native/Window/collection qualification required after runtime change.",
+    "all_native_and_full_parity_gates_complete": false,
+    "measured_source_paths_matched_git_index": 201
   },
   "resume_baseline": {
     "published": {
@@ -603,6 +639,171 @@
     "receipt": "artifacts/release-011/main-audit-43367059557/verification.json"
   },
   "next_unreleased_checkpoint": {
+    "version": "0.12.0",
+    "branch": "codex_mongodb_finite_stream",
+    "base_release_source_sha": "87df5cd70f9293c4585637b1eab6e00e37810097",
+    "head_before_candidate_commit": "7e8032e9c0a3e7c9f28ee34b4c93c9b905e757c2",
+    "final_source_sha": null,
+    "validation": "../validation-0.12.md",
+    "finite_stream_contract": "../mongodb-pipeline-stream.md",
+    "reference_observations": "../ui-reference-18-mongodb-pipeline.md",
+    "local_validation": "latest_reported_local_validation",
+    "demo": "latest_main_demo",
+    "six_native_installer_ci_or_release_complete": false,
+    "full_goal_stays_active": true
+  },
+  "historical_candidate_release_0_11": {
+    "version": "0.11.0",
+    "status": "published_verified",
+    "frozen_source_sha": "87df5cd70f9293c4585637b1eab6e00e37810097",
+    "six_target_ci_started": true,
+    "tag_created": true,
+    "public_release_created": true,
+    "final_local_source": {
+      "passed": 2011,
+      "skipped": 567,
+      "failed": 0,
+      "errors": 0,
+      "seconds": 79.24,
+      "receipt": "artifacts/release-011/final-source.xml",
+      "scope": "4111d331_pre_budget_fix_worktree; overlapping_historical_local_measurement"
+    },
+    "final_local_collections": {
+      "passed": 460,
+      "skipped": 0,
+      "failed": 0,
+      "errors": 0,
+      "seconds": 53.23,
+      "owned_fixtures": 8,
+      "independently_absent_by_exact_id": true,
+      "source_hashes_matched": 48,
+      "receipt": "artifacts/release-011/final-collections/summary.json",
+      "scope": "4111d331_pre_budget_fix_worktree; overlapping_historical_local_measurement"
+    },
+    "native_cocoa": {
+      "passed": 51,
+      "skipped": 0,
+      "seconds": 10.64,
+      "scope": "4111d331_pre_budget_fix_worktree; overlapping_historical_local_measurement"
+    },
+    "single_gif": {
+      "recorded_and_reviewed": true,
+      "phase_count": 28,
+      "frames": 371,
+      "duration_seconds": 61.84,
+      "sha256": "5f46313db93fbc3e1bd9b9cc6ffb8a0d89cda748b10c23e434ebf223582b2b4e",
+      "batch_tasks_executed": 2,
+      "history_persisted": true,
+      "source_bson_and_uuid_unchanged": true,
+      "post_fix_scope": "UI_and_demonstrated_workflows_unchanged_by_budget_and_cancel_repair; previously_reviewed_capture_retained"
+    },
+    "first_precheck": {
+      "source_sha": "4111d3310e22ac6e42d72de93fa1a93e4f975118",
+      "run_id": 43362158137,
+      "conclusion": "success",
+      "successful_jobs": 7,
+      "publisher": "skipped",
+      "independent_installer_byte_audit": false,
+      "release_qualification": false,
+      "reason": "subsequent_owned_wire_and_profiler_reproduction_found_positive_maxTimeMS_replaced_by_CSOT; final_fix_requires_new_source_and_run"
+    },
+    "pipeline_budget_fix": {
+      "status": "released0.11; positive1_10_5000_wire_and_cold_and_window_cancel_regression_passed",
+      "wire_receipt": "artifacts/pipeline-maxtime-fixed-wire-20261113/receipt.json",
+      "security_receipt": "artifacts/pipeline-budget-security-final/verification.json",
+      "positive_max_time_ms": [
+        1,
+        10,
+        5000
+      ],
+      "zero_and_unset": "original_path_retained",
+      "external_ambient_CSOT": "not_inherited_by_positive_budget_clients",
+      "precise_cpu_wall_preemption_claimed": false,
+      "backend_scoped_passed": 210,
+      "batch_runtime_passed": 19,
+      "security_module_passed": 24,
+      "security_module_skipped": 0,
+      "security_final_receipt": "artifacts/pipeline-budget-security-full/verification.json"
+    },
+    "post_fix_local_source": {
+      "passed": 2051,
+      "skipped": 590,
+      "seconds": 78.6,
+      "failed": 0,
+      "errors": 0,
+      "receipt": "artifacts/release-011/budget-final-source.xml"
+    },
+    "post_fix_local_collections": {
+      "passed": 498,
+      "skipped": 0,
+      "seconds": 52.1,
+      "failed": 0,
+      "errors": 0,
+      "owned_fixtures": 8,
+      "exact_declared_targets": 48,
+      "source_hashes_matched": 48,
+      "independently_absent_by_exact_id": true,
+      "receipt": "artifacts/release-011/budget-final-collections-r2/summary.json",
+      "independent_receipt": "artifacts/release-011/budget-final-independent-cleanup.json",
+      "initial_attempt": "strict_manifest_rejection_of_unparameterized_declared_case_before_DB_execution; retained"
+    },
+    "post_fix_native_cocoa": {
+      "passed": 56,
+      "skipped": 0,
+      "seconds": 13.77,
+      "receipt": "artifacts/release-011/budget-final-cocoa.xml"
+    },
+    "main_precheck_run": 43367059557,
+    "formal_run": 43368650962,
+    "formal_native_audit_passed": true,
+    "anonymous_public_eight_assets_verified": true
+  },
+  "historical_local_validation_0_11": {
+    "source_checkpoint": "87df5cd70f9293c4585637b1eab6e00e37810097",
+    "measurement_scope": "post-fix local application/test working tree before source87df commit; overlapping scopes not added",
+    "executed_this_resume": true,
+    "full_source": {
+      "passed": 2051,
+      "conditionally_skipped": 590
+    },
+    "collection_runner": {
+      "passed": 498,
+      "skipped": 0,
+      "owned_fixture_count": 8,
+      "source_hashes_matched": 48,
+      "exact_ids_independently_absent": true
+    },
+    "native_cocoa": {
+      "passed": 56,
+      "skipped": 0
+    },
+    "mongodb_security": {
+      "passed": 24,
+      "skipped": 0
+    },
+    "source_smoke": {
+      "rows": 6,
+      "columns": 4
+    },
+    "overlapping_scopes_not_added": true
+  },
+  "published_demo_0_11": {
+    "receipt": "../assets/opennavicat-demo.json",
+    "gif": "../assets/opennavicat-demo.gif",
+    "scope": "Actual0.11nativeCocoa isolated application workflow; UI unchanged by later budget/cancel repair",
+    "phases": 28,
+    "frames": 371,
+    "duration_seconds": 61.84,
+    "bytes": 1631603,
+    "sha256": "5f46313db93fbc3e1bd9b9cc6ffb8a0d89cda748b10c23e434ebf223582b2b4e",
+    "gif_bytes_match_receipt_this_resume": true,
+    "recorded_each_phase_privacy_frame_count_matches": true,
+    "new_recording_this_resume": true,
+    "new_visual_privacy_review_this_resume": true,
+    "reference_screenshots_used": false,
+    "single_gif_only": true
+  },
+  "historical_backend_only_checkpoint": {
     "branch": "codex_mongodb_finite_stream",
     "base_source_sha": "87df5cd70f9293c4585637b1eab6e00e37810097",
     "owned_rs_runner": {
@@ -663,5 +864,61 @@
     },
     "ui_integration": "in_progress_after_frozen_backend; text-only messages/output, page-local Stop and explicit partial/row/time boundary handling; no parity claimed",
     "new_six_installer_ci_or_release_complete": false
+  },
+  "captured_at_utc": "2026-11-13T06:48:48.170549+00:00",
+  "candidate_ci": {
+    "version": "0.12.0",
+    "source_sha": null,
+    "status": "not_started_for_final_candidate",
+    "six_native_targets_qualified": false,
+    "formal_tag_created": false,
+    "public_release_created": false
+  },
+  "task_ownership_probe": {
+    "status": "completed_task_and_signal_retention_confirmed; minimal_candidate_release_confirmed_in_private_probe",
+    "scope": "Real MainWindow.submit, two tasks completed; not a proof of the original SIGSEGV cause",
+    "current_r2": {
+      "created_tasks": 2,
+      "task_registry_empty": true,
+      "native_task_alive": [
+        false,
+        false
+      ],
+      "python_tasks_still_live": [
+        true,
+        true
+      ],
+      "python_signals_still_live": [
+        true,
+        true
+      ],
+      "destroyed_count": 0,
+      "finalized_count": 0,
+      "receipt": "artifacts/release-012/task-ownership-probe/current-r2-result.json"
+    },
+    "candidate_gui_parent_and_deferred_delete": {
+      "created_tasks": 2,
+      "task_registry_empty": true,
+      "native_task_alive": [
+        false,
+        false
+      ],
+      "python_tasks_still_live": [
+        false,
+        false
+      ],
+      "python_signals_still_live": [
+        false,
+        false
+      ],
+      "destroyed_count": 2,
+      "finalized_count": 2,
+      "all_destroy_and_finalize_on_gui_thread": true,
+      "wrong_thread_destroyed": [],
+      "receipt": "artifacts/release-012/task-ownership-probe/candidate-result.json"
+    },
+    "candidate_source_included_in_this_checkpoint": false,
+    "source_regression_and_requalification_pending": true,
+    "original_sigsegv_same_cause_proven": false
   }
 }

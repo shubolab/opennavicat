@@ -20,6 +20,7 @@ from .batch_jobs import (
 from .database import ConnectionConfig, DatabaseError, DatabaseSession
 from .js_engine.server_errors import server_failure
 from .mongodb_pipeline import execute_pipeline, from_nagg
+from .mongodb_pipeline_stream import FiniteStreamResult, StreamExecutionError
 
 
 MAX_LABEL_LENGTH = 160
@@ -194,11 +195,24 @@ def run_batch_job(definition, prepared_jobs, *, control, emit, session_factory=D
                         status, message = 'cancelled', 'Cancelled before execution; no pipeline execution was dispatched'
                     else:
                         phase = 'execute'
-                        execute_pipeline(session, item.resolved.schema, pipeline, cancel_event=control.cancel_event)
-                        completed = True
-                        status, message = 'success', 'Pipeline execution completed'
+                        execution = execute_pipeline(session, item.resolved.schema, pipeline, cancel_event=control.cancel_event)
+                        if isinstance(execution, FiniteStreamResult) and (
+                                execution.completion != 'empty_batch' or execution.undelivered_event_count):
+                            status = 'failed'
+                            message = {
+                                'row_limit': 'Finite stream task reached its row limit before empty-batch completion',
+                                'deadline': 'Finite stream task reached its elapsed-time limit before empty-batch completion',
+                                'byte_limit': 'Finite stream task reached its byte limit; some events were not delivered',
+                            }.get(execution.completion, 'Finite stream task did not complete its bounded read')
+                        else:
+                            completed = True
+                            status, message = 'success', 'Pipeline execution completed'
         except Exception as error:
-            if control.cancelled:
+            if (isinstance(error, StreamExecutionError)
+                    and isinstance(error.partial_result, FiniteStreamResult)
+                    and error.partial_result.completion == 'cleanup_failed'):
+                status, message = 'failed', 'Stream cursor cleanup could not be confirmed; do not automatically retry'
+            elif control.cancelled:
                 status, message = 'cancelled', 'Cancellation requested; acknowledgement may be unknown, and changes are not automatically undone or retried'
             else:
                 status, message = 'failed', _failure_message(error, phase, private_values)

@@ -8,9 +8,10 @@
 
 候选从0.11源码继续，有限后端检查点1841c01已推送，随后合入仅文档的ee876b5。
 本轮接入原生Qt stream消息/输出、当前页Stop、typed结果和结构化安全错误路由，以及Batch边界状态。
-版本元数据已调整0.12.0。本机最终检查测量的是尚待提交的候选工作树；
-HEAD `7e8032e`是基点，不能写成这些未提交变化的完整源码SHA。
-最终提交SHA、该SHA的六目标CI和正式发布仍待完成。
+版本元数据已调整0.12.0。有限UI/GIF检查点已提交`979d052`，随后`479a811`修复Task ownership并加入四项回归。
+修后默认全源的201份文件前后哈希一致，并逐个匹配`479a811`不可变Git blob；
+测试开始时的旧HEAD只是测量基点，实际已测应用/测试/runner源码绑定到`479a811`。
+包含本验证文档的最终候选提交、该精确SHA的六目标CI和正式发布仍待完成。
 
 实际参考为Navicat Premium **18.0.5 build321 / macOS**，使用自有临时MongoDB8.0.34单节点副本集。
 新观察为 [AP18-11](ui-reference-18-mongodb-pipeline.md)：
@@ -19,6 +20,30 @@ HEAD `7e8032e`是基点，不能写成这些未提交变化的完整源码SHA。
 实际非法`$limit`错误另有服务器原文和独立`at line 1, column 27`行；Stop没有位置行。
 源、采样、数量和operator在忙时禁用；其它未执行的状态继续开放。
 原版退出与临时服务/卷清理有独立证据，原版遗留idle游标不作为期望产品行为复制。
+
+## Task ownership修复后的本机检查点
+
+`479a811`将TaskSignals归属MainWindow，并在既有finished清理之后连接`deleteLater`。
+四项真实Qt回归覆盖serial pool与cancel pool各自成功/错误路径、前任务native尾段仍活跃时提交后续任务及worker GC，连同原18项共22项通过；
+销毁/释放在GUI线程，完成的Task/TaskSignals不再留存。下表各scope独立归属、彼此重叠，不相加。
+原始parallel SIGSEGV是否由同一retention造成仍未证明。
+
+| 范围 | 修后结果 | 证据与边界 |
+| --- | --- | --- |
+| 默认全源 | **2184通过 / 636条件跳过，84.67秒（stdout）** | Python3.13.11、Darwin arm64、offscreen、native helper已构建；201个源路径前后相同且逐Git blob匹配`479a811`，JUnit84.650秒。条件跳过不是实际服务执行。 |
+| 原生Cocoa | **98通过 / 零跳过，28.60秒（stdout）** | 16真实Window＋78组件＋新增4项真实生命周期回归；actual Cocoa、Darwin arm64、版本0.12.0，14份源哈希前后相同；自有RS一容器/两卷独立逐ID absent。 |
+| 实际Window独立runner | **16通过 / 零跳过** | 11份声明源码哈希匹配修后源码；自有RS一容器/两卷独立逐ID absent。涵盖实际工具栏→wire、错误/位置、Stop、普通视图恢复及两条真实Batch路径。 |
+| 普通集合runner | **511通过 / 零跳过** | 严格case manifest；outer observer的198份源哈希前后相同，runner声明48份源哈希匹配；8容器/16卷独立逐ID absent。包含整个22项lifecycle模块。 |
+| recorder专项 | **offline79通过 / 3条件跳过；own-RS另1通过 / 零跳过** | 两scope各79份文件前后相同并逐Git blob匹配`479a811`；真实Run取得2个typed事件、精确BSON/UUID及原主连接不变，own-RS容器/两卷独立absent。offscreen专项没有录制GUI。 |
+| 源smoke | **6行×4列，版本0.12.0** | 修后Cocoa源smoke exit0，全部驱动/加密/native-JS探针通过；不是包内smoke。 |
+| 未变的声明源scope | 后端**46/0跳过**；普通TLS/SSH **24/0**；stream TLS/SSH **2/0**；stopped cleanup **13/0** | 原各scope声明源字节未变并重新绑定，不冒称ownership之后重跑。后端32纯/14真实RS；stream transport仅standalone及40573拒绝；cleanup零start/零DB。普通TLS全部卷ID未由外层observer独立保留的限制继续有效。 |
+
+修后回执分别为`artifacts/release-012/final-default-ownership/verification.json`、
+`final-native-cocoa-ownership/verification.json`及`independent-cleanup.json`、
+`final-window-owner-fix/summary.json`、`final-collections-owner-fix/summary.json`及`independent-check.json`，
+总交接索引为`owner-fix-validation.json`。
+recorder两scope目录为`final-recorder-ownership-{offline,own-rs}-20261113T065926Z-9dc0cd/`。
+这是本机有限范围资格，不是新六安装器、公开发布或完整参考验收。
 
 ## Task ownership修复前的本机候选检查点
 
@@ -55,11 +80,11 @@ Root已将默认全源回执中的201个源路径逐个与Git index blob匹配�
 **串行重跑通过不能证明首次崩溃原因。** 另一个真实`MainWindow.submit`实验已确认：
 正常完成、pool active为0且native QRunnable失效之后，Task/TaskSignals的Python对象仍被native连接闭包环保留，
 worker GC不能释放。私有候选实验用GUI parent及finished后的`deleteLater`恢复GUI线程销毁/释放，
-源码最小修复和回归测试已安排。该retention是否就是首次SIGSEGV的原因仍未建立。
+该retention随后由`479a811`最小修复及上节回归验证；是否就是首次SIGSEGV的原因仍未建立。
 两次task的current-r2与candidate独立结果分别在
 `artifacts/release-012/task-ownership-probe/current-r2-result.json`和`candidate-result.json`，
 machine index保留了两组live/destroy/finalize对照。
-修改runtime后须重核full-source、native/Window及collection范围；以上数字都是修复前检查点，本记录尚不构成可发布结论。
+本节数字保持为修复前历史；修后full-source、native/Window和collection资格见上节，仍不构成可发布结论。
 
 ## 已保留的历史检查点
 
@@ -91,7 +116,10 @@ SHA256 `d1ec33dd15e03fa38e5749f0ff0efe01051e5b40116c12229a7113d847e33c9e`。
 31阶段均检查首/中/尾编码帧（93帧）并补充全尺寸视觉检查，自动逐帧guard为411/411；
 未见真实连接/路径/凭据/业务内容，无原版截图。录制使用新认证RS，实际取得2个typed事件、
 保留原主连接、精确BSON/UUID与游标清理，自有服务和卷已移除；事件payload未渲染到GUI。
-GIF与receipt已复制到`docs/assets/`，这是候选演示刷新，仍不是公开0.12安装器验收。
+GIF与receipt已复制到`docs/assets/`，录制源码属于`979d052`：77份capture源逐Git blob匹配该提交。
+与`479a811`相比，演示运行源码仅Window的两行ownership不同；pipeline widgets及recorder未变，
+新79＋1专项验证修后工作流，兼容回执在`final-recorder-ownership-compatibility-20261113T065926Z-9dc0cd.json`。
+保留已审GIF，没有冒称`479a811`重新录制或旧capture哈希等于新Window；仍不是公开0.12安装器验收。
 新六目标源码测试、原生构建、包内smoke、真实安装/运行/卸载、独立六安装器审查、
 正式tag及八个公开资产的匿名下载尚未完成；只能在完整六安装器和校验和通过后发布。
 

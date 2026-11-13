@@ -20,8 +20,10 @@ Windows/Linux/macOS 的 1:1 保留 UI；本次同步、既有 Release 或下一�
 
 当前工作在独立工作树 `/Users/wangshubo/.codex/worktrees/mongodb-finite-stream/opennavicat`、
 分支`codex_mongodb_finite_stream`继续，候选元数据为**0.12.0，尚未发布**。
-公开安装器仍是0.11，不能借用其六目标资格。HEAD `7e8032e`只是本轮工作树基点，
-不是当前未提交候选全部变化的最终源码SHA；最终提交和该SHA的CI尚待完成。
+公开安装器仍是0.11，不能借用其六目标资格。有限UI/GIF检查点已提交`979d052`，
+Task ownership最小修复及四项回归另提交`479a811`；默认全源201项前后文件哈希
+逐Git blob匹配`479a811`，不能用测试开始时旧HEAD替代实际源码身份。
+包含最新验证文档的最终候选提交及其六目标CI尚待完成。
 
 AP18-11在新owned RS同页确认busy两页、空/错误三页、事件四页、再次空跑移除Output；
 稳定消息/输出仅为script+状态+实际elapsed，无事件网格。源码已接该有限text-only路径、
@@ -31,23 +33,29 @@ Batch手动任务已区分row/time/byte/cleanup失败，不读取errmsg写历史
 参考Preview/PreviewAll曾在独立sample后stream各出现一次崩溃，AP18-11未重放，
 不能复制原版故障或据此移除正常预览门禁。原版已退出，自有fixture/卷精确清理。
 
-Task ownership修复前的最近各scope独立测量（不相加）为：默认全源**2180通过/636条件跳过**，201源路径前后哈希相同；
-后端**46/0跳过**（32纯/14真实RS）、真实Window **16/0**、组件**78/0**，
-实际原生Cocoa **94/0**（Window16+组件78，版本0.12、Darwin arm64、13源哈希相同）；
-stream TLS/SSH **2/0**仍仅standalone transport＋实际40573拒绝，stopped cleanup **13/0**零start/零DB。
-源smoke6行×4列通过。完整回执归属、旧检查点和限制见 [0.12候选验证](../validation-0.12.md)。
+修后各scope独立测量（不相加）：默认全源**2184通过/636条件跳过**，201源路径前后相同并逐Git blob绑定`479a811`；
+真实Window **16/0**、实际原生Cocoa **98/0**（Window16+组件78+新增4生命周期，版本0.12、Darwin arm64、14源哈希相同）；
+完整生命周期模块 **22/0**；普通collection **511/0**，198源路径outer前后相同、48声明源匹配，8容器/16卷独立absent。
+后端**46/0**（32纯/14真实RS）、普通TLS **24/0**、stream TLS **2/0**、stopped cleanup **13/0**
+沿用各自未变声明源的资格并重新绑定，不冒称修后重跑；stream TLS仅standalone transport及40573拒绝，cleanup零start/零DB。
+普通TLS首wave未独立留齐每个卷ID的边界继续保留。修后源smoke6×4通过。
+recorder专项offline **79通过/3条件跳过**，own-RS另 **1/0**，各79文件前后相同并绑定`479a811`；
+真实Run得到2个typed事件，BSON/UUID及主连接不变，容器/两卷独立absent；没有录制GUI。
+完整回执归属、旧检查点和限制见 [0.12候选验证](../validation-0.12.md)。
 
-集合runner首次并行执行出现SIGSEGV，失败目录保留；fresh串行r2 **507/0**且8容器/16卷独立absent。
-r2通过不证明首次崩溃原因。另已真实确认Task/TaskSignals在正常完成后仍被native连接闭包环保留，
-worker GC不能释放；GUI parent+finished后deleteLater的私有实验已恢复GUI线程释放，最小源码修复及回归已安排。
-它是否与首次SIGSEGV同因仍未建立；修改runtime后必须重核相关范围，以上数字不能当修后源码或可发布结论。
+集合runner首次parallel SIGSEGV的失败记录继续保留；修复前fresh串行r2为507/0，不能据通过证明崩溃原因。
+另已真实确认的Task/TaskSignals正常完成后被native闭包环保留，已由`479a811`的GUI parent＋finished后deleteLater修复，
+真实Qt回归及上述修后资格通过；该retention是否与首次SIGSEGV同因仍未建立。
+修复前2180/636、Cocoa94和collection507只作为历史，不冒充新源码验证。
 唯一候选GIF已完成31阶段/411帧/68.5秒、1,712,746字节并复制到`docs/assets/`。
 31阶段首/中/尾93帧及额外全尺寸视觉检查完成，自动逐帧guard411/411通过；
 SHA256为`d1ec33dd15e03fa38e5749f0ff0efe01051e5b40116c12229a7113d847e33c9e`。
 录制为新认证RS的真实工作流，不渲染事件payload，不代表0.12已公开。
+GIF capture源码归属`979d052`，77份源逐Git blob核定；修后Window仅两行ownership不同，
+widgets及recorder未变并有新79＋1工作流资格。保留原已审capture，不冒称`479a811`重新录制。
 
-当前继续顺序是先解决上述源稳定性疑点并按必要改动重验相关范围，
-再冻结完整候选SHA执行六个原生目标CI/安装器审查，全部门禁通过才可决定里程碑发布。
+当前继续顺序是冻结包含修后资格文档的完整候选SHA，执行该SHA六个原生目标CI与独立安装器审查，
+全部交付门禁通过才可决定里程碑发布；原始崩溃因果未知与完整资源门禁保持记录。
 正常stream预览、完整partial/恢复/options/拓扑、其它工具与三平台参考门禁继续开放，goal保持active。
 
 以下各节保留本轮恢复、初次预检和修复的时间顺序；其中0.10仍为最新/0.11待发布等

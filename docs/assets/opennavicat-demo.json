@@ -546,5 +546,12 @@
     "method": "First, middle and last encoded frame of every phase, with extra full-size views and visible-text privacy guards on every captured frame",
     "real_connections_hostnames_paths_credentials_business_data_found": false,
     "reference_screenshots_used": false
+  },
+  "source_capture_commit": "979d0522f11cae3a8094f93c424bad558ed83298",
+  "post_capture_compatibility": {
+    "verified_against_commit": "479a811adfc78549e3982c8338c3dc9eb3d28be6",
+    "change": "Task signal ownership and deferred deletion; displayed UI and demonstrated database behavior unchanged",
+    "demonstrated_workflow_reverified": true,
+    "recaptured": false
   }
 }

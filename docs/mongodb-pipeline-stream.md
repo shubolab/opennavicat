@@ -222,37 +222,41 @@ Completed stream Messages/Output keep Save, grey Run and focus; returning to
 Pipeline restores its action group. Busy Import and other unexecuted graph/raw
 editor mutations are not claimed as accepted merely from their visible state.
 
-The following local measurements precede the queued Task ownership fix and
-remain separate from the historical scopes above. They must not be reused as
-qualification of a changed runtime:
+The finite UI/GIF checkpoint is committed as `979d052`; the subsequent
+`479a811` parents TaskSignals to MainWindow and defers their deletion after the
+existing finished cleanup. Four new real Qt regressions plus the prior eighteen
+lifecycle cases pass. The post-fix measurements below remain separate scopes:
 
 | Scope | Result | Qualification boundary |
 | --- | --- | --- |
-| Structured-error backend runner | **46 passed / zero skipped** | 32 pure contracts plus the same 14 real RS cases; six declared source hashes match. Bounded message/redaction and phase handling supplement the earlier protocol checks. |
-| Native Window runner | **16 passed / zero skipped** | Eleven declared source hashes match. Real toolbar-to-wire Run, local/queued/cold/late Stop, exact private BSON, actual invalid-stage message/location, ordinary-view recovery and two real Batch workflows. |
-| Offscreen Qt components | **78 passed / zero skipped** | 57 stream-component and 21 existing pipeline cases. Typed partials, no-location diagnostics, invalid/untrusted metadata, secret causes, state priority and repeated tab restoration are included. |
-| Native Cocoa components + Window | **94 passed / zero skipped**, 28.89 seconds (JUnit) | Actual Cocoa, Darwin arm64, v0.12.0; 13 source hashes unchanged. The exact owned RS container and two volumes were independently confirmed absent. This is a scoped UI check, not complete macOS or six-platform acceptance. |
-| Final default source suite | **2,180 passed / 636 conditional skips**, 82.89 seconds | Built native helper; 201 runtime/test/runner/native/workflow/project paths unchanged. Skips are not counted as real service execution. |
-| Final stream transport / stopped cleanup | **2 / zero skipped** and **13 / zero skipped**, separate scopes | Their declared source hashes match the corresponding final paths. Transport remains standalone TLS/SSH with expected 40573 rejection; cleanup starts no containers and connects to no DB. |
+| Native Window runner | **16 passed / zero skipped** | Eleven declared source hashes match the repaired source. Real toolbar-to-wire Run, local/queued/cold/late Stop, exact private BSON, invalid-stage message/location and two real Batch workflows. One owned RS container and two volumes independently absent. |
+| Native Cocoa components + Window + new lifecycle regressions | **98 passed / zero skipped**, 28.60 seconds (stdout) | 16 Window +78 components +4 new lifecycle cases; actual Cocoa, Darwin arm64, v0.12.0, fourteen source hashes unchanged. One owned RS container and two volumes independently absent. Scoped UI checks do not establish complete platform parity. |
+| Default source suite | **2,184 passed / 636 conditional skips**, 84.67 seconds (stdout) | Built native helper; 201 runtime/test/runner/native/workflow/project paths unchanged and independently matched to immutable `479a811` blobs. The old HEAD at test start is not the tested-source identity. |
+| Ordinary collection runner | **511 passed / zero skipped** | Strict manifest, 198 outer-observed source hashes unchanged, 48 declared source hashes matched; eight containers and sixteen volumes independently absent. Includes the complete 22-case lifecycle module. |
+| Recorder qualification | **79 passed / 3 conditional skips** offline; separately **1 passed / zero skipped** own-RS | Each scope binds 79 unchanged source files to `479a811`. Real toolbar Run delivered two typed events with exact BSON/UUID and preserved original session; owned service and both volumes independently absent. No GUI capture was made by these offscreen scopes. |
+| Unchanged declared-source qualifications | Backend **46 / zero skipped**; ordinary TLS **24 / zero skipped**; stream transport **2 / zero skipped**; stopped cleanup **13 / zero skipped** | Rebound by matching each scope's declared source bytes, not represented as post-fix re-executions. Backend is 32 pure +14 RS. Stream transport is standalone TLS/SSH with 40573 rejection; cleanup starts no containers and connects to no DB. Ordinary TLS's incomplete outer volume-ID record remains a limit. |
 
-The latest backend and Window receipts are
-`artifacts/stream-structured-errors-backend-qualification/summary.json` and
-`artifacts/stream-structured-errors-window-qualification/summary.json`.
-Other final receipts are under `artifacts/release-012/`, especially
-`final-default/verification.json`, `final-native-cocoa/verification.json` and
-the separate stream-security/stopped-cleanup directories. These remain
-working-tree measurements before a final candidate commit; the old HEAD is not
-the SHA of all currently uncommitted changes. Counts across scopes are not added.
-The [0.12 validation record](validation-0.12.md) tracks installer/CI and demo gates.
+The post-fix receipts are under `artifacts/release-012/`, notably
+`final-default-ownership/verification.json`,
+`final-native-cocoa-ownership/verification.json`,
+`final-window-owner-fix/summary.json`, `final-collections-owner-fix/summary.json`
+and `owner-fix-validation.json`. Recorder receipts are in the separate
+`final-recorder-ownership-{offline,own-rs}-20261113T065926Z-9dc0cd/` directories.
+The earlier **2,180 / 636**, **94 Cocoa** and serial **507** collection results
+remain the pre-ownership checkpoint; their old source hashes are not relabelled
+as repaired-runtime measurements. The 78 component cases comprise 57 stream and
+21 existing pipeline cases. Counts across scopes are not added.
+The [0.12 validation record](validation-0.12.md) retains all checkpoint and demo
+source ownership. Exact final-candidate six-target CI/installers remain pending.
 
 An initial parallel collection run ended in SIGSEGV; the separate fresh serial
 retry passed 507 cases with eight containers and sixteen volumes independently
 absent. That retry does not establish the crash's cause. A separate real
 `MainWindow.submit` experiment confirmed completed Task/TaskSignals Python
-objects retained by native callback closures; a minimal ownership fix and
-regression are queued. Its relationship to the SIGSEGV is unproven. Runtime
-changes require fresh relevant qualification before final source/installer
-acceptance; the measurements above remain the pre-fix checkpoint.
+objects retained by native callback closures. The `479a811` ownership fix and
+post-fix regression/qualification above address that confirmed defect. Its
+relationship to the original SIGSEGV remains unproven; successful reruns do not
+establish causality or close the broader resource/performance gate.
 
 Interactive and Batch callers now inspect returned `row_limit` and `deadline`
 instead of recording unconditional full success. Byte overflow remains an

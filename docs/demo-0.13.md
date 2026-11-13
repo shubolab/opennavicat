@@ -46,3 +46,13 @@ Oracle 部分展示连接设置界面，回执明确记录 `database_connection_
 ```
 
 本次准备不录制 GIF、不启动数据库服务，也不改公开资产。离屏回归验证实际选择器抓图、无交接状态、可见文本保护及正常／异常后的销毁；这些检查不替代合流后的 35 阶段 Cocoa 录制、逐阶段视觉审查或三平台验收。
+
+## GIF 图标颜色修正
+
+源码 `ca4d20a` 的首轮实际 35 阶段 GIF 已完成逐阶段隐私审查，但连接选择器中的 Oracle 红色变为棕红色，不能作为视觉通过的展示。相同源码的原始 Cocoa PNG 保持鲜红、青蓝和粉色；两次独立抓图不足以定位首轮录制的每一步，旧 GIF 继续保留为失败证据。
+
+编码改为统计完整帧的全局 palette，并在该 16×16 palette 中保留本应用独立绘制的九个数据库主色。已有精确色保留原 entry，缺少的颜色先复用重复 entry，再选择最接近的不同 entry；透明 slot 和黑白保留。该操作只调整 GIF 调色板，所有画面仍来自实际应用抓图，不添加色板、图标或控件。QImage 的文件/像素处理在录制器的 I/O worker 执行，不读取 QWidget、QPixmap 或现有工作区。公开回执新增 `gif_palette`，记录实际使用的策略及非秘密主色。
+
+对照同时保留原全局 diff、全局 full、逐帧 single/new 与保色全局 full。逐帧方案有较大的体积代价；把逐帧 palette 与 rectangle 复用叠加还会使未改变区域使用旧索引。当前选择保色全局 full，继续使用固定 palette 的 rectangle 优化。FFmpeg 的 [palettegen](https://www.ffmpeg.org/ffmpeg-filters.html#palettegen) 与 [paletteuse](https://www.ffmpeg.org/ffmpeg-filters.html#paletteuse) 文档说明统计方式及逐帧 palette 选项，实际颜色、文字、帧序和时间仍以解码测试为准。
+
+新增回归使用本应用实际 16px 图标与生成的多色画面，检查晚出现的静态图标、局部变化时未改变的图标、文字前景、回到前一画面的顺序和实际 GIF 帧数/时长；另检查 worker 中调色板读写、透明 slot、少色 padding 与无效输入不改文件。原始应用 PNG 和已审样例只用于忽略目录下的离线诊断，诊断重编码不是新的实际应用演示。合流冻结新源码后，须重新实际录制全部 35 阶段并逐阶段审查，再替换 README 同一份 GIF；以上测试不代替该步骤，也不构成完整视觉或三平台验收。

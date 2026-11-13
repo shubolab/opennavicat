@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 from contextlib import closing, contextmanager
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from dataclasses import asdict
@@ -45,6 +46,13 @@ MONGO_STREAM_COLLECTION = "generated_stream_events"
 ORACLE_FORM_NAME = "Oracle · 连接设置演示"
 ORACLE_FORM_PHASES = ("oracle_connection_general", "oracle_connection_advanced", "oracle_connection_databases")
 CONNECTION_CHOOSER_PHASES = ("connection_chooser",)
+# Match the independent application artwork's sRGB driver fills. These colors
+# only reserve GIF palette entries; no pixels or controls are added to captures.
+DEMO_DRIVER_COLORS = {
+    "mysql": "#41d549", "postgresql": "#4083ff", "sqlserver": "#ffaa01",
+    "oracle": "#ff0033", "sqlite": "#61dbd2", "mariadb": "#c3986d",
+    "mongodb": "#ba5101", "redis": "#fe7d7b", "snowflake": "#29b5e8",
+}
 SQLITE_PHASES = ("objects", "table_data", "query_editor", "query_results", "table_designer", "designer_sql_preview")
 MONGO_PHASES = ("mongodb_collection_grid", "mongodb_typed_tree", "mongodb_gridfs_preview",
     "mongodb_javascript_editor", "mongodb_javascript_results", "mongodb_collection_inline_index",
@@ -928,23 +936,84 @@ def generated_sample(directory):
     return path
 
 
+def reserve_demo_driver_colors(path):
+    """Adjust only an owned 16x16 palette, using worker-safe QImage values."""
+    from PySide6.QtGui import QColor, QImage
+
+    palette = QImage(str(path))
+    if palette.isNull() or palette.width() != 16 or palette.height() != 16:
+        raise RuntimeError("GIF encoding did not produce its 256-entry palette.")
+    palette = palette.convertToFormat(QImage.Format.Format_RGBA8888)
+    original = [palette.pixelColor(index % 16, index // 16) for index in range(256)]
+    transparent = [index for index, color in enumerate(original) if color.alpha() == 0]
+    if len(transparent) != 1 or any(color.alpha() not in (0, 255) for color in original):
+        raise RuntimeError("GIF palette transparency differs from its reserved single slot.")
+    targets = {kind: QColor(value) for kind, value in DEMO_DRIVER_COLORS.items()}
+    assignments = {}
+    used = set(transparent)
+    counts = Counter(color.rgba() for color in original)
+    # Palettegen pads short palettes with repeated black. Keep one black/white
+    # entry, then reuse duplicates before replacing a distinct source color.
+    for protected in (QColor('black'), QColor('white')):
+        index = next((index for index, color in enumerate(original) if color == protected), None)
+        if index is not None:
+            used.add(index)
+    # Keep every already-exact brand entry before assigning missing colors.
+    for kind, target in targets.items():
+        exact = next((index for index, color in enumerate(original)
+                      if index not in used and color == target), None)
+        if exact is not None:
+            assignments[kind] = exact
+            used.add(exact)
+    for kind, target in targets.items():
+        if kind in assignments:
+            continue
+        choices = [index for index in range(256) if index not in used]
+        if not choices:
+            raise RuntimeError("GIF palette has no safe distinct entry for driver colors.")
+        index = min(choices, key=lambda item: (counts[original[item].rgba()] <= 1,
+                    sum((component - wanted) ** 2 for component, wanted in
+                        zip(original[item].getRgb()[:3], target.getRgb()[:3]))))
+        counts[original[index].rgba()] -= 1
+        assignments[kind] = index
+        used.add(index)
+    for kind, index in assignments.items():
+        palette.setPixelColor(index % 16, index // 16, targets[kind])
+    expected = [palette.pixelColor(index % 16, index // 16) for index in range(256)]
+    if not palette.save(str(path), 'PNG'):
+        raise RuntimeError("Could not save the reserved-color GIF palette.")
+    saved = QImage(str(path))
+    if (saved.isNull() or saved.size() != palette.size()
+            or any(saved.pixelColor(index % 16, index // 16) != color
+                   for index, color in enumerate(expected))):
+        raise RuntimeError("The saved GIF palette did not preserve its exact colors and transparency.")
+    return {"strategy": "global_full_with_reserved_driver_colors",
+            "reserved_driver_colors": dict(DEMO_DRIVER_COLORS),
+            "reserved_color_count": len(assignments),
+            "transparency_slot_preserved": True}
+
+
 def encode(ffmpeg, frames, fps, output):
     palette = frames.parent / "palette.png"
     common = [ffmpeg, "-hide_banner", "-loglevel", "error", "-y"]
     sequence = ["-framerate", str(fps), "-i", str(frames / "frame-%05d.png")]
     commands = [
-        [*common, *sequence, "-vf", "palettegen=max_colors=256:stats_mode=diff",
+        [*common, *sequence, "-vf", "palettegen=max_colors=256:stats_mode=full:reserve_transparent=1",
          "-frames:v", "1", str(palette)],
         [*common, *sequence, "-i", str(palette), "-lavfi",
          "paletteuse=dither=bayer:bayer_scale=3:diff_mode=rectangle",
          "-gifflags", "+offsetting+transdiff", "-loop", "0", str(output)],
     ]
-    for command in commands:
+    palette_info = None
+    for number, command in enumerate(commands):
         result = subprocess.run(command, capture_output=True, text=True, timeout=120)
         if result.returncode:
             # Never put an absolute capture/workspace path in a public receipt.
             error = result.stderr.replace(str(frames.parent), "<temporary-demo>")
             raise RuntimeError("GIF encoding failed: " + error[-1800:])
+        if number == 0:
+            palette_info = reserve_demo_driver_colors(palette)
+    return palette_info
 
 
 def verify_gif(path, receipt):
@@ -2217,7 +2286,7 @@ def main():
                 mongo_config = io_pool.submit(mongo.start).result() if mongo is not None else None
                 frames, receipt = record(args, temporary, io_pool, mongo, mongo_config)
                 generated = temporary / "demo.gif"
-                io_pool.submit(encode,ffmpeg,frames,args.fps,generated).result()
+                receipt["gif_palette"] = io_pool.submit(encode,ffmpeg,frames,args.fps,generated).result()
                 io_pool.submit(verify_gif,generated,receipt).result()
                 if mongo is not None:
                     io_pool.submit(mongo.cleanup).result()

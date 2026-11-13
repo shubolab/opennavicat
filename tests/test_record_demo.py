@@ -482,6 +482,167 @@ def test_actual_main_and_modal_frames_share_one_encodable_pixel_format(recorder,
     assert receipt['gif_probe']['frames'] == 6
 
 
+@pytest.mark.parametrize('few_colors', [False, True], ids=['full-palette', 'padded-palette'])
+def test_palette_reserves_distinct_driver_colors_and_keeps_transparency_in_worker(qapp, recorder, tmp_path, few_colors):
+    from concurrent.futures import ThreadPoolExecutor
+    from PySide6.QtGui import QColor, QImage
+
+    path = tmp_path / 'palette.png'
+    palette = QImage(16, 16, QImage.Format.Format_RGBA8888)
+    for index in range(256):
+        palette.setPixelColor(index % 16, index // 16, QColor('black') if few_colors else QColor(index, index, index))
+    palette.setPixelColor(1, 0, QColor('white'))
+    palette.setPixelColor(2, 0, QColor('#7bb75e'))
+    for index, kind in ((20, 'postgresql'), (21, 'oracle'), (22, 'redis')):
+        palette.setPixelColor(index % 16, index // 16, QColor(recorder.DEMO_DRIVER_COLORS[kind]))
+    palette.setPixelColor(15, 15, QColor(0, 255, 0, 0))
+    assert palette.save(str(path))
+    before = [palette.pixelColor(index % 16, index // 16) for index in range(256)]
+    gui_thread = threading.get_ident()
+    def reserve_in_worker():
+        assert threading.get_ident() != gui_thread
+        return recorder.reserve_demo_driver_colors(path)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        facts = pool.submit(reserve_in_worker).result(timeout=5)
+    saved = QImage(str(path))
+    after = [saved.pixelColor(index % 16, index // 16) for index in range(256)]
+    assert saved.size() == palette.size()
+    assert after[255] == before[255] and after[255].alpha() == 0
+    assert sum(color.alpha() == 0 for color in after) == 1
+    assert after[0] == before[0] and after[1] == before[1]
+    if few_colors:
+        assert after[2] == before[2]  # The sole source green is not sacrificed for a reserved brand.
+    assert [after[index] for index in (20, 21, 22)] == [before[index] for index in (20, 21, 22)]
+    targets = [QColor(value) for value in recorder.DEMO_DRIVER_COLORS.values()]
+    assert len(set(color.rgba() for color in targets)) == 9
+    assert all(color in after for color in targets)
+    changed = [index for index in range(256) if after[index] != before[index]]
+    assert len(changed) == 6 and all(after[index] in targets for index in changed)
+    assert facts['reserved_color_count'] == 9 and facts['transparency_slot_preserved']
+
+
+@pytest.mark.parametrize('invalid', ['unreadable', 'geometry', 'opaque', 'two-transparent', 'partial-alpha'])
+def test_invalid_palette_is_rejected_before_its_file_is_changed(recorder, tmp_path, invalid):
+    from PySide6.QtGui import QColor, QImage
+
+    path = tmp_path / 'invalid-palette.png'
+    if invalid == 'unreadable':
+        path.write_bytes(b'not a PNG')
+    else:
+        palette = QImage(15 if invalid == 'geometry' else 16, 16, QImage.Format.Format_RGBA8888)
+        palette.fill(QColor('#808080'))
+        if invalid != 'opaque':
+            palette.setPixelColor(0, 0, QColor(0, 255, 0, 0))
+        if invalid == 'two-transparent':
+            palette.setPixelColor(1, 0, QColor(0, 255, 0, 0))
+        if invalid == 'partial-alpha':
+            palette.setPixelColor(1, 0, QColor(20, 30, 40, 128))
+        assert palette.save(str(path))
+    before = path.read_bytes()
+    with pytest.raises(RuntimeError, match='palette'):
+        recorder.reserve_demo_driver_colors(path)
+    assert path.read_bytes() == before
+
+
+@pytest.mark.parametrize('changing_panel', [False, True], ids=['late-static-icons', 'unchanged-icons'])
+def test_late_static_driver_icons_keep_color_text_and_frame_order_after_encoding(qapp, recorder, tmp_path, changing_panel):
+    import shutil
+    from PySide6.QtCore import QRect, Qt
+    from PySide6.QtGui import QColor, QFont, QIcon, QImage, QPainter
+    from opennavicat.ui.icons import icon
+
+    if shutil.which('ffmpeg') is None or shutil.which('ffprobe') is None:
+        pytest.skip('Actual GIF color verification requires ffmpeg and ffprobe')
+    width, height = 480, 320
+    busy = QImage(width, height, QImage.Format.Format_RGB32)
+    for y in range(height):
+        for x in range(width):
+            busy.setPixelColor(x, y, QColor(x * 255 // (width - 1),
+                y * 255 // (height - 1), (x * 13 + y * 7) % 256))
+    static = QImage(width, height, QImage.Format.Format_RGB32)
+    static.fill(QColor('white'))
+    targets = {
+        'mysql': '41d549', 'postgresql': '4083ff', 'sqlserver': 'ffaa01',
+        'oracle': 'ff0033', 'sqlite': '61dbd2', 'mariadb': 'c3986d',
+        'mongodb': 'ba5101', 'redis': 'fe7d7b', 'snowflake': '29b5e8',
+    }
+    painter = QPainter(static)
+    font = QFont(qapp.font()); font.setPixelSize(14)
+    painter.setFont(font)
+    painter.setPen(QColor('black'))
+    for number, kind in enumerate(targets):
+        x, y = 24 + (number % 3) * 156, 30 + (number // 3) * 96
+        icon(kind, 16).paint(painter, QRect(x, y, 16, 16),
+            Qt.AlignmentFlag.AlignCenter, QIcon.Mode.Normal, QIcon.State.Off)
+        painter.drawText(x, y + 36, kind)
+    painter.end()
+    rgb = static.convertToFormat(QImage.Format.Format_RGB888)
+    row_bytes = rgb.bytesPerLine()
+    original = bytes(rgb.constBits())
+    expected = {kind: bytes.fromhex(value) for kind, value in targets.items()}
+    color_kinds = {color: kind for kind, color in expected.items()}
+    masks = {kind: [] for kind in targets}
+    text_pixels = []
+    for y in range(height):
+        for x in range(width):
+            at = y * row_bytes + x * 3
+            value = original[at:at + 3]
+            kind = color_kinds.get(value)
+            if kind is not None:
+                masks[kind].append((y * width + x) * 3)
+            if max(value) < 40:
+                text_pixels.append((y * width + x) * 3)
+    assert all(len(indices) > 80 for indices in masks.values())
+    assert len(text_pixels) > 100
+    frames = tmp_path / 'frames'; frames.mkdir()
+    # A varied earlier scene must not consume the colors of small icons held
+    # later. Returning to each scene also catches a palette/frame mismatch.
+    panel_colors = ['#891122', '#1111ff', '#8a22cd', '#44bbcc', '#1111ff', '#ffffff']
+    if changing_panel:
+        sequence = []
+        for color in panel_colors:
+            frame = static.copy()
+            painter = QPainter(frame)
+            painter.fillRect(QRect(80, 80, 90, 30), QColor(color))
+            painter.end()
+            sequence.append(frame)
+    else:
+        sequence = [busy, *([static] * 18), busy, static]
+    for number, frame in enumerate(sequence):
+        assert frame.save(str(frames / f'frame-{number:05d}.png'))
+    output = tmp_path / 'late-icons.gif'
+    recorder.encode(shutil.which('ffmpeg'), frames, 6, output)
+    receipt = dict(frames=len(sequence), fps=6, size=[width, height],
+                   duration_seconds=len(sequence) / 6)
+    recorder.verify_gif(output, receipt)
+    decoded = subprocess.run([shutil.which('ffmpeg'), '-v', 'error', '-threads', '1',
+        '-ignore_loop', '1', '-i', str(output), '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-'],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, timeout=30).stdout
+    frame_bytes = width * height * 3
+    assert len(decoded) == len(sequence) * frame_bytes
+    for number in range(len(sequence)):
+        pixels = decoded[number * frame_bytes:(number + 1) * frame_bytes]
+        if changing_panel:
+            at = (90 * width + 90) * 3
+            color = bytes.fromhex(panel_colors[number][1:])
+            assert all(abs(pixels[at + channel] - color[channel]) <= 8 for channel in range(3))
+        elif number in (0, 19):
+            assert max(pixels[:3]) < 40
+        else:
+            assert min(pixels[:3]) > 240
+    for number in range(len(sequence)) if changing_panel else (1, 9, 18, 20):
+        pixels = decoded[number * frame_bytes:(number + 1) * frame_bytes]
+        for kind, indices in masks.items():
+            color = expected[kind]
+            errors = [sum(abs(pixels[at + channel] - color[channel]) for at in indices)
+                      / len(indices) for channel in range(3)]
+            within = sum(all(abs(pixels[at + channel] - color[channel]) <= 16
+                             for channel in range(3)) for at in indices)
+            assert max(errors) <= 8, (number, kind, errors)
+            assert within / len(indices) > .95, (number, kind, within, len(indices))
+        assert sum(max(pixels[at:at + 3]) < 80 for at in text_pixels) / len(text_pixels) > .98
+
+
 @pytest.mark.parametrize("button_class",[QPushButton,QToolButton])
 def test_actual_visible_button_endpoint_is_rejected_before_capture(qtbot,recorder,tmp_path,button_class):
     window = QWidget()

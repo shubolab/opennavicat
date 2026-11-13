@@ -42,6 +42,18 @@ MONGO_STORAGE_COLLECTION = "generated_storage"
 MONGO_BATCH_PIPELINE_NAME = "生成聚合管道"
 MONGO_BATCH_NAME = "生成批处理作业"
 MONGO_STREAM_COLLECTION = "generated_stream_events"
+ORACLE_FORM_NAME = "Oracle · 连接设置演示"
+ORACLE_FORM_PHASES = ("oracle_connection_general", "oracle_connection_advanced", "oracle_connection_databases")
+SQLITE_PHASES = ("objects", "table_data", "query_editor", "query_results", "table_designer", "designer_sql_preview")
+MONGO_PHASES = ("mongodb_collection_grid", "mongodb_typed_tree", "mongodb_gridfs_preview",
+    "mongodb_javascript_editor", "mongodb_javascript_results", "mongodb_collection_inline_index",
+    "mongodb_collection_inline_key_editor", "mongodb_collection_storage_engine", "mongodb_collection_index_defaults",
+    "mongodb_collection_options", "mongodb_collection_collation", "mongodb_collection_storage_save_sheet",
+    "mongodb_collection_options_reopened", "mongodb_aggregation_pipeline_stage_template",
+    "mongodb_aggregation_pipeline_options", "mongodb_aggregation_pipeline", "mongodb_aggregation_pipeline_script",
+    "mongodb_aggregation_pipeline_explain", "mongodb_aggregation_pipeline_results", "mongodb_batch_job_general",
+    "mongodb_batch_job_messages", "mongodb_batch_job_history")
+STREAM_PHASES = ("mongodb_finite_stream_busy", "mongodb_finite_stream_messages", "mongodb_finite_stream_output")
 MONGO_IMAGE = "mongo:8.0.34@sha256:b9924c330a8bbc5800fe9c69f04a84e221eca7b28fd049a0354147d9908fa142"
 MONGO_STORAGE_TEXT = '{ wiredTiger: { configString: "block_compressor=zlib" } }'
 MONGO_INDEX_DEFAULTS_TEXT = '{ storageEngine: { wiredTiger: { configString: "prefix_compression=false" } } }'
@@ -69,6 +81,12 @@ def mongo_storage_options():
         "storageEngine": {"wiredTiger": {"configString": "block_compressor=zlib"}},
         "indexOptionDefaults": {"storageEngine": {"wiredTiger": {"configString": "prefix_compression=false"}}},
     }
+
+
+def required_demo_phases(*, mongodb=False, stream=False, oracle_form=False):
+    if stream and not mongodb:
+        raise ValueError("A finite-stream demo requires its MongoDB workflows.")
+    return SQLITE_PHASES + (MONGO_PHASES if mongodb else ()) + (STREAM_PHASES if stream else ()) + (ORACLE_FORM_PHASES if oracle_form else ())
 
 
 def mongo_collection_options():
@@ -670,17 +688,21 @@ def remaining_seconds(deadline):
 
 def visible_texts(window):
     """Inspect rendered text surfaces, not hidden credentials or UserRole data."""
-    from PySide6.QtCore import Qt
+    from PySide6.QtCore import QModelIndex, Qt
     from PySide6.QtGui import QAction
-    from PySide6.QtWidgets import QAbstractButton, QAbstractItemView, QComboBox, QLabel, QLineEdit, QPlainTextEdit, QTextEdit
+    from PySide6.QtWidgets import QAbstractButton, QAbstractItemView, QComboBox, QLabel, QLineEdit, QListView, QPlainTextEdit, QTextEdit
 
     yield window.windowTitle()
     for widget in window.findChildren(QLabel)+window.findChildren(QLineEdit):
         if widget.isVisible():
             yield widget.text()
+            if isinstance(widget, QLineEdit) and not widget.text():
+                yield widget.placeholderText()
     for widget in window.findChildren(QPlainTextEdit)+window.findChildren(QTextEdit):
         if widget.isVisible():
             yield widget.toPlainText()
+            if not widget.toPlainText():
+                yield widget.placeholderText()
     for widget in window.findChildren(QComboBox):
         if widget.isVisible():
             yield widget.currentText()
@@ -694,13 +716,19 @@ def visible_texts(window):
         if not view.isVisible() or view.model() is None:
             continue
         model = view.model()
-        for column in range(model.columnCount()):
-            value = model.headerData(column, Qt.Orientation.Horizontal, Qt.ItemDataRole.DisplayRole)
-            if value is not None:
-                yield str(value)
+        # QListWidget's internal QAbstractListModel exposes columnCount as a
+        # private C++ override. Read the view's actual displayed model column
+        # through QListView's public API instead of invoking that override.
+        def columns(parent):
+            return (view.modelColumn(),) if isinstance(view, QListView) else range(model.columnCount(parent))
+        if not isinstance(view, QListView):
+            for column in columns(QModelIndex()):
+                value = model.headerData(column, Qt.Orientation.Horizontal, Qt.ItemDataRole.DisplayRole)
+                if value is not None:
+                    yield str(value)
         def rows(parent):
             for row in range(model.rowCount(parent)):
-                for column in range(model.columnCount(parent)):
+                for column in columns(parent):
                     index = model.index(row,column,parent)
                     value = model.data(index,Qt.ItemDataRole.DisplayRole)
                     if value is not None:
@@ -708,7 +736,6 @@ def visible_texts(window):
                 first = model.index(row,0,parent)
                 if model.rowCount(first):
                     yield from rows(first)
-        from PySide6.QtCore import QModelIndex
         yield from rows(QModelIndex())
 
 
@@ -748,6 +775,79 @@ def fit_capture_image(source, width, height, *, save_sheet=False):
     painter.drawImage((width - image.width()) // 2, (height - image.height()) // 2, image)
     painter.end()
     return canvas
+
+
+@contextmanager
+def oracle_form_demo(parent=None):
+    """Actual unsaved form, with every Oracle connection attempt forbidden."""
+    from opennavicat.oracle_session import OracleSession
+    from opennavicat.ui.oracle_connection import OracleConnectionDialog
+
+    original = OracleSession.connect
+    original_init = OracleSession.__init__
+    dialog = None
+    attempted = []
+    def deny_connection(*_args, **_kwargs):
+        attempted.append(True)
+        raise RuntimeError("The Oracle form demonstration forbids database connections.")
+    def guarded_init(session, config):
+        original_init(session, config)
+        # A queued worker keeps this per-instance guard even after the form
+        # closes and the process-wide class hooks have been restored.
+        session.connect = deny_connection
+    OracleSession.connect = deny_connection
+    OracleSession.__init__ = guarded_init
+    try:
+        dialog = OracleConnectionDialog(parent)
+        dialog.name_edit.setText(ORACLE_FORM_NAME)
+        dialog._demo_connection_attempts = attempted
+        yield dialog
+    finally:
+        try:
+            if dialog is not None:
+                dialog.reject()
+        finally:
+            OracleSession.connect = original
+            OracleSession.__init__ = original_init
+
+
+def verify_oracle_form_demo(dialog):
+    """Read real widgets on the GUI thread; never report a database success."""
+    from PySide6.QtCore import QThread
+    from PySide6.QtWidgets import QApplication
+    from opennavicat.ui.oracle_connection import OracleConnectionDialog
+
+    app = QApplication.instance()
+    if app is None or QThread.currentThread() is not app.thread():
+        raise RuntimeError("Oracle demo widgets must be verified on their GUI owner.")
+    if not isinstance(dialog, OracleConnectionDialog):
+        raise RuntimeError("The Oracle demo must capture its actual application connection form.")
+    tabs = [dialog.tabs.tabText(i) for i in range(dialog.tabs.count())]
+    if tabs != ["常规", "高级", "数据库", "SSH", "备注"]:
+        raise RuntimeError("The actual Oracle form does not show its five required pages.")
+    config = dialog._draft_config()
+    if (config.name != ORACLE_FORM_NAME or config.driver != "oracle" or config.database != ""
+            or config.host != "" or config.username != "" or config.oracle_service_identifier != "ORCL"
+            or config.port != 1521 or config.oracle_connection_type != "basic"
+            or config.oracle_service_type != "service" or config.oracle_role != "default"
+            or config.oracle_os_auth or config.ssh_enabled or config.ssl_mode != "disable"
+            or config.oracle_auto_connect or config.oracle_session_limit_enabled
+            or config.oracle_keepalive_enabled or config.oracle_custom_database_list_enabled
+            or config.oracle_session_limit != 0 or config.oracle_keepalive_seconds != 240
+            or config.oracle_client_charset != ""
+            or any(widget.text() for widget in (dialog.host_edit, dialog.user_edit, dialog.password_edit,
+                dialog.ssh_password_edit, dialog.ssh_key_passphrase_edit))
+            or any(getattr(config, field) for field in ("password", "ssh_password", "ssh_key_passphrase",
+                "ssl_key_password", "ssl_ca", "ssl_cert", "ssl_key", "ssl_crl", "ssh_host", "ssh_username", "ssh_key_file", "oracle_tns_alias", "oracle_settings_directory",
+                "oracle_initial_query", "oracle_notes", "oracle_custom_database_list"))
+            or dialog._testing or dialog._test_task is not None or dialog._test_pool.activeThreadCount()
+            or dialog._config is not None or not dialog.test_banner.isHidden()
+            or getattr(dialog, "_demo_connection_attempts", None) != []):
+        raise RuntimeError("The Oracle demo form contains nondefault data or a connection/save attempt.")
+    return {"pages": tabs, "captured_pages": ["常规", "高级", "数据库"],
+            "host_empty": True, "username_empty": True, "credentials_empty": True,
+            "service_identifier": "ORCL", "profile_saved": False,
+            "database_connection_attempted": False, "database_success_claimed": False}
 
 
 def generated_sample(directory):
@@ -815,6 +915,7 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
     from opennavicat.ui.window import MainWindow, TablePage
 
     include_stream = bool(getattr(args, "include_stream", False))
+    include_oracle_form = bool(getattr(args, "include_oracle_form", False))
     if include_stream and (mongo is None or not mongo.replica_set):
         raise RuntimeError("A generated stream recording requires its new owned replica set.")
     io_jobs = []
@@ -895,9 +996,10 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
              "mongo_storage_page": None, "mongo_storage_verification": None,
              "mongo_batch_page": None, "mongo_batch_verification": None,
              "mongo_stream_page": None, "mongo_stream_verification": None,
+             "oracle_form": None, "oracle_form_guard": None, "oracle_form_verification": None,
              "stream_abort": threading.Event(), "stream_release": threading.Event(),
              "capture_target": window}
-    deadline = time.monotonic() + (150 if include_stream else 120)
+    deadline = time.monotonic() + (150 if include_stream else 120) + (12 if include_oracle_form else 0)
     capture_timer = QTimer(app)
     capture_timer.setInterval(round(1000 / args.fps))
 
@@ -925,6 +1027,8 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
             # This is a guard, not pixel redaction. A leaking frame is never saved.
             assert_visible_privacy(window,temporary,mongo)
             target = state["capture_target"]
+            if target is state["oracle_form"]:
+                verify_oracle_form_demo(target)
             if target is not window:
                 # A real app sheet is grabbed directly, never composited into a
                 # synthetic main-window image or sampled from the desktop.
@@ -951,7 +1055,8 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
     def phase(name):
         target = state["capture_target"]
         state["phases"].append({"name": name, "first_frame": state["count"],
-            "surface": "main_window" if target is window else "save_sheet",
+            "surface": ("main_window" if target is window else "oracle_connection_dialog"
+                        if target is state["oracle_form"] else "save_sheet"),
             "source_size_logical": [target.width(), target.height()],
             "fit": "existing_main_window_scale" if target is window else "keep_aspect_centered_neutral_letterbox"})
 
@@ -1067,7 +1172,7 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
 
     def preview_ready():
         phase("designer_sql_preview")
-        hold(3.0, open_mongodb if mongo is not None else finish)
+        hold(3.0, open_mongodb if mongo is not None else finish_workflows)
 
     def open_mongodb():
         from opennavicat.mongodb_session import MongoSession
@@ -1632,7 +1737,7 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
             raise RuntimeError("The persisted Batch Job history did not display both successful tasks.")
         phase("mongodb_batch_job_history")
         capture(); capture_timer.start()
-        hold(2.4, prepare_mongo_stream if include_stream else finish)
+        hold(2.4, prepare_mongo_stream if include_stream else finish_workflows)
 
     def prepare_mongo_stream():
         capture(); capture_timer.stop()
@@ -1735,10 +1840,42 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
         verify_mongo_stream_page(page, output=True)
         phase("mongodb_finite_stream_output")
         capture(); capture_timer.start()
-        hold(2.4, finish)
+        hold(2.4, finish_workflows)
 
-    def finish():
-        capture()
+    def finish_workflows():
+        if not include_oracle_form:
+            finish()
+            return
+        capture_timer.stop()
+        guard = oracle_form_demo(window)
+        dialog = guard.__enter__()
+        state["oracle_form_guard"] = guard
+        state["oracle_form"] = dialog
+        state["capture_target"] = dialog
+        dialog.show()
+        wait_for(dialog.isVisible, lambda: show_oracle_form_page(0), "showing the generated Oracle connection form")
+
+    def show_oracle_form_page(index):
+        dialog = state["oracle_form"]
+        dialog.tabs.setCurrentIndex(index)
+        state["oracle_form_verification"] = verify_oracle_form_demo(dialog)
+        phase(ORACLE_FORM_PHASES[index])
+        capture(); capture_timer.start()
+        hold(2.4, (lambda: show_oracle_form_page(index + 1)) if index < 2 else close_oracle_form)
+
+    def close_oracle_form():
+        capture(); capture_timer.stop()
+        state["oracle_form_verification"] = verify_oracle_form_demo(state["oracle_form"])
+        state["oracle_form_guard"].__exit__(None, None, None)
+        state["oracle_form_guard"] = None
+        state["capture_target"] = window
+        # Keep the last form phase's frames together: finish verification is
+        # paused and the main window is not captured under that form phase.
+        finish(capture_last=False)
+
+    def finish(*, capture_last=True):
+        if capture_last:
+            capture()
         capture_timer.stop()
         if state["error"] is not None:
             return
@@ -1759,12 +1896,18 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
                     raise RuntimeError("The generated Batch Job's actual execution and persisted history were not verified.")
                 if include_stream and not state["mongo_stream_verification"]:
                     raise RuntimeError("The generated finite stream was not independently verified.")
+            if include_oracle_form and not state["oracle_form_verification"]:
+                raise RuntimeError("The actual Oracle connection form was not verified.")
         window.submit(verify_preview, lambda _result: shutdown(), label="验证生成的演示数据")
 
     def shutdown():
         if state["shutdown"]:
             return
         state["shutdown"] = True
+        if state["oracle_form_guard"] is not None:
+            state["oracle_form_guard"].__exit__(None, None, None)
+            state["oracle_form_guard"] = None
+            state["capture_target"] = window
         state["stream_abort"].set()
         state["stream_release"].set()
         capture_timer.stop()
@@ -1867,7 +2010,8 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
         raise RuntimeError(state["error"] or "Demo application failed.")
     if not window._closed or not idle():
         raise RuntimeError("The demo exited before its native sessions and window had closed.")
-    if state["count"] < 2 or len(state["phases"]) != (31 if include_stream else 28 if mongo is not None else 6):
+    expected_phases = required_demo_phases(mongodb=mongo is not None, stream=include_stream, oracle_form=include_oracle_form)
+    if state["count"] < 2 or tuple(item["name"] for item in state["phases"]) != expected_phases:
         raise RuntimeError("The demo did not capture all required workflows.")
     for index, item in enumerate(state["phases"]):
         stop = state["phases"][index + 1]["first_frame"] if index + 1 < len(state["phases"]) else state["count"]
@@ -1877,7 +2021,7 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
         item["privacy_checked_frames"] = item["frames"]
     return frames, {
         "application": "OpenNavicat", "version": __version__, "theme": args.theme,
-        "capture": "Actual live Qt QWidget.grab frames; save-sheet phase keeps the actual modal's aspect ratio on a centered neutral letterbox canvas; no reference screenshots, synthetic controls or image generation service",
+        "capture": "Actual live Qt QWidget.grab frames; actual modal forms and save sheets keep their aspect ratio on a centered neutral letterbox canvas; no reference screenshots, synthetic controls or image generation service",
         "qt_platform": app.platformName(), "qt_version": QLibraryInfo.version().toString(),
         "size": [args.width, args.height], "fps": args.fps, "frames": state["count"],
         "duration_seconds": round(state["count"] / args.fps, 3), "loop": "infinite",
@@ -1913,6 +2057,7 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
         "mongodb_aggregation_pipeline_results": state.get("mongo_pipeline_results"),
         "mongodb_batch_job": state["mongo_batch_verification"],
         "mongodb_finite_stream": state["mongo_stream_verification"],
+        "oracle_connection_form": state["oracle_form_verification"],
         "visible_text_privacy_guard": "labels, editors, titles, actions, combos, tree/table display fields; paths/endpoints/credentials rejected before frame save",
         "sqlite_closed_in_worker": state["sqlite_closed_in_worker"],
         "native_window_closed_before_quit": bool(window._closed),
@@ -1932,6 +2077,8 @@ def main():
         help="Add actual generated BSON and GridFS workflows using a new owned Docker service")
     parser.add_argument("--include-stream", action="store_true",
         help="Add real finite-stream busy/messages/output using an authenticated owned replica set; requires --include-mongodb")
+    parser.add_argument("--include-oracle-form", action="store_true",
+        help="Add three actual Oracle connection-form pages with empty host/user/password; no database connection or saved profile")
     parser.add_argument("--check-dependencies", action="store_true")
     args = parser.parse_args()
     if args.include_stream and not args.include_mongodb:
@@ -1939,14 +2086,15 @@ def main():
     ffmpeg, version = dependencies(args.include_mongodb)
     if args.check_dependencies:
         print(json.dumps({"ffmpeg": version, "palette_filters": True, "Pillow_required": False,
-            "mongodb_requested":args.include_mongodb,"docker_available":shutil.which("docker") is not None}))
+            "mongodb_requested":args.include_mongodb,"oracle_form_requested":args.include_oracle_form,
+            "docker_available":shutil.which("docker") is not None}))
         return 0
     if args.width < 950 or args.height < 620:
         parser.error("The application needs at least 950 by 620 logical pixels.")
     if args.output.suffix.lower() != ".gif":
         parser.error("The demo output must be a .gif file.")
-    if args.include_mongodb and not any(value == "--output" or value.startswith("--output=") for value in sys.argv[1:]):
-        parser.error("A MongoDB capture requires an explicit --output; use an ignored development artifact before publishing.")
+    if (args.include_mongodb or args.include_oracle_form) and not any(value == "--output" or value.startswith("--output=") for value in sys.argv[1:]):
+        parser.error("An extended demo capture requires an explicit --output; use an ignored development artifact before publishing.")
     os.environ["QT_QPA_PLATFORM"] = args.platform
     sys.path.insert(0, str(ROOT))
     # Qt's first application/thread identity belongs to the main thread, before

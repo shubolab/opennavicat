@@ -29,6 +29,144 @@ def recorder():
     return module
 
 
+def test_oracle_form_records_actual_three_pages_with_no_endpoint_or_success(qtbot, recorder, tmp_path, monkeypatch):
+    import oracledb
+    from PySide6.QtGui import QImage
+    from opennavicat.oracle_session import OracleSession
+    original = OracleSession.connect
+    monkeypatch.setattr(oracledb, 'connect', lambda **kwargs: pytest.fail('Form capture must not connect'))
+    with recorder.oracle_form_demo() as dialog:
+        qtbot.addWidget(dialog)
+        dialog.show()
+        qtbot.waitExposed(dialog)
+        for index, title in enumerate(['常规', '高级', '数据库']):
+            dialog.tabs.setCurrentIndex(index)
+            qtbot.wait(10)
+            facts = recorder.verify_oracle_form_demo(dialog)
+            assert dialog.tabs.tabText(dialog.tabs.currentIndex()) == title
+            assert facts['pages'] == ['常规', '高级', '数据库', 'SSH', '备注']
+            assert facts['service_identifier'] == 'ORCL'
+            assert facts['host_empty'] and facts['username_empty'] and facts['credentials_empty']
+            assert not facts['profile_saved'] and not facts['database_connection_attempted']
+            assert not facts['database_success_claimed']
+            recorder.assert_visible_privacy(dialog, tmp_path)
+            source = dialog.grab().toImage()
+            fitted = recorder.fit_capture_image(source, 1440, 900, save_sheet=True)
+            assert not source.isNull() and fitted.format() == QImage.Format.Format_RGB32
+            assert (fitted.width(), fitted.height()) == (1440, 900)
+    assert not dialog.isVisible() and OracleSession.connect is original
+
+
+@pytest.mark.parametrize('field,value', [
+    ('host_edit', '127.0.0.1'), ('user_edit', 'private-user'), ('password_edit', 'private-password'),
+    ('oracle_settings_edit', '/private/owned-profile-path'), ('oracle_service_edit', 'PRIVATE_SERVICE'),
+    ('ssh_password_edit', 'private-password'), ('ssh_key_passphrase_edit', 'private-key-passphrase'),
+])
+def test_oracle_form_rejects_hidden_or_visible_private_values_before_capture(qtbot, recorder, field, value):
+    with recorder.oracle_form_demo() as dialog:
+        qtbot.addWidget(dialog)
+        dialog.show()
+        # Check every form field even when another page is selected; a masked
+        # password must remain forbidden when remember-password is unchecked.
+        dialog.remember_check.setChecked(False)
+        getattr(dialog, field).setText(value)
+        dialog.tabs.setCurrentIndex(2)
+        with pytest.raises(RuntimeError, match='nondefault data'):
+            recorder.verify_oracle_form_demo(dialog)
+
+
+def test_oracle_form_guard_blocks_real_backend_connect_and_restores_on_error(qtbot, recorder, monkeypatch):
+    import oracledb
+    from opennavicat.database import ConnectionConfig, DatabaseSession
+    from opennavicat.oracle_session import OracleSession
+    original = OracleSession.connect
+    monkeypatch.setattr(oracledb, 'connect', lambda **kwargs: pytest.fail('No native Oracle I/O'))
+    with recorder.oracle_form_demo() as dialog:
+        qtbot.addWidget(dialog)
+        session = DatabaseSession(ConnectionConfig('generated', 'Generated', driver='oracle'))
+        with pytest.raises(RuntimeError, match='forbids database connections'):
+            session.connect()
+        with pytest.raises(RuntimeError, match='connection/save attempt'):
+            recorder.verify_oracle_form_demo(dialog)
+    assert OracleSession.connect is original
+    # A job created during the form cannot gain network access by starting late.
+    with pytest.raises(RuntimeError, match='forbids database connections'):
+        session.connect()
+
+
+def test_oracle_form_acceptance_cannot_be_reported_as_an_unsaved_demo(qtbot, recorder):
+    with recorder.oracle_form_demo() as dialog:
+        qtbot.addWidget(dialog)
+        dialog.accept()
+        assert dialog._config is not None
+        with pytest.raises(RuntimeError, match='connection/save attempt'):
+            recorder.verify_oracle_form_demo(dialog)
+
+
+def test_oracle_form_native_guard_restores_even_when_reject_fails(qtbot, recorder, monkeypatch):
+    from opennavicat.oracle_session import OracleSession
+    original = OracleSession.connect
+    guard = recorder.oracle_form_demo()
+    dialog = guard.__enter__()
+    qtbot.addWidget(dialog)
+    original_reject = dialog.reject
+    def failed_reject():
+        raise RuntimeError('controlled reject failure')
+    monkeypatch.setattr(dialog, 'reject', failed_reject)
+    try:
+        with pytest.raises(RuntimeError, match='controlled reject failure'):
+            guard.__exit__(None, None, None)
+        assert OracleSession.connect is original
+    finally:
+        monkeypatch.setattr(dialog, 'reject', original_reject)
+        dialog.reject()
+
+
+def test_oracle_demo_widget_verification_rejects_worker_thread(qtbot, recorder):
+    from concurrent.futures import ThreadPoolExecutor
+    with recorder.oracle_form_demo() as dialog:
+        qtbot.addWidget(dialog)
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            with pytest.raises(RuntimeError, match='GUI owner'):
+                pool.submit(recorder.verify_oracle_form_demo, dialog).result(timeout=3)
+
+
+def test_oracle_ui_extension_retains_all_prior_workflows_in_order(recorder):
+    previous = recorder.required_demo_phases(mongodb=True, stream=True)
+    extended = recorder.required_demo_phases(mongodb=True, stream=True, oracle_form=True)
+    assert len(previous) == 31 and extended[:31] == previous
+    assert extended[31:] == ('oracle_connection_general', 'oracle_connection_advanced', 'oracle_connection_databases')
+    assert len(extended) == 34 and len(set(extended)) == 34
+    assert recorder.required_demo_phases(oracle_form=True) == recorder.SQLITE_PHASES + recorder.ORACLE_FORM_PHASES
+    with pytest.raises(ValueError, match='requires'):
+        recorder.required_demo_phases(stream=True)
+
+
+def test_oracle_extended_capture_requires_explicit_output_before_any_recording(recorder, monkeypatch):
+    monkeypatch.setattr(recorder.sys, 'argv', ['record-demo.py', '--include-oracle-form'])
+    monkeypatch.setattr(recorder, 'dependencies', lambda *_args: ('unused-encoder', 'unused-version'))
+    monkeypatch.setattr(recorder, 'record', lambda *_args: pytest.fail('No capture without explicit output'))
+    with pytest.raises(SystemExit) as caught:
+        recorder.main()
+    assert caught.value.code == 2
+
+
+@pytest.mark.parametrize('surface', ['profile_list', 'host_placeholder', 'notes_placeholder'])
+def test_oracle_form_privacy_reads_actual_list_and_empty_editor_placeholder_surfaces(qtbot, recorder, tmp_path, surface):
+    with recorder.oracle_form_demo() as dialog:
+        qtbot.addWidget(dialog)
+        dialog.show()
+        if surface == 'profile_list':
+            dialog.profiles.item(0).setText('private-host 127.0.0.1')
+        elif surface == 'host_placeholder':
+            dialog.host_edit.setPlaceholderText('127.0.0.1')
+        else:
+            dialog.tabs.setCurrentIndex(4)
+            dialog.oracle_notes_edit.setPlaceholderText(str(tmp_path / 'private-note'))
+        with pytest.raises(RuntimeError, match='endpoint|filesystem path'):
+            recorder.assert_visible_privacy(dialog, tmp_path)
+
+
 @pytest.mark.parametrize("corruption", [None, "rounded_stock", "wrong_price", "wrong_sku", "wrong_display"])
 def test_generated_javascript_demo_requires_exact_bson_and_actual_display(recorder, corruption):
     from bson import Decimal128, Int64

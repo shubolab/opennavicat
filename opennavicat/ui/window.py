@@ -4187,12 +4187,33 @@ class MainWindow(QMainWindow):
     def remove_connection(self, connection_id):
         if QMessageBox.question(self, "删除连接", "删除这个已保存的连接？数据库文件和服务器数据不受影响。") != QMessageBox.StandardButton.Yes:
             return
-        if not self.disconnect(connection_id):
+        expected = self.configs.get(connection_id)
+        if expected is None:
             return
-        self.store.delete_connection(connection_id)
-        del self.configs[connection_id]
-        self.populate_connections()
-        self.set_active(None)
+        expected_value = deepcopy(expected)
+
+        def saved_binding():
+            return (next((entry for entry in self.store.state["connections"]
+                          if entry["id"] == connection_id), None),
+                    connection_id in self.store.state["remembered_passwords"],
+                    self.store.state.get("remembered_secrets", {}).get(connection_id))
+
+        saved = deepcopy(saved_binding())
+
+        def deleted():
+            if (self.configs.get(connection_id) is not expected or expected != expected_value
+                    or saved_binding() != saved or connection_id in self.sessions
+                    or connection_id in self._connecting or connection_id in self._closing_connections):
+                self.statusBar().showMessage("连接状态已改变；此次连接没有删除。", 5000)
+                return
+            self.store.delete_connection(connection_id)
+            del self.configs[connection_id]
+            self.populate_connections()
+            self.set_active(None)
+
+        # For remote sessions True means that close was queued. Only the
+        # successful close continuation may remove the profile and credentials.
+        self.disconnect(connection_id, after=deleted)
 
     def close_tab(self, index):
         page = self.tabs.widget(index)

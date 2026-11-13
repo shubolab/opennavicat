@@ -14,15 +14,15 @@ from PySide6.QtGui import QBrush, QColor, QFont, QLinearGradient, QPainter, QPai
 
 
 _DRIVER_COLORS = {
-    "sqlite": ("#5fd5be", "#43bea5"),
-    "mysql": ("#79c730", "#65b326"),
-    "postgresql": ("#3674df", "#255dcc"),
-    "sqlserver": ("#ef9c3f", "#da7d27"),
-    "oracle": ("#f3544b", "#e73b36"),
-    "mariadb": ("#b38b63", "#96734f"),
-    "mongodb": ("#b87b32", "#a15f24"),
-    "redis": ("#f0a1ad", "#e68a9b"),
-    "snowflake": ("#46bcd7", "#28a1c1"),
+    "sqlite": ("#61dbd2", "#61dbd2"),
+    "mysql": ("#41d549", "#41d549"),
+    "postgresql": ("#4083ff", "#4083ff"),
+    "sqlserver": ("#ffaa01", "#ffaa01"),
+    "oracle": ("#ff0033", "#ff0033"),
+    "mariadb": ("#c3986d", "#c3986d"),
+    "mongodb": ("#ba5101", "#ba5101"),
+    "redis": ("#fe7d7b", "#fe7d7b"),
+    "snowflake": ("#29b5e8", "#29b5e8"),
 }
 
 _PROVIDER_NAMES = frozenset({
@@ -220,7 +220,10 @@ def _other(p: QPainter) -> None:
 
 
 def _backup(p: QPainter) -> None:
-    _round(p, 1.5, 1.5, 29, 29, _gradient("#838c93", "#535a60", 1.5, 29), 3.6)
+    _round(p, 3, .5, 26, 31, _gradient("#838c93", "#535a60", .5, 31), 3.4)
+    p.translate(16, 16)
+    p.scale(.8, .8)
+    p.translate(-16, -16)
     arc = QPainterPath(QPointF(10.7, 24.3))
     arc.cubicTo(23.8, 29.2, 29, 16.7, 22.1, 10.1)
     arc.cubicTo(17.8, 5.9, 11.2, 7.1, 8.8, 10.9)
@@ -257,11 +260,11 @@ def _model(p: QPainter) -> None:
 
 def _bi(p: QPainter) -> None:
     for x, y, h, top, bottom in (
-        (1, 11.5, 19, "#cf6ddc", "#b64ac8"),
+        (1, 8.5, 15, "#cf6ddc", "#b64ac8"),
         (7.1, 1.5, 29, "#b96bd5", "#a446c3"),
-        (13.2, 8.5, 22, "#d66cdd", "#bd4acb"),
-        (19.3, 4.5, 26, "#c66bd7", "#ad45c3"),
-        (25.4, 15.5, 15, "#da74df", "#bc4dcb"),
+        (13.2, 6, 20, "#d66cdd", "#bd4acb"),
+        (19.3, 3.5, 25, "#c66bd7", "#ad45c3"),
+        (25.4, 9.5, 13, "#da74df", "#bc4dcb"),
     ):
         _round(p, x, y, 5.6, h, _gradient(top, bottom, y, h), 2.8)
 
@@ -315,13 +318,18 @@ def _folder(p: QPainter) -> None:
     _line(p, [(5, 13.1), (27, 13.1)], "#ffe69c", .8)
 
 
-def _database(p: QPainter) -> None:
+def _database(p: QPainter, *, disconnected=False) -> None:
     # Three green shelves and their visible elliptical shoulders.
+    body_top, body_bottom, base, rim_top, rim_bottom, shine = (
+        ("#b6bdc2", "#8a959e", "#929da5", "#c6ccd0", "#9ea8b0", "#dde1e4")
+        if disconnected else
+        ("#6bc38b", "#45a86a", "#4daa6d", "#94d9aa", "#65bc81", "#b5e4c0")
+    )
     for y in (14.5, 8.3, 2.1):
-        _round(p, 2, y + 4, 28, 8, _gradient("#6bc38b", "#45a86a", y+4, 8), 1.4)
-        _ellipse(p, 2, y + 7.8, 28, 7, "#4daa6d")
-        _ellipse(p, 2, y, 28, 8, _gradient("#94d9aa", "#65bc81", y, 8))
-    _ellipse(p, 4, 3.6, 24, 4.7, "#b5e4c0")
+        _round(p, 2, y + 4, 28, 8, _gradient(body_top, body_bottom, y+4, 8), 1.4)
+        _ellipse(p, 2, y + 7.8, 28, 7, base)
+        _ellipse(p, 2, y, 28, 8, _gradient(rim_top, rim_bottom, y, 8))
+    _ellipse(p, 4, 3.6, 24, 4.7, shine)
 
 
 def _connection(p: QPainter) -> None:
@@ -355,19 +363,28 @@ def _driver_glyph(p: QPainter, name: str, cutout: str) -> None:
         _line(p, [(12.5, 18.8), (20.1, 13.4)], cutout, .85)
         _line(p, [(11.3, 21), (17.2, 17.8)], cutout, .8)
     elif name == "mysql":
-        path = QPainterPath(QPointF(4.5, 21.5))
-        path.cubicTo(7.8, 17.4, 12.6, 12.7, 18.5, 12.2)
-        path.lineTo(17.5, 7)
-        path.cubicTo(20.6, 8.2, 22.6, 10.4, 23.2, 12.2)
-        path.cubicTo(26, 12.5, 27.6, 14.5, 28.5, 17.2)
-        path.cubicTo(25.3, 15.9, 22.4, 16.2, 19.9, 17.5)
-        path.cubicTo(15.4, 20, 13.7, 23.8, 10.6, 25.5)
-        path.lineTo(10.9, 21.8)
-        path.lineTo(5.2, 25)
-        path.lineTo(7.2, 21.2)
-        path.closeSubpath()
-        _fill(p, path, white)
-        _ellipse(p, 24, 13.5, 1.2, 1.2, cutout)
+        p.save()
+        try:
+            p.translate(16, 16)
+            p.rotate(40)
+            p.translate(-16, -16)
+            path = QPainterPath(QPointF(3, 14))
+            path.cubicTo(6, 11, 8, 10, 12, 10)
+            path.lineTo(16, 5)
+            path.cubicTo(17, 6.5, 17, 8.5, 17, 10)
+            path.cubicTo(21, 11, 23, 13, 25, 16)
+            path.lineTo(29, 12)
+            path.lineTo(27, 17)
+            path.lineTo(30, 21)
+            path.lineTo(24, 19)
+            path.cubicTo(21, 21, 16, 22, 11, 18)
+            path.lineTo(10, 22)
+            path.lineTo(8.5, 16.5)
+            path.cubicTo(6, 16, 4.5, 15.2, 3, 14)
+            _fill(p, path, white)
+            _ellipse(p, 6.5, 12.2, 1.2, 1.2, cutout)
+        finally:
+            p.restore()
     elif name == "postgresql":
         path = QPainterPath(QPointF(16, 7.2))
         path.cubicTo(11.1, 3, 5.1, 6.2, 5.5, 12.8)
@@ -386,22 +403,33 @@ def _driver_glyph(p: QPainter, name: str, cutout: str) -> None:
         _ellipse(p, 14.2, 11.3, 1.2, 1.2, cutout)
         _ellipse(p, 19.5, 11.3, 1.2, 1.2, cutout)
     elif name == "sqlserver":
-        # A woven sail: curved boundary plus crossing ribs.
-        path = QPainterPath(QPointF(8.3, 6.7))
-        path.cubicTo(13.1, 8.7, 20.1, 6.5, 25.2, 4.7)
-        path.cubicTo(18.9, 11.9, 16.5, 17.4, 26, 25.6)
-        path.cubicTo(18.7, 24.6, 11.8, 23, 5.7, 25.2)
-        path.cubicTo(12.2, 18.3, 12.6, 13, 8.3, 6.7)
+        # Two independently drawn S-band edges and crossing woven ribs.
+        path = QPainterPath(QPointF(9, 4))
+        path.cubicTo(12, 7, 15, 9, 23, 10)
+        path.cubicTo(27, 10, 28, 12, 28, 14)
+        path.cubicTo(22, 15, 11, 18, 7, 23)
+        path.cubicTo(4, 27, 9, 29, 14, 29)
+        path.cubicTo(19, 22, 18, 16, 13, 13)
+        path.cubicTo(8, 10, 5, 7, 9, 4)
         _stroke(p, white, 1.8)
         p.drawPath(path)
         for points in (
-            [(9.6, 9), (22.1, 8)], [(10.6, 12.1), (20.1, 11.4)],
-            [(11.3, 15.2), (18.8, 15.1)], [(10.8, 18.4), (21.1, 19.1)],
-            [(8.6, 22), (23.8, 23.4)], [(12, 7.4), (15.9, 24.3)],
-            [(17, 7), (17, 23.7)], [(22, 5.9), (12.1, 24.2)],
+            [(7.5, 7), (13.2, 7.5)], [(8.8, 10.2), (20.7, 9.5)],
+            [(12, 12.5), (27.7, 13.5)], [(14.7, 15.5), (20.5, 16.3)],
+            [(16.4, 18.8), (11.6, 19.7)], [(17, 22.3), (6, 25)],
+            [(15.9, 26), (8.1, 28.1)],
         ):
             _line(p, points, white, .8)
+        for bend in (0, 2):
+            ribs = QPainterPath(QPointF(9, 4))
+            ribs.cubicTo(10 + bend, 8, 18 + bend, 11, 20 + bend, 13.8)
+            ribs.cubicTo(19, 18, 7 + bend, 23, 13 + bend/2, 29)
+            _stroke(p, white, .7)
+            p.drawPath(ribs)
     elif name == "mariadb":
+        p.translate(16, 16)
+        p.scale(1, 1.3)
+        p.translate(-16, -16)
         path = QPainterPath(QPointF(4.1, 24.3))
         path.lineTo(8.3, 17.7)
         path.cubicTo(10.8, 14.5, 16.2, 16.9, 20.1, 12.9)
@@ -431,10 +459,10 @@ def _driver_glyph(p: QPainter, name: str, cutout: str) -> None:
         swirl.cubicTo(21.9, 14.4, 15.2, 14.4, 11.2, 15.3)
         swirl.cubicTo(7.2, 16.3, 5.5, 20, 8.1, 21.3)
         swirl.cubicTo(11.9, 23, 16.1, 18.8, 17.3, 16.1)
-        _stroke(p, white, 2)
+        _stroke(p, white, 3)
         p.drawPath(swirl)
-        _line(p, [(17.1, 14), (22.5, 25)], white, 2)
-        _line(p, [(20.8, 25), (25.1, 25)], white, 1.7)
+        _line(p, [(17.1, 14), (22.5, 25)], white, 3)
+        _line(p, [(20.8, 25), (25.1, 25)], white, 2.3)
     elif name == "snowflake":
         for k in range(6):
             a = k * pi / 3 - pi / 2
@@ -448,7 +476,7 @@ def _driver_glyph(p: QPainter, name: str, cutout: str) -> None:
 
 def _driver(p: QPainter, name: str, *, disconnected: bool) -> None:
     top, bottom = ("#b3b9bc", "#949da2") if disconnected else _DRIVER_COLORS[name]
-    _round(p, 1, 1, 30, 30, _gradient(top, bottom), 4.7)
+    _round(p, 0, 0, 32, 32, _gradient(top, bottom), 5.5)
     _driver_glyph(p, name, bottom)
 
 
@@ -463,10 +491,13 @@ def _provider_text(p: QPainter, text: str, color: str, *, pixels: int,
     p.drawText(rect, Qt.AlignmentFlag.AlignCenter, text)
 
 
-def _provider(p: QPainter, name: str) -> None:
-    _round(p, 1.8, 1.8, 28.4, 28.4, "#ffffff", 4.7)
+def _provider(p: QPainter, name: str, *, driver: str | None = None) -> None:
+    def ink(color):
+        return "#ffffff" if driver is not None else color
+    background = _gradient(*_DRIVER_COLORS[driver]) if driver is not None else "#ffffff"
+    _round(p, 0, 0, 32, 32, background, 5.5)
     if name == "provider_alibaba":
-        orange = "#ee8526"
+        orange = ink("#ee8526")
         _line(p, [(10.5, 7.5), (6, 7.5), (4.6, 9), (4.6, 23),
                   (6, 24.5), (10.5, 24.5)], orange, 2.2)
         _line(p, [(21.5, 7.5), (26, 7.5), (27.4, 9), (27.4, 23),
@@ -485,33 +516,33 @@ def _provider(p: QPainter, name: str) -> None:
             path.cubicTo(tip[0] - sx * 1.3, tip[1] - sy * 1.3,
                          16 + dx * 10 - sx * 2.5, 23 + dy * 12 - sy * 2.5,
                          16 + dx * 2, 23 + dy * 2)
-            _fill(p, path, "#d72d39")
+            _fill(p, path, ink("#d72d39"))
     elif name == "provider_tencent":
         blue = QPainterPath(QPointF(17.1, 11.5))
         blue.cubicTo(11.7, 6.5, 5.2, 9, 5.2, 15.5)
         blue.cubicTo(5.2, 21.4, 12.1, 24.6, 17.3, 20.4)
-        _stroke(p, "#1389d6", 3.6)
+        _stroke(p, ink("#1389d6"), 3.6)
         p.drawPath(blue)
         cyan = QPainterPath(QPointF(14.6, 11.4))
         cyan.cubicTo(18.9, 5.2, 27, 7.9, 27, 14.7)
         cyan.cubicTo(27, 20.6, 21.3, 23.5, 16.2, 20.1)
-        _stroke(p, "#25bbd4", 3.6)
+        _stroke(p, ink("#25bbd4"), 3.6)
         p.drawPath(cyan)
     elif name == "provider_kingbase":
-        red = "#c92d39"
+        red = ink("#c92d39")
         _round(p, 6.2, 5.5, 4.4, 21, red, .5)
         _polygon(p, [(10, 14.5), (21.7, 5.5), (27.1, 5.5),
                      (15, 15.7), (27.5, 26.5), (21.5, 26.5), (10, 16.7)], red)
     elif name == "provider_pingcap":
-        _round(p, 5.5, 5, 6.3, 22, "#4b57a6", .5)
-        _round(p, 11.8, 5, 13.9, 5.3, "#7880c5", .4)
-        _round(p, 20.2, 10.3, 5.5, 8.8, "#9b68b8", .4)
-        _round(p, 11.8, 14.1, 8.4, 5, "#5c62ad", .4)
-        _round(p, 11.8, 10.3, 5.3, 3.8, "#c4b4d5", .25)
+        _round(p, 5.5, 5, 6.3, 22, ink("#4b57a6"), .5)
+        _round(p, 11.8, 5, 13.9, 5.3, ink("#7880c5"), .4)
+        _round(p, 20.2, 10.3, 5.5, 8.8, ink("#9b68b8"), .4)
+        _round(p, 11.8, 14.1, 8.4, 5, ink("#5c62ad"), .4)
+        _round(p, 11.8, 10.3, 5.3, 3.8, ink("#c4b4d5"), .25)
     elif name == "provider_highgo":
-        _provider_text(p, "瀚高", "#242529", pixels=11, bold=True)
+        _provider_text(p, "瀚高", ink("#242529"), pixels=11, bold=True)
     elif name == "provider_oceanbase":
-        blue = "#2288c7"
+        blue = ink("#2288c7")
         _stroke(p, blue, 2.2)
         p.drawEllipse(QRectF(4.3, 9, 10.7, 14))
         b = QPainterPath(QPointF(18.4, 23))
@@ -523,85 +554,92 @@ def _provider(p: QPainter, name: str) -> None:
         p.drawPath(b)
         _line(p, [(18.6, 15.5), (23.4, 15.5)], blue, 1.6)
     elif name == "provider_aws":
-        ink = "#333a45"
-        _stroke(p, ink, 1.8)
+        word = ink("#333a45")
+        _stroke(p, word, 1.8)
         p.drawEllipse(QRectF(5, 11.1, 5.8, 8.3))
-        _line(p, [(10.8, 11.1), (10.8, 19.8)], ink, 1.8)
+        _line(p, [(10.8, 11.1), (10.8, 19.8)], word, 1.8)
         _line(p, [(13.3, 11.2), (15.1, 19.8), (18.1, 13.5),
-                  (20.7, 19.8), (22.8, 11.2)], ink, 1.8)
+                  (20.7, 19.8), (22.8, 11.2)], word, 1.8)
         s = QPainterPath(QPointF(28.1, 11.6))
         s.cubicTo(23.4, 8.4, 22.4, 14.4, 26.1, 15.1)
         s.cubicTo(30.6, 16.2, 28, 21.5, 24.3, 19)
-        _stroke(p, ink, 1.65)
+        _stroke(p, word, 1.65)
         p.drawPath(s)
         smile = QPainterPath(QPointF(6, 23))
         smile.quadTo(16, 29, 26, 22.8)
-        _stroke(p, "#ef9d24", 1.8)
+        _stroke(p, ink("#ef9d24"), 1.8)
         p.drawPath(smile)
-        _line(p, [(22.8, 22.1), (26.5, 22.3), (25.3, 25.5)], "#ef9d24", 1.1)
+        _line(p, [(22.8, 22.1), (26.5, 22.3), (25.3, 25.5)], ink("#ef9d24"), 1.1)
     elif name == "provider_fujitsu":
         infinity = QPainterPath(QPointF(15.9, 15.9))
         infinity.cubicTo(10.9, 7.5, 4.2, 9.2, 4.2, 16.1)
         infinity.cubicTo(4.2, 23.3, 11.1, 24.2, 16, 16)
         infinity.cubicTo(21, 7.7, 27.8, 9.1, 27.8, 16.1)
         infinity.cubicTo(27.8, 23.3, 21.1, 24.1, 15.9, 15.9)
-        _stroke(p, "#db3045", 2)
+        _stroke(p, ink("#db3045"), 2)
         p.drawPath(infinity)
     elif name == "provider_google":
         # Independent four-colour cloud outline, with joins hidden by round caps.
         blue = QPainterPath(QPointF(11, 24))
         blue.lineTo(9, 24)
         blue.cubicTo(1.7, 24, 1.7, 15.3, 8.4, 14.5)
-        _stroke(p, "#4285e8", 4)
+        _stroke(p, ink("#4285e8"), 4)
         p.drawPath(blue)
         red = QPainterPath(QPointF(8.4, 14.5))
         red.cubicTo(8.2, 6.9, 18.7, 4.8, 22.4, 11.6)
-        _stroke(p, "#e64e43", 4)
+        _stroke(p, ink("#e64e43"), 4)
         p.drawPath(red)
         yellow = QPainterPath(QPointF(22.4, 11.6))
         yellow.cubicTo(28.7, 11, 31.1, 19.3, 26.4, 22.4)
-        _stroke(p, "#f4bc30", 4)
+        _stroke(p, ink("#f4bc30"), 4)
         p.drawPath(yellow)
         green = QPainterPath(QPointF(26.4, 22.4))
         green.quadTo(24.7, 24, 22, 24)
         green.lineTo(11, 24)
-        _stroke(p, "#43a85b", 4)
+        _stroke(p, ink("#43a85b"), 4)
         p.drawPath(green)
     elif name == "provider_microsoft":
         for x, y, color in ((5.2, 5.2, "#ee5a32"), (16.6, 5.2, "#80b843"),
                             (5.2, 16.6, "#32a9d8"), (16.6, 16.6, "#f1bc33")):
-            _round(p, x, y, 10.2, 10.2, color, .1)
+            _round(p, x, y, 10.2, 10.2, ink(color), .1)
     elif name == "provider_oracle_cloud":
-        _stroke(p, "#dc4a49", 2.6)
+        _stroke(p, ink("#dc4a49"), 2.6)
         p.drawRoundedRect(QRectF(5.3, 10.5, 21.4, 11), 5.5, 5.5)
     elif name == "provider_mongodb_atlas":
         leaf = QPainterPath(QPointF(16.2, 4.2))
         leaf.cubicTo(9.9, 10.6, 6.3, 17.4, 16, 26.1)
         leaf.cubicTo(25.6, 20.1, 23.6, 12.7, 16.2, 4.2)
-        _fill(p, leaf, "#4b9f58")
-        _line(p, [(16, 24.9), (15.8, 28.2)], "#477f4b", 1.4)
-        _line(p, [(16.2, 9), (16, 23.9)], "#e6f1e4", .8)
+        _fill(p, leaf, ink("#4b9f58"))
+        _line(p, [(16, 24.9), (15.8, 28.2)], ink("#477f4b"), 1.4)
+        _line(p, [(16.2, 9), (16, 23.9)], _DRIVER_COLORS[driver][1] if driver else "#e6f1e4", .8)
 
 
-def draw_primary(painter: QPainter, name: str, *, connection_state=None) -> bool:
+def draw_primary(painter: QPainter, name: str, *, connection_state=None,
+                 provider_driver: str | None = None) -> bool:
     """Paint a known name in the caller's 32-unit canvas; otherwise return False.
 
-    Driver ``connection_state`` may be ``None`` (brand-color chooser artwork),
-    ``"connected"`` or ``"disconnected"`` (grey badge).  Other states are not
-    invented here.  The painter's transform, clipping, pen and brush survive.
-    Non-driver names ignore connection_state so a wrapper may pass it uniformly.
+    Driver and database ``connection_state`` may be ``None`` (brand/green),
+    ``True``/``"connected"`` or ``False``/``"disconnected"`` (grey). Provider
+    names use a white badge unless ``provider_driver`` selects a known driver
+    background with a white glyph. Other names ignore these optional settings.
+    The painter's transform, clipping, pen and brush survive.
     """
     if name not in PRIMARY_NAMES:
         return False
-    if name in _DRIVER_COLORS and connection_state not in (None, "connected", "disconnected"):
-        raise ValueError("Unsupported connection icon state")
+    if name in _DRIVER_COLORS or name == "database":
+        if (connection_state is not None and type(connection_state) is not bool
+                and connection_state not in ("connected", "disconnected")):
+            raise ValueError("Unsupported connection icon state")
+    if name in _PROVIDER_NAMES and provider_driver is not None and provider_driver not in _DRIVER_COLORS:
+        raise ValueError("Unsupported provider icon driver")
+    disconnected = connection_state is False or connection_state == "disconnected"
     painter.save()
     try:
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         if name in _PROVIDER_NAMES:
-            _provider(painter, name)
+            _provider(painter, name, driver=provider_driver)
         elif name in _DRIVER_COLORS:
-            _driver(painter, name, disconnected=connection_state == "disconnected")
+            _driver(painter, name, disconnected=disconnected)
         elif name in {"table", "redis_data"}:
             _tile(painter)
         elif name == "view":
@@ -639,7 +677,7 @@ def draw_primary(painter: QPainter, name: str, *, connection_state=None) -> bool
         elif name == "folder":
             _folder(painter)
         elif name == "database":
-            _database(painter)
+            _database(painter, disconnected=disconnected)
         elif name == "connection":
             _connection(painter)
     finally:

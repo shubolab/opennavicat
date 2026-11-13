@@ -98,7 +98,7 @@
 | C02 | MySQL完整连接 | ◐ | E3/S-E/V有真实服务测试 | 全部认证、编码、兼容、高级/安全设置及适用版本；读写/元数据/取消/重连。 |
 | C03 | PostgreSQL完整连接 | ◐ | S-E/R03已有实际TLS/SSH核心验证；18全部选项/认证适用性仍未验收 | 全部认证/选项/schema行为、证书/主机验证及失败恢复和18参考等价。 |
 | C04 | MariaDB完整连接 | ◐ | S-E/V有真实11.4测试 | 原生选项和版本差异单独验收，不能只当改名MySQL；所有适用连接/认证case。 |
-| C05 | Oracle连接和会话 | ✗ | [OR18-01](ui-reference-18-oracle.md)实际Basic/Test/save-reopen/catalog；L2/E1/E13/R16历史；仍无OpenNavadapter | 专属adapter和参考形五页设置/会话，Basic/TNS/service/SID/角色/OS认证、完整安全、元数据/类型/事务/取消；独立Thin研究与wheel架构不关闭任何产品或六目标门禁。 |
+| C05 | Oracle连接和会话 | ◐ | [OR18-01](ui-reference-18-oracle.md)实际Basic/Test/save-reopen/catalog；未发布[0.13候选](validation-oracle-0.13-candidate.md)已有专属Thin adapter、参考形五页和owner-qualified表/视图只读路径。Basic/service/Default/password/TCP取得14项owned后端资格；表单/窗口246纯测试、Cocoa45（严格fake数据库）、本机ARM64真实应用包smoke各自独立，不能拼成真实窗口DB验收。两native Linux backend job报告成功，artifact审查另记；未发布六目标安装器。 | 完整真实Window/Cocoa工作流、Basic/TNS/service/SID/角色/OS认证、Thick/TLS/SSH/高级设置、全元数据/类型/事务/写入和工具、及时中断server SLEEP及三平台实际参考/人工验收仍开放；Query导航保留但未接完整执行语义。 |
 | C06 | SQL Server连接和会话 | ◐ | 0.5纯TDS适配器与真实SQL2022读写/元数据/事务/取消/TLS/SSH；集成认证、全部对象/选项仍开放 | 参考服务器/实例/数据库/登录、适用认证和TLS，真实临时服务验证查询/事务/权限。 |
 | C07 | MongoDB连接和会话 | ◐ | 已发布0.6.1有真实standalone/PyMongo适配、设置/URI、核心TLS/SSH安全22项及类型保持读写；M18实际18参考；副本集/分片/SRV/全部认证与平台矩阵仍开放 | 参考 standalone/副本集/分片等适用连接、认证/TLS/会话设置；真实集合读写和取消。 |
 | C08 | 云数据库别名及兼容后端 | ✗ | L18-04已展开14供应商；新版别名清单另档归档，端点/认证/兼容未执行 | 完整枚举新窗口全部别名和设置，每种实际端点/兼容限制验证；已有16菜单不替代18，不以排除云账号删去DB连接。 |

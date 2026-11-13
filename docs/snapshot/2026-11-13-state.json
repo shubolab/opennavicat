@@ -21,26 +21,20 @@
   },
   "repository": {
     "remote": "git@github.com:shubolab/opennavicat.git",
-    "synced_origin_main_sha": "fab0419fd47ad49378f3c2481bee0dca46fe7a43",
-    "working_branch": "codex_mongodb_stream_variants",
-    "working_branch_base_sha": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
-    "workspace": "/Users/wangshubo/.codex/worktrees/mongodb-stream-variants/opennavicat",
+    "synced_origin_main_sha": "6b61871e31e6e33b91f53f7bfb53c598d7e56e49",
+    "working_branch": "codex_oracle_basic_integration",
+    "working_branch_base_sha": "6b61871e31e6e33b91f53f7bfb53c598d7e56e49",
+    "workspace": "/Users/wangshubo/.codex/worktrees/oracle-basic-integration/opennavicat",
     "original_main_workspace": "/Users/wangshubo/develop/opennavicat",
     "other_branches_or_unmerged_work_removed": false,
     "application_release_source_sha": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
-    "documentation_receipt_scope": "Current unreleased image integration fab:main7success/publisherskipped; six native CI receipt audit without installer bytes; actual Cocoa Window25; publishedv0.12 remains separateb6 formal/public bytes.",
-    "next_working_branch": "codex_oracle_basic_backend",
-    "next_workspace": "/Users/wangshubo/.codex/worktrees/oracle-basic-backend/opennavicat",
-    "origin_main_verification_scope": "Exact mainfab CI and local cleanworktrees verified before this doc-only snapshot commit; no self-referential documentation SHA claimed.",
-    "local_head_at_candidate_measurement": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
-    "candidate_final_source_sha": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
-    "candidate_tested_application_source_sha": "d9bee6649d66542ea94dfd077a567dafd42c6224",
-    "candidate_tested_total_source_sha": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
-    "original_main_workspace_head": "fab0419fd47ad49378f3c2481bee0dca46fe7a43",
+    "documentation_receipt_scope": "Unpublished0.13 Oracle candidate; separately bound backend/UI/native probes and localapp/Cocoa scopes. Public0.12/b6 and mainfab CI remain separate.",
+    "next_working_branch": "codex_oracle_window_actual",
+    "next_workspace": "/Users/wangshubo/.codex/worktrees/oracle-window-actual/opennavicat",
+    "origin_main_verification_scope": "Fetched origin; remote main6b and primary/focused trees clean at6b. Candidate65 local merges precede this documentation commit; no self-referential final SHA.",
+    "original_main_workspace_head": "6b61871e31e6e33b91f53f7bfb53c598d7e56e49",
     "original_main_workspace_clean": true,
     "release_tag_source_sha": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
-    "working_tree_documentation_head": "fab0419fd47ad49378f3c2481bee0dca46fe7a43",
-    "workspace_head_scope": "Measured before this documentation-only commit; source/test/build/workflow remains exactfab.",
     "historical_finite_stream_resume_repository": {
       "remote": "git@github.com:shubolab/opennavicat.git",
       "synced_origin_main_sha": "a189508403b92d286d8b8d82173ae4ccebaaa8c3",
@@ -66,10 +60,13 @@
     },
     "focused_user_workspace": "/Users/wangshubo/.codex/worktrees/release-0-10/opennavicat",
     "focused_user_branch": "codex_mongodb_pipeline_tasks",
-    "focused_user_workspace_head": "fab0419fd47ad49378f3c2481bee0dca46fe7a43",
+    "focused_user_workspace_head": "6b61871e31e6e33b91f53f7bfb53c598d7e56e49",
     "focused_user_workspace_clean": true,
     "next_parallel_ui_branch": "codex_oracle_connection_ui",
-    "next_parallel_ui_workspace": "/Users/wangshubo/.codex/worktrees/oracle-connection-ui/opennavicat"
+    "next_parallel_ui_workspace": "/Users/wangshubo/.codex/worktrees/oracle-connection-ui/opennavicat",
+    "current_candidate_revision_at_measurement": "65abe89278462ee62ec31db07207a298c9d44b66",
+    "next_parallel_ci_branch": "codex_oracle_ci_native",
+    "next_parallel_ci_workspace": "/Users/wangshubo/.codex/worktrees/oracle-ci-native/opennavicat"
   },
   "reference": {
     "path": "/Users/wangshubo/Downloads/Navicat Premium.app",
@@ -647,15 +644,23 @@
     "finite_stream_event_grid_or_export_accepted": false,
     "finite_stream_successful_preview_accepted": false,
     "finite_stream_backend_published_0_12": true,
-    "missing_required_update_image_typed_display_sentinels_unreleased": true
+    "missing_required_update_image_typed_display_sentinels_unreleased": true,
+    "oracle_dedicated_adapter_in_unreleased_candidate": true,
+    "oracle_basic_service_default_password_plain_tcp": true,
+    "oracle_reference_shaped_five_page_form": true,
+    "oracle_owner_qualified_bounded_table_view_read": true,
+    "oracle_query_ui_accepted": false,
+    "oracle_full_tool_or_ui_parity_accepted": false,
+    "oracle_published": false
   },
   "next_steps": [
-    "Continue active complete Navicat18 retained UI/database-tool goal; publishedv0.12/b6 and full matrix gates remain distinct from laterdev/CI.",
-    "Review/integrate dedicated Oracle backend/config/deps and five-page connection/Store/catalog-window branches only after owned precision/metadata/cancel/serialclose/staleasync tests; do not stop at Test or genericSQL.",
-    "ActualCocoa ownedOracle Test/save-reopen/schema/table/view workflow after merge; all reference/auth/TNS/SID/Thick/TLS/roles/typed/transaction/DataPump/Other tools still open.",
-    "Keep AP18-13 successfulONblankOutput and initial-call cardinality unknown; separately diagnose controlledreferenceOutput state, preserve Preview/resume/retention/topology/permission/WinLinux gates.",
-    "At a usable new release milestone refresh/review the one actualisolatedappGIF as needed, qualify six native installers/checksums and publicbytes anew before publishing; currentmainCI receipts alone are not release-byte verification.",
-    "Continue Snowflake, remainingdatabase objects/designers/query/wizards/auth/AI/model/BI/backup/automation and three-platform reference/human acceptance until full paritymatrix is actually complete."
+    "Keep complete retained Navicat18 UI/database-tool goal active; public0.12/b6 and full parity gates remain separate from candidate qualification.",
+    "Integrate and qualify the separately reproduced Remove/asyncClose failure and same-ID replacement fix before main/release; earlier app/Cocoa scopes retain their original source binding.",
+    "Complete independent backend CI artifact audit and real Oracle Window Test/save-reopen/Open/schema/table/view/live Stop/reuse/disconnect/close scope; integrate runner and require both native Linux jobs to execute it anew.",
+    "Review/merge candidate, run exact merged default suite, then qualify actual Cocoa DB window flow. Do not substitute fake-session Cocoa widgets or backend-only tests.",
+    "Before usable0.13 release refresh/privacy-review one actual-app GIF and requalify six native desktop installers/checksums plus formal/public bytes; do not reuse0.12 installer evidence.",
+    "Keep Oracle Query/TNS/SID/roles/OS/Thick/TLS/SSH/advanced/types/transactions/writes/DataPump/Other tools and prompt serverSLEEP cancellation open.",
+    "Continue unresolved AP18-13 ONblankOutput/initial-call counts, Preview/resume/retention/topology/permissions and WinLinux reference/human gates, plus Snowflake and all remaining matrix functions."
   ],
   "new_reference_or_implementation_work_claimed_by_this_snapshot": true,
   "limits": [
@@ -697,7 +702,7 @@
     "change_stream": "Published0.12 bounded stream remainsb6; later fab image-mode/getMore47 typedUI sentinel integrates AP18-12/13 regression, main6native+security receipts and local actualCocoa25. ONblankOutput/initial-call cardinality/resume/retention/Preview/topology/permissions/reference-platform gates open.",
     "qt_task_lifecycle": "Local Window/Dialog native TaskSignals lifetime fixes shipped0.12; native signals destroyed on GUI thread and weakrefs clear, no claim all QRunnable/wrappers GUI-destroyed. Original parallel SIGSEGV same cause unproven.",
     "macos_installer_packaging": "Releasedb6 limited busy retry after79contracts; localARM and main/formal native DMGs first-create success, no actual busy recovery claimed. Main/formal six installers and anonymous public bytes independently audited; publicARM Cocoa isolated smoke passed.",
-    "oracle": "OR18-01 actual reference and separatedriver/wheel/fixture research completed. Dedicated backend and five-page/catalog UI being implemented in isolated branches fromfab; no Oracle productqualification or release claimed."
+    "oracle": "Dedicated Basic/service/Default/password/TCP Thin backend b8 and five-page form/catalog-window UI45e integrated into unpublished0.13 candidate65. Exact backend14/nativeCPUcancel/Decimal, UI246/full2382, localARMapp smoke/native audit and actualCocoa45 fake-session scopes are separate. Real Oracle Window3 cases in progress; six installers and complete tools/UI remain open."
   },
   "historical_candidate_release_0_12": {
     "version": "0.12.0",
@@ -1183,7 +1188,7 @@
     "ui_integration": "in_progress_after_frozen_backend; text-only messages/output, page-local Stop and explicit partial/row/time boundary handling; no parity claimed",
     "new_six_installer_ci_or_release_complete": false
   },
-  "captured_at_utc": "2026-11-13T09:54:24.990271+00:00",
+  "captured_at_utc": "2026-11-13T11:22:28.574532+00:00",
   "historical_candidate_ci_0_12": {
     "version": "0.12.0",
     "source_sha": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
@@ -2008,7 +2013,7 @@
     }
   },
   "parallel_next_major_scope": {
-    "audit": "Oracle and Snowflake dedicated adapters missing; existing nine-family chooser and SQLite seven-page designer must not be recreated",
+    "audit": "Oracle dedicated adapter now exists in candidate; Snowflake still missing. Existing nine-family chooser and SQLite seven-page designer remain.",
     "selected_slice": "Oracle Basic password/service connection, actual reference settings/Test/save-reopen and dedicated owned schema/table/view browsing",
     "reference_live_verified": {
       "observation": "OR18-01",
@@ -2044,9 +2049,10 @@
         "password SYSDBA to CDB"
       ],
       "decimal_generic_fidelity": false,
-      "product_adapter_implemented": false,
       "receipt_tree": "mongodb-finite-stream/opennavicat",
-      "cleanup_receipt": "artifacts/next-oracle-reference-prep/independent-cleanup.json"
+      "cleanup_receipt": "artifacts/next-oracle-reference-prep/independent-cleanup.json",
+      "product_adapter_implemented_at_research_time": false,
+      "scope": "Historical separate driver/wheel research, not current candidate qualification."
     },
     "full_scope_retained": true,
     "implementation_in_progress": {
@@ -2062,8 +2068,20 @@
       "merged_to_main": false,
       "oracle_product_acceptance": false,
       "contract": "artifacts/oracle-basic-backend/contract.json",
-      "first_slice": "Basic/password/service/Default TCP explicit ssl_mode disable; five-page settings and dedicated schema/table/view read. Other active unsupported configurations failclosed, never silent Basic downgrade."
-    }
+      "first_slice": "Basic/password/service/Default TCP explicit ssl_mode disable; five-page settings and dedicated schema/table/view read. Other active unsupported configurations failclosed, never silent Basic downgrade.",
+      "backend_commit": "b8f3f8a8415c054481c37cd9c3684e589b445405",
+      "ui_commit": "45e57e3e5a129e72c03f748e08ce0b1f3490ab92",
+      "integration_branch": "codex_oracle_basic_integration",
+      "integration_revision": "65abe89278462ee62ec31db07207a298c9d44b66",
+      "backend_status": "committed/pushed/merged into candidate",
+      "ui_status": "committed/pushed/merged into candidate",
+      "ci_owner": "snapshot_refresh",
+      "actual_window_owner": "pipeline_implementation_audit",
+      "source_review_owner": "pipeline_task_reference",
+      "root_owner": "native package/Cocoa/integration/snapshot",
+      "oracle_actual_window_acceptance": false
+    },
+    "historical_audit_before_implementation": "Oracle and Snowflake dedicated adapters missing; existing nine-family chooser and SQLite seven-page designer must not be recreated"
   },
   "reference_image_modes_ap18_13": {
     "reference_version": "18.0.5 build321",
@@ -2242,6 +2260,45 @@
     ]
   },
   "latest_reported_local_validation": {
+    "candidate_revision_at_measurement": "65abe89278462ee62ec31db07207a298c9d44b66",
+    "cocoa_source_passed": 45,
+    "cocoa_source_skipped": 0,
+    "fake_oracle_sessions": true,
+    "local_arm64_packaged_smoke_passed": true,
+    "actual_oracle_window_scope": "in progress in independent offscreen tree",
+    "see": "oracle_candidate_qualification",
+    "not_complete_reference_or_tool_parity": true
+  },
+  "current_resume_validation": {
+    "candidate_revision_at_measurement": "65abe89278462ee62ec31db07207a298c9d44b66",
+    "qualified_scopes": "oracle_candidate_qualification",
+    "default_full_source_scope_revision": "45e57e3e5a129e72c03f748e08ce0b1f3490ab92",
+    "merged_candidate_full_suite_not_yet_run": true,
+    "main_ci_scope": "ci_current (fab image-mode CI; noOracle qualification)",
+    "candidate_backend_ci_scope": "ci_oracle_backend_candidate",
+    "full_parity_complete": false
+  },
+  "next_unreleased_checkpoint": {
+    "revision_at_measurement": "65abe89278462ee62ec31db07207a298c9d44b66",
+    "version": "0.13.0 candidate",
+    "scope": "Dedicated Oracle backend/form/catalog, native probes and pinned two-arch DB CI integrated locally; real window and aggregate qualification pending",
+    "merged_to_main": false,
+    "six_target_oracle_ci_receipts_qualified": false,
+    "six_installer_byte_or_new_public_release_qualification": false
+  },
+  "historical_image_mode_current_resume_validation": {
+    "source_sha": "fab0419fd47ad49378f3c2481bee0dca46fe7a43",
+    "main_ci_run": 43399815386,
+    "main_ci_success": true,
+    "actual_cocoa_window_passed": 25,
+    "full_parity_complete": false,
+    "see": [
+      "ci_current",
+      "latest_reported_local_validation",
+      "post_release_image_mode_integration"
+    ]
+  },
+  "historical_image_mode_latest_reported_local_validation": {
     "source_sha": "fab0419fd47ad49378f3c2481bee0dca46fe7a43",
     "actual_cocoa_window": {
       "passed": 25,
@@ -2265,23 +2322,180 @@
     },
     "not_complete_reference_or_tool_parity": true
   },
-  "current_resume_validation": {
-    "source_sha": "fab0419fd47ad49378f3c2481bee0dca46fe7a43",
-    "main_ci_run": 43399815386,
-    "main_ci_success": true,
-    "actual_cocoa_window_passed": 25,
-    "full_parity_complete": false,
-    "see": [
-      "ci_current",
-      "latest_reported_local_validation",
-      "post_release_image_mode_integration"
-    ]
-  },
-  "next_unreleased_checkpoint": {
+  "historical_image_mode_next_unreleased_checkpoint": {
     "source_sha": "fab0419fd47ad49378f3c2481bee0dca46fe7a43",
     "scope": "Qualified image-mode runtime plus semantic/cleanup test fixes; Oracle branches in progress and not merged",
     "version": "0.12.0 development; no new release candidate/version declared",
     "six_target_ci_receipts_passed": true,
     "six_installer_byte_or_new_public_release_qualification": false
+  },
+  "historical_repository_before_oracle_integration": {
+    "remote": "git@github.com:shubolab/opennavicat.git",
+    "synced_origin_main_sha": "fab0419fd47ad49378f3c2481bee0dca46fe7a43",
+    "working_branch": "codex_mongodb_stream_variants",
+    "working_branch_base_sha": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
+    "workspace": "/Users/wangshubo/.codex/worktrees/mongodb-stream-variants/opennavicat",
+    "original_main_workspace": "/Users/wangshubo/develop/opennavicat",
+    "other_branches_or_unmerged_work_removed": false,
+    "application_release_source_sha": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
+    "documentation_receipt_scope": "Current unreleased image integration fab:main7success/publisherskipped; six native CI receipt audit without installer bytes; actual Cocoa Window25; publishedv0.12 remains separateb6 formal/public bytes.",
+    "next_working_branch": "codex_oracle_basic_backend",
+    "next_workspace": "/Users/wangshubo/.codex/worktrees/oracle-basic-backend/opennavicat",
+    "origin_main_verification_scope": "Exact mainfab CI and local cleanworktrees verified before this doc-only snapshot commit; no self-referential documentation SHA claimed.",
+    "local_head_at_candidate_measurement": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
+    "candidate_final_source_sha": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
+    "candidate_tested_application_source_sha": "d9bee6649d66542ea94dfd077a567dafd42c6224",
+    "candidate_tested_total_source_sha": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
+    "original_main_workspace_head": "fab0419fd47ad49378f3c2481bee0dca46fe7a43",
+    "original_main_workspace_clean": true,
+    "release_tag_source_sha": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
+    "working_tree_documentation_head": "fab0419fd47ad49378f3c2481bee0dca46fe7a43",
+    "workspace_head_scope": "Measured before this documentation-only commit; source/test/build/workflow remains exactfab.",
+    "historical_finite_stream_resume_repository": {
+      "remote": "git@github.com:shubolab/opennavicat.git",
+      "synced_origin_main_sha": "a189508403b92d286d8b8d82173ae4ccebaaa8c3",
+      "working_branch": "codex_mongodb_finite_stream",
+      "working_branch_base_sha": "87df5cd70f9293c4585637b1eab6e00e37810097",
+      "workspace": "/Users/wangshubo/.codex/worktrees/mongodb-finite-stream/opennavicat",
+      "original_main_workspace": "/Users/wangshubo/develop/opennavicat",
+      "other_branches_or_unmerged_work_removed": false,
+      "application_release_source_sha": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
+      "documentation_receipt_scope": "Current publicv0.12 prerelease exactb6 formal8/8 and anonymous eight assets verified, publicARM Cocoa smoke passed. Main precheck and earlier failures remain historical; next94de386 variant scope is local only and not tag qualification.",
+      "next_working_branch": "codex_mongodb_stream_variants",
+      "next_workspace": "/Users/wangshubo/.codex/worktrees/mongodb-stream-variants/opennavicat",
+      "origin_main_verification_scope": "Local origin/main and documentation HEAD read during final release-doc pass; release/tag source remains exactb6 and future variant94de386 is separate.",
+      "local_head_at_candidate_measurement": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
+      "candidate_final_source_sha": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
+      "candidate_tested_application_source_sha": "d9bee6649d66542ea94dfd077a567dafd42c6224",
+      "candidate_tested_total_source_sha": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
+      "original_main_workspace_head": "a189508403b92d286d8b8d82173ae4ccebaaa8c3",
+      "original_main_workspace_clean": true,
+      "release_tag_source_sha": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
+      "working_tree_documentation_head": "a189508403b92d286d8b8d82173ae4ccebaaa8c3",
+      "workspace_head_scope": "Read immediately before the final release documentation commit; published application source remains exactb6, and this receipt does not claim a self-referential final documentation SHA."
+    },
+    "focused_user_workspace": "/Users/wangshubo/.codex/worktrees/release-0-10/opennavicat",
+    "focused_user_branch": "codex_mongodb_pipeline_tasks",
+    "focused_user_workspace_head": "fab0419fd47ad49378f3c2481bee0dca46fe7a43",
+    "focused_user_workspace_clean": true,
+    "next_parallel_ui_branch": "codex_oracle_connection_ui",
+    "next_parallel_ui_workspace": "/Users/wangshubo/.codex/worktrees/oracle-connection-ui/opennavicat"
+  },
+  "oracle_candidate_qualification": {
+    "version": "0.13.0",
+    "unpublished": true,
+    "integration_revision_at_measurement": "65abe89278462ee62ec31db07207a298c9d44b66",
+    "backend": {
+      "revision": "b8f3f8a8415c054481c37cd9c3684e589b445405",
+      "unit_passed": 93,
+      "actual_oracle_passed": 14,
+      "actual_oracle_skipped": 0,
+      "actual_oracle_seconds": 3.47,
+      "backend_declared_sources": 9,
+      "historical_and_final_owned_cids_independently_absent": 11,
+      "data_volumes": 0,
+      "receipt_tree": "oracle-basic-backend/opennavicat",
+      "receipt": "artifacts/oracle-basic-backend/final-actual-user-bound/verification.json",
+      "sleep_timely_cancel_accepted": false
+    },
+    "ui_source": {
+      "revision": "45e57e3e5a129e72c03f748e08ce0b1f3490ab92",
+      "focused_passed": 246,
+      "focused_skipped": 0,
+      "full_passed": 2382,
+      "full_conditional_skipped": 659,
+      "full_failed": 0,
+      "full_seconds": 89.59,
+      "declared_sources": 217,
+      "actual_oracle_window": false,
+      "receipt_tree": "oracle-connection-ui/opennavicat",
+      "receipt": "artifacts/oracle-ui/final-r2/verification.json"
+    },
+    "native_probe_contracts": {
+      "revision": "1cb6bc12159a1b1d4c3989f50491183cbafd5d1c",
+      "passed": 192,
+      "skipped": 0,
+      "independently_repeated": true,
+      "receipt": "artifacts/oracle-packaging-review/verification.json"
+    },
+    "local_arm64_app": {
+      "build_revision": "1cb6bc12159a1b1d4c3989f50491183cbafd5d1c",
+      "version": "0.13.0",
+      "oracledb": "26.1.0",
+      "native_oracle_extensions": true,
+      "thin_params_roundtrip_no_network": true,
+      "isolated_async_sqlite_rows": 6,
+      "isolated_async_sqlite_columns": 4,
+      "packaged_smoke_exit": 0,
+      "qt_platform": "offscreen",
+      "actual_oracle_endpoint": false,
+      "native_static_audit_passed": true,
+      "own_modules_matched": 77,
+      "actual_extension_arch": "arm64",
+      "receipt": "artifacts/oracle-integration/native-probe/packaged-smoke-verification.json",
+      "static_receipt": "artifacts/oracle-packaging-review/native-app/verification.json"
+    },
+    "actual_cocoa_source": {
+      "revision": "65abe89278462ee62ec31db07207a298c9d44b66",
+      "passed": 45,
+      "skipped": 0,
+      "failed": 0,
+      "qt_platform": "cocoa",
+      "declared_sources": 224,
+      "exact_collection_junit": true,
+      "oracle_database": "strict fake sessions; no actual endpoint",
+      "receipt": "artifacts/oracle-integration/native-cocoa-tests/verification.json"
+    },
+    "packaged_cua": {
+      "build_revision": "1cb6bc12159a1b1d4c3989f50491183cbafd5d1c",
+      "five_pages_save_edit_test_open_prompts": true,
+      "password_prompts_cancelled": true,
+      "oracle_database_connection": false,
+      "own_launched_process_absent": true,
+      "global_inventory_scope": "Another pre-existing OpenNavicat instance shares the bundle ID; no actions on its final incidental AX observation.",
+      "receipt": "artifacts/oracle-integration/native-cocoa/verification.json"
+    },
+    "complete_merged_source_suite_rerun": false,
+    "six_native_installers_qualified": false,
+    "new_public_release": false,
+    "full_parity_complete": false,
+    "validation": "docs/validation-oracle-0.13-candidate.md",
+    "delete_after_close_defect": {
+      "reproduced": true,
+      "fix_branch": "codex_oracle_delete_close_fix",
+      "fixed_and_qualified": false,
+      "release_gate": "Only delete after successful close; retain profiles/credential flags on failure; protect same-ID replacements."
+    }
+  },
+  "ci_oracle_backend_candidate": {
+    "run_id": 43415040482,
+    "revision": "64226493cdf7feb87b7a6b53482b93003c865e79",
+    "status": "completed",
+    "conclusion": "success",
+    "native_jobs_successful": 2,
+    "native_arches": [
+      "amd64",
+      "arm64"
+    ],
+    "url": "https://github.com/shubolab/opennavicat/actions/runs/43415040482",
+    "independent_artifact_audit_complete": false,
+    "scope": "backend only; exact-source/image/JUnit/cleanup audit in progress; not complete candidate/six-target/window qualification",
+    "failed_diagnostic_runs": [
+      {
+        "run_id": 43411174075,
+        "phase": "collection beforeDocker",
+        "precise_cause": "unknown; stderr not retained"
+      },
+      {
+        "run_id": 43412653289,
+        "phase": "collection beforeDocker",
+        "precise_cause": "unknown; stderr not retained"
+      },
+      {
+        "run_id": 43413750180,
+        "phase": "collection beforeDocker",
+        "precise_cause": "retained QtGui import trace: missing libEGL.so.1 on both runners"
+      }
+    ]
   }
 }

@@ -4,6 +4,35 @@
 Windows/Linux/macOS 的 1:1 保留 UI；本次同步、既有 Release 或下一个里程碑均不表示完成。
 全部门禁继续以 [parity matrix](../parity-matrix.md) 为准。
 
+## 当前未发布 Oracle 0.13 候选
+
+本次重新fetch后远端main仍为`6b61871`，主工作树及用户原工作树均clean并在该提交。
+当前开发入口改为`codex_oracle_basic_integration`，目录
+`/Users/wangshubo/.codex/worktrees/oracle-basic-integration/opennavicat`；
+测量时合流提交为`65abe89278462ee62ec31db07207a298c9d44b66`，并非main或公开release。
+专属Oracle backend `b8f3f8a`、五页连接/表视图UI `45e57e3`、实际native probe `1cb6bc1`
+以及双原生数据库CI修正`6422649`已经合入该候选。版本为**0.13.0未发布候选**，
+公开0.12的tag、六安装器和单GIF均未变。完整资格与限制见
+[Oracle候选验证](../validation-oracle-0.13-candidate.md)。
+
+后端93纯/14真Oracle、UI焦点246/默认全源2382通过659条件跳过各有自己的精确源码绑定；
+它们不是合流后同一整轮，也不合算为真实窗口资格。本机actual ARM64 app构建、隔离6×4
+packaged smoke和全部Oracle native探针已过；独立审核77应用模块、四扩展ARM64机器代码及
+26.1.0 metadata/三许可证实际字节。actual Cocoa 45项表单/窗口状态测试零跳过，使用严格fake
+数据库；packaged CUA另看五页、Save Password状态、保存重开和两次临时密码提示后取消。
+该自有进程已正常退出并按精确PID确认absent；全局仍有另一个既有同bundle-ID应用，
+其最后一次偶然AX观察不纳入证据或演示，也未在其窗口操作。
+
+Oracle双原生backend CI [43415040482](https://github.com/shubolab/opennavicat/actions/runs/43415040482)
+报告amd64/arm64成功，正在独立下载核对source/JUnit/image/cleanup；不得只凭job成功关闭资格。
+前三次失败保留，只有第三次保留了明确`libEGL.so.1`缺失trace；前两次仅知collect阶段失败。
+现正以独立owned Oracle补真实Dialog Test、Save/Edit/Open、schema/table/view、实际Stop后复用及
+Disconnect/Close，并将该Window runner接入两native job后重新验证。暂未合入main，合流默认全源、
+actual Cocoa真库窗口和六目标新安装器均仍待做；server SLEEP及时取消和完整Oracle工具/认证等门禁仍开放。
+独立审计另复现共用Remove在异步Close完成前删profile、失败后留下session的问题；
+`codex_oracle_delete_close_fix`正在做成功continuation/失败保留/同ID替换保护的最小修复，
+合流前不得进入main或release资格，既有原生包和Cocoa收据只绑定各自旧源码。
+
 ## 当前已完成的发布与继续入口
 
 **最新公开版本为[v0.12.0预发布](https://github.com/shubolab/opennavicat/releases/tag/v0.12.0)**，非draft、prerelease=true，
@@ -64,11 +93,11 @@ backend74/0、Window25/0分别在fresh auth nativeARM64 RS严格执行，默认2
 另行oracledb26.1六目标wheel实际字节/架构与ownedThin/service/TNS/SID/SYSDBA研究不等于OpenNavadapter或六平台执行。
 完整Oracle工具/设置/安全/事务/类型、Snowflake及三平台UI/功能门禁保持开放。
 
-下一段已在独立工作树开始：`codex_oracle_basic_backend`负责专属session/config/deps/owned测试，
-`codex_oracle_connection_ui`负责五页连接、密码状态、Store和schema/table/view窗口路由。
-二者均从fab开始，唯一配置契约以backend的`7eb42ed`为基础，service identifier与schema分离；
-这些开发中源码尚未合入main，也没有Oracle产品或安装器验收。合流前继续审查lossless NUMBER/LOB、精确cancel token、
-stale form/session绑定、无明文secret、unsupported active选项failclosed、PK/冲突/DDL边界；不得把专属连接成功当完整Oracle工具完成。
+上述参考研究之后的专属session/config/deps/owned测试与五页连接、密码状态、Store、
+schema/table/view窗口路由，现已在本页开头记录的0.13候选合流；尚未合入main。
+service identifier与schema继续分离，lossless NUMBER/LOB、精确cancel token、stale绑定、
+无明文secret和unsupported active选项failclosed各自保留验证；写入/PK冲突/DDL等工具仍未实现。
+不得把专属连接成功或后端测试当完整Oracle工具、真实窗口或安装器完成。
 
 ### 历史0.11基线
 

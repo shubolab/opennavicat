@@ -4,6 +4,9 @@ This candidate follows the actual macOS Navicat **18.0.5 build 321**
 [OR18-01 observation](ui-reference-18-oracle.md). It adds the dedicated Oracle
 connection form and an owner-qualified table/view reading path. It does not
 close Oracle UI or tool parity, native platform acceptance or a release gate.
+The measurements below belong to checkpoint `45e57e3`; later integration,
+packaged native probes and separate Cocoa state checks are recorded in the
+[unpublished 0.13 candidate ledger](validation-oracle-0.13-candidate.md).
 
 ## Connection form and retained drafts
 
@@ -108,5 +111,6 @@ that evidence into an actual GUI-to-Oracle workflow acceptance.
 Actual Cocoa Test/save/reopen/schema/table/view acceptance, remaining Oracle
 authentication and topology modes, all unimplemented tools and designers,
 Windows/Linux reference acceptance, six native installers and public release
-verification remain separate gates. This branch does not change the version,
-tag, GIF or release assets.
+verification remain separate gates. This UI checkpoint did not change the
+version, tag, GIF or release assets; the later integration's 0.13 candidate
+does not change that checkpoint's qualification scope.

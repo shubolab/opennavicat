@@ -188,10 +188,11 @@ def test_actual_queued_cancel_and_live_server_cancel_then_reuse(session, config)
         with observer.cursor() as cursor:
             deadline = time.monotonic() + 3
             while time.monotonic() < deadline:
-                cursor.execute("""SELECT S.STATUS,Q.SQL_TEXT FROM V$SESSION S JOIN V$SQL Q
+                cursor.execute("""SELECT S.STATUS,Q.SQL_TEXT,S.USERNAME,S.SERIAL#,S.SID FROM V$SESSION S JOIN V$SQL Q
                     ON Q.SQL_ID=S.SQL_ID AND Q.CHILD_NUMBER=S.SQL_CHILD_NUMBER WHERE S.SID=:sid""", {"sid": sid})
                 state = cursor.fetchone()
-                if state and state[0] == "ACTIVE" and sql_marker in state[1]:
+                if (state and state[0] == "ACTIVE" and sql_marker in state[1]
+                        and state[2] == config.username and int(state[3]) > 0 and int(state[4]) == sid):
                     break
                 time.sleep(0.02)
             else:

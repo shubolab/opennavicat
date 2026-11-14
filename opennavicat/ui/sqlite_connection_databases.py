@@ -17,6 +17,7 @@ from opennavicat.sqlite_database_config import (
     SQLiteDatabaseEntry, copy_connection_config, with_sqlite_database_password,
 )
 from .icons import tool_icon
+from .sqlite_browse_button import SQLiteBrowseButton
 
 
 def _absolute_file(value: str) -> str:
@@ -69,16 +70,6 @@ class _FontLineEdit(QLineEdit):
         return handled
 
 
-class _BrowseButton(QPushButton):
-    def sizeHint(self):
-        hint = super().sizeHint()
-        hint.setWidth(max(24, self.fontMetrics().horizontalAdvance(self.text()) + 12))
-        return hint
-
-    def minimumSizeHint(self):
-        return self.sizeHint()
-
-
 class _DatabaseTable(QTableWidget):
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -124,13 +115,11 @@ class SQLiteDatabaseDialog(QDialog):
         file_field = QWidget()
         file_layout = QHBoxLayout(file_field)
         file_layout.setContentsMargins(0, 0, 0, 0)
-        file_layout.setSpacing(3)
+        file_layout.setSpacing(0)
         self.file_edit = _FontLineEdit(entry.database if entry else "")
         self.file_edit.setObjectName("sqliteDatabaseFile")
         file_layout.addWidget(self.file_edit, 1)
-        self.browse_button = _BrowseButton("...")
-        self.browse_button.setAutoDefault(False)
-        self.browse_button.setAccessibleName("选择数据库文件")
+        self.browse_button = SQLiteBrowseButton()
         self.browse_button.clicked.connect(self._browse)
         file_layout.addWidget(self.browse_button)
         form.addRow("数据库文件:", file_field)

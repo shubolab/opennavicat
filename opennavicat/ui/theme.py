@@ -47,6 +47,7 @@ QWidget#viewButtonGroup QToolButton:hover { background: %(hover)s; border-radius
 QFrame#viewButtonDivider { background: %(muted)s; border: 0; }
 
 QPushButton { padding: 2px 8px; min-height: 20px; }
+QPushButton#sqliteFileBrowseButton { padding: 3px 3px; min-height: 0px; }
 QPushButton:disabled, QLabel:disabled, QToolButton:disabled { color: %(disabled)s; }
 QLineEdit, QSpinBox, QDoubleSpinBox { background: %(edit)s; color: %(text)s; border: 1px solid %(border)s; padding: 2px 4px; min-height: 18px; selection-background-color: %(selection)s; selection-color: %(selection_text)s; }
 QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus { border-color: %(selection)s; }

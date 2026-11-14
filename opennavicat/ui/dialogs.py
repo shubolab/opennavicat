@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 from opennavicat.database import ConnectionConfig
 from .connection_test_banner import ConnectionTestBanner
 from .icons import tool_icon, toggle_icon
+from .sqlite_browse_button import SQLiteBrowseButton
 from .sqlite_connection_databases import SQLiteConnectionDatabases
 
 
@@ -158,6 +159,10 @@ class _ConnectionDiagram(QWidget):
         left = self.width() * (0.15 if self.tunnel_enabled else 0.24)
         right = self.width() * (0.85 if self.tunnel_enabled else 0.76)
         y = 35
+        sqlite_outline = self.driver == "SQLite"
+        # The observed SQLite glyph is a narrow outline, with clear space
+        # between its left edge and the link. Other drivers retain their art.
+        link_right = right - (14 + 26 if sqlite_outline else 40)
         # Original workbench artwork sits on the left, database on the right.
         painter.drawRoundedRect(QRectF(left - 29, y + 3, 58, 39), 3, 3)
         painter.drawLine(round(left), y + 43, round(left), y + 51)
@@ -165,7 +170,7 @@ class _ConnectionDiagram(QWidget):
         if self.tunnel_enabled:
             center = self.width() * 0.5
             painter.drawLine(round(left + 40), y + 28, round(center - 33), y + 28)
-            painter.drawLine(round(center + 33), y + 28, round(right - 40), y + 28)
+            painter.drawLine(round(center + 33), y + 28, round(link_right), y + 28)
             painter.drawRoundedRect(QRectF(center - 26, y + 1, 52, 51), 2, 2)
             for offset in (12, 26, 40):
                 painter.drawLine(round(center - 18), y + offset, round(center + 18), y + offset)
@@ -173,16 +178,28 @@ class _ConnectionDiagram(QWidget):
             painter.save()
             if self.sqlite_connection_succeeded and self.driver == "SQLite":
                 painter.setPen(QPen(QColor('#6bc859'), 1.5))
-            painter.drawLine(round(left + 40), y + 28, round(right - 40), y + 28)
+            painter.drawLine(round(left + 40), y + 28, round(link_right), y + 28)
             painter.restore()
-        body = QPainterPath()
-        body.moveTo(right - 26, y + 8)
-        body.lineTo(right - 26, y + 42)
-        body.cubicTo(right - 26, y + 56, right + 26, y + 56, right + 26, y + 42)
-        body.lineTo(right + 26, y + 8)
-        painter.drawPath(body)
-        painter.drawEllipse(QRectF(right - 26, y, 52, 17))
-        painter.drawArc(QRectF(right - 26, y + 18, 52, 17), 180 * 16, 180 * 16)
+        if sqlite_outline:
+            painter.save()
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.setPen(QPen(palette.placeholderText().color(), 1.5))
+            top = y + 4
+            painter.drawLine(round(right - 14), top + 5, round(right - 14), top + 33)
+            painter.drawLine(round(right + 14), top + 5, round(right + 14), top + 33)
+            painter.drawEllipse(QRectF(right - 14, top, 28, 10))
+            for offset in (9, 18, 28):
+                painter.drawArc(QRectF(right - 14, top + offset, 28, 10), 180 * 16, 180 * 16)
+            painter.restore()
+        else:
+            body = QPainterPath()
+            body.moveTo(right - 26, y + 8)
+            body.lineTo(right - 26, y + 42)
+            body.cubicTo(right - 26, y + 56, right + 26, y + 56, right + 26, y + 42)
+            body.lineTo(right + 26, y + 8)
+            painter.drawPath(body)
+            painter.drawEllipse(QRectF(right - 26, y, 52, 17))
+            painter.drawArc(QRectF(right - 26, y + 18, 52, 17), 180 * 16, 180 * 16)
         if self.ssl_enabled:
             lock_x = self.width() * (0.675 if self.tunnel_enabled else 0.5)
             painter.drawArc(QRectF(lock_x - 4, y + 6, 8, 10), 0, 180 * 16)
@@ -342,11 +359,9 @@ class ConnectionDialog(QDialog):
         self.database_row = QWidget()
         database_layout = QHBoxLayout(self.database_row)
         database_layout.setContentsMargins(0, 0, 0, 0)
-        database_layout.setSpacing(6)
+        database_layout.setSpacing(0)
         database_layout.addWidget(self.database_edit, 1)
-        self.browse_button = QPushButton("…")
-        self.browse_button.setFixedWidth(30)
-        self.browse_button.setToolTip("选择数据库文件")
+        self.browse_button = SQLiteBrowseButton()
         database_layout.addWidget(self.browse_button)
         # Retained for callers using the original public widget attribute. The
         # SQLite type selector now exposes the create-file workflow.

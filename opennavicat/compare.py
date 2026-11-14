@@ -4,9 +4,11 @@ from __future__ import annotations
 import contextlib
 import json
 import re
+import uuid
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
+from pathlib import Path
 
 from .database import DatabaseSession
 
@@ -29,7 +31,7 @@ class DiffPlan:
     applied: bool = False
 
 
-def fingerprint(session):
+def fingerprint(session, schema=None):
     config = session.config
     # The same database address can resolve to different servers on different
     # jump hosts. A preview must remain bound to its original SSH endpoint and
@@ -38,8 +40,27 @@ def fingerprint(session):
     if getattr(config, "ssh_enabled", False):
         tunnel = [config.ssh_host, config.ssh_port, config.ssh_username,
                   config.ssh_host_key]
-    return json.dumps([config.driver, config.host, config.port, config.database,
-                       config.username, tunnel])
+    binding = [config.driver, config.host, config.port, config.database,
+               config.username, tunnel]
+    if config.driver == "sqlite":
+        # Do not reopen a closed target (or create a missing main file) merely
+        # to validate an old preview. Comparison reads already connected it.
+        connection = session.connection
+        if connection is None:
+            raise ValueError("The target connection is closed. Compare again before applying.")
+        databases = sorted((row[1], row[2]) for row in session._query("PRAGMA database_list"))
+        if schema is not None and schema not in {alias for alias, _path in databases}:
+            raise ValueError("The target database is no longer attached. Compare again before applying.")
+        if any(path and not Path(path).is_file() for _alias, path in databases):
+            raise ValueError("A target database file is missing. Compare again before applying.")
+        # Retain the prior connection object, including after close(), until
+        # this binding read replaces it. Allocator id reuse cannot validate a
+        # reconnect; identity state belongs to this session, not a registry.
+        if getattr(session, "_compare_identity_connection", None) is not connection:
+            session._compare_identity_connection = connection
+            session._compare_identity_token = uuid.uuid4().hex
+        binding.append([schema, databases, session._compare_identity_token])
+    return json.dumps(binding)
 
 
 def require_transactional_table(session, schema, table):
@@ -108,7 +129,7 @@ def compare_tables(source: DatabaseSession, target: DatabaseSession, source_sche
     left, right = keyed(source_data, source_types), keyed(target_data, target_types)
     plan = DiffPlan(f"{source.config.name} / {source_schema}.{source_table}",
                     f"{target.config.name} / {target_schema}.{target_table}",
-                    target.config.id, target_schema, target_table, keys, fingerprint(target), target_meta)
+                    target.config.id, target_schema, target_table, keys, fingerprint(target, target_schema), target_meta)
     for key, row in left.items():
         if key not in right:
             plan.inserts.append({name: value for name, value in row.items() if name in writable})
@@ -127,7 +148,7 @@ def compare_tables(source: DatabaseSession, target: DatabaseSession, source_sche
 def apply_plan(target: DatabaseSession, plan: DiffPlan, include_deletes: bool = False) -> dict:
     if target.config.id != plan.target_id:
         raise ValueError("The preview belongs to a different target connection.")
-    if fingerprint(target) != plan.target_fingerprint:
+    if fingerprint(target, plan.schema) != plan.target_fingerprint:
         raise ValueError("The target connection settings changed. Compare again before applying.")
     if plan.applied:
         raise ValueError("This preview has already been applied. Compare again to create a fresh preview.")

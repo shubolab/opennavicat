@@ -42,7 +42,7 @@
 | AP18-13 | [images OFF/ON实际对照](ui-reference-18-mongodb-pipeline.md#ap18-13-collection-images-offon-and-required-image-errors) | 新read profile、自有RS六次实际Run：whenAvailable OFF/ON返回1/2，required-pre/post ON各2；两个OFF-required真实getMore47均显示0/0哨兵，不是真实脚本位置。三个成功ON的Output经截图确认空白、原因未定，首WA_OFF仍script+OK，不据此重写旧观察。初始调用基数unknown/overallinconclusive；正常Quit后4idle/0active，清理exactCID/两卷，不复制遗留游标。独立typed observer不代表原版私有BSON；后续未发布b53f60e已增加六种实际工具栏回归及两种typed诊断哨兵，backend74/0、Window25/0、默认2243/645；[源码集成](validation-mongodb-image-modes.md)单独绑定，未解ON Output空白；保留期、其它event/权限/拓扑、Stop/Preview和三平台门禁开放。 |
 | OR18-01 | [Oracle设置与owned对象实际观察](ui-reference-18-oracle.md) | macOS18.0.5五页、Basic/TNS、service/SID、三角色、OS-auth切换、247字符集、三SSH方法、Oracle工具栏/15种Other和28/13对象列已枚举；新Basic/Default密码profile实际Test成功、保存重开、On列30schemas，own表/视图各1条合成数据实际读取。一次ORA12545来源unknown，不改server掩盖。只新profile断开Off/0后Quitfalse，3个研究/参考CID逐ID清理、零数据卷。另行Thin/API/六目标wheel字节研究不是OpenNav适配器或原生包资格；完整Oracle工具/认证/安全/事务/类型和三平台门禁仍开放。 |
 | AU18-01–AU18-06 | [18自动运行实际观察](ui-reference-18-automation.md) / [当前Batch片段](batch-jobs.md) | 全局列表/四页Batch、16类别、Version1.4文件与Jobs空对象、已保存Pipeline引用/重复/改名失效、None认证断开后的独立执行、错误继续/跳过、历史重开和copy/sort均有自有样例观察；未创建OS计划或发邮件。Batch取消、其余类别执行与三平台仍开放。永久删除确认已取消，残留合成任务被清空；两容器/四匿名卷逐ID核验已清理。 |
-| SDB18 | [SQLite数据库页实际观察](sqlite-connection-databases.md) | 九个草稿检查点涵盖三列/裸加减/600×215新增编辑sheet/取消删除；后续五检查点实际plain Test、Save Off、主/附加库四行及同进程保存重开。密码/加密/进程重启/invalid规则/三平台仍开放，不属于v0.13.2数据库页实现。 |
+| SDB18 | [SQLite数据库页实际观察](sqlite-connection-databases.md) | 九个草稿检查点涵盖三列/裸加减/600×215新增编辑sheet/取消删除；后续五检查点实际plain Test、Save Off、主/附加库四行及同进程保存重开。未发布[0.13.3本地集成](validation-0.13.3.md)已接草稿页、普通附加会话、来源绑定和原生字体修复；固定800的6项失败保留，最终全源/包资格待执行。密码/加密/进程重启/invalid规则/三平台仍开放，不属于v0.13.2数据库页实现。 |
 | S-W | [window.py](../opennavicat/ui/window.py)、[workspace.py](../opennavicat/ui/workspace.py)、[query.py](../opennavicat/ui/query.py)、[theme.py](../opennavicat/ui/theme.py) | 0.2 按实际参考重建的部分工作台、对象/信息区、表和查询页；尚未完成完整对照。 |
 | S-D | [dialogs.py](../opennavicat/ui/dialogs.py)、[editor.py](../opennavicat/ui/editor.py)、[grid.py](../opennavicat/ui/grid.py) | 现有连接/新表/记录对话框、SQL 和网格组件。 |
 | S-E | [database.py](../opennavicat/database.py) | SQLite/PostgreSQL/MySQL/MariaDB四驱动、基础metadata/SQL/行修改；其余五个数据库族和完整对象管理仍有缺口。 |
@@ -96,7 +96,7 @@
 
 | ID | 必需能力 | 当前 | 依据/差距 | 关闭门禁所需验收 |
 | --- | --- | --- | --- | --- |
-| C01 | SQLite完整连接 | ◐ | E4/S-E/S-D 新/已有/:memory:/只读；SDB18已观察草稿sheet及单个plain ATTACH、同进程保存重开；完整加密/进程重启/附加工具与平台仍未验收 | 枚举版本/格式、密码/加密、Cipher Name算法及附加库等实际选项；官方18文档只声明入口，算法/codec需实看与加密fixture；连接、失败、重开和独立文件校验。 |
+| C01 | SQLite完整连接 | ◐ | E4/S-E/S-D 新/已有/:memory:/只读；SDB18已观察草稿sheet及单个plain ATTACH、同进程保存重开；未发布[0.13.3本地片段](validation-0.13.3.md)增加普通附加初始化/原子会话发布、取消代次、比较及备份绑定，不借上一版安装器资格；完整加密/进程重启/附加工具与平台仍未验收 | 枚举版本/格式、密码/加密、Cipher Name算法及附加库等实际选项；官方18文档只声明入口，算法/codec需实看与加密fixture；连接、失败、重开和独立文件校验。 |
 | C02 | MySQL完整连接 | ◐ | E3/S-E/V有真实服务测试 | 全部认证、编码、兼容、高级/安全设置及适用版本；读写/元数据/取消/重连。 |
 | C03 | PostgreSQL完整连接 | ◐ | S-E/R03已有实际TLS/SSH核心验证；18全部选项/认证适用性仍未验收 | 全部认证/选项/schema行为、证书/主机验证及失败恢复和18参考等价。 |
 | C04 | MariaDB完整连接 | ◐ | S-E/V有真实11.4测试 | 原生选项和版本差异单独验收，不能只当改名MySQL；所有适用连接/认证case。 |

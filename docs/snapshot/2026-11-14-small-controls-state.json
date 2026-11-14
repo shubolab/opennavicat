@@ -1,6 +1,6 @@
 {
-  "schema_version": 7,
-  "captured_at_utc": "2026-11-14T07:12:24.726136+00:00",
+  "schema_version": 8,
+  "captured_at_utc": "2026-11-14T07:56:33.198942+00:00",
   "handoff": "2026-11-14-small-controls.md",
   "previous_handoff": "2026-11-14-goal-resume.md",
   "goal": {
@@ -16,7 +16,7 @@
     "qualified_source": "6af4335232e9cfadb5f9c3668490fc22c86da9e2",
     "source_inputs": 250,
     "version": "0.13.2",
-    "pushed_checkpoint": "12be93d83116956beab1982c9a02bc3dedb19e77",
+    "pushed_checkpoint": "40e8b7e723779bca9cc5606a1cce3bac0c092391",
     "remote_candidate_branch_retained": false
   },
   "public_release": {
@@ -135,7 +135,7 @@
   },
   "open_gates": [
     "Full icons and all UI states",
-    "SQLite database tab integration and full form proportions",
+    "SQLite database tab final integration qualification and full form proportions",
     "Actual encrypted provider/Cipher Name/invalid configuration and process restart reference",
     "All retained database tool functionality",
     "Windows and Linux actual reference",
@@ -155,7 +155,7 @@
     "future_policy": "Default local task branches; push milestones to main; promptly delete integrated remote temporary refs"
   },
   "workspace_delivery": {
-    "main_directory_and_release_0_10_fast_forwarded_to": "12be93d83116956beab1982c9a02bc3dedb19e77",
+    "main_directory_and_release_0_10_fast_forwarded_to": "40e8b7e723779bca9cc5606a1cce3bac0c092391",
     "physical_venv_version": "0.13.2",
     "all_other_distribution_versions_preserved": true,
     "running_application_overwritten_or_restarted": false
@@ -185,7 +185,7 @@
   "next_local_development": {
     "workspace": "/Users/wangshubo/.codex/worktrees/sqlite-databases/opennavicat",
     "branch": "codex_sqlite_databases",
-    "head_at_capture": "8005162a8358039afb0af78b51212d8929bf1c9f",
+    "head_at_capture": "18c7f3d3f2fa6e5014368e1482b1cebfacaf3dec",
     "version": "0.13.3",
     "remote_task_branch_pushed": false,
     "first_integrated_scope": {
@@ -206,6 +206,64 @@
       "failed": 0,
       "full_default_or_native_qualification_claimed": false
     },
-    "cocoa_scope": "running exact 8005162; not yet qualified"
+    "cocoa_scope": {
+      "source": "8005162a8358039afb0af78b51212d8929bf1c9f",
+      "total": 720,
+      "passed": 711,
+      "failed": 6,
+      "errors": 0,
+      "skipped": 3,
+      "source_inputs": 260,
+      "source_stable": true,
+      "owned_store_removed": true,
+      "owned_process_cleanup": true,
+      "immutable_failed_evidence": "artifacts/release-0133/cocoa-800",
+      "causes": [
+        "Recorder background Store snapshot missed in-memory binding cache; two nested offscreen cases",
+        "QMacStyle actual line-edit content height stayed 21px; four large-font cases"
+      ],
+      "qualification_passed": false
+    },
+    "source_inputs": 261,
+    "merged_main_checkpoint": "40e8b7e723779bca9cc5606a1cce3bac0c092391",
+    "recorder_followup": {
+      "leaf": "17cfc74324b595d8b685d536e49321d810173e99",
+      "integrated": "b2ac8a8",
+      "same_final_test_bytes_old_failed": 2,
+      "same_final_test_bytes_new_passed": 2,
+      "related_passed": 144,
+      "related_existing_database_conditional_skipped": 3,
+      "platform": "offscreen"
+    },
+    "native_font_followup": {
+      "leaf": "6f3cae1d1fc23d37c426298bbc2413e4d886c79c",
+      "integrated": "18c7f3d3f2fa6e5014368e1482b1cebfacaf3dec",
+      "same_final_test_bytes_old_native_failed": 7,
+      "same_final_test_bytes_new_native_passed": 7,
+      "leaf_cocoa_passed": 126,
+      "leaf_offscreen_passed": 230,
+      "scale_1_25_passed": 22,
+      "scale_2_passed": 22,
+      "root_full_size_images_viewed": 3,
+      "root_independent_capture_pids_absent": true,
+      "whole_integrated_source_or_platform_acceptance_claimed": false
+    },
+    "helper_build": {
+      "source": "18c7f3d3f2fa6e5014368e1482b1cebfacaf3dec",
+      "passed": true,
+      "native_target": "Darwin arm64",
+      "fresh_raw_helper": true,
+      "builder_native_source_archive_hashes_before_after": true,
+      "processed_payload_built": false,
+      "whole_source_or_package_qualification_claimed": false
+    },
+    "pending": [
+      "Freeze final recorder and integrated source",
+      "Full default collect/run/JUnit qualification",
+      "Fresh actual Cocoa integrated scope including native contents",
+      "Native application build and actual smoke",
+      "New actual GIF and every phase privacy/visual review",
+      "Six native installer targets and public-byte verification"
+    ]
   }
 }

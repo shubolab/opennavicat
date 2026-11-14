@@ -47,6 +47,7 @@ ORACLE_FORM_NAME = "Oracle · 连接设置演示"
 ORACLE_FORM_PHASES = ("oracle_connection_general", "oracle_connection_advanced", "oracle_connection_databases")
 CONNECTION_CHOOSER_PHASES = ("connection_chooser",)
 SQLITE_TEST_PHASES = ("sqlite_connection_test",)
+SQLITE_DATABASES_PHASES = ("sqlite_connection_databases_empty", "sqlite_database_add_sheet_empty")
 SQLITE_TEST_FILENAME = "generated-connection-test.sqlite"
 SQLITE_TEST_NAME = "SQLite · 生成连接测试"
 # Match the independent application artwork's sRGB driver fills. These colors
@@ -97,11 +98,12 @@ def mongo_storage_options():
     }
 
 
-def required_demo_phases(*, mongodb=False, stream=False, oracle_form=False, connection_chooser=False, sqlite_test=False):
+def required_demo_phases(*, mongodb=False, stream=False, oracle_form=False, connection_chooser=False, sqlite_test=False, sqlite_databases=False):
     if stream and not mongodb:
         raise ValueError("A finite-stream demo requires its MongoDB workflows.")
     return (SQLITE_PHASES + (MONGO_PHASES if mongodb else ()) + (STREAM_PHASES if stream else ())
             + (SQLITE_TEST_PHASES if sqlite_test else ())
+            + (SQLITE_DATABASES_PHASES if sqlite_databases else ())
             + (ORACLE_FORM_PHASES if oracle_form else ())
             + (CONNECTION_CHOOSER_PHASES if connection_chooser else ()))
 
@@ -986,6 +988,97 @@ def verify_sqlite_connection_test_demo(dialog, fixture):
             "credentials_empty": True, "clipboard_action_executed": False, **ledger["fixture_verified"]}
 
 
+def begin_sqlite_databases_demo(dialog):
+    """Observe the actual empty page, retaining its private draft for Cancel."""
+    page = dialog.sqlite_databases_page
+    ledger = {"before": page.snapshot(), "changed": 0, "add_clicked": 0,
+              "sheet_opened": 0, "cancel_clicked": 0, "sheet_results": [],
+              "sheet_accepted": 0, "opening": False, "page_verified": False,
+              "sheet_verified": False}
+    dialog._demo_sqlite_databases_ledger = ledger
+    page.changed.connect(lambda: ledger.update(changed=ledger["changed"] + 1))
+    page.add_button.clicked.connect(lambda: ledger.update(add_clicked=ledger["add_clicked"] + 1))
+    dialog.tabs.setCurrentWidget(dialog.databases_tab)
+    return ledger
+
+
+def observe_sqlite_database_sheet(dialog, sheet):
+    """Bind the sheet created by the real plus callback, without replacing it."""
+    from PySide6.QtWidgets import QApplication, QDialogButtonBox
+    from opennavicat.ui.sqlite_connection_databases import SQLiteDatabaseDialog
+
+    ledger = dialog._demo_sqlite_databases_ledger
+    if type(sheet) is not SQLiteDatabaseDialog or QApplication.activeModalWidget() is not sheet:
+        raise RuntimeError("The generated database add sheet was not opened by its actual component.")
+    ledger["sheet_opened"] += 1
+    sheet.finished.connect(lambda code: ledger["sheet_results"].append(int(code)))
+    sheet.accepted.connect(lambda: ledger.update(sheet_accepted=ledger["sheet_accepted"] + 1))
+    sheet.buttons.button(QDialogButtonBox.StandardButton.Cancel).clicked.connect(
+        lambda: ledger.update(cancel_clicked=ledger["cancel_clicked"] + 1))
+    return verify_sqlite_databases_demo(dialog, sheet)
+
+
+def verify_sqlite_databases_demo(dialog, sheet=None):
+    """Verify real visible widgets and the unchanged unsaved process draft."""
+    from PySide6.QtCore import QThread
+    from PySide6.QtWidgets import QApplication
+    from opennavicat.ui.dialogs import ConnectionDialog
+    from opennavicat.ui.sqlite_connection_databases import SQLiteDatabaseDialog
+
+    app = QApplication.instance()
+    if app is None or QThread.currentThread() is not app.thread():
+        raise RuntimeError("The generated SQLite database widgets need their GUI owner.")
+    ledger = getattr(dialog, '_demo_sqlite_databases_ledger', {})
+    probe = getattr(dialog, '_demo_sqlite_test_ledger', {})
+    page = dialog.sqlite_databases_page
+    snapshot = page.snapshot()
+    if (type(dialog) is not ConnectionDialog or dialog.driver_combo.currentData() != 'sqlite'
+            or dialog.name_edit.text() != SQLITE_TEST_NAME or dialog.database_edit.text() != SQLITE_TEST_FILENAME
+            or dialog.tabs.currentWidget() is not dialog.databases_tab or not page.isVisible()
+            or dialog.get_config() is not None or dialog._original is not None or probe.get('accepted')
+            or not sqlite_test_idle(dialog) or snapshot != ledger.get('before') or ledger.get('changed')
+            or snapshot.sqlite_databases or snapshot.sqlite_database_passwords or snapshot.sqlite_database_password_bindings
+            or page.table.rowCount() or page.table.selectedItems()
+            or [page.table.horizontalHeaderItem(i).text() for i in range(3)] != ['数据库', '文件', '已加密']
+            or any(button.text() or button.icon().isNull() or not button.isEnabled() or not button.isFlat()
+                   for button in (page.add_button, page.remove_button))
+            or any(widget.text() for widget in (dialog.host_edit, dialog.user_edit, dialog.password_edit,
+                   dialog.ssl_key_password_edit, dialog.ssl_ca_edit, dialog.ssl_cert_edit,
+                   dialog.ssl_key_edit, dialog.ssl_crl_edit, dialog.ssh_host_edit, dialog.ssh_user_edit,
+                   dialog.ssh_key_edit, dialog.ssh_password_edit, dialog.ssh_key_passphrase_edit))):
+        raise RuntimeError("The SQLite database demo did not preserve its actual empty, unsaved state.")
+    if sheet is not None:
+        if (type(sheet) is not SQLiteDatabaseDialog or QApplication.activeModalWidget() is not sheet
+                or sheet.parentWidget() is not dialog or not sheet.isVisible() or sheet.get_config() is not None
+                or any(edit.text() for edit in (sheet.name_edit, sheet.file_edit, sheet.password_edit))
+                or sheet.encrypted_check.isChecked() or sheet.password_edit.isEnabled()
+                or sheet.password_edit.echoMode() != sheet.password_edit.EchoMode.Password
+                or ledger.get('sheet_opened') != 1 or ledger.get('sheet_results') or ledger.get('sheet_accepted')):
+            raise RuntimeError("The generated database add sheet did not preserve its actual empty fields.")
+        ledger['sheet_verified'] = True
+    else:
+        ledger['page_verified'] = True
+    return {"database_rows": 0, "credentials_empty": True, "draft_unchanged": True,
+            "pool_idle_before_capture": True, "new_unsaved_profile": True, "profile_saved": False}
+
+
+def finish_sqlite_databases_demo(dialog):
+    """Read only the live parent and plain signals after the sheet has exited."""
+    from PySide6.QtWidgets import QDialog
+
+    facts = verify_sqlite_databases_demo(dialog)
+    ledger = dialog._demo_sqlite_databases_ledger
+    if (not ledger['page_verified'] or not ledger['sheet_verified'] or ledger['add_clicked'] != 1
+            or ledger['sheet_opened'] != 1 or ledger['cancel_clicked'] != 1
+            or ledger['sheet_results'] != [int(QDialog.DialogCode.Rejected)]
+            or ledger['sheet_accepted'] or ledger['opening']):
+        raise RuntimeError("The generated database add sheet did not finish through its actual Cancel action.")
+    return {**facts, "actual_add_button_clicked": True, "actual_empty_sheet_opened": True,
+            "actual_cancel_button_clicked": True, "sheet_rejected": True,
+            "empty_database_page_verified": True, "empty_sheet_fields_verified": True,
+            "draft_changed_signals": 0, "row_added": False, "secret_added": False}
+
+
 @contextmanager
 def connection_chooser_demo(parent=None):
     """Unbound actual chooser: no workspace, credential or settings handoff."""
@@ -1249,6 +1342,7 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
 
     include_stream = bool(getattr(args, "include_stream", False))
     include_sqlite_test = bool(getattr(args, "include_sqlite_test", False))
+    include_sqlite_databases = bool(getattr(args, "include_sqlite_databases", False))
     include_oracle_form = bool(getattr(args, "include_oracle_form", False))
     include_connection_chooser = bool(getattr(args, "include_connection_chooser", False))
     if include_stream and (mongo is None or not mongo.replica_set):
@@ -1337,11 +1431,12 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
              "connection_chooser": None, "connection_chooser_guard": None, "connection_chooser_verification": None,
              "sqlite_test_dialog": None, "sqlite_test_guard": None, "sqlite_test_fixture": None,
              "sqlite_test_verification": None,
+             "sqlite_database_sheet": None, "sqlite_databases_verification": None,
              "stream_abort": threading.Event(), "stream_release": threading.Event(),
              "capture_target": window}
     deadline = (time.monotonic() + (150 if include_stream else 120)
                 + (12 if include_oracle_form else 0) + (6 if include_connection_chooser else 0)
-                + (8 if include_sqlite_test else 0))
+                + (8 if include_sqlite_test else 0) + (8 if include_sqlite_databases else 0))
     capture_timer = QTimer(app)
     capture_timer.setInterval(round(1000 / args.fps))
 
@@ -1369,12 +1464,21 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
             # This is a guard, not pixel redaction. A leaking frame is never saved.
             assert_visible_privacy(window,temporary,mongo)
             target = state["capture_target"]
+            if (state.get("sqlite_databases_active")
+                    and target in (state["sqlite_test_dialog"], state["sqlite_database_sheet"])
+                    and not idle()):
+                raise RuntimeError("The generated database page capture needs its main serial owner idle.")
             if target is state["oracle_form"]:
                 verify_oracle_form_demo(target)
             if target is state["connection_chooser"]:
                 verify_connection_chooser_demo(target)
             if target is state["sqlite_test_dialog"]:
-                verify_sqlite_connection_test_demo(target, state["sqlite_test_fixture"])
+                if state.get("sqlite_databases_active"):
+                    verify_sqlite_databases_demo(target)
+                else:
+                    verify_sqlite_connection_test_demo(target, state["sqlite_test_fixture"])
+            if target is state["sqlite_database_sheet"]:
+                verify_sqlite_databases_demo(state["sqlite_test_dialog"], target)
             if target is not window:
                 # A real app sheet is grabbed directly, never composited into a
                 # synthetic main-window image or sampled from the desktop.
@@ -1403,8 +1507,10 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
         state["phases"].append({"name": name, "first_frame": state["count"],
             "surface": ("main_window" if target is window else "oracle_connection_dialog"
                         if target is state["oracle_form"] else "connection_manager_dialog"
-                        if target is state["connection_chooser"] else "sqlite_connection_test_dialog"
-                        if target is state["sqlite_test_dialog"] else "save_sheet"),
+                        if target is state["connection_chooser"] else "sqlite_connection_databases_dialog"
+                        if target is state["sqlite_test_dialog"] and state.get("sqlite_databases_active") else "sqlite_connection_test_dialog"
+                        if target is state["sqlite_test_dialog"] else "sqlite_database_add_sheet"
+                        if target is state["sqlite_database_sheet"] else "save_sheet"),
             "source_size_logical": [target.width(), target.height()],
             "fit": "existing_main_window_scale" if target is window else "keep_aspect_centered_neutral_letterbox"})
 
@@ -2191,7 +2297,7 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
         hold(2.4, finish_workflows)
 
     def finish_workflows():
-        if not include_sqlite_test:
+        if not (include_sqlite_test or include_sqlite_databases):
             show_oracle_forms()
             return
         capture_timer.stop()
@@ -2202,6 +2308,9 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
         state["sqlite_test_guard"] = guard
         state["sqlite_test_dialog"] = dialog
         dialog.show()
+        if not include_sqlite_test:
+            wait_for(dialog.isVisible, show_sqlite_databases, "showing the generated SQLite database page")
+            return
         # This is the actual button and native application's asynchronous test,
         # not a fabricated banner or test_finished signal.
         dialog.test_button.click()
@@ -2228,11 +2337,92 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
         capture(); capture_timer.stop()
         state["sqlite_test_verification"] = verify_sqlite_connection_test_demo(
             state["sqlite_test_dialog"], state["sqlite_test_fixture"])
+        if include_sqlite_databases:
+            show_sqlite_databases()
+            return
+        close_sqlite_form()
+
+    def close_sqlite_form():
         state["sqlite_test_guard"].__exit__(None, None, None)
         state["sqlite_test_guard"] = None
-        state["sqlite_test_verification"]["form_closed_after_worker_idle"] = True
+        for verification in (state["sqlite_test_verification"], state["sqlite_databases_verification"]):
+            if verification is not None:
+                verification["form_closed_after_worker_idle"] = True
         state["capture_target"] = window
         show_oracle_forms(capture_last=False)
+
+    def show_sqlite_databases():
+        capture_timer.stop()
+        dialog = state["sqlite_test_dialog"]
+        begin_sqlite_databases_demo(dialog)
+        state["sqlite_databases_active"] = True
+        state["capture_target"] = dialog
+        phase(SQLITE_DATABASES_PHASES[0])
+        capture()
+        if state["shutdown"]:
+            return
+        capture_timer.start()
+        hold(2.4, open_sqlite_database_sheet)
+
+    def open_sqlite_database_sheet():
+        from PySide6.QtWidgets import QApplication
+
+        capture(); capture_timer.stop()
+        if state["shutdown"]:
+            return
+        dialog = state["sqlite_test_dialog"]
+        ledger = dialog._demo_sqlite_databases_ledger
+
+        def ready():
+            if state["shutdown"]:
+                return
+            try:
+                sheet = QApplication.activeModalWidget()
+                state["sqlite_database_sheet"] = sheet
+                observe_sqlite_database_sheet(dialog, sheet)
+                state["capture_target"] = sheet
+                phase(SQLITE_DATABASES_PHASES[1])
+                capture()
+                if state["shutdown"]:
+                    return
+                capture_timer.start()
+                hold(2.4, cancel_sqlite_database_sheet)
+            except Exception as error:
+                fail(error)
+
+        # The component's actual plus slot calls sheet.exec(). Its nested Qt
+        # loop delivers this observer/capture and the actual Cancel click.
+        QTimer.singleShot(0, ready)
+        ledger['opening'] = True
+        try:
+            dialog.sqlite_databases_page.add_button.click()
+        finally:
+            ledger['opening'] = False
+            state["sqlite_database_sheet"] = None
+        if state["shutdown"]:
+            return
+        state["sqlite_databases_verification"] = finish_sqlite_databases_demo(dialog)
+        if not idle():
+            raise RuntimeError("The generated database sheet closed before its main serial owner was idle.")
+        state["sqlite_databases_verification"]["main_window_pool_idle_before_capture"] = True
+        state["capture_target"] = dialog
+        future = background_io(verify_sqlite_test_fixture, state["sqlite_test_fixture"])
+
+        def verified():
+            state["sqlite_databases_verification"].update(future.result())
+            close_sqlite_form()
+
+        wait_for(future.done, verified, "checking the unchanged generated file after database-sheet Cancel")
+
+    def cancel_sqlite_database_sheet():
+        from PySide6.QtWidgets import QDialogButtonBox
+
+        capture(); capture_timer.stop()
+        if state["shutdown"]:
+            return
+        sheet = state["sqlite_database_sheet"]
+        verify_sqlite_databases_demo(state["sqlite_test_dialog"], sheet)
+        sheet.buttons.button(QDialogButtonBox.StandardButton.Cancel).click()
 
     def show_oracle_forms(*, capture_last=True):
         if not include_oracle_form:
@@ -2323,12 +2513,17 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
                 raise RuntimeError("The actual connection chooser was not verified.")
             if include_sqlite_test and not state["sqlite_test_verification"]:
                 raise RuntimeError("The actual generated SQLite connection Test was not verified.")
+            if include_sqlite_databases and not state["sqlite_databases_verification"]:
+                raise RuntimeError("The actual empty SQLite database page and Cancelled sheet were not verified.")
         window.submit(verify_preview, lambda _result: shutdown(), label="验证生成的演示数据")
 
     def shutdown():
         if state["shutdown"]:
             return
         state["shutdown"] = True
+        if state["sqlite_database_sheet"] is not None:
+            # Stop the real modal loop before its parent context is drained.
+            state["sqlite_database_sheet"].reject()
         if state["oracle_form_guard"] is not None:
             state["oracle_form_guard"].__exit__(None, None, None)
             state["oracle_form_guard"] = None
@@ -2351,7 +2546,8 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
                     # Its task/pool belong to this dialog, not window.pool.
                     # Keep Qt alive and the parent open until its real finished
                     # signal and worker cleanup have both completed.
-                    if not sqlite_test_idle(state["sqlite_test_dialog"]):
+                    if (not sqlite_test_idle(state["sqlite_test_dialog"])
+                            or getattr(state["sqlite_test_dialog"], '_demo_sqlite_databases_ledger', {}).get('opening')):
                         QTimer.singleShot(40, poll)
                         return
                     state["sqlite_test_guard"].__exit__(None, None, None)
@@ -2451,7 +2647,7 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
         raise RuntimeError("The demo exited before its native sessions and window had closed.")
     expected_phases = required_demo_phases(mongodb=mongo is not None, stream=include_stream,
         oracle_form=include_oracle_form, connection_chooser=include_connection_chooser,
-        sqlite_test=include_sqlite_test)
+        sqlite_test=include_sqlite_test, sqlite_databases=include_sqlite_databases)
     if state["count"] < 2 or tuple(item["name"] for item in state["phases"]) != expected_phases:
         raise RuntimeError("The demo did not capture all required workflows.")
     for index, item in enumerate(state["phases"]):
@@ -2501,6 +2697,7 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
         "oracle_connection_form": state["oracle_form_verification"],
         "connection_chooser": state["connection_chooser_verification"],
         "sqlite_connection_test": state["sqlite_test_verification"],
+        "sqlite_connection_databases": state["sqlite_databases_verification"],
         "visible_text_privacy_guard": "labels, editors, titles, actions, combos, tree/table display fields; paths/endpoints/credentials rejected before frame save",
         "sqlite_closed_in_worker": state["sqlite_closed_in_worker"],
         "native_window_closed_before_quit": bool(window._closed),
@@ -2526,6 +2723,8 @@ def main():
         help="Add the actual unselected connection chooser grid; no settings handoff, saved profile or database connection")
     parser.add_argument("--include-sqlite-test", action="store_true",
         help="Add one actual unsaved SQLite connection Test using a generated relative file in the recorder's owned temporary working directory")
+    parser.add_argument("--include-sqlite-databases", action="store_true",
+        help="Add the real empty SQLite database page and empty add sheet, then Cancel without saving or changing its draft")
     parser.add_argument("--check-dependencies", action="store_true")
     args = parser.parse_args()
     if args.include_stream and not args.include_mongodb:
@@ -2536,13 +2735,14 @@ def main():
             "mongodb_requested":args.include_mongodb,"oracle_form_requested":args.include_oracle_form,
             "connection_chooser_requested":args.include_connection_chooser,
             "sqlite_test_requested":args.include_sqlite_test,
+            "sqlite_databases_requested":args.include_sqlite_databases,
             "docker_available":shutil.which("docker") is not None}))
         return 0
     if args.width < 950 or args.height < 620:
         parser.error("The application needs at least 950 by 620 logical pixels.")
     if args.output.suffix.lower() != ".gif":
         parser.error("The demo output must be a .gif file.")
-    if (args.include_mongodb or args.include_oracle_form or args.include_connection_chooser or args.include_sqlite_test) and not any(value == "--output" or value.startswith("--output=") for value in sys.argv[1:]):
+    if (args.include_mongodb or args.include_oracle_form or args.include_connection_chooser or args.include_sqlite_test or args.include_sqlite_databases) and not any(value == "--output" or value.startswith("--output=") for value in sys.argv[1:]):
         parser.error("An extended demo capture requires an explicit --output; use an ignored development artifact before publishing.")
     args.output = args.output.resolve()
     ffmpeg = str(Path(ffmpeg).resolve())
@@ -2556,7 +2756,7 @@ def main():
     with ThreadPoolExecutor(max_workers=1,thread_name_prefix="demo-io") as io_pool:
         with tempfile.TemporaryDirectory(prefix="opennavicat-readme-demo-") as directory:
             temporary = Path(directory).resolve()
-            with owned_recording_cwd(temporary, enabled=args.include_sqlite_test) as cwd_facts:
+            with owned_recording_cwd(temporary, enabled=args.include_sqlite_test or args.include_sqlite_databases) as cwd_facts:
                 try:
                     mongo_config = io_pool.submit(mongo.start).result() if mongo is not None else None
                     frames, receipt = record(args, temporary, io_pool, mongo, mongo_config)
@@ -2586,6 +2786,9 @@ def main():
         if args.include_sqlite_test:
             receipt["sqlite_connection_test"]["working_directory_restored"] = cwd_facts["restored"]
             receipt["sqlite_connection_test"]["temporary_fixture_removed"] = not temporary.exists()
+        if args.include_sqlite_databases:
+            receipt["sqlite_connection_databases"]["working_directory_restored"] = cwd_facts["restored"]
+            receipt["sqlite_connection_databases"]["temporary_fixture_removed"] = not temporary.exists()
         text = json.dumps(receipt,ensure_ascii=False,indent=2)+"\n"
         forbidden = [str(ROOT),directory,str(Path.home())]
         if mongo is not None:

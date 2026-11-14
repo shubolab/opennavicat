@@ -175,3 +175,62 @@ helper、工具和隔离清理通过；实际 Cocoa 原生 runner 的 5 模块 5
 验证后的进展与 snapshot 直接进入 main，不再为阶段性记录新建远端分支。
 
 随后 main `9f2104fd1a920adb52db0c83196b657781add381` 的 run [`43585915945`](https://github.com/shubolab/opennavicat/actions/runs/43585915945) 虽通过六目标原生 SQLite UI 门禁，仍在两项 Windows 完整测试中被相同的 `width() < 80` 断言拦下。Windows 36px 字体的实际内容需要 116px；字形内容矩形、右边界及布局约束均通过，因此纠正的是测试的固定宽度预期。当前修订只将“小于 80px”限定于默认主题的 12px 紧凑控件，并在实测字形需求加边距超过 80px 时检查自然扩宽。macOS offscreen 两个相关模块 7 项通过，`git diff --check` 通过；这不是 Windows/ARM 复验。新主线 CI 仍待推送触发并观察，v0.13.3 未打 tag、未发布，公开版本仍是 v0.13.2。
+
+## 10 小时恢复后的新验证（仍未发布）
+
+用户明确恢复并设定北京时间 2026-11-15 08:43:06 的收尾截止，见
+[本轮快照](snapshot/2026-11-15-ten-hour-resume.md)。此节记录新观察，前面的失败及旧 GIF
+测量保留原来源，不回填成新版本结果。
+
+`b0e407af5f8f8ad4e9fd269270c39e6808d00265` 本机完整默认测试为 3,825 项：
+3,152 通过、673 条件跳过、零失败/error。新 runner 分别收集完整默认集合及执行进程
+集合，与 JUnit 精确对应；272 份源码输入和七份现有 helper 输入前后相同。真实条件跳过
+原因逐项保留，不把它们当功能通过。完整清单与 source/运行回执将在六目标 CI 上传。
+
+首次新 runner 的 3,802 项中三个失败来自它禁用插件自动加载后，既有子测试未继承
+命令行 `-p`，缺失 `qtbot`；已通过显式继承插件修正，旧日志保留。Windows 新 owner
+使用创建时绑定的 Job 管理普通后代；初次故障注入发现异步 job 终止后的重复终止竞态，
+已修正为等待。随后 main
+[`run43609330345`](https://github.com/shubolab/opennavicat/actions/runs/43609330345)
+六个桌面任务及其原生 67 项 UI 范围均成功，两个 Windows 完整默认 suite 和安装器任务
+也成功；Oracle ARM 的 SYSTEM 密码重设仍失败，整条流水线为失败、publisher 跳过。
+未以这些成功片段发布不完整 Release。
+
+六模块 67 项真实 Cocoa 零跳过及来源/隔离清理合同见
+[原生 UI 门禁记录](native-sqlite-ui-qualification.md)。长信息标题和 pipeline 卡片的
+修正、旧红新绿及状态范围见[长名称专项](validation-bounded-names-0.13.3.md)；
+[本轮实际参考](sqlite-connection-runtime-2026-11-14.md)另观察了普通多附件、进程重启、
+无效草稿及十五个 cipher 候选，不等于应用已接入全部加密功能。
+
+Oracle 初始化顺序修正后的冻结源 `1b4f87173aad1812e41f5a39051b56d3a316c1dc`：
+本机原生 Linux ARM 服务的 backend **14** 项及独立新服务的 window **3** 项均零跳过，
+完整 source 前后对应、精确容器/临时密码/会话清理通过。客户端为 macOS arm64，window
+QPA 为 offscreen，不当作 Linux 客户端或 Cocoa 参考验收。两个回执 SHA256 分别为
+`9dc446bdccee9b9cd752fff36c2e74021cb0ac7243ea9721eeb2b7f787ed9aef`、
+`2b70fba1a13e514a334fd660bb6552c284f0121971003c10f89277b88fcbb1b1`。
+原 360 秒 readiness 预算保留，不宣称能约束所有进行中认证的完整 wall time；
+真实两架构 CI 仍需再运行。
+
+### README 实录刷新
+
+唯一 GIF 已替换为源码 `487584d5ea1ee6357c49c46566cf2d4e91b81345` 的真实 Cocoa
+38 阶段、522 帧、87 秒实录，1,998,831 字节，SHA256
+`030070a8a0866001a4983b89f559737ef1da4444153a51dddfa2f229c1ae61d9`；公开 JSON 收据原样
+复制。录制前后源、helper 和私有工具稳定。相关录制测试 159 通过、3 条件跳过。
+
+更新前的审查成员已逐张看过 38 张全尺寸阶段代表帧；应用更新恢复后另看七张全图，ROOT
+另看 objects、设计器 SQL preview 和 pipeline 三张全图，未发现真实连接、个人路径、
+凭据、业务数据或参考图。不是逐 522 帧人工目视声明。所有帧经录制文本保护，新的 Qt
+与 ffmpeg 全部 522 帧 RGBA 一致；独立 bounded Docker 事件确定唯一录制容器及两匿名卷，
+exact inspect 证明均不存在。审查 manifest SHA256 为
+`9f04e44e64fa552ffdad784f9c354708e2fd912db2ed7c93023f2ad2f15a8b6f`。
+
+本次成功圆点前景 34/34 与源色精确；驱动卡片主色众数 162/198 精确，MongoDB/Atlas
+各十八处众数与源色相差 1 个 RGB 标量级，源色在相同区域仍大量存在。因此
+all-primary-fill-exact 门禁保持 false。次要背景/文字/线条区域众数距离 1/56/23；混合
+抗锯齿文字的最近样本距离为 3。这些众数距离不是最大逐像素编码误差，也不是原始前景色。
+原始捕获 PNG 已删除，不能归因于编码。没有改应用、GIF 或筛选区域消掉真实驱动差异。
+
+窄 combo、预览表头与 AND combo、密集页签仍有限制，选项底部为可滚动 viewport；
+stream 两页仍是生成命令、OK 和耗时的 text-only 结果。U15/U08、全部功能及三平台参考
+继续开放。当前公开安装器仍为 v0.13.2。

@@ -1,9 +1,12 @@
 # OpenNavicat 交接快照
 
-当前恢复入口：**[2026-11-14：0.13.2 小图标与结果条续作](2026-11-14-small-controls.md)**。
+当前恢复入口：**[2026-11-15：10 小时恢复与截止交接](2026-11-15-ten-hour-resume.md)**。
 
 恢复当前 goal 时先读这份快照，再核对其中的分支、提交和 CI 当前状态。
-当前机器可读索引见 [2026-11-14-small-controls-state.json](2026-11-14-small-controls-state.json)。
+本轮原定硬截止为 2026-11-15 08:43:06（Asia/Shanghai）；新记录进行中，截止时必须收尾。
+机器可读的本轮检查点见 [2026-11-15-ten-hour-state.json](2026-11-15-ten-hour-state.json)。
+此前 [小控件快照](2026-11-14-small-controls.md)和
+[2026-11-14-small-controls-state.json](2026-11-14-small-controls-state.json)保留历史，不把旧 CI pending 当作当前状态。
 同日已交付 v0.13.1 的[历史快照](2026-11-14-goal-resume.md)与[旧索引](2026-11-14-state.json)保留。
 前一完整候选交接见 [11月13日 goal snapshot](2026-11-13-goal-resume.md)；
 旧 [11月13日机器索引](2026-11-13-state.json) 保留历史，不作为当前应用/图标/演示检查点。

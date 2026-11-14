@@ -76,3 +76,38 @@ scope，并上传完整 helper 字节以便独立审查默认测试的全部输�
 演示，源与 helper 前后核对通过；GIF SHA256 为
 `030070a8a0866001a4983b89f559737ef1da4444153a51dddfa2f229c1ae61d9`。
 录制成功与 README 素材验收分开，完整画面/隐私/颜色审查尚在进行，暂未替换旧 GIF。
+
+## 第一小时后的整合检查点
+
+上述素材后续已完成新的全部 522 帧 Qt/ffmpeg RGBA 对照、38 阶段代表帧人工审查及
+精确录制容器/两匿名卷不存在复核，现已原样替换 README 唯一 GIF 与公开 JSON 收据。
+圆点前景 34/34 源色精确；驱动主色众数 162/198 精确，其余 MongoDB/Atlas 众数偏差 1，
+源色在同区域仍大量存在。all-primary-exact 仍 false，未修改应用/GIF/区域来消除差异，
+无原始 PNG 不能归因。详见 [最新开发验证](../validation-0.13.3.md)。
+
+Oracle 新初始化顺序在冻结 `1b4f87173aad1812e41f5a39051b56d3a316c1dc` 上，本机新
+原生 ARM 服务 backend 14 项、另一个全新服务 window 3 项均零跳过通过；macOS 客户端，
+window actual QPA=offscreen，来源/会话/容器/密码清理通过，不等于 Linux 客户端或三平台
+参考验收。后续再清除未知 healthcheck exit 后的旧合法 code，新增 (5,127) 回归，相关
+72 项通过；这项小诊断修正未回填至原 1b4 结果。360 秒仍是原 readiness 预算检查，
+不扩大称所有进行中认证都有严格相同 wall-time 上限。
+
+新实际加密参考已完成：十四个 provider 生成配置各在 Navicat 中查询两行；AES256 一个
+参考写出文件又由独立 provider 只读 `quick_check`/两行核对、错 key 和普通 SQLite 拒读
+验证。Ascon legacy 在现有及新建模式均真实报配置失败，新建留下零字节文件；不据此
+删除参考候选或宣称所有输入都不适用。两个保存密码控件、进程内历史与 fresh 草稿默认
+分开记录；fresh cipher 当前值为空，未默认选择算法。
+见 [加密实际互读](../sqlite-cipher-runtime-2026-11-14.md)与
+[fresh 默认](../sqlite-connection-fresh-defaults-2026-11-14.md)。
+
+本轮新建的两个参考测试 profile 均在各自当次用户确认后精确删除，临时数据库/副本/
+缓存目录清理通过，参考执行文件与 provider 原件哈希未变；未修改既有用户连接。
+provider 原生适配层的独立本地叶 `d4b9103a497fe3371c3f79eeba81f22ec96ff8b5`
+有 89 项真实 macOS ARM 测试及冻结 probe，尚未接入产品 backend/UI/依赖，未合入 main；
+十四份生成加密原件是后续实验资产，保留在该本地叶工作树的忽略目录，不随包分发。
+其后发现的跨 cipher 备份损坏探针和拒绝边界必须保留，不能把未集成实验当产品支持。
+
+main `4855e8f` 的六个桌面任务（含 67 项原生 UI、完整默认 suite、打包及安装 smoke）
+均成功，但 Oracle ARM 仍失败，整条 run43609330345 为失败，publisher 跳过。
+当前修正/素材/文档的下一轮主线 CI 尚待此检查点推送；没有 v0.13.3 tag 或 release。
+完整目标继续推进，原硬截止不变，到时必须提交与 snapshot 收尾。

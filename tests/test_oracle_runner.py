@@ -620,24 +620,26 @@ def test_system_authentication_waits_until_image_initialization_is_complete(tmp_
     assert fixture.admin_password not in (fixture.out / "fixture.json").read_text()
 
 
-@pytest.mark.parametrize("code", [126, 127])
-def test_unknown_image_healthcheck_failure_cannot_become_driver_readiness(tmp_path, monkeypatch, code):
+@pytest.mark.parametrize("codes", [(126,), (127,), (5, 127)])
+def test_unknown_image_healthcheck_failure_cannot_become_driver_readiness(tmp_path, monkeypatch, codes):
     fixture = support.OwnedOracle(tmp_path / "health-failed")
     calls = []
+    statuses, waits = iter(codes), []
     docker = owned_startup_docker(fixture, calls, state={"Status": "running", "Running": True})
     def health_docker(*args, **kwargs):
         if args[0] == "exec" and args[-2:] == ("healthcheck.sh", "FREEPDB1"):
-            return SimpleNamespace(returncode=code, stdout=fixture.admin_password)
+            return SimpleNamespace(returncode=next(statuses), stdout=fixture.admin_password)
         return docker(*args, **kwargs)
     monkeypatch.setattr(fixture, "docker", health_docker)
     monkeypatch.setattr(fixture, "connect", lambda *_args, **_kwargs: pytest.fail("No driver before image is ready"))
-    monkeypatch.setattr(support.time, "sleep", lambda *_args: pytest.fail("No retry for unknown image failure"))
+    monkeypatch.setattr(support.time, "sleep", lambda seconds: waits.append(seconds))
     monkeypatch.setattr(support, "_bounded_command_output", lambda *_args: (b"", "captured"))
     with pytest.raises(RuntimeError, match="image healthcheck failed"):
         fixture.start()
     assert fixture.receipt["startup"]["reason"] == "docker_operation"
     assert fixture.receipt["startup"]["image_healthcheck_ready"] is False
     assert "last_image_healthcheck_exit" not in fixture.receipt["startup"]
+    assert waits == [1] * (len(codes) - 1)
     assert fixture.admin_password not in (fixture.out / "fixture.json").read_text()
 
 

@@ -441,6 +441,7 @@ class OwnedOracle:
                 code = health.returncode
                 self.receipt["startup"]["image_healthcheck_attempts"] += 1
                 if type(code) is not int or code not in range(6):
+                    self.receipt["startup"].pop("last_image_healthcheck_exit", None)
                     self._startup_reason = "docker_operation"
                     raise RuntimeError("Owned Oracle image healthcheck failed") from None
                 self.receipt["startup"]["last_image_healthcheck_exit"] = code

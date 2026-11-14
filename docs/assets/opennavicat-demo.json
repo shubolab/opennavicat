@@ -36,12 +36,12 @@
         900
       ],
       "fit": "existing_main_window_scale",
-      "frames": 13,
-      "privacy_checked_frames": 13
+      "frames": 12,
+      "privacy_checked_frames": 12
     },
     {
       "name": "table_data",
-      "first_frame": 13,
+      "first_frame": 12,
       "surface": "main_window",
       "source_size_logical": [
         1440,
@@ -53,7 +53,7 @@
     },
     {
       "name": "query_editor",
-      "first_frame": 26,
+      "first_frame": 25,
       "surface": "main_window",
       "source_size_logical": [
         1440,
@@ -65,7 +65,7 @@
     },
     {
       "name": "query_results",
-      "first_frame": 40,
+      "first_frame": 39,
       "surface": "main_window",
       "source_size_logical": [
         1440,
@@ -77,31 +77,31 @@
     },
     {
       "name": "table_designer",
-      "first_frame": 55,
+      "first_frame": 54,
       "surface": "main_window",
       "source_size_logical": [
         1440,
         900
       ],
       "fit": "existing_main_window_scale",
-      "frames": 13,
-      "privacy_checked_frames": 13
+      "frames": 12,
+      "privacy_checked_frames": 12
     },
     {
       "name": "designer_sql_preview",
-      "first_frame": 68,
+      "first_frame": 66,
       "surface": "main_window",
       "source_size_logical": [
         1440,
         900
       ],
       "fit": "existing_main_window_scale",
-      "frames": 17,
-      "privacy_checked_frames": 17
+      "frames": 16,
+      "privacy_checked_frames": 16
     },
     {
       "name": "mongodb_collection_grid",
-      "first_frame": 85,
+      "first_frame": 82,
       "surface": "main_window",
       "source_size_logical": [
         1440,
@@ -113,7 +113,7 @@
     },
     {
       "name": "mongodb_typed_tree",
-      "first_frame": 98,
+      "first_frame": 95,
       "surface": "main_window",
       "source_size_logical": [
         1440,
@@ -125,7 +125,7 @@
     },
     {
       "name": "mongodb_gridfs_preview",
-      "first_frame": 112,
+      "first_frame": 109,
       "surface": "main_window",
       "source_size_logical": [
         1440,
@@ -137,31 +137,31 @@
     },
     {
       "name": "mongodb_javascript_editor",
-      "first_frame": 125,
+      "first_frame": 122,
       "surface": "main_window",
       "source_size_logical": [
         1440,
         900
       ],
       "fit": "existing_main_window_scale",
-      "frames": 14,
-      "privacy_checked_frames": 14
+      "frames": 13,
+      "privacy_checked_frames": 13
     },
     {
       "name": "mongodb_javascript_results",
-      "first_frame": 139,
+      "first_frame": 135,
       "surface": "main_window",
       "source_size_logical": [
         1440,
         900
       ],
       "fit": "existing_main_window_scale",
-      "frames": 15,
-      "privacy_checked_frames": 15
+      "frames": 16,
+      "privacy_checked_frames": 16
     },
     {
       "name": "mongodb_collection_inline_index",
-      "first_frame": 154,
+      "first_frame": 151,
       "surface": "main_window",
       "source_size_logical": [
         1440,
@@ -173,19 +173,19 @@
     },
     {
       "name": "mongodb_collection_inline_key_editor",
-      "first_frame": 167,
+      "first_frame": 164,
       "surface": "save_sheet",
       "source_size_logical": [
         520,
         320
       ],
       "fit": "keep_aspect_centered_neutral_letterbox",
-      "frames": 16,
-      "privacy_checked_frames": 16
+      "frames": 17,
+      "privacy_checked_frames": 17
     },
     {
       "name": "mongodb_collection_storage_engine",
-      "first_frame": 183,
+      "first_frame": 181,
       "surface": "main_window",
       "source_size_logical": [
         1440,
@@ -197,7 +197,7 @@
     },
     {
       "name": "mongodb_collection_index_defaults",
-      "first_frame": 193,
+      "first_frame": 191,
       "surface": "main_window",
       "source_size_logical": [
         1440,
@@ -209,7 +209,7 @@
     },
     {
       "name": "mongodb_collection_options",
-      "first_frame": 203,
+      "first_frame": 201,
       "surface": "main_window",
       "source_size_logical": [
         1440,
@@ -221,19 +221,19 @@
     },
     {
       "name": "mongodb_collection_collation",
-      "first_frame": 216,
+      "first_frame": 214,
       "surface": "main_window",
       "source_size_logical": [
         1440,
         900
       ],
       "fit": "existing_main_window_scale",
-      "frames": 12,
-      "privacy_checked_frames": 12
+      "frames": 13,
+      "privacy_checked_frames": 13
     },
     {
       "name": "mongodb_collection_storage_save_sheet",
-      "first_frame": 228,
+      "first_frame": 227,
       "surface": "save_sheet",
       "source_size_logical": [
         680,
@@ -245,19 +245,7 @@
     },
     {
       "name": "mongodb_collection_options_reopened",
-      "first_frame": 241,
-      "surface": "main_window",
-      "source_size_logical": [
-        1440,
-        900
-      ],
-      "fit": "existing_main_window_scale",
-      "frames": 11,
-      "privacy_checked_frames": 11
-    },
-    {
-      "name": "mongodb_aggregation_pipeline_stage_template",
-      "first_frame": 252,
+      "first_frame": 240,
       "surface": "main_window",
       "source_size_logical": [
         1440,
@@ -268,8 +256,20 @@
       "privacy_checked_frames": 12
     },
     {
+      "name": "mongodb_aggregation_pipeline_stage_template",
+      "first_frame": 252,
+      "surface": "main_window",
+      "source_size_logical": [
+        1440,
+        900
+      ],
+      "fit": "existing_main_window_scale",
+      "frames": 11,
+      "privacy_checked_frames": 11
+    },
+    {
       "name": "mongodb_aggregation_pipeline_options",
-      "first_frame": 264,
+      "first_frame": 263,
       "surface": "main_window",
       "source_size_logical": [
         1440,
@@ -281,15 +281,15 @@
     },
     {
       "name": "mongodb_aggregation_pipeline",
-      "first_frame": 277,
+      "first_frame": 276,
       "surface": "main_window",
       "source_size_logical": [
         1440,
         900
       ],
       "fit": "existing_main_window_scale",
-      "frames": 12,
-      "privacy_checked_frames": 12
+      "frames": 13,
+      "privacy_checked_frames": 13
     },
     {
       "name": "mongodb_aggregation_pipeline_script",
@@ -312,20 +312,20 @@
         900
       ],
       "fit": "existing_main_window_scale",
-      "frames": 13,
-      "privacy_checked_frames": 13
+      "frames": 14,
+      "privacy_checked_frames": 14
     },
     {
       "name": "mongodb_aggregation_pipeline_results",
-      "first_frame": 314,
+      "first_frame": 315,
       "surface": "main_window",
       "source_size_logical": [
         1440,
         900
       ],
       "fit": "existing_main_window_scale",
-      "frames": 14,
-      "privacy_checked_frames": 14
+      "frames": 13,
+      "privacy_checked_frames": 13
     },
     {
       "name": "mongodb_batch_job_general",
@@ -336,24 +336,24 @@
         900
       ],
       "fit": "existing_main_window_scale",
-      "frames": 15,
-      "privacy_checked_frames": 15
+      "frames": 16,
+      "privacy_checked_frames": 16
     },
     {
       "name": "mongodb_batch_job_messages",
-      "first_frame": 343,
+      "first_frame": 344,
       "surface": "main_window",
       "source_size_logical": [
         1440,
         900
       ],
       "fit": "existing_main_window_scale",
-      "frames": 14,
-      "privacy_checked_frames": 14
+      "frames": 15,
+      "privacy_checked_frames": 15
     },
     {
       "name": "mongodb_batch_job_history",
-      "first_frame": 357,
+      "first_frame": 359,
       "surface": "main_window",
       "source_size_logical": [
         1440,
@@ -365,7 +365,7 @@
     },
     {
       "name": "mongodb_finite_stream_busy",
-      "first_frame": 372,
+      "first_frame": 374,
       "surface": "main_window",
       "source_size_logical": [
         1440,
@@ -377,7 +377,7 @@
     },
     {
       "name": "mongodb_finite_stream_messages",
-      "first_frame": 382,
+      "first_frame": 384,
       "surface": "main_window",
       "source_size_logical": [
         1440,
@@ -389,7 +389,7 @@
     },
     {
       "name": "mongodb_finite_stream_output",
-      "first_frame": 396,
+      "first_frame": 398,
       "surface": "main_window",
       "source_size_logical": [
         1440,
@@ -401,51 +401,51 @@
     },
     {
       "name": "sqlite_connection_test",
-      "first_frame": 410,
+      "first_frame": 412,
       "surface": "sqlite_connection_test_dialog",
       "source_size_logical": [
         749,
         668
       ],
       "fit": "keep_aspect_centered_neutral_letterbox",
-      "frames": 18,
-      "privacy_checked_frames": 18
+      "frames": 19,
+      "privacy_checked_frames": 19
     },
     {
       "name": "sqlite_connection_databases_empty",
-      "first_frame": 428,
+      "first_frame": 431,
       "surface": "sqlite_connection_databases_dialog",
       "source_size_logical": [
         749,
         668
       ],
       "fit": "keep_aspect_centered_neutral_letterbox",
-      "frames": 16,
-      "privacy_checked_frames": 16
+      "frames": 15,
+      "privacy_checked_frames": 15
     },
     {
       "name": "sqlite_database_add_sheet_empty",
-      "first_frame": 444,
+      "first_frame": 446,
       "surface": "sqlite_database_add_sheet",
       "source_size_logical": [
         600,
         215
       ],
       "fit": "keep_aspect_centered_neutral_letterbox",
-      "frames": 16,
-      "privacy_checked_frames": 16
+      "frames": 15,
+      "privacy_checked_frames": 15
     },
     {
       "name": "oracle_connection_general",
-      "first_frame": 460,
+      "first_frame": 461,
       "surface": "oracle_connection_dialog",
       "source_size_logical": [
         900,
         672
       ],
       "fit": "keep_aspect_centered_neutral_letterbox",
-      "frames": 15,
-      "privacy_checked_frames": 15
+      "frames": 14,
+      "privacy_checked_frames": 14
     },
     {
       "name": "oracle_connection_advanced",
@@ -740,8 +740,8 @@
     "credentials_generated_in_memory": true
   },
   "encoder": "ffmpeg version 9.0.2 Copyright (c) 2000-2026 the FFmpeg developers",
-  "gif_bytes": 2015909,
-  "gif_sha256": "0985e27ee91dc01b1185202a9320f50d17588972c0a82e69c6e07ab93b419711",
+  "gif_bytes": 1998831,
+  "gif_sha256": "030070a8a0866001a4983b89f559737ef1da4444153a51dddfa2f229c1ae61d9",
   "temporary_workspace_removed": true,
   "temporary_frame_files_removed": true
 }

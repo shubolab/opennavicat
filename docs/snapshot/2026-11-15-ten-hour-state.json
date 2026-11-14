@@ -1,0 +1,154 @@
+{
+  "schema_version": 11,
+  "captured_at_utc": "2026-11-14T16:03:50Z",
+  "handoff": "2026-11-15-ten-hour-resume.md",
+  "previous_handoff": "2026-11-14-small-controls.md",
+  "time_budget": {
+    "start_utc": "2026-11-14T14:43:06Z",
+    "deadline_utc": "2026-11-15T00:43:06Z",
+    "deadline_local": "2026-11-15 08:43:06 Asia/Shanghai",
+    "stop_and_snapshot_required": true
+  },
+  "goal": {
+    "user_resumed": true,
+    "work_status": "in_progress",
+    "complete": false,
+    "full_parity_verified": false,
+    "scope": "docs/parity-matrix.md",
+    "goal_tool_status_at_resume": "blocked"
+  },
+  "repository": {
+    "remote": "git@github.com:shubolab/opennavicat.git",
+    "workspace": "/Users/wangshubo/.codex/worktrees/sqlite-databases/opennavicat",
+    "branch": "codex_sqlite_databases",
+    "head_at_capture": "dad8c5d1a0a1d30f8116567737678711603feced",
+    "remote_main_at_capture": "4855e8f4df86d1bcc405309b8415c884879d8d3b",
+    "integration_uncommitted_at_capture": true,
+    "push_pending": true,
+    "product_inputs_equal_to": "b0e407af5f8f8ad4e9fd269270c39e6808d00265"
+  },
+  "public_release": {
+    "tag": "v0.13.2",
+    "prerelease": true,
+    "version_0133_published": false,
+    "previous_asset_qualification": "2026-11-14-small-controls-state.json"
+  },
+  "checks": {
+    "default": {
+      "source": "b0e407af5f8f8ad4e9fd269270c39e6808d00265",
+      "total": 3825,
+      "passed": 3152,
+      "skipped": 673,
+      "failed": 0,
+      "errors": 0,
+      "source_inputs": 272,
+      "helper_inputs": 7,
+      "collect_run_junit_equal": true
+    },
+    "native_ui": {
+      "source": "839c71d2daabb9c7698301218537b41e3b4ec498",
+      "qpa": "cocoa",
+      "modules": 6,
+      "total": 67,
+      "passed": 67,
+      "skipped": 0,
+      "source_inputs": 93,
+      "human_reference_acceptance": false
+    },
+    "oracle_backend": {
+      "source": "1b4f87173aad1812e41f5a39051b56d3a316c1dc",
+      "passed": 14,
+      "skipped": 0,
+      "server_architecture": "arm64",
+      "client": "macOS arm64",
+      "cleanup": true
+    },
+    "oracle_window": {
+      "source": "1b4f87173aad1812e41f5a39051b56d3a316c1dc",
+      "passed": 3,
+      "skipped": 0,
+      "qpa": "offscreen",
+      "server_architecture": "arm64",
+      "client": "macOS arm64",
+      "cleanup": true
+    },
+    "latest_oracle_runner_tests": {
+      "passed": 72,
+      "skipped": 0,
+      "source_at_capture": "uncommitted diagnostic-only followup"
+    },
+    "refreshed_demo_tests": {
+      "passed": 159,
+      "skipped": 3
+    }
+  },
+  "ci": {
+    "run": 43609330345,
+    "source": "4855e8f4df86d1bcc405309b8415c884879d8d3b",
+    "status": "completed",
+    "conclusion": "failure",
+    "required_pass": 8,
+    "required_fail": 1,
+    "failure": "Oracle ARM SYSTEM password reset",
+    "desktop_targets_passed": 6,
+    "native_ui_each": 67,
+    "publisher": "skipped",
+    "six_installer_bytes_audited": false,
+    "next_run_pending": true
+  },
+  "demo": {
+    "source": "487584d5ea1ee6357c49c46566cf2d4e91b81345",
+    "sha256": "030070a8a0866001a4983b89f559737ef1da4444153a51dddfa2f229c1ae61d9",
+    "bytes": 1998831,
+    "frames": 522,
+    "phases": 38,
+    "seconds": 87,
+    "actual_qpa": "cocoa",
+    "readme_replaced": true,
+    "all_frames_qt_ffmpeg_equal": true,
+    "phase_representative_full_review": 38,
+    "recovery_extra_full_review": 7,
+    "root_full_review": 3,
+    "manual_every_frame_claimed": false,
+    "success_marker_exact": [
+      34,
+      34
+    ],
+    "driver_fill_mode_exact": [
+      162,
+      198
+    ],
+    "remaining_driver_mode_max_scalar_difference": 1,
+    "all_primary_fill_exact": false,
+    "raw_capture_png_available": false,
+    "independent_container_two_volumes_absent": true,
+    "review_manifest_sha256": "9f04e44e64fa552ffdad784f9c354708e2fd912db2ed7c93023f2ad2f15a8b6f"
+  },
+  "cipher_research": {
+    "product_integrated": false,
+    "provider": "apsw-sqlite3mc 3.54.0.0",
+    "reference_read_rows_labels": 14,
+    "reverse_aes256_verified": true,
+    "ascon_legacy_reference": "configuration failure; new-file attempt left zero bytes",
+    "local_adapter_leaf": "d4b9103a497fe3371c3f79eeba81f22ec96ff8b5",
+    "adapter_native_tests": 89,
+    "all_reference_profiles_cleaned_with_action_time_confirmation": true,
+    "provider_original_fixtures_retained": true
+  },
+  "remote_branches": {
+    "remaining": [
+      "main",
+      "codex_mongodb_finite_stream"
+    ],
+    "temporary_task_branches_pushed": false,
+    "retained_branch_reason": "Associated dirty worktree; preserve unmerged work"
+  },
+  "open_gates": [
+    "New final-source six-target CI and installer byte audit",
+    "Formal tag, six new installers/checksums and public-byte verification",
+    "Complete retained Navicat UI and database tools",
+    "Cipher backend/UI/credentials integration and complete settings behavior",
+    "Full text, themes, focus/hover/disabled states",
+    "Windows and Linux actual reference-backed acceptance"
+  ]
+}

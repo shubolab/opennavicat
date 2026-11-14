@@ -23,7 +23,7 @@ from typing import Any, Iterator, TypedDict, Literal
 import sqlparse
 
 from .sqlite_database_config import (
-    SQLiteDatabaseEntry, bound_sqlite_database_passwords, decode_sqlite_databases,
+    SQLiteDatabaseEntry, bound_sqlite_database_passwords, copy_connection_config, decode_sqlite_databases,
 )
 
 
@@ -93,11 +93,14 @@ class ConnectionConfig:
     oracle_custom_database_list_enabled: bool = False
     oracle_custom_database_list: list[OracleDatabaseListEntry] = field(default_factory=list)
     oracle_notes: str = ""
+    sqlite_open_mode: Literal["legacy", "existing", "create"] = "legacy"
     sqlite_databases: tuple[SQLiteDatabaseEntry, ...] = field(default_factory=tuple, repr=False)
     sqlite_database_passwords: dict[str, str] = field(default_factory=dict, repr=False)
     sqlite_database_password_bindings: dict[str, tuple[str, str, bool]] | None = field(default=None, repr=False)
 
     def __post_init__(self):
+        if type(self.sqlite_open_mode) is not str or self.sqlite_open_mode not in {"legacy", "existing", "create"}:
+            raise ValueError("Invalid SQLite database open mode")
         self.sqlite_databases = decode_sqlite_databases(self.sqlite_databases)
         self.sqlite_database_passwords, self.sqlite_database_password_bindings = bound_sqlite_database_passwords(
             self.id, self.sqlite_databases, self.sqlite_database_passwords, self.sqlite_database_password_bindings)
@@ -207,6 +210,8 @@ class DatabaseSession:
             raise ValueError(f"Unsupported database driver: {config.driver}")
         self.connection: Any = None
         self._cancel_requested = threading.Event()
+        self._cancel_lock = threading.Lock()
+        self._cancel_generation = 0
         self._active = False
         self._selected_schema: str | None = None
         self._tunnel = None
@@ -215,31 +220,115 @@ class DatabaseSession:
     def placeholder(self) -> str:
         return "?" if self.config.driver == "sqlite" else "%s"
 
+    @staticmethod
+    def _sqlite_open_plan(config):
+        """Validate a plain candidate before any database file is opened.
+
+        Existing-only attachments and alias validation are implementation
+        boundaries; the reference's invalid-input rules remain unverified.
+        """
+        rows = decode_sqlite_databases(config.sqlite_databases)
+        if any(row.encrypted for row in rows):
+            raise ValueError("Encrypted SQLite databases require a compatible encryption provider, which is not available")
+        if config.ssh_enabled:
+            raise ValueError("SQLite uses local files and does not support SSH TCP forwarding")
+        if (config.sqlite_open_mode != "legacy" or rows) and (config.username or config.password):
+            raise ValueError("SQLite user authentication requires a compatible provider, which is not available")
+        aliases = {"main", "temp"}
+        names = []
+        ascii_lower = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")
+        for row in rows:
+            if not row.name or "\0" in row.name:
+                raise ValueError("SQLite database aliases must be nonempty strings without NUL bytes")
+            alias = row.name.translate(ascii_lower)
+            if alias in aliases:
+                raise ValueError("SQLite database aliases must be distinct and cannot use main or temp")
+            aliases.add(alias)
+            names.append('"' + row.name.replace('"', '""') + '"')
+        database = config.database
+        if not database:
+            if config.sqlite_open_mode != "legacy":
+                raise ValueError("A SQLite database filename is required")
+            database = ":memory:"
+        if database == ":memory:":
+            target, uri = database, bool(rows or config.sqlite_open_mode != "legacy")
+        else:
+            path = Path(database).expanduser()
+            if config.read_only and config.sqlite_open_mode == "create" and not path.is_file():
+                raise ValueError("A read-only SQLite connection cannot create a database file")
+            uri = bool(config.read_only or rows or config.sqlite_open_mode != "legacy")
+            if uri:
+                mode = "ro" if config.read_only else "rw" if config.sqlite_open_mode == "existing" else "rwc"
+                target = path.resolve().as_uri() + "?mode=" + mode
+            else:
+                # Preserve the historical direct-call creation behavior.
+                target = str(path)
+        attachments = []
+        for row, name in zip(rows, names):
+            if not row.database or "\0" in row.database:
+                raise ValueError("A SQLite attached database filename is required")
+            path = Path(row.database).expanduser().resolve()
+            if not path.is_file():
+                raise ValueError("SQLite attached databases must be existing files")
+            attachments.append((name, path.as_uri() + ("?mode=ro" if config.read_only else "?mode=rw")))
+        return target, uri, tuple(attachments)
+
+    def _sqlite_initialize_candidate(self, connection, config, attachments, cancellation_requested):
+        # Enforce the actual native connection's limit, not a guessed default.
+        if len(attachments) > connection.getlimit(sqlite3.SQLITE_LIMIT_ATTACHED):
+            raise ValueError("The configured SQLite attachments exceed this engine's attachment limit")
+        connection.set_progress_handler(lambda: int(cancellation_requested()), 1000)
+        with contextlib.closing(connection.execute("PRAGMA foreign_keys = ON")):
+            pass
+        if config.read_only:
+            with contextlib.closing(connection.execute("PRAGMA query_only = ON")):
+                pass
+        def check_catalog(name):
+            if cancellation_requested():
+                raise DatabaseError("Connection cancelled")
+            # One constant scalar/zero rows bounds delivery, not SQLite's
+            # internal schema parsing, file I/O or total execution memory.
+            with contextlib.closing(connection.execute(f"SELECT 1 FROM {name}.sqlite_schema LIMIT 1")) as cursor:
+                cursor.fetchone()
+        check_catalog('"main"')
+        for name, filename in attachments:
+            if cancellation_requested():
+                raise DatabaseError("Connection cancelled")
+            with contextlib.closing(connection.execute(f"ATTACH DATABASE ? AS {name}", (filename,))):
+                pass
+            check_catalog(name)
+        if cancellation_requested():
+            raise DatabaseError("Connection cancelled")
+
+    def _retire_sqlite_cancellation(self, generation):
+        with self._cancel_lock:
+            if self._cancel_generation == generation:
+                self._cancel_requested.clear()
+
     def connect(self) -> None:
         if self.connection is not None:
             return
         from .transport import SSHTunnel, SSHHostKeyError, SSHAuthenticationError, TLSKeyPasswordError
         c = self.config
         connection = None
+        observed_cancellation = [None]
+        def cancellation_requested():
+            with self._cancel_lock:
+                if self._cancel_requested.is_set():
+                    observed_cancellation[0] = self._cancel_generation
+                    return True
+                return False
         if not isinstance(c.connect_timeout, int) or not 1 <= c.connect_timeout <= 31536000:
             raise ValueError("Connection timeout must be a positive number of seconds")
         try:
             if c.driver == "sqlite":
-                if c.ssh_enabled:
-                    raise ValueError("SQLite uses local files and does not support SSH TCP forwarding")
-                database = c.database or ":memory:"
-                if c.read_only and database != ":memory:":
-                    database = Path(database).expanduser().resolve().as_uri() + "?mode=ro"
-                    connection = sqlite3.connect(database, uri=True, isolation_level=None,
-                                                 check_same_thread=False, timeout=c.connect_timeout)
-                else:
-                    database = str(Path(database).expanduser()) if database != ":memory:" else database
-                    connection = sqlite3.connect(database, isolation_level=None,
-                                                 check_same_thread=False, timeout=c.connect_timeout)
-                connection.execute("PRAGMA foreign_keys = ON")
-                if c.read_only:
-                    connection.execute("PRAGMA query_only = ON")
-                connection.set_progress_handler(lambda: int(self._cancel_requested.is_set()), 1000)
+                c = copy_connection_config(c)
+                if cancellation_requested():
+                    raise DatabaseError("Connection cancelled")
+                database, uri, attachments = self._sqlite_open_plan(c)
+                connection = sqlite3.connect(database, uri=uri, isolation_level=None,
+                                             check_same_thread=False, timeout=c.connect_timeout)
+                self._sqlite_initialize_candidate(connection, c, attachments, cancellation_requested)
             else:
                 # Validate TLS files/key passwords before opening SSH or DB sockets.
                 _tls_context(c)
@@ -272,6 +361,8 @@ class DatabaseSession:
                     connection.close()
             self.connection = None
             self._selected_schema = None
+            if c.driver == "sqlite" and observed_cancellation[0] is not None:
+                self._retire_sqlite_cancellation(observed_cancellation[0])
             if self._tunnel is not None:
                 self._tunnel.close()
                 self._tunnel = None
@@ -336,12 +427,20 @@ class DatabaseSession:
             raise
 
     def close(self) -> None:
+        retired = False
+        with self._cancel_lock:
+            generation = self._cancel_generation
         try:
             if self.connection is not None:
                 self.connection.close()
+                retired = True
         finally:
             self.connection = None
             self._selected_schema = None
+            if retired and self.config.driver == "sqlite":
+                # Only retire signals with a successfully closed published
+                # handle. An idle/unpublished initialization cancel stays pending.
+                self._retire_sqlite_cancellation(generation)
             if self._tunnel is not None:
                 self._tunnel.close()
                 self._tunnel = None
@@ -359,7 +458,9 @@ class DatabaseSession:
 
     def cancel(self) -> None:
         """Cancel the current command without dropping an explicit transaction silently."""
-        self._cancel_requested.set()
+        with self._cancel_lock:
+            self._cancel_generation += 1
+            self._cancel_requested.set()
         connection = self.connection
         if connection is None or not self._active:
             return

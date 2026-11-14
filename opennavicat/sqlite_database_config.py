@@ -165,6 +165,10 @@ def connection_from_metadata(value) -> ConnectionConfig:
     metadata = {key: deepcopy(item) for key, item in value.items()
                 if key not in CONNECTION_SECRET_FIELDS
                 and key not in {"sqlite_database_passwords", "sqlite_database_password_bindings"}}
+    if metadata.get("driver", "sqlite") == "sqlite" and "sqlite_open_mode" not in metadata:
+        # A legacy persistent path is not permission to create a replacement
+        # when its file disappears. Direct new Config callers retain legacy.
+        metadata["sqlite_open_mode"] = "existing"
     for key in CONNECTION_SECRET_FIELDS:
         metadata[key] = ""
     try:

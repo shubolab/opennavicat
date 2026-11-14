@@ -41,7 +41,12 @@ definition of success.
 
 The user has authorized regular commits and pushes to
 `git@github.com:shubolab/opennavicat.git`. Keep reviewable working milestones in
-that repository. Every usable release milestone must publish an actual installer
+that repository. Keep parallel task branches local unless remote review or
+handoff needs one. Delete a temporary remote branch promptly after its work is
+integrated into main; first verify current remote ancestry or patch equivalence,
+associated worktree state and any unpushed work. Preserve unmerged or dirty work.
+Do not accumulate remote branches as progress checkpoints; keep those commits
+and snapshots on main. Every usable release milestone must publish an actual installer
 for **Windows, Linux and macOS, each on amd64 and arm64** (six native targets).
 Build and smoke-test on each target OS/architecture. A ZIP, source archive,
 workflow declaration or emulated x64 executable is not an arm64 installer.

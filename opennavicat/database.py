@@ -329,6 +329,14 @@ class DatabaseSession:
                 connection = sqlite3.connect(database, uri=uri, isolation_level=None,
                                              check_same_thread=False, timeout=c.connect_timeout)
                 self._sqlite_initialize_candidate(connection, c, attachments, cancellation_requested)
+                # Linearize cancellation against publishing a fully initialized
+                # candidate. The helper's last checkpoint precedes this lock.
+                with self._cancel_lock:
+                    if self._cancel_requested.is_set():
+                        observed_cancellation[0] = self._cancel_generation
+                        raise DatabaseError("Connection cancelled")
+                    self.connection = connection
+                    self._selected_schema = "main"
             else:
                 # Validate TLS files/key passwords before opening SSH or DB sockets.
                 _tls_context(c)
@@ -346,15 +354,13 @@ class DatabaseSession:
                     if c.read_only:
                         with connection.cursor() as cur:
                             cur.execute("SET SESSION TRANSACTION READ ONLY")
-            self.connection = connection
-            if c.driver == "sqlite":
-                self._selected_schema = "main"
-            elif c.driver in {"mysql", "mariadb"}:
-                self._selected_schema = c.database or None
-            else:
-                with connection.cursor() as cur:
-                    cur.execute("SELECT current_schema()")
-                    self._selected_schema = cur.fetchone()[0]
+                self.connection = connection
+                if c.driver in {"mysql", "mariadb"}:
+                    self._selected_schema = c.database or None
+                else:
+                    with connection.cursor() as cur:
+                        cur.execute("SELECT current_schema()")
+                        self._selected_schema = cur.fetchone()[0]
         except Exception as exc:
             if connection is not None:
                 with contextlib.suppress(Exception):

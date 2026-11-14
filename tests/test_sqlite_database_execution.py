@@ -573,3 +573,60 @@ def test_empty_modern_filename_is_not_silently_changed_to_memory():
         with pytest.raises(DatabaseError, match="filename is required"):
             session.connect()
         assert session.connection is None
+
+
+@pytest.mark.parametrize("new_cancel_during_cleanup", [False, True])
+def test_cancel_after_final_candidate_checkpoint_cannot_publish(files, monkeypatch, new_cancel_during_cleanup):
+    main, aux, _second = files
+    before = hashes(main.parent)
+    session = DatabaseSession(config(main, attached(aux)))
+    candidate_ready = threading.Event()
+    release_publication = threading.Event()
+    cleanup_cancel = False
+    native_aux_rows, errors = [], []
+    original_initialize = session._sqlite_initialize_candidate
+    def pause_after_final_checkpoint(connection, *args):
+        original_initialize(connection, *args)
+        assert isinstance(connection, sqlite3.Connection)
+        with closing(connection.execute("SELECT id, label FROM aux.items ORDER BY id")) as cursor:
+            native_aux_rows.extend(cursor.fetchall())
+        candidate_ready.set()
+        assert release_publication.wait(3), "Owned candidate publication barrier was not released"
+    def cancel_during_cleanup(_candidate):
+        nonlocal cleanup_cancel
+        if new_cancel_during_cleanup and not cleanup_cancel:
+            session.cancel()
+            cleanup_cancel = True
+    monkeypatch.setattr(session, "_sqlite_initialize_candidate", pause_after_final_checkpoint)
+    candidates, _calls = track_candidates(monkeypatch, session, before_close=cancel_during_cleanup)
+    def connect():
+        try:
+            session.connect()
+        except BaseException as exc:
+            errors.append(exc)
+    worker = threading.Thread(target=connect)
+    try:
+        worker.start()
+        assert candidate_ready.wait(3)
+        assert native_aux_rows == [(1, "aux-1"), (2, "aux-2")]
+        assert session.connection is None and session._selected_schema is None
+        session.cancel()  # Arrives after the helper's final checkpoint, before publication.
+        cancelled_generation = session._cancel_generation
+        release_publication.set()
+        worker.join(3)
+        assert not worker.is_alive()
+        assert len(errors) == 1 and isinstance(errors[0], DatabaseError) and "cancelled" in str(errors[0])
+        assert candidates[0].closed and session.connection is None and session._selected_schema is None
+        assert session._cancel_requested.is_set() is new_cancel_during_cleanup
+        assert session._cancel_generation == cancelled_generation + int(new_cancel_during_cleanup)
+        if new_cancel_during_cleanup:
+            with pytest.raises(DatabaseError, match="cancelled"):
+                session.execute("SELECT id, label FROM aux.items ORDER BY id")
+            assert len(candidates) == 1 and not session._cancel_requested.is_set()
+        monkeypatch.setattr(session, "_sqlite_initialize_candidate", original_initialize)
+        assert session.execute("SELECT id, label FROM aux.items ORDER BY id")[0].rows == [[1, "aux-1"], [2, "aux-2"]]
+    finally:
+        release_publication.set()
+        worker.join(3)
+        session.close()
+    assert not worker.is_alive() and hashes(main.parent) == before

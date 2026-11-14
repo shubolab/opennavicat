@@ -202,10 +202,7 @@ class Store:
 
     @contextmanager
     def _sqlite_database_commit(self, connection_id, config=None):
-        """Candidate memory rollback; scalar keyring writes remain separate."""
-        if not self._uses_sqlite_database_state(connection_id, config):
-            yield
-            return
+        """Publish profile and process credentials only after workspace replacement."""
         previous = self.state, self.passwords, self.secrets, self._sqlite_database_passwords
         self.state = deepcopy(self.state)
         self.passwords, self.secrets = self.passwords.copy(), self.secrets.copy()
@@ -275,7 +272,8 @@ class Store:
                 self._sqlite_database_passwords = passwords
                 self._prune_sqlite_database_passwords()
         else:
-            self._save_connection(snapshot, remember, remember_ssh, remember_ssl, remember_ssh_key)
+            with self._sqlite_database_commit(config.id, snapshot):
+                self._save_connection(snapshot, remember, remember_ssh, remember_ssl, remember_ssh_key)
         config.id = snapshot.id
         # Publish the accepted carrier back only after commit. Otherwise the
         # caller could restore a removed row and resurrect its stale sidecar.
@@ -288,58 +286,59 @@ class Store:
             config.id = str(uuid.uuid4())
         flags = {"password": remember, "ssh_password": remember_ssh,
                  "ssh_key_passphrase": remember_ssh_key, "ssl_key_password": remember_ssl}
-        # Complete requested keychain writes before changing durable profile state.
-        # Backend failures remain errors; credentials never fall back to JSON.
-        written = []
+        # Keychain and workspace replacement cannot form one OS transaction.
+        # Read before writing so a failed workspace replacement can compensate
+        # requested writes. Defer removals until the new profile is durable.
+        written, removals = [], []
         try:
             for field in self.SECRET_FIELDS:
                 value = getattr(config, field)
+                key = self._secret_key(config.id, field)
                 if flags[field] and value:
                     import keyring
-                    key = self._secret_key(config.id, field)
-                    try:
-                        previous = keyring.get_password("OpenNavicat", key)
-                    except Exception:
-                        previous = None
-                    keyring.set_password("OpenNavicat", key, value)
+                    previous = keyring.get_password("OpenNavicat", key)
                     written.append((key, previous))
-        except Exception:
+                    keyring.set_password("OpenNavicat", key, value)
+                else:
+                    removals.append(key)
+                cache = self.passwords if field == "password" else self.secrets
+                cache_key = config.id if field == "password" else (config.id, field)
+                cache[cache_key] = value
+            self.state["remembered_passwords"] = [identifier for identifier in self.state["remembered_passwords"] if identifier != config.id]
+            if remember and config.password:
+                self.state["remembered_passwords"].append(config.id)
+            remembered = [field for field in self.SECRET_FIELDS if field != "password" and flags[field] and getattr(config, field)]
+            if remembered:
+                self.state["remembered_secrets"][config.id] = remembered
+            else:
+                self.state["remembered_secrets"].pop(config.id, None)
+            value = connection_metadata(config)
+            self.state["connections"] = [c for c in self.state["connections"] if c["id"] != config.id] + [value]
+            imported = self.state.setdefault("navicat_imports", {}).get(config.id)
+            if imported is not None:
+                imported.update(locally_edited=True, blocked=config.driver not in SUPPORTED_DRIVERS,
+                                unsupported_fields=[] if config.driver in SUPPORTED_DRIVERS else ["driver"],
+                                requires_secrets=[], reviewed_at=datetime.now(timezone.utc).isoformat(timespec="microseconds"))
+            self.flush()
+        except BaseException:
             for key, previous in reversed(written):
                 try:
+                    import keyring
                     if previous is None:
                         keyring.delete_password("OpenNavicat", key)
                     else:
                         keyring.set_password("OpenNavicat", key, previous)
                 except Exception:
+                    # A failed keychain compensation is not permission to
+                    # persist credentials in a local fallback file.
                     pass
             raise
-        for field in self.SECRET_FIELDS:
-            value = getattr(config, field)
-            cache = self.passwords if field == "password" else self.secrets
-            key = config.id if field == "password" else (config.id, field)
-            cache[key] = value
-            if not (flags[field] and value):
-                try:
-                    import keyring
-                    keyring.delete_password("OpenNavicat", self._secret_key(config.id, field))
-                except Exception:
-                    pass
-        self.state["remembered_passwords"] = [identifier for identifier in self.state["remembered_passwords"] if identifier != config.id]
-        if remember and config.password:
-            self.state["remembered_passwords"].append(config.id)
-        remembered = [field for field in self.SECRET_FIELDS if field != "password" and flags[field] and getattr(config, field)]
-        if remembered:
-            self.state["remembered_secrets"][config.id] = remembered
-        else:
-            self.state["remembered_secrets"].pop(config.id, None)
-        value = connection_metadata(config)
-        self.state["connections"] = [c for c in self.state["connections"] if c["id"] != config.id] + [value]
-        imported = self.state.setdefault("navicat_imports", {}).get(config.id)
-        if imported is not None:
-            imported.update(locally_edited=True, blocked=config.driver not in SUPPORTED_DRIVERS,
-                            unsupported_fields=[] if config.driver in SUPPORTED_DRIVERS else ["driver"],
-                            requires_secrets=[], reviewed_at=datetime.now(timezone.utc).isoformat(timespec="microseconds"))
-        self.flush()
+        for key in removals:
+            try:
+                import keyring
+                keyring.delete_password("OpenNavicat", key)
+            except Exception:
+                pass
 
     def sync_navicat_profiles(self, report) -> dict[str, int]:
         """Add/update redacted discovery metadata without credentials or connections.
@@ -491,17 +490,18 @@ class Store:
 
     def _delete_connection(self, connection_id):
         for field in self.SECRET_FIELDS:
-            try:
-                import keyring
-                keyring.delete_password("OpenNavicat", self._secret_key(connection_id, field))
-            except Exception:
-                pass
             self.secrets.pop((connection_id, field), None)
         self.passwords.pop(connection_id, None)
         self.state["remembered_passwords"] = [identifier for identifier in self.state["remembered_passwords"] if identifier != connection_id]
         self.state["remembered_secrets"].pop(connection_id, None)
         self.state["connections"] = [c for c in self.state["connections"] if c["id"] != connection_id]
         self.flush()
+        for field in self.SECRET_FIELDS:
+            try:
+                import keyring
+                keyring.delete_password("OpenNavicat", self._secret_key(connection_id, field))
+            except Exception:
+                pass
 
     def record(self, config, sql, elapsed, status, *, query_language=LEGACY):
         if not isinstance(query_language, str) or query_language not in LANGUAGES: raise ValueError('Unknown query language')

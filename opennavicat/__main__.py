@@ -120,6 +120,8 @@ def main():
         from .oracle_probe import probe_oracle_runtime
         runtime.update(probe_oracle_runtime())
     app = QApplication(sys.argv[:1])
+    if runtime is not None:
+        runtime["qt_platform_name"] = app.platformName()
     app.setApplicationName("OpenNavicat")
     app.setOrganizationName("OpenNavicat")
     app.setApplicationVersion(__version__)

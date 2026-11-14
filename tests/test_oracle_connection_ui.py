@@ -309,7 +309,9 @@ def test_oracle_test_uses_serial_dedicated_probe_and_ephemeral_password(qtbot, m
         assert dialog.test_banner.y() < dialog.footer.y()
         assert dialog.test_banner.width() > dialog.settings_pane.width()
         assert [diagram.connection_succeeded for diagram in dialog._diagrams] == [not fail] * 5
-        assert dialog.test_status.text() == ('连接失败' if fail else '✓  连接成功  服务器版本: Oracle generated version')
+        assert dialog.test_status.text() == ('连接失败' if fail else '连接成功')
+        assert dialog.test_banner.detail_label.text() == ('' if fail else '服务器版本: Oracle generated version')
+        assert dialog.test_banner.status_icon.isVisible() is not fail
         assert [item[0] for item in calls] == ['create', 'probe', 'close']
         assert len({item[1] for item in calls}) == 1 and calls[0][1] != gui_thread
         assert calls[0][2] == 'generated-ephemeral-password'

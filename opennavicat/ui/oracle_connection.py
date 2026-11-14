@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from opennavicat.database import ConnectionConfig
+from .connection_test_banner import ConnectionTestBanner
 from .dialogs import ConnectionDialog, _ConnectionDiagram, _PortSpinBox
 from .icons import tool_icon, toggle_icon
 
@@ -165,17 +166,12 @@ class OracleConnectionDialog(ConnectionDialog):
         right.addWidget(self.tabs); row.addWidget(self.settings_pane, 1); outer.addWidget(self.content, 1)
         self.driver_combo = QComboBox(self); self.driver_combo.addItem('Oracle', 'oracle'); self.driver_combo.hide()
         self._build_general(); self._build_advanced(); self._build_databases(); self._build_ssh(); self._build_notes()
-        self.test_banner = QFrame(); self.test_banner.setObjectName('oracleConnectionTestBanner')
-        banner = QHBoxLayout(self.test_banner); banner.setContentsMargins(10, 5, 10, 5)
-        self.test_status = QLabel(); self.test_status.setObjectName('connectionTestStatus')
-        self.test_status.setTextFormat(Qt.TextFormat.PlainText)
-        banner.addWidget(self.test_status, 1)
-        self.test_copy_button = QPushButton('⧉'); self.test_copy_button.setFixedWidth(26)
-        self.test_copy_button.setToolTip('复制连接测试结果'); self.test_copy_button.clicked.connect(self._copy_test_result)
-        self.test_dismiss_button = QPushButton('×'); self.test_dismiss_button.setFixedWidth(26)
-        self.test_dismiss_button.setToolTip('关闭连接测试结果'); self.test_dismiss_button.clicked.connect(self.test_banner.hide)
-        banner.addWidget(self.test_copy_button); banner.addWidget(self.test_dismiss_button)
-        self.test_banner.hide(); outer.addWidget(self.test_banner)
+        self.test_banner = ConnectionTestBanner()
+        self.test_banner.setObjectName('oracleConnectionTestBanner')
+        self.test_status = self.test_banner.status_label
+        self.test_copy_button = self.test_banner.copy_button
+        self.test_dismiss_button = self.test_banner.dismiss_button
+        outer.addWidget(self.test_banner)
         self.test_finished.connect(self._display_test_result)
         self.footer = QFrame(); self.footer.setFixedHeight(60); footer = QHBoxLayout(self.footer)
         footer.setContentsMargins(18, 12, 18, 12)
@@ -208,6 +204,15 @@ class OracleConnectionDialog(ConnectionDialog):
         diagram = _OracleConnectionDiagram(); diagram.driver = 'Oracle'; self._diagrams.append(diagram); layout.addWidget(diagram)
         self.tabs.addTab(page, title)
         return page, layout, diagram
+
+    @staticmethod
+    def _small_icon_button(name, label):
+        button = QPushButton()
+        button.setIcon(tool_icon(name, 16)); button.setIconSize(QSize(16, 16))
+        button.setFixedWidth(24); button.setFlat(True)
+        button.setStyleSheet('QPushButton { padding: 0px; }')
+        button.setAccessibleName(label); button.setToolTip(label)
+        return button
 
     @staticmethod
     def _center_form(layout, form, label_width=80):
@@ -354,8 +359,10 @@ class OracleConnectionDialog(ConnectionDialog):
                     raise ValueError()
                 self._add_database_row(entry)
         except (TypeError, ValueError): self._draft_error = '自定义数据库列表包含无法表示的设置；原始草稿未改动。'
-        buttons = QHBoxLayout()
-        self.oracle_database_add = QPushButton('＋'); self.oracle_database_remove = QPushButton('－'); self.oracle_database_refresh = QPushButton('刷新')
+        buttons = QHBoxLayout(); buttons.setSpacing(0)
+        self.oracle_database_add = self._small_icon_button('record_add', '添加数据库')
+        self.oracle_database_remove = self._small_icon_button('record_delete', '删除数据库')
+        self.oracle_database_refresh = self._small_icon_button('refresh', '刷新数据库列表')
         self.oracle_database_add.clicked.connect(self._add_database); self.oracle_database_remove.clicked.connect(self._remove_database)
         self.oracle_database_refresh.setEnabled(False); self.oracle_database_refresh.setToolTip('Oracle 自定义数据库列表获取尚未实现。')
         for button in (self.oracle_database_add, self.oracle_database_remove, self.oracle_database_refresh): buttons.addWidget(button)
@@ -488,7 +495,7 @@ class OracleConnectionDialog(ConnectionDialog):
         return session.test_connection(cancel_event=threading.Event())
 
     def _start_connection_test(self, config):
-        self.test_banner.hide()
+        self.test_banner.clear_result()
         self.back_button.setEnabled(False)
         for diagram in self._diagrams:
             diagram.connection_succeeded = False; diagram.update()
@@ -497,21 +504,21 @@ class OracleConnectionDialog(ConnectionDialog):
     def _display_test_result(self, success, message):
         self.back_button.setEnabled(True)
         if success:
-            self.test_status.setText('✓  连接成功  服务器版本: ' + message[:512])
-            self.test_banner.setStyleSheet('#oracleConnectionTestBanner { background: rgba(76, 175, 80, 45); }')
+            detail = '服务器版本: ' + message[:512]
+            # Preserve this app's existing Oracle clipboard payload separately
+            # from the painted success symbol and split status/version labels.
+            self.test_banner.set_result(True, '连接成功', detail_text=detail,
+                copy_text='✓  连接成功  ' + detail, tooltip=message[:512])
         else:
             # A failure's reference presentation has not been established.
-            self.test_status.setText('连接失败')
-            self.test_banner.setStyleSheet('')
-        self.test_status.setToolTip(message[:512])
+            self.test_banner.set_result(False, '连接失败',
+                copy_text='连接失败', tooltip=message[:512])
         for diagram in self._diagrams:
             diagram.connection_succeeded = success; diagram.update()
-        self.test_banner.show()
         self._state_changed()
 
     def _copy_test_result(self):
-        from PySide6.QtWidgets import QApplication
-        QApplication.clipboard().setText(self.test_status.text())
+        self.test_banner.copy_result()
 
     def test_connection(self):
         if self._testing: return

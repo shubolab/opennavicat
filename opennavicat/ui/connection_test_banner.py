@@ -19,9 +19,11 @@ from .icons import tool_icon
 class _ElidingPlainText(QLabel):
     """Keep bounded source text accessible without enlarging the form for it."""
 
-    def __init__(self, preferred_width, parent=None):
+    def __init__(self, preferred_width, parent=None, *, minimum_text=''):
         super().__init__(parent)
         self._preferred_width = preferred_width
+        self._minimum_text = minimum_text
+        self._foreground = None
         self.setTextFormat(Qt.TextFormat.PlainText)
         self.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
@@ -31,15 +33,25 @@ class _ElidingPlainText(QLabel):
         return QSize(min(size.width(), self._preferred_width), size.height())
 
     def minimumSizeHint(self):
-        return QSize(0, super().minimumSizeHint().height())
+        metrics = self.fontMetrics()
+        width = min(metrics.horizontalAdvance(self.text()), metrics.horizontalAdvance(self._minimum_text))
+        return QSize(width, super().minimumSizeHint().height())
+
+    def setForegroundColor(self, color):
+        self._foreground = QColor(color) if color is not None else None
+        self.update()
 
     def paintEvent(self, event):
         painter = QPainter(self)
         option = QStyleOption()
         option.initFrom(self)
         self.style().drawPrimitive(QStyle.PrimitiveElement.PE_Widget, option, painter, self)
-        group = QPalette.ColorGroup.Active if self.isEnabled() else QPalette.ColorGroup.Disabled
-        painter.setPen(self.palette().color(group, QPalette.ColorRole.WindowText))
+        if not option.state & QStyle.StateFlag.State_Enabled:
+            group = QPalette.ColorGroup.Disabled
+        else:
+            group = QPalette.ColorGroup.Active if option.state & QStyle.StateFlag.State_Active else QPalette.ColorGroup.Inactive
+        color = self._foreground if self._foreground is not None and self.isEnabled() else self.palette().color(group, QPalette.ColorRole.WindowText)
+        painter.setPen(color)
         painter.setFont(self.font())
         rect = self.contentsRect().adjusted(self.margin(), self.margin(), -self.margin(), -self.margin())
         text = QFontMetrics(self.font()).elidedText(self.text(), Qt.TextElideMode.ElideRight, max(0, rect.width()))
@@ -86,7 +98,7 @@ class ConnectionTestBanner(QFrame):
         row.setSpacing(8)
         self.status_icon = _SuccessIcon(self)
         self.status_icon.setObjectName('connectionTestSuccessIcon')
-        self.status_label = _ElidingPlainText(320, self)
+        self.status_label = _ElidingPlainText(320, self, minimum_text='连接成功')
         self.status_label.setObjectName('connectionTestStatus')
         self.detail_label = _ElidingPlainText(512, self)
         self.detail_label.setObjectName('connectionTestDetail')
@@ -153,10 +165,9 @@ class ConnectionTestBanner(QFrame):
         # contrast are a local rendering choice pending a light reference run.
         dark = self.palette().color(QPalette.ColorRole.Window).lightness() < 128
         color = '#68bc58' if dark else '#287724'
-        self.status_label.setStyleSheet('color: ' + color + '; background: transparent;' if self._success else '')
-        metrics = self.status_label.fontMetrics()
-        self.status_label.setMinimumWidth(min(metrics.horizontalAdvance(self.status_label.text()),
-                                             metrics.horizontalAdvance('连接成功')))
+        # A QLabel stylesheet establishes an explicit font and prevents later
+        # parent-font changes from propagating. Paint only the foreground role.
+        self.status_label.setForegroundColor(color if self._success else None)
 
     def changeEvent(self, event):
         super().changeEvent(event)

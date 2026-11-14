@@ -139,6 +139,8 @@ def test_long_result_stays_inside_current_form_with_large_fonts(qtbot, pixels, w
                       copy_text='Generated copy', tooltip='Generated detail')
     qtbot.waitUntil(lambda: result.width() == host.width())
     assert host.width() == width
+    assert result.status_label.font().pixelSize() == pixels
+    assert result.detail_label.font().pixelSize() == pixels
     assert result.status_label.fontMetrics().horizontalAdvance('连接成功') <= result.status_label.width()
     for widget in (result.status_icon, result.status_label, result.detail_label,
                    result.copy_button, result.dismiss_button):
@@ -147,6 +149,47 @@ def test_long_result_stays_inside_current_form_with_large_fonts(qtbot, pixels, w
         assert widget.width() > 0 and widget.height() > 0
     assert result.copy_button.geometry().right() < result.dismiss_button.x()
     assert result.copy_text == 'Generated copy'
+
+
+def test_active_result_keeps_status_and_detail_font_inheritance_after_changes(qtbot):
+    host, result = banner(qtbot)
+    result.set_result(True, '连接成功', detail_text='服务器版本: '+'Generated '*100)
+    for pixels in (36, 18, 24):
+        font = QFont(host.font()); font.setPixelSize(pixels); host.setFont(font)
+        qtbot.waitUntil(lambda: result.status_label.font().pixelSize() == pixels
+            and result.detail_label.font().pixelSize() == pixels)
+        qtbot.waitUntil(lambda: result.status_label.width() >= result.status_label.fontMetrics().horizontalAdvance('连接成功'))
+        assert result.contentsRect().contains(result.status_label.geometry())
+        assert result.contentsRect().contains(result.copy_button.geometry())
+        assert result.contentsRect().contains(result.dismiss_button.geometry())
+    palette = host.palette(); palette.setColor(QPalette.ColorRole.Window, QColor('#ededed')); host.setPalette(palette)
+    assert result.status_label.font().pixelSize() == result.detail_label.font().pixelSize() == 24
+
+
+def test_plain_result_uses_inactive_and_disabled_text_palette_roles(qtbot):
+    host, result = banner(qtbot, pixels=24)
+    palette = host.palette()
+    colors = {QPalette.ColorGroup.Active: '#1010e0',
+              QPalette.ColorGroup.Inactive: '#c010c0', QPalette.ColorGroup.Disabled: '#107010'}
+    for group, color in colors.items():
+        palette.setColor(group, QPalette.ColorRole.WindowText, QColor(color))
+    host.setPalette(palette)
+    result.set_result(False, 'MMMM', detail_text='MMMM')
+    other = QDialog(); qtbot.addWidget(other); other.show()
+    other.activateWindow()
+    qtbot.waitUntil(lambda: not host.isActiveWindow())
+
+    def includes_color(label, color):
+        image = render(label, 1)
+        return any(image.pixelColor(x, y).name() == color
+                   for x in range(image.width()) for y in range(image.height()))
+
+    assert includes_color(result.status_label, colors[QPalette.ColorGroup.Inactive])
+    assert includes_color(result.detail_label, colors[QPalette.ColorGroup.Inactive])
+    result.set_result(True, 'MMMM', detail_text='MMMM')
+    result.setEnabled(False)
+    assert includes_color(result.status_label, colors[QPalette.ColorGroup.Disabled])
+    assert includes_color(result.detail_label, colors[QPalette.ColorGroup.Disabled])
 
 
 @pytest.mark.parametrize('dpr', [1, 2, 3])

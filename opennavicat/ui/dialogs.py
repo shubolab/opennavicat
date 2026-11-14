@@ -140,13 +140,15 @@ class _ConnectionDiagram(QWidget):
         self.driver = "SQLite"
         self.tunnel_enabled = False
         self.ssl_enabled = False
+        # Separate from Oracle's dedicated connection_succeeded overlay.
+        self.sqlite_connection_succeeded = False
         self.setFixedHeight(140)
         self.setObjectName("connectionDiagram")
         self.setAccessibleName("OpenNavicat 与数据库连接示意图")
 
     def paintEvent(self, event):
         from PySide6.QtCore import QRectF
-        from PySide6.QtGui import QPainter, QPainterPath, QPen
+        from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         palette = self.palette()
@@ -167,7 +169,11 @@ class _ConnectionDiagram(QWidget):
             for offset in (12, 26, 40):
                 painter.drawLine(round(center - 18), y + offset, round(center + 18), y + offset)
         else:
+            painter.save()
+            if self.sqlite_connection_succeeded and self.driver == "SQLite":
+                painter.setPen(QPen(QColor('#6bc859'), 1.5))
             painter.drawLine(round(left + 40), y + 28, round(right - 40), y + 28)
+            painter.restore()
         body = QPainterPath()
         body.moveTo(right - 26, y + 8)
         body.lineTo(right - 26, y + 42)
@@ -640,6 +646,10 @@ class ConnectionDialog(QDialog):
         self._ssh_state_changed()
         if config and config.port:
             self.port_spin.setValue(config.port)
+        self.database_edit.textChanged.connect(self._sqlite_profile_changed)
+        self.sqlite_mode_combo.currentIndexChanged.connect(self._sqlite_profile_changed)
+        self.read_only_check.toggled.connect(self._sqlite_profile_changed)
+        self.timeout_spin.valueChanged.connect(self._sqlite_profile_changed)
 
     @staticmethod
     def _restore_mongo_choice(combo, value):
@@ -792,6 +802,7 @@ class ConnectionDialog(QDialog):
         previous_driver = getattr(self, "_active_driver", None)
         local = driver == "sqlite"
         if driver != previous_driver:
+            self._reset_sqlite_test_diagram()
             self.sqlite_test_banner.clear_result()
             self.test_status.clear()
             self.test_status.setToolTip('')
@@ -1101,12 +1112,27 @@ class ConnectionDialog(QDialog):
     def test_connection(self):
         if self._testing:
             return
+        self._sqlite_profile_changed()
         try:
             config = self._collect_config(testing=True)
         except ValueError as exc:
             QMessageBox.warning(self, "测试连接", str(exc))
             return
         self._start_connection_test(config)
+
+    def _reset_sqlite_test_diagram(self):
+        self.diagram.sqlite_connection_succeeded = False
+        self.diagram.update()
+
+    def _sqlite_profile_changed(self, *_):
+        if self.driver_combo.currentData() != 'sqlite':
+            return
+        self._reset_sqlite_test_diagram()
+        self.sqlite_test_banner.clear_result()
+        self.test_status.clear()
+        self.test_status.setToolTip('')
+        self.test_status.show()
+        self.footer.layout().setStretch(self._test_footer_gap_index, 0)
 
     @staticmethod
     def _probe_session(session, config):
@@ -1127,6 +1153,7 @@ class ConnectionDialog(QDialog):
         # Oracle has its own initializer and result strip. Its override already
         # resets that strip before delegating to this shared worker owner.
         if hasattr(self, 'sqlite_test_banner'):
+            self._reset_sqlite_test_diagram()
             self.sqlite_test_banner.clear_result()
             self.test_status.show()
             self.footer.layout().setStretch(self._test_footer_gap_index, 0)
@@ -1169,6 +1196,9 @@ class ConnectionDialog(QDialog):
             self._test_server_version = ''
 
     def _display_test_result(self, success, message):
+        self.diagram.sqlite_connection_succeeded = bool(success and self._tested_driver == 'sqlite'
+            and self.driver_combo.currentData() == 'sqlite')
+        self.diagram.update()
         if self._tested_driver == 'sqlite' and self.driver_combo.currentData() == 'sqlite' and success:
             version = self._test_server_version[:512]
             detail = '服务器版本: ' + version

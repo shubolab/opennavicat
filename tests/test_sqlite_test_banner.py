@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 from PySide6.QtCore import QPoint, QThread, Qt
-from PySide6.QtWidgets import QApplication, QDialogButtonBox
+from PySide6.QtWidgets import QApplication, QDialogButtonBox, QMessageBox
 
 from opennavicat.database import ConnectionConfig, DatabaseSession
 from opennavicat.ui.dialogs import ConnectionDialog, _ConnectionProbeResult
@@ -26,6 +26,15 @@ def create_database(path):
         database.execute('CREATE TABLE generated(id INTEGER PRIMARY KEY, label TEXT)')
         database.execute('INSERT INTO generated VALUES (?, ?)', (1, 'Generated owned row'))
         return database.execute('SELECT sqlite_version()').fetchone()[0]
+
+
+def connection_line_is_green(dialog):
+    image = dialog.diagram.grab().toImage()
+    dpr = image.devicePixelRatio()
+    center = dialog.diagram.width()//2
+    colors = [image.pixelColor(round(x*dpr), round(y*dpr))
+              for x in range(center-3, center+4) for y in range(62, 65)]
+    return any(c.green() > c.red()+40 and c.green() > c.blue()+40 for c in colors)
 
 
 @pytest.mark.parametrize('stylesheet', ['', STYLESHEET, LIGHT_STYLESHEET], ids=['native', 'dark', 'light'])
@@ -52,6 +61,7 @@ def test_real_async_sqlite_version_strip_close_and_dismiss_retest_preserve_datab
     initial = asdict(dialog._collect_config())
     dialog.test_finished.connect(lambda ok, message: completed.append((ok, message, threading.get_ident())))
     assert dialog.sqlite_test_banner.isHidden() and calls == []
+    assert not connection_line_is_green(dialog)
     for attempt in range(2):
         with qtbot.waitSignal(dialog.test_finished, timeout=5000) as result:
             qtbot.mouseClick(dialog.test_button, Qt.MouseButton.LeftButton)
@@ -63,6 +73,7 @@ def test_real_async_sqlite_version_strip_close_and_dismiss_retest_preserve_datab
         assert strip.status_label.toolTip() == expected_version
         assert strip.copy_text == '连接成功  服务器版本: '+expected_version
         assert strip.status_icon.isVisible() and dialog.test_status.isHidden()
+        assert connection_line_is_green(dialog)
         assert dialog.test_status.text() == '连接成功'
         assert strip.parentWidget() is dialog.settings_pane
         assert strip.geometry().bottom() < dialog.footer.y()
@@ -94,6 +105,7 @@ def test_failure_retains_footer_result_and_retry_never_reuses_old_success(qtbot,
     dialog._tested_driver = 'sqlite'; dialog._test_server_version = 'Generated previous version'
     dialog._display_test_result(True, '连接成功')
     assert dialog.sqlite_test_banner.isVisible()
+    assert connection_line_is_green(dialog)
     if empty_error:
         original_probe = dialog._probe_session
         monkeypatch.setattr(dialog, '_probe_session', lambda *_args: (_ for _ in ()).throw(RuntimeError('')))
@@ -102,6 +114,7 @@ def test_failure_retains_footer_result_and_retry_never_reuses_old_success(qtbot,
     qtbot.waitUntil(lambda: not dialog._testing and not dialog._test_pool.activeThreadCount())
     assert result.args[0] is False
     assert dialog.sqlite_test_banner.isHidden() and dialog.sqlite_test_banner.copy_text == ''
+    assert not connection_line_is_green(dialog)
     assert dialog.test_status.isVisible() and dialog.test_status.text() == '连接失败'
     assert dialog.test_status.toolTip() == result.args[1]
     if empty_error:
@@ -114,6 +127,7 @@ def test_failure_retains_footer_result_and_retry_never_reuses_old_success(qtbot,
     assert result.args == [True, '连接成功']
     assert dialog.sqlite_test_banner.isVisible()
     assert dialog.sqlite_test_banner.detail_label.text() == '服务器版本: '+expected
+    assert connection_line_is_green(dialog)
 
 
 def test_busy_retest_clears_old_copy_blocks_close_and_delivers_on_gui(qtbot, tmp_path, monkeypatch):
@@ -144,6 +158,7 @@ def test_busy_retest_clears_old_copy_blocks_close_and_delivers_on_gui(qtbot, tmp
     dialog = editor(qtbot, path)
     dialog._tested_driver = 'sqlite'; dialog._test_server_version = 'Old generated version'
     dialog._display_test_result(True, '连接成功')
+    assert connection_line_is_green(dialog)
     callbacks = []
     dialog.test_finished.connect(lambda *_args: callbacks.append(QThread.currentThread() == dialog.thread()))
     try:
@@ -151,6 +166,7 @@ def test_busy_retest_clears_old_copy_blocks_close_and_delivers_on_gui(qtbot, tmp
             qtbot.mouseClick(dialog.test_button, Qt.MouseButton.LeftButton)
             qtbot.waitUntil(started.is_set)
             assert dialog._testing and dialog.sqlite_test_banner.isHidden()
+            assert not connection_line_is_green(dialog)
             assert dialog.sqlite_test_banner.copy_text == ''
             dialog.sqlite_test_banner.copy_result(); assert copied == []
             assert not dialog.content.isEnabled() and not dialog.test_button.isEnabled()
@@ -163,6 +179,7 @@ def test_busy_retest_clears_old_copy_blocks_close_and_delivers_on_gui(qtbot, tmp
         assert all(p[1] != gui for p in probes)
         assert callbacks == [True] and dialog.sqlite_test_banner.isVisible()
         assert 'Generated busy version' in dialog.sqlite_test_banner.detail_label.text()
+        assert connection_line_is_green(dialog)
     finally:
         release.set()
         qtbot.waitUntil(lambda: not dialog._test_pool.activeThreadCount(), timeout=5000)
@@ -194,11 +211,51 @@ def test_driver_switch_hides_sqlite_result_and_preserves_other_footer_hierarchy(
     dialog._tested_driver = 'sqlite'; dialog._test_server_version = 'Generated version'
     dialog._display_test_result(True, '连接成功')
     assert dialog.sqlite_test_banner.isVisible() and dialog.footer.parentWidget() is dialog.settings_pane
+    assert connection_line_is_green(dialog)
     dialog.driver_combo.setCurrentIndex(dialog.driver_combo.findData('postgresql'))
     assert dialog.sqlite_test_banner.isHidden() and dialog.sqlite_test_banner.copy_text == ''
     assert dialog.test_status.text() == '' and dialog.test_status.isVisible()
     assert dialog.footer.parentWidget() is dialog and dialog.footer.height() == 60
+    assert not connection_line_is_green(dialog)
     dialog.driver_combo.setCurrentIndex(dialog.driver_combo.findData('sqlite'))
     assert dialog.sqlite_test_banner.isHidden()
     assert dialog.footer.parentWidget() is dialog.settings_pane and dialog.footer.height() == 44
+    assert not connection_line_is_green(dialog)
     assert dialog.buttons.button(QDialogButtonBox.StandardButton.Save).isEnabled()
+
+
+@pytest.mark.parametrize('change', ['mode', 'database', 'read_only', 'timeout'])
+def test_sqlite_binding_changes_clear_success_line_without_implicit_test(qtbot, tmp_path, change):
+    path = tmp_path/'generated-binding.sqlite'; create_database(path)
+    dialog = editor(qtbot, path)
+    with qtbot.waitSignal(dialog.test_finished, timeout=5000):
+        qtbot.mouseClick(dialog.test_button, Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda: not dialog._testing and not dialog._test_pool.activeThreadCount())
+    assert connection_line_is_green(dialog)
+    if change == 'mode':
+        dialog.sqlite_mode_combo.setCurrentIndex(dialog.sqlite_mode_combo.findData('create'))
+    elif change == 'database':
+        dialog.database_edit.setText(str(tmp_path/'generated-other.sqlite'))
+    elif change == 'read_only':
+        dialog.read_only_check.setChecked(True)
+    else:
+        dialog.timeout_spin.setValue(dialog.timeout_spin.value()+1)
+    assert not connection_line_is_green(dialog)
+    assert dialog.sqlite_test_banner.isHidden() and dialog.sqlite_test_banner.copy_text == ''
+    assert not dialog._testing and not dialog._test_pool.activeThreadCount() and dialog._test_task is None
+
+
+def test_sqlite_validation_failure_keeps_line_neutral_and_does_not_launch_worker(qtbot, tmp_path, monkeypatch):
+    path = tmp_path/'generated-validation.sqlite'; create_database(path)
+    dialog = editor(qtbot, path)
+    with qtbot.waitSignal(dialog.test_finished, timeout=5000):
+        qtbot.mouseClick(dialog.test_button, Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda: not dialog._testing and not dialog._test_pool.activeThreadCount())
+    assert connection_line_is_green(dialog)
+    path.unlink()  # Owned fixture only; the next Test fails GUI-side validation.
+    warnings = []
+    monkeypatch.setattr(QMessageBox, 'warning', lambda _parent, _title, text: warnings.append(text))
+    dialog.test_connection()
+    assert warnings and not connection_line_is_green(dialog)
+    assert dialog.sqlite_test_banner.isHidden() and dialog.sqlite_test_banner.copy_text == ''
+    assert not dialog._testing and not dialog._test_pool.activeThreadCount() and dialog._test_task is None

@@ -7,8 +7,10 @@ import threading
 from types import SimpleNamespace
 
 import pytest
-from PySide6.QtCore import QPoint, QThread, Qt
-from PySide6.QtWidgets import QApplication, QDialogButtonBox, QMessageBox
+from PySide6.QtCore import QPoint, QSize, QThread, Qt
+from PySide6.QtGui import QIcon
+from PySide6.QtTest import QSignalSpy
+from PySide6.QtWidgets import QApplication, QDialogButtonBox, QMessageBox, QPushButton, QStyle, QStyleOptionButton
 
 from opennavicat.database import ConnectionConfig, DatabaseSession
 from opennavicat.ui.dialogs import ConnectionDialog, _ConnectionProbeResult
@@ -259,3 +261,130 @@ def test_sqlite_validation_failure_keeps_line_neutral_and_does_not_launch_worker
     assert warnings and not connection_line_is_green(dialog)
     assert dialog.sqlite_test_banner.isHidden() and dialog.sqlite_test_banner.copy_text == ''
     assert not dialog._testing and not dialog._test_pool.activeThreadCount() and dialog._test_task is None
+
+
+def test_sqlite_profile_add_is_icon_only_in_header_and_stays_unavailable(qtbot, tmp_path):
+    path = tmp_path/'generated-header.sqlite'; create_database(path)
+    dialog = editor(qtbot, path)
+    button = dialog.new_profile_button
+    assert button.text() == ''
+    assert button.parentWidget() is dialog.profile_header
+    assert dialog.profile_header.isVisible() and dialog.profile_header_title.text() == '连接配置文件'
+    assert dialog.profile_pane.layout().indexOf(dialog.profile_header) == 0
+    assert dialog.profile_pane.layout().indexOf(dialog.profiles) == 1
+    assert dialog.profile_header.layout().indexOf(button) == 1
+    assert dialog.profiles.item(0).text() == '主要配置文件（有效）'
+    assert dialog.profiles.currentRow() == 0
+    assert button.iconSize() == QSize(16, 16) and not button.icon().isNull()
+    assert button.accessibleName() == '新建连接配置文件' and '尚未实现' in button.toolTip()
+    assert not button.isEnabled() and button.isFlat() and not button.autoDefault()
+    qtbot.waitUntil(lambda: button.height() == 26 and button.width() == 26)
+    assert dialog.profile_header.rect().contains(button.geometry())
+    assert button.y() < dialog.profiles.y()
+    clicked = QSignalSpy(button.clicked)
+    qtbot.mouseClick(button, Qt.MouseButton.LeftButton)
+    assert clicked.count() == 0 and dialog.profiles.count() == 1
+    assert dialog.get_config() is None and dialog.isVisible() and not dialog._test_pool.activeThreadCount()
+
+
+def profile_button_state(button):
+    policy = button.sizePolicy()
+    font = button.font()
+    return dict(text=button.text(), tooltip=button.toolTip(), accessible=button.accessibleName(),
+        minimum=button.minimumSize().toTuple(), maximum=button.maximumSize().toTuple(),
+        policy=(policy.horizontalPolicy(), policy.verticalPolicy(), policy.horizontalStretch(),
+                policy.verticalStretch(), policy.controlType(), policy.retainSizeWhenHidden()),
+        stylesheet=button.styleSheet(), flat=button.isFlat(), auto_default=button.autoDefault(),
+        font=(font.family(), font.pixelSize(), font.pointSizeF(), font.weight(), font.resolveMask()),
+        icon_size=button.iconSize().toTuple(), enabled=button.isEnabled())
+
+
+@pytest.mark.parametrize('driver', ['postgresql', 'mysql', 'mariadb', 'sqlserver', 'redis', 'mongodb'])
+def test_sqlite_profile_header_roundtrips_reuse_button_and_restore_native_driver_state(qtbot, tmp_path, driver):
+    path = tmp_path/('generated-'+driver+'.sqlite'); create_database(path)
+    dialog = editor(qtbot, path)
+    button, model, first_item = dialog.new_profile_button, dialog.profiles.model(), dialog.profiles.item(0)
+    dialog.profiles.addItem('Generated retained profile row')
+    second_item = dialog.profiles.item(1)
+    second_item.setData(Qt.ItemDataRole.UserRole, {'generated': 'retained'})
+    dialog.profiles.setCurrentRow(1)
+    dialog.name_edit.setText('Generated immutable name')
+    dialog.user_edit.setText('Generated database user')
+    dialog.password_edit.setText('generated-process-memory-only')
+    dialog.remember_check.setChecked(True)
+    dialog.read_only_check.setChecked(True)
+    dialog.timeout_spin.setValue(17)
+    retained = (dialog.name_edit.text(), dialog.database_edit.text(), dialog.user_edit.text(),
+                dialog.password_edit.text(), dialog.remember_check.isChecked(),
+                dialog.read_only_check.isChecked(), dialog.timeout_spin.value())
+    dialog.driver_combo.setCurrentIndex(dialog.driver_combo.findData(driver))
+    native = profile_button_state(button)
+    native_control = ConnectionDialog(config=ConnectionConfig('generated-native', 'Generated native driver',
+        driver=driver, database='generated_database', ssl_mode='disable'))
+    qtbot.addWidget(native_control); native_control.show()
+    assert native == profile_button_state(native_control.new_profile_button)
+    assert native['text'] == '新建连接配置文件'
+    assert native['stylesheet'] == '' and not native['flat']
+    for _ in range(20):
+        dialog.driver_combo.setCurrentIndex(dialog.driver_combo.findData('sqlite'))
+        assert dialog.new_profile_button is button and button.parentWidget() is dialog.profile_header
+        assert button.text() == '' and not button.isEnabled()
+        assert dialog.profile_header.isVisible() and dialog.profile_pane.width() == 200
+        assert first_item.text() == '主要配置文件（有效）'
+        assert dialog.profiles.model() is model and dialog.profiles.item(0) is first_item
+        assert dialog.profiles.item(1) is second_item and dialog.profiles.currentItem() is second_item
+        assert second_item.data(Qt.ItemDataRole.UserRole) == {'generated': 'retained'}
+        dialog.driver_combo.setCurrentIndex(dialog.driver_combo.findData(driver))
+        assert dialog.new_profile_button is button and button.parentWidget() is dialog.profile_pane
+        assert dialog.profile_header.isHidden()
+        assert dialog.profile_pane.layout().indexOf(dialog.profile_header) == -1
+        assert dialog.profile_pane.layout().indexOf(dialog.profiles) == 0
+        assert dialog.profile_pane.layout().indexOf(button) == 1
+        assert profile_button_state(button) == native
+        assert first_item.text() == 'Main Profile（有效）'
+        assert dialog.profiles.model() is model and dialog.profiles.currentItem() is second_item
+        assert dialog.profile_pane.findChildren(QPushButton, 'newConnectionProfile') == [button]
+        assert len(dialog.profile_pane.findChildren(type(dialog.profile_header), 'sqliteConnectionProfileHeader')) == 1
+    assert (dialog.name_edit.text(), dialog.database_edit.text(), dialog.user_edit.text(),
+            dialog.password_edit.text(), dialog.remember_check.isChecked(),
+            dialog.read_only_check.isChecked(), dialog.timeout_spin.value()) == retained
+    assert not dialog._testing and not dialog._test_pool.activeThreadCount() and dialog.get_config() is None
+
+
+def test_external_profile_model_text_selection_and_user_data_are_not_replaced(qtbot, tmp_path):
+    path = tmp_path/'generated-custom-profile.sqlite'; create_database(path)
+    dialog = editor(qtbot, path)
+    item = dialog.profiles.item(0)
+    item.setText('Generated externally retained primary')
+    item.setData(Qt.ItemDataRole.UserRole, ('generated', 7))
+    dialog.driver_combo.setCurrentIndex(dialog.driver_combo.findData('postgresql'))
+    dialog.driver_combo.setCurrentIndex(dialog.driver_combo.findData('sqlite'))
+    assert dialog.profiles.item(0) is item and dialog.profiles.currentItem() is item
+    assert item.text() == 'Generated externally retained primary'
+    assert item.data(Qt.ItemDataRole.UserRole) == ('generated', 7)
+
+
+@pytest.mark.parametrize('dpr', [1, 2, 3])
+@pytest.mark.parametrize('stylesheet', ['', STYLESHEET, LIGHT_STYLESHEET], ids=['native', 'dark', 'light'])
+def test_sqlite_header_circle_plus_fits_real_contents_at_display_density(qtbot, tmp_path, dpr, stylesheet):
+    path = tmp_path/'generated-header-density.sqlite'; create_database(path)
+    dialog = editor(qtbot, path); dialog.setStyleSheet(stylesheet)
+    button = dialog.new_profile_button
+    qtbot.waitUntil(lambda: button.width() == 26 and dialog.profile_header.rect().contains(button.geometry()))
+    option = QStyleOptionButton(); option.initFrom(button); option.rect = button.rect()
+    contents = button.style().subElementRect(QStyle.SubElement.SE_PushButtonContents, option, button)
+    assert contents.width() >= 16 and contents.height() >= 16
+    title = dialog.profile_header_title
+    assert title.textFormat() == Qt.TextFormat.PlainText
+    assert title.fontMetrics().horizontalAdvance(title.text()) <= title.contentsRect().width()
+    pixmap = button.icon().pixmap(QSize(16, 16), dpr, QIcon.Mode.Disabled)
+    assert pixmap.width() == pixmap.height() == 16*dpr and pixmap.devicePixelRatio() == dpr
+    image = pixmap.toImage()
+    ink = [image.pixelColor(x, y) for x in range(image.width()) for y in range(image.height())
+           if image.pixelColor(x, y).alpha() > 96]
+    assert ink and all(max(c.red(), c.green(), c.blue())-min(c.red(), c.green(), c.blue()) < 20 for c in ink)
+    assert all(image.pixelColor(x, 0).alpha() == image.pixelColor(x, image.height()-1).alpha() == 0 for x in range(image.width()))
+    qtbot.mouseClick(dialog.profile_toggle, Qt.MouseButton.LeftButton)
+    assert not dialog.profile_pane.isVisible() and not dialog.profile_header.isVisible()
+    qtbot.mouseClick(dialog.profile_toggle, Qt.MouseButton.LeftButton)
+    assert dialog.profile_header.isVisible() and dialog.new_profile_button is button

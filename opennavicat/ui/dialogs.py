@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QEvent, QRect, QThreadPool, QTimer, QSize, Signal, QRegularExpression
-from PySide6.QtGui import QFontMetricsF, QRegularExpressionValidator
+from PySide6.QtGui import QFont, QFontMetricsF, QRegularExpressionValidator
 from PySide6.QtWidgets import (
     QButtonGroup, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout,
     QFrame, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QListWidget, QMessageBox, QPlainTextEdit,
@@ -239,6 +239,7 @@ class ConnectionDialog(QDialog):
         self.profile_pane.setObjectName("connectionProfilePane")
         self.profile_pane.setFixedWidth(200)
         rail = QVBoxLayout(self.profile_pane)
+        self._profile_rail = rail
         rail.setContentsMargins(0, 0, 0, 0)
         rail.setSpacing(0)
         self.profiles = QListWidget()
@@ -263,6 +264,25 @@ class ConnectionDialog(QDialog):
         self.new_profile_button.setToolTip("多个连接配置文件尚未实现；当前连接使用 Main Profile。")
         rail.addWidget(self.new_profile_button)
         content.addWidget(self.profile_pane)
+        self.new_profile_button.ensurePolished()
+        self._profile_button_defaults = dict(
+            text=self.new_profile_button.text(), tooltip=self.new_profile_button.toolTip(),
+            accessible_name=self.new_profile_button.accessibleName(),
+            minimum=QSize(self.new_profile_button.minimumSize()),
+            maximum=QSize(self.new_profile_button.maximumSize()),
+            size_policy=QSizePolicy(self.new_profile_button.sizePolicy()),
+            stylesheet=self.new_profile_button.styleSheet(), flat=self.new_profile_button.isFlat(),
+            auto_default=self.new_profile_button.autoDefault(), font=QFont(self.new_profile_button.font()),
+        )
+        self.profile_header = QWidget(self.profile_pane)
+        self.profile_header.setObjectName('sqliteConnectionProfileHeader')
+        header = QHBoxLayout(self.profile_header)
+        header.setContentsMargins(0, 0, 0, 6)
+        header.setSpacing(8)
+        self.profile_header_title = QLabel('连接配置文件')
+        self.profile_header_title.setTextFormat(Qt.TextFormat.PlainText)
+        header.addWidget(self.profile_header_title, 1)
+        self.profile_header.hide()
 
         right = QWidget()
         self.settings_pane = right
@@ -801,6 +821,7 @@ class ConnectionDialog(QDialog):
         driver = self.driver_combo.currentData()
         previous_driver = getattr(self, "_active_driver", None)
         local = driver == "sqlite"
+        self._set_sqlite_profile_header(local)
         if driver != previous_driver:
             self._reset_sqlite_test_diagram()
             self.sqlite_test_banner.clear_result()
@@ -886,6 +907,44 @@ class ConnectionDialog(QDialog):
         self.profile_toggle.setChecked(local)
         self.profile_toggle.blockSignals(False)
         self._toggle_profiles(local)
+
+    def _set_sqlite_profile_header(self, local):
+        button = self.new_profile_button
+        in_header = button.parentWidget() is self.profile_header
+        if local != in_header:
+            if local:
+                self._profile_rail.removeWidget(button)
+                self._profile_rail.insertWidget(0, self.profile_header)
+                self.profile_header.layout().addWidget(button)
+                button.setText('')
+                button.setAccessibleName('新建连接配置文件')
+                button.setToolTip('多个连接配置文件尚未实现；当前连接使用主要配置文件。')
+                button.setFlat(True)
+                button.setAutoDefault(False)
+                button.setStyleSheet('QPushButton { padding: 0; min-width: 26px; max-width: 26px; min-height: 26px; max-height: 26px; border: 0; background: transparent; }')
+                button.setFixedSize(26, 26)
+            else:
+                self.profile_header.layout().removeWidget(button)
+                self._profile_rail.removeWidget(self.profile_header)
+                self._profile_rail.addWidget(button)
+                original = self._profile_button_defaults
+                button.setText(original['text'])
+                button.setAccessibleName(original['accessible_name'])
+                button.setToolTip(original['tooltip'])
+                button.setStyleSheet(original['stylesheet'])
+                button.setMinimumSize(original['minimum'])
+                button.setMaximumSize(original['maximum'])
+                button.setSizePolicy(original['size_policy'])
+                button.setFlat(original['flat'])
+                button.setAutoDefault(original['auto_default'])
+                button.setFont(original['font'])
+            button.show()
+        self.profile_header.setVisible(local)
+        # Only the built-in placeholder profile is localized. Do not rebuild
+        # the model, change selection, or rename any externally supplied row.
+        main = self.profiles.item(0)
+        if main is not None and main.text() in ('Main Profile（有效）', '主要配置文件（有效）'):
+            main.setText('主要配置文件（有效）' if local else 'Main Profile（有效）')
 
     def _read_only_driver_state(self, *_):
         unsupported = self.driver_combo.currentData() == "sqlserver"

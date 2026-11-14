@@ -5,7 +5,7 @@ from copy import deepcopy
 import json
 import math
 
-from PySide6.QtCore import QEvent, QMimeData, QPoint, QPointF, QRectF, QThread, QTimer, Qt, Signal
+from PySide6.QtCore import QEvent, QMimeData, QPoint, QPointF, QRectF, QSize, QThread, QTimer, Qt, Signal
 from PySide6.QtGui import QAction, QColor, QDrag, QKeySequence, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import (
     QAbstractItemView, QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
@@ -826,10 +826,17 @@ class MongoExplainCanvas(QGraphicsView):
         item.update()
         self._show_detail(item)
 
+    def _dismiss_detail(self, expected=None):
+        proxy = self._detail_proxy
+        if proxy is None or (expected is not None and proxy is not expected):
+            return
+        self._detail_proxy = None
+        self.detail_view = None
+        self.scene.removeItem(proxy)
+        proxy.deleteLater()
+
     def _show_detail(self, item):
-        if self._detail_proxy is not None:
-            self.scene.removeItem(self._detail_proxy)
-            self._detail_proxy = None
+        self._dismiss_detail()
         panel = QFrame()
         panel.setObjectName("mongoExplainDetailPanel")
         panel.setStyleSheet(
@@ -839,7 +846,12 @@ class MongoExplainCanvas(QGraphicsView):
         header = QHBoxLayout()
         title = QLabel(item.node.stage)
         title.setStyleSheet("font-weight: 600; color: #f0f2f5;")
-        close_button = QPushButton("×")
+        close_button = QPushButton()
+        close_button.setIcon(tool_icon("dismiss", 16))
+        close_button.setIconSize(QSize(16, 16))
+        close_button.setAccessibleName("关闭执行计划节点详情")
+        close_button.setToolTip("关闭执行计划节点详情")
+        close_button.setStyleSheet("QPushButton { padding: 0px; }")
         close_button.setFixedSize(24, 24)
         header.addWidget(title)
         header.addStretch()
@@ -855,7 +867,7 @@ class MongoExplainCanvas(QGraphicsView):
         y = max(24.0, item.y() - 35)
         proxy.setPos(x, y)
         self._detail_proxy = proxy
-        close_button.clicked.connect(lambda: self.scene.removeItem(proxy))
+        close_button.clicked.connect(lambda: self._dismiss_detail(proxy))
 
     def select_index(self, index):
         if 0 <= index < len(self._items):

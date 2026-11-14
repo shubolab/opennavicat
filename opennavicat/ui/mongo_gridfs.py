@@ -123,7 +123,11 @@ class MongoGridFSPage(QWidget):
         self.filter_fields = QGridLayout()
         filters.addLayout(self.filter_fields)
         controls = QHBoxLayout()
-        self.filter_add_button = QPushButton("＋")
+        self.filter_add_button = QPushButton()
+        self.filter_add_button.setIcon(tool_icon("record_add", 16))
+        self.filter_add_button.setIconSize(QSize(16, 16))
+        self.filter_add_button.setAccessibleName("添加名称条件")
+        self.filter_add_button.setStyleSheet("QPushButton { padding: 0px; }")
         self.filter_add_button.setFixedWidth(28)
         self.filter_add_button.setToolTip("添加名称条件；所有启用条件须同时满足。")
         self.filter_add_button.clicked.connect(self.add_filter)
@@ -300,7 +304,12 @@ class MongoGridFSPage(QWidget):
     def add_filter(self):
         if self.loading:
             return
-        enabled, field, operation, text, remove = QCheckBox(), QComboBox(), QComboBox(), QLineEdit(), QPushButton("−")
+        enabled, field, operation, text, remove = QCheckBox(), QComboBox(), QComboBox(), QLineEdit(), QPushButton()
+        remove.setIcon(tool_icon("record_delete", 16))
+        remove.setIconSize(QSize(16, 16))
+        remove.setAccessibleName("删除名称条件")
+        remove.setToolTip("删除名称条件")
+        remove.setStyleSheet("QPushButton { padding: 0px; }")
         enabled.setChecked(True)
         field.addItem("名称", "filename")
         operation.addItem("包含", "contains")

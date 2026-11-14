@@ -15,19 +15,18 @@ Python + Qt Widgets（PySide6），数据库连接、SQL 和结果均在本机�
 再执行有限 change-stream Run，查看忙时状态、消息与输出，
 最后查看 Oracle 连接的常规、高级和数据库页，以及空选连接类型网格；主栏、数据库标志和动作图标使用新的独立绘制。
 连接名、客户、邮箱、日期、订单、商品、BSON、SQL 和图像均由隔离演示工作区生成，
-不读取本机真实连接或业务数据库。单段 GIF 对应 **0.13.1 开发候选** 的实际 Qt 界面，
+不读取本机真实连接或业务数据库。单段 GIF 对应 **0.13.1** 的实际 Qt 界面，
 35 个阶段、471 帧、78.5 秒；
-最新公开安装器为 **v0.12.0（预发布）**；
+最新公开安装器为 **v0.13.1（预发布）**；
 SQLite 结构和 MongoDB 索引部分展示预览，集合选项、存储与排序规则实际保存并独立核验服务器配置后重新打开；
 聚合管线的阶段模板、选项、分阶段预览、脚本、Explain 和最终结果均由隔离 MongoDB 实际执行或返回。
 批处理使用两个独立会话真实执行，历史实际落盘，独立客户端确认源文档的精确 BSON 与集合 UUID 未变。
 有限 stream 通过独立生产者取得两个精确 BSON 事件，owner 完成游标清理；界面按实际参考显示脚本、状态和耗时。
 Oracle 表单的主机、用户名和密码均留空，未保存或连接数据库；连接网格无选择或设置交接。
-35 个阶段均查看了全尺寸代表帧和首/中/尾联系表，全部 471 帧执行文本隐私检查并独立解码，
-实际连接卡片主色经像素核对；录制数据、临时服务与工作区已清理。
-候选源码、图标与本机验证见 [0.13.1 候选记录](docs/validation-0.13.1.md) 和
-[图标专项](docs/validation-icons-navicat18.md)；当前公开安装器的六目标与下载验证见
-[0.12 验证记录](docs/validation-0.12.md)。
+35 个阶段均查看了全尺寸代表帧和首/中/尾联系表，全部 471 帧通过录制器文本保护并独立解码；
+未宣称逐帧人工目视或全帧 OCR。实际连接卡片主色经像素核对，录制数据、临时服务与工作区已清理。
+源码、正式六目标安装器、匿名八资产及本机验证见 [0.13.1 验证记录](docs/validation-0.13.1.md) 和
+[图标专项](docs/validation-icons-navicat18.md)。
 
 ![OpenNavicat 示例数据工作流演示](docs/assets/opennavicat-demo.gif)
 
@@ -42,33 +41,43 @@ Oracle 表单的主机、用户名和密码均留空，未保存或连接数据�
 **v0.12.0** 已预发布，加入有限 change-stream Run、按实际参考切换的消息/输出页、当前页 Stop、
 Batch 边界状态和两处后台任务信号生命周期修复。正式流水线8/8成功；六个原生安装器、
 八个匿名公开下载及本机公开 ARM64 DMG 的隔离运行验证均通过。
+**v0.13.1** 已预发布，加入 Oracle Basic 连接与只读目录/数据浏览，继续对齐主栏、数据库标志、
+小动作、Oracle 表单及连接选择器，并修复“其它/用户”按钮刷新后的短暂空白。
+正式 tag 流水线10/10成功，六份原生安装器与八个匿名公开下载均已核验；
+本版公开 ARM64 DMG 已在本机隔离运行，异步 SQLite 6×4、Oracle 四项及其它十三项本地探针通过，
+正常退出及卸载清理通过。Cocoa 显式请求，smoke 未自报实际 QPA；既有 bb4 本机应用结果单独保留。
 当前验证、复现 fixture 和剩余差距见 [持续开发快照](docs/snapshot/2026-11-14-goal-resume.md)、
-[0.12 验证记录](docs/validation-0.12.md)、[0.11 验证记录](docs/validation-0.11.md)、
+[0.13.1 验证记录](docs/validation-0.13.1.md)、[0.12 验证记录](docs/validation-0.12.md)、[0.11 验证记录](docs/validation-0.11.md)、
 [0.10 验证记录](docs/validation-0.10.md)、[集合存储页记录](docs/mongodb-collection-storage.md)和
 [验证器 UI 记录](docs/mongodb-validator-ui.md)。
 
-最新可用里程碑为 **v0.12.0（预发布）**，提供三个操作系统、两种架构的六份安装包。
+最新可用里程碑为 **v0.13.1（预发布）**，提供三个操作系统、两种架构的六份安装包。
 现有 **SQLite、PostgreSQL、MySQL、MariaDB、SQL Server、Redis、MongoDB** 七种核心驱动，
-使用隔离数据库进行了真实协议、读写及界面集成验证。本版保留 Linux 历史连接及分组发现、
+使用隔离数据库进行了真实协议、读写及界面集成验证。新增 Oracle 目前限定为 Basic 连接、
+元数据和有界只读浏览；Query、事务、写入、设计器、Data Pump 及其余认证/安全设置仍在实现与验收。
+本版保留 Linux 历史连接及分组发现、
 MongoDB 六页索引设计器、随包提供的原生 JavaScript 查询，以及 BSON 网格/树、GridFS、
 Windows 连接候选发现、SQLite 独立索引/触发器设计和 macOS 历史连接自动加载。
 完整 Navicat Premium 能力和 1:1 界面仍在持续实现中，
-详细范围见 [功能路线图](docs/roadmap.md) 和 [0.12 验证记录](docs/validation-0.12.md)。
+详细范围见 [功能路线图](docs/roadmap.md) 和 [0.13.1 验证记录](docs/validation-0.13.1.md)。
 
 | 安装包 | amd64 / Intel、x64 | arm64 / Apple Silicon、Windows ARM |
 | --- | --- | --- |
-| macOS | [DMG](https://github.com/shubolab/opennavicat/releases/download/v0.12.0/OpenNavicat-0.12.0-macos-amd64.dmg) | [DMG](https://github.com/shubolab/opennavicat/releases/download/v0.12.0/OpenNavicat-0.12.0-macos-arm64.dmg) |
-| Windows | [Setup EXE](https://github.com/shubolab/opennavicat/releases/download/v0.12.0/OpenNavicat-0.12.0-windows-amd64-setup.exe) | [Setup EXE](https://github.com/shubolab/opennavicat/releases/download/v0.12.0/OpenNavicat-0.12.0-windows-arm64-setup.exe) |
-| Linux（Debian/Ubuntu） | [DEB](https://github.com/shubolab/opennavicat/releases/download/v0.12.0/OpenNavicat-0.12.0-linux-amd64.deb) | [DEB](https://github.com/shubolab/opennavicat/releases/download/v0.12.0/OpenNavicat-0.12.0-linux-arm64.deb) |
+| macOS | [DMG](https://github.com/shubolab/opennavicat/releases/download/v0.13.1/OpenNavicat-0.13.1-macos-amd64.dmg) | [DMG](https://github.com/shubolab/opennavicat/releases/download/v0.13.1/OpenNavicat-0.13.1-macos-arm64.dmg) |
+| Windows | [Setup EXE](https://github.com/shubolab/opennavicat/releases/download/v0.13.1/OpenNavicat-0.13.1-windows-amd64-setup.exe) | [Setup EXE](https://github.com/shubolab/opennavicat/releases/download/v0.13.1/OpenNavicat-0.13.1-windows-arm64-setup.exe) |
+| Linux（Debian/Ubuntu） | [DEB](https://github.com/shubolab/opennavicat/releases/download/v0.13.1/OpenNavicat-0.13.1-linux-amd64.deb) | [DEB](https://github.com/shubolab/opennavicat/releases/download/v0.13.1/OpenNavicat-0.13.1-linux-arm64.deb) |
 
-[SHA256SUMS](https://github.com/shubolab/opennavicat/releases/download/v0.12.0/SHA256SUMS)
-和 [构建与安装验证清单](https://github.com/shubolab/opennavicat/releases/download/v0.12.0/build-manifests.json)
+[SHA256SUMS](https://github.com/shubolab/opennavicat/releases/download/v0.13.1/SHA256SUMS)
+和 [构建与安装验证清单](https://github.com/shubolab/opennavicat/releases/download/v0.13.1/build-manifests.json)
 随版本发布。当前安装包没有发布者签名或 Apple 公证；Windows ARM64 安装引导器使用 x86，
 安装后的应用、Python、Qt 及原生库为 ARM64。实际系统验证范围和功能边界见
-[0.12 验证记录](docs/validation-0.12.md)。本版六个原生 CI 目标均实际完成测试、安装、运行和卸载，
-八个公开资产（六安装器、校验和及合并清单）已匿名下载并核对摘要。正式 `v0.12.0` tag run
-43390347592 为 8/8 job 成功，六安装器各自完成测试、打包、安装、启动和卸载。公开ARM64 DMG另在本机完成
-原生Cocoa隔离6×4查询与全部驱动、加密、native-JS探针；完整参考UI和功能仍见矩阵。Linux DEB 基于 Ubuntu 24.04，
+[0.13.1 验证记录](docs/validation-0.13.1.md)。正式 `v0.13.1` 源码为 `b9261016de530dda0311683223a1862efdb05d26`，
+[tag run43531823280](https://github.com/shubolab/opennavicat/actions/runs/43531823280) 为 10/10 job 成功；
+六个原生 CI 目标均实际完成测试、打包、安装、启动和卸载，两个 Linux 架构另有独立 Oracle 14/3 项专项。
+八个公开资产（六安装器、校验和及合并清单）已匿名下载，大小与摘要逐项匹配 GitHub、正式 CI 和清单，
+未复用 main 预检安装器。2026-11-14 00:18:33 UTC 发布为预发布；公开 ARM64 DMG 另完成本机隔离
+smoke、全尺寸截图目视及精确清理核查，Cocoa 为请求值，包内报告未记录实际 QPA。
+完整参考 UI 和功能仍见矩阵。Linux DEB 基于 Ubuntu 24.04，
 要求 glibc 2.39 或更新版本，通过包管理器安装声明的 Qt 图形库及 Noto CJK 字体。
 0.5 公开版本另完成 macOS ARM64、干净 Ubuntu ARM64 XCB 及 Windows AMD64 RDP 的 6×4 示例查询，
 并在 Windows 实际打开 SQL Server/Redis 的连接设置；该次远程桌面没有连接真实 SQL Server/Redis 服务。

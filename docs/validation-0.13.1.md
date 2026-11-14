@@ -1,19 +1,25 @@
-# 0.13.1 图标与 Oracle 候选验证
+# 0.13.1 图标与 Oracle 里程碑验证
 
 2026-11-14，Asia/Shanghai。完整 goal 保持 active。该里程碑继续实现 Navicat 18 的
 完整工具与 1:1 保留界面，不能用本页的有限检查关闭 [parity matrix](parity-matrix.md)。
 
 ## 源码与当前交付状态
 
-应用源码冻结为 `bb4d46964d3568d1dc2f6743f92050e7a43519d9`，版本字段、项目和 lock 均为
-`0.13.1`，已推到 main 与 `codex_oracle_basic_integration`。声明的运行、测试、构建、
-打包、workflow 和许可证输入共 243 份；README、文档与演示资产不在此源码哈希范围内。
+应用及测试源码冻结为 `bb4d46964d3568d1dc2f6743f92050e7a43519d9`；正式 `v0.13.1` tag
+为 `b9261016de530dda0311683223a1862efdb05d26`，增加已审文档及唯一演示资产，243 份运行、
+测试、构建、打包、workflow 和许可证输入与 bb4 相同。版本字段、项目和 lock 均为 `0.13.1`；
+README、文档与演示资产不在此源码输入哈希范围内。
 
-当前最新公开安装器仍为 [v0.12.0 预发布](https://github.com/shubolab/opennavicat/releases/tag/v0.12.0)。
-新 main [run43524907305](https://github.com/shubolab/opennavicat/actions/runs/43524907305)
-在 exact bb4 上完成：九个必需 job 成功，publisher 按 main 规则 skipped；15 artifact和六安装器
-实际字节、两类manifest/sidecar、原生/安装运行回执均独立审查通过。正式tag和公开下载资格
-尚未取得，不能先改公开版本链接。
+当前最新公开安装器为 [v0.13.1 预发布](https://github.com/shubolab/opennavicat/releases/tag/v0.13.1)，
+发布于 **2026-11-14 00:18:33 UTC**。[正式 run43531823280](https://github.com/shubolab/opennavicat/actions/runs/43531823280)
+在 exact b926 上 10/10 job 成功，15 artifact、六份原生安装器及运行回执独立审查通过；
+随后八个公开资产全部匿名下载，并与 GitHub 大小/digest、SHA256SUMS、合并 manifest 和该正式 CI 字节逐项匹配。
+公开 ARM64 DMG 另在本机完成隔离复制、真实异步 SQLite 6×4 查询、本地运行时探针及精确卸载清理，
+截图经全尺寸目视复核。Cocoa 显式请求，包内 smoke 未自报实际 QPA；不与 bb4 本机应用或 CI 回执混记。
+
+main [run43524907305](https://github.com/shubolab/opennavicat/actions/runs/43524907305) 的 exact bb4
+九个必需 job 成功、publisher skipped 与六安装器字节审计继续记为预检，摘要单列如下；
+正式 tag 和公开下载未复用这些 main 安装器。
 
 旧 `v0.13.0` tag 保持在 `81523aa4ff5b8734776f5bf0b6e7217ef0e192f7`；
 [run43487011620](https://github.com/shubolab/opennavicat/actions/runs/43487011620) 在 macOS Intel
@@ -86,6 +92,66 @@ Mongo collections511，有限stream的backend/window/security/cleanup为各自�
 完整成熟审计随后通过，两Mac只读提取挂载已独立确认detach。证据为
 `artifacts/release-0131/main-audit-43524907305/{verification,delivery-handoff}.json`。
 
+## 正式 tag 与匿名公开下载
+
+正式 run43531823280 的六个原生 OS/架构 job、TLS/SSH、Oracle native amd64、Oracle native arm64
+和 publisher 共 10 项均成功。15 份正式 artifact、六安装器实际字节、sidecar、打包与验证两份
+manifest 及安装/启动/卸载回执均绑定 b926；未沿用 main artifact。
+Linux 源码 3369 项（2704 通过/665 条件跳过）、macOS 3387 项（2722/665）、Windows 3405 项
+（2609/796）均零失败/错误；103 项 native-JS VM 与 4 项 Qt 组件按各自动态清单核对。
+两个原生 Linux 架构的 Oracle backend 各 14、window 各 3 项，均零跳过且精确 fixture 清理通过。
+Mongo collections 511、stream backend 74/window 25/security 2/cleanup 13 分别记账，未相加冒充完整覆盖。
+
+| 正式及公开目标 | 实际字节 | SHA256 |
+| --- | ---: | --- |
+| linux-amd64 | 78680894 | `cb270629965402fc4654de7d154ba947b7caf5bb85405a139e9d2d44516d651a` |
+| linux-arm64 | 77189062 | `59c8939d7669608d25e71616ab5e4e1c299ba378423f30d4d9f116f48d4e9df8` |
+| macos-amd64 | 53699609 | `f983fc48551d36e6e4f1ef09002a7f39ad05b94742dfe6ef6d44c6f04bb0bfaf` |
+| macos-arm64 | 52689861 | `8aeb2fd1d3f6b506d82a55f8d232be045a974e7bac6ccfa6842e5be904ee9739` |
+| windows-amd64 | 45428983 | `8a34abfee619ad7c6914ad365f251e41db9cf478a1e0ee1f246a6f0bf1d9f6ca` |
+| windows-arm64 | 36070717 | `c2fa23f1bf11b73d023bed0f879d302a9d1f70562078966101d82a633d687d11` |
+| SHA256SUMS | 622 | `f7ae0ebe88ab15bdb397111375aa41ce14c45905f276913f4a6e4083c3c060c5` |
+| build-manifests.json | 211923 | `5ce67df23286d01c52fa93a13f6d4039c556c3b0c10e36aa66e7cd35ba71c3c8` |
+
+公开 Release ID 为 `444872196`，非 draft、prerelease=true；八个规范资产均返回匿名 HTTP 200，
+关闭 curl 配置、未使用 Authorization 或认证回退。首次匿名 API 调用因 core quota 耗尽返回
+403，尚未请求资产；原失败记录保留，配额重置后的 r2 八资产审计通过。
+私有正式证据为 `artifacts/release-0131/tag-audit-43531823280/{verification,delivery-handoff}.json`，
+其中 verification SHA256 为 `fb58682e4b5d47f42f43691250140a66a3e9e475ebda6a05d52e63a64fbc6a72`。
+公开证据为 `artifacts/release-0131/public-43531823280-r2/{verification,delivery-handoff}.json`，
+verification SHA256 为 `258e9a29a485e393e5797fa675a4331fbe8e2e553e31662da92fac17647f884b`。
+公开字节一致及 CI 原生安装通过不等于三平台人工验收；下列公开 ARM64 DMG 本机结果单独记账。
+
+## 公开 ARM64 DMG 本机隔离验收
+
+使用上述唯一公开 DMG（52689861 字节，SHA256
+`8aeb2fd1d3f6b506d82a55f8d232be045a974e7bac6ccfa6842e5be904ee9739`），只读挂载后用 ditto
+复制到自有临时安装位置，不改动 `/Applications` 或既有运行程序。404 个文件、103 个 symlink
+的内容/模式/目标与挂载包一致；原生 ARM64 bundle 版本为 0.13.1，主程序字节匹配正式 manifest。
+完整 79 个应用模块及 desktop_entry 与 exact b926 Git 源码编译结果相同，仅归一化 co_filename。
+
+隔离 Store/config/cache/TNS/TMP 后，实际应用执行 `--smoke-test --smoke-report --screenshot`，
+真实后台 SQLite 查询返回六行、四列（customer/city/orders/revenue）。Oracle 26.1.0 四个
+canonical flag 及其它十三项驱动/加密/native-JS 本地探针均为 true；Oracle 探针未连接数据库。
+应用 PID/PGID 3823 正常退出 0、未超时或要求强制结束，所有 owned 进程均 reaped、组不存在且
+reader 已关闭。精确 `/dev/disk4` detach 后挂载与 image 不存在，安装副本及自有临时根目录删除；
+root 另行核对全部记录 PID/PGID、exact public image 和临时根目录均不存在。
+
+Cocoa 只是明确传入的请求值；包内报告未自报实际 Qt 平台，保留 actual_qpa_reported=null。
+3024×1840 PNG 已检查编码完整性，root 实际全尺寸目视看到生成示例 SQL、六行四列及图标，
+未见缺字或隐私阻断；禁用动作低对比、连接名与 SQL 状态省略、深色空白页签条仍为可见限制。
+截图 SHA256 为 `6ab51182319c587e9c660d2f5aca061e91669f2f73b1dae0de6d038b87bf380a`。
+该结果是有界包内运行与画面检查，不是三平台人工验收、完整参考 UI 或数据库工具验收。
+
+私有结果为 `artifacts/release-0131/public-arm-cocoa-43531823280-r2/verification.json`，SHA256
+`b61d62ab848b78ea2331f1c163a4627539e6c8653e5b4a7b7c61a56414cb0fed`；原报告保持不变，
+人工目视及独立清理补证另存 `root-visual-cleanup-review.json`。
+首轮 `public-arm-cocoa-43531823280/` 在 ditto/启动应用之前，因 hdiutil 返回完整 XML 后附加
+弃用警告导致解析失败；当轮精确设备卸载、临时根删除及 PID/PGID 清理均通过，失败记录保留。
+私有 parser 仅允许完整闭合 XML 后这一条精确警告，记录原输出、XML/尾部及排除行摘要；
+未知前后缀、截断、重复 XML/警告仍拒绝。实际捕获输出的红绿回归与原计划/清理测试共 42 项
+纯测试通过、Counter 一致后，另用 fresh-r2 实际执行取得上述通过结果。
+
 ## 演示与尚未完成门禁
 
 bb4 新实际 Cocoa GIF 已审查通过并精确替换 README 中同一资产：35阶段、471帧、78.5秒、
@@ -110,7 +176,7 @@ setStyle、MacIntel子进程OpenSSL导入，以及OracleARM服务准备失败。
 也不能据此回填原Oracle失败原因；新fixture增加有限启动阶段/reason/driver-code/owned
 State诊断，原360秒预算不变，原超时仍仅是推断。详细历史见[当前snapshot](snapshot/2026-11-14-goal-resume.md)。
 
-六原生目标、正式 tag、匿名八资产与公开 ARM64 DMG 的本机隔离 smoke 继续单独验收。
+六原生 CI 目标、正式 tag、匿名八资产及公开 ARM64 DMG 的本机隔离 smoke 已按上述边界分别通过。
 Windows/Linux 实际参考界面、完整主题/悬浮/焦点/失活状态、全部菜单/向导的小元素及
 Oracle copy/关闭/数据库列表等尚存 Unicode 控件继续开放。
 

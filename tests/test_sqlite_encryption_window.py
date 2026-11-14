@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 from PySide6.QtWidgets import QDialog, QInputDialog, QMessageBox
+from shiboken6 import isValid
 
 from opennavicat.database import ConnectionConfig, DatabaseError
 from opennavicat.sqlite_database_config import SQLiteDatabaseEntry, copy_connection_config
@@ -16,8 +17,8 @@ import opennavicat.ui.window as window_module
 
 
 def idle(qtbot, window):
-    qtbot.waitUntil(lambda: not window.tasks and not window.pool.activeThreadCount()
-                   and not window.cancel_pool.activeThreadCount(), timeout=10000)
+    qtbot.waitUntil(lambda: not isValid(window) or (not window.tasks and not window.pool.activeThreadCount()
+                   and not window.cancel_pool.activeThreadCount()), timeout=10000)
 
 
 @pytest.fixture
@@ -56,8 +57,10 @@ def host(qtbot, tmp_path, monkeypatch):
                             constructed=constructed, errors=errors, gui=gui, session_type=Session)
     yield value
     idle(qtbot, window)
-    window.close()
-    qtbot.waitUntil(lambda: window._closed, timeout=10000)
+    if isValid(window):
+        window.close()
+        qtbot.waitUntil(lambda: window._closed, timeout=10000)
+        idle(qtbot, window)
 
 
 def test_save_off_prompts_for_every_new_session_without_reusing_process_key(qtbot, host, monkeypatch):
@@ -89,8 +92,9 @@ def test_remembered_matching_key_avoids_prompt_but_stays_out_of_public_config(qt
     assert not host.errors
 
 
-@pytest.mark.parametrize('answer', [('owned-not-used', False), ('', True), ('x' * 65537, True)])
-def test_cancel_empty_or_oversized_key_never_constructs_or_dispatches_session(qtbot, host, monkeypatch, answer):
+@pytest.mark.parametrize('kind', ['cancel', 'empty', 'oversized'])
+def test_cancel_empty_or_oversized_key_never_constructs_or_dispatches_session(qtbot, host, monkeypatch, kind):
+    answer = {'cancel': ('owned-not-used', False), 'empty': ('', True), 'oversized': ('x' * 65537, True)}[kind]
     monkeypatch.setattr(QInputDialog, 'getText', lambda *_: answer)
     before = host.store.path.read_bytes()
     host.window.connect_id(host.config.id)
@@ -194,3 +198,18 @@ def test_wrong_cipher_key_does_not_open_a_database_account_password_dialog(qtbot
     assert prompts == ['SQLite 加密密码']
     assert len(host.constructed) == len(host.errors) == 1
     assert not host.window.sessions and 'owned-wrong-key' not in host.errors[0]
+
+
+def test_window_exit_closes_encrypted_session_on_its_serial_worker(qtbot, host, monkeypatch):
+    monkeypatch.setattr(QInputDialog, 'getText', lambda *_: ('owned-session-secret', True))
+    host.window.connect_id(host.config.id)
+    idle(qtbot, host.window)
+    closed = []
+    def close(session):
+        assert threading.get_ident() != host.gui
+        closed.append(session.config.id)
+    monkeypatch.setattr(host.session_type, 'close', close)
+    host.window.close()
+    qtbot.waitUntil(lambda: host.window._closed, timeout=10000)
+    idle(qtbot, host.window)
+    assert closed == [host.config.id]

@@ -3256,7 +3256,7 @@ class MainWindow(QMainWindow):
             dialog.ssh_remember_check.setChecked("ssh_password" in remembered)
             dialog.ssh_key_remember_check.setChecked("ssh_key_passphrase" in remembered)
             dialog.ssl_remember_check.setChecked("ssl_key_password" in remembered)
-            if hasattr(dialog, "set_remember_sqlite_encryption"):
+            if selected_driver == "sqlite" and hasattr(dialog, "set_remember_sqlite_encryption"):
                 dialog.set_remember_sqlite_encryption("sqlite_encryption_password" in remembered)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             if selected_driver == "oracle" and is_new and getattr(dialog, "back_requested", False):
@@ -4268,6 +4268,13 @@ class MainWindow(QMainWindow):
         if self.active_id:
             self.disconnect(self.active_id)
 
+    @staticmethod
+    def _requires_background_close(session):
+        config = session.config
+        return (config.driver in {"mongodb", "oracle"}
+                or config.driver == "sqlite" and (getattr(config, "sqlite_encryption_enabled", False)
+                    or any(row.encrypted for row in getattr(config, "sqlite_databases", ()))))
+
     def disconnect(self, connection_id, *, after=None, retry=None):
         if self._closed or not isValid(self):
             return False
@@ -4301,7 +4308,7 @@ class MainWindow(QMainWindow):
         if session and session.in_transaction:
             if QMessageBox.question(self, "事务尚未结束", "回滚尚未提交的事务并关闭连接？", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel) != QMessageBox.StandardButton.Yes:
                 return False
-        if session and session.config.driver in {"mongodb", "oracle"}:
+        if session and self._requires_background_close(session):
             # MongoClient.close can drain cursors and send commands. Keep that
             # work on the same serial owner as reads/writes, then change widgets.
             self._closing_connections.add(connection_id)
@@ -4317,7 +4324,7 @@ class MainWindow(QMainWindow):
                 cancelled = getattr(retry, "cancelled", None)
                 if callable(cancelled):
                     cancelled()
-            self.submit(session.close, completed, failed, label="关闭 Oracle 连接" if session.config.driver == "oracle" else "关闭 MongoDB 连接")
+            self.submit(session.close, completed, failed, label="关闭数据库连接")
             return True
         if session:
             session.close()
@@ -4826,8 +4833,12 @@ class MainWindow(QMainWindow):
         for dialog in tuple(self._mongo_maintenance_dialogs):
             dialog.reject()
         mongo_sessions = [(identifier, session) for identifier, session in self.sessions.items()
-                          if session.config.driver in {"mongodb", "oracle"}]
+                          if self._requires_background_close(session)]
         if mongo_sessions:
+            if any(session.in_transaction for _, session in mongo_sessions):
+                if QMessageBox.question(self, "事务尚未结束", "回滚尚未提交的事务并退出？", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel) != QMessageBox.StandardButton.Yes:
+                    event.ignore()
+                    return
             self._closing_mongo = True
             mongo_pages = [self.tabs.widget(index) for index in range(self.tabs.count())
                            if isinstance(self.tabs.widget(index), MONGO_PAGES)]

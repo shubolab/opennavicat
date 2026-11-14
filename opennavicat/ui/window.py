@@ -4065,6 +4065,7 @@ class MainWindow(QMainWindow):
             return
         self.refresh_connection_icons()
         page = self.tabs.currentWidget()
+        busy = bool(self.tasks or self._closing_connections or self._closing_mongo)
         connected = self.active_id in self.sessions and self.active_id not in self._closing_connections and not self._closing_mongo
         if hasattr(self, "category_actions"):
             self.category_actions['automation'].setEnabled(True)
@@ -4128,11 +4129,14 @@ class MainWindow(QMainWindow):
         self.import_action.setEnabled(isinstance(page, TablePage) and page.kind == "table" and
                                       self.configs[page.connection_id].driver != "oracle" and not self.configs[page.connection_id].read_only)
         for action in self.transaction_actions:
-            action.setEnabled(not oracle)
+            action.setEnabled(not oracle and not busy)
         self.explain_action.setEnabled(not oracle)
         self.export_action.setEnabled(isinstance(page, (QueryPage, TablePage)) and page.current_result() is not None)
         session = self.sessions.get(self.active_id)
-        if hasattr(self, "transaction_status"):
+        # The serial worker can be between native close() and clearing the
+        # Python reference. Preserve the last label until all work/close ends;
+        # reading a native transaction property here races that owner.
+        if hasattr(self, "transaction_status") and not busy:
             self.transaction_status.setText("事务已开始" if session and session.in_transaction else "")
         if isinstance(page, QueryPage) and page.current_result() is not None and not page.running:
             self.status.setText(f"{len(page.current_result().rows)} 条记录")

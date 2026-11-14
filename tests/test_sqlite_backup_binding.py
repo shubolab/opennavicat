@@ -156,3 +156,64 @@ def test_legacy_unconnected_default_still_opens_and_backs_up_main(backup_source,
         assert rows(output) == MAIN
     finally:
         session.close()
+
+
+def test_busy_refresh_does_not_read_a_native_connection_mid_close(qtbot, window, backup_source, monkeypatch):
+    original, paths = backup_source
+    entered, release, block = threading.Event(), threading.Event(), threading.Event()
+    native_connect = sqlite3.connect
+    class ClosingConnection(sqlite3.Connection):
+        def close(self):
+            super().close()
+            if block.is_set():
+                block.clear()
+                entered.set()
+                assert release.wait(5)
+    def connect(*args, **kwargs):
+        return native_connect(*args, **kwargs, factory=ClosingConnection)
+    monkeypatch.setattr(sqlite3, "connect", connect)
+    session = DatabaseSession(original.config)
+    session.execute("BEGIN")
+    window.configs[session.config.id] = session.config
+    window.sessions[session.config.id] = session
+    window.active_id = session.config.id
+    window.refresh_actions()
+    assert window.transaction_status.text() == "事务已开始"
+    assert all(action.isEnabled() for action in window.transaction_actions)
+    block.set()
+    window.submit(session.close)
+    try:
+        qtbot.waitUntil(entered.is_set)
+        # The native handle is genuinely closed while DatabaseSession still
+        # retains it. GUI refresh must not dereference its transaction state.
+        window.refresh_actions()
+        assert window.transaction_status.text() == "事务已开始"
+        assert not any(action.isEnabled() for action in window.transaction_actions)
+    finally:
+        release.set()
+        idle(qtbot, window)
+    assert session.connection is None
+    assert window.transaction_status.text() == ""
+    assert all(action.isEnabled() for action in window.transaction_actions)
+    assert rows(paths["main"]) == MAIN
+
+
+@pytest.mark.parametrize("finish_action", [1, 2], ids=["commit", "rollback"])
+def test_transaction_actions_disable_while_running_and_restore_when_idle(qtbot, window, backup_source, finish_action):
+    session, paths = backup_source
+    window.configs[session.config.id] = session.config
+    window.sessions[session.config.id] = session
+    window.active_id, window.active_schema = session.config.id, "main"
+    window.refresh_actions()
+    window.transaction_actions[0].trigger()
+    assert not any(action.isEnabled() for action in window.transaction_actions)
+    idle(qtbot, window)
+    assert session.in_transaction and window.transaction_status.text() == "事务已开始"
+    assert all(action.isEnabled() for action in window.transaction_actions)
+    window.transaction_actions[finish_action].trigger()
+    assert not any(action.isEnabled() for action in window.transaction_actions)
+    assert window.transaction_status.text() == "事务已开始"
+    idle(qtbot, window)
+    assert not session.in_transaction and window.transaction_status.text() == ""
+    assert all(action.isEnabled() for action in window.transaction_actions)
+    assert rows(paths["main"]) == MAIN and rows(paths["aux"]) == AUX

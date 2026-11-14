@@ -1,5 +1,5 @@
 {
-  "schema_version": 5,
+  "schema_version": 6,
   "captured_on": "2026-11-14",
   "timezone": "Asia/Shanghai",
   "handoff": "2026-11-14-goal-resume.md",
@@ -16,13 +16,14 @@
     "remote": "git@github.com:shubolab/opennavicat.git",
     "working_branch": "codex_oracle_basic_integration",
     "workspace": "/Users/wangshubo/.codex/worktrees/oracle-basic-integration/opennavicat",
-    "application_source_checkpoint": "ca4d20a858c964d18eff53e97664e4b32d403cc9",
-    "main_source_at_checkpoint": "ca4d20a858c964d18eff53e97664e4b32d403cc9",
+    "application_source_checkpoint": "bb4d46964d3568d1dc2f6743f92050e7a43519d9",
+    "main_source_at_checkpoint": "bb4d46964d3568d1dc2f6743f92050e7a43519d9",
     "source_pushed_to_main_and_candidate": true,
     "documentation_head_scope": "Later documentation/GIF-only commits must be reconciled with this explicit application-source checkpoint; do not infer a self-referential final HEAD",
     "branches_or_dirty_work_removed": false,
-    "latest_local_test_fix_checkpoint": "cb62a39",
-    "latest_test_fixes_pushed": false
+    "latest_local_test_fix_checkpoint": "bb4d46964d3568d1dc2f6743f92050e7a43519d9",
+    "latest_test_fixes_pushed": true,
+    "latest_integrated_source": "bb4d46964d3568d1dc2f6743f92050e7a43519d9"
   },
   "public_release": {
     "tag": "v0.12.0",
@@ -36,11 +37,11 @@
     "version": "0.13.1",
     "published": false,
     "tag_created": false,
-    "six_native_targets_qualified": false,
+    "six_native_targets_qualified": true,
     "reference_full_parity_verified": false,
     "validation": "../validation-0.13.1.md",
     "icons_validation": "../validation-icons-navicat18.md",
-    "main_preflight_qualified": false,
+    "main_preflight_qualified": true,
     "formal_tag_qualification": false,
     "public_bytes_verified": false,
     "tag": null,
@@ -85,33 +86,35 @@
     }
   },
   "local_qualification": {
-    "revision": "ca4d20a858c964d18eff53e97664e4b32d403cc9",
-    "scope": "Historical exact ca4 qualification; subsequent test/recorder/diagnostic changes require their own qualification and explicit runtime-byte binding",
+    "revision": "bb4d46964d3568d1dc2f6743f92050e7a43519d9",
+    "scope": "Exact bb4 local source qualification; formal/public/native reference acceptance remains separate",
     "default": {
-      "passed": 2693,
+      "passed": 2725,
       "conditional_skipped": 662,
       "failed": 0,
       "errors": 0,
-      "total": 3355,
-      "seconds": 112.521,
+      "total": 3387,
+      "seconds": 107.837,
       "exact_collection_execution_junit": true,
-      "source_inputs": 242,
+      "source_inputs": 243,
       "source_before_after_git_equal": true,
       "native_helper_stable": true,
       "warnings_policy": "error",
-      "evidence": "artifacts/release-0131/default-ca4/verification.json"
+      "evidence": "artifacts/release-0131/default-bb4/verification.json"
     },
     "targeted_cocoa": {
-      "passed": 249,
+      "passed": 334,
       "conditional_skipped": 3,
-      "total": 252,
+      "total": 337,
       "failed": 0,
       "errors": 0,
       "actual_qpa": "cocoa",
-      "source_inputs": 242,
+      "source_inputs": 243,
       "source_before_after_git_equal": true,
       "lifecycle_child_qpa": "offscreen",
-      "evidence": "artifacts/release-0131/cocoa-targeted-ca4/verification.json"
+      "evidence": "artifacts/release-0131/cocoa-targeted-bb4/verification.json",
+      "modules": 11,
+      "style_children": "Same QPA explicitly requested in independent pytest children; parent Qt state preserved"
     },
     "native_bundle": {
       "build_exit": 0,
@@ -127,8 +130,8 @@
       "oracle_version": "26.1.0",
       "oracle_native_flags_true": 4,
       "installer_built": false,
-      "evidence": "artifacts/release-0131/native-ca4/packaged-verification.json",
-      "static_evidence": "artifacts/release-0131/native-ca4-static/verification.json"
+      "evidence": "artifacts/release-0131/native-bb4/packaged-verification.json",
+      "static_evidence": "artifacts/release-0131/native-bb4-static/verification.json"
     },
     "actual_oracle_window": {
       "passed": 3,
@@ -138,18 +141,37 @@
       "source_before_after_current_git_equal": true,
       "independent_structural_resource_checks": 106,
       "phase_pngs": 28,
-      "unique_pngs": 16,
-      "visual_review_pending": true,
-      "evidence": "artifacts/release-0131/oracle-cocoa-ca4/verification.json",
-      "independent_evidence": "artifacts/release-0131/oracle-cocoa-ca4-independent/structural-verification.json"
+      "unique_pngs": 15,
+      "visual_review_pending": false,
+      "evidence": "artifacts/release-0131/oracle-cocoa-bb4/verification.json",
+      "independent_evidence": "artifacts/release-0131/oracle-cocoa-bb4-independent/structural-verification.json",
+      "visual_evidence": "artifacts/release-0131/oracle-cocoa-bb4-independent/visual-review.json"
     },
-    "actual_own_ui": {
+    "historical_actual_own_ui_ca4": {
       "screenshots": 20,
       "actual_qpa": "cocoa",
       "screen_dpr": 2,
       "all_fullsize_viewed": true,
       "reference_parity_accepted": false,
       "evidence": "artifacts/release-0131/app-cocoa-ca4/report.json"
+    },
+    "actual_own_ui": {
+      "source_revision": "bb4d46964d3568d1dc2f6743f92050e7a43519d9",
+      "actual_qpa": "cocoa",
+      "gif_phases": 35,
+      "fullsize_phase_middle_images_viewed": 35,
+      "first_middle_last_contacts_viewed": 35,
+      "oracle_phase_pngs": 28,
+      "oracle_unique_fullsize_images_viewed": 15,
+      "full_reference_or_three_os_acceptance": false
+    },
+    "source_bracketing": {
+      "full_declared_source_inputs": 243,
+      "default_cocoa_native_recording_snapshots_all_equal_current_git": true,
+      "oracle_declared_inputs": 24,
+      "oracle_scope_bound_to_same_full_manifest": true,
+      "readme_docs_assets_excluded_from_source_manifest": true,
+      "evidence": "artifacts/release-0131/combined-bb4-source-verification.json"
     }
   },
   "icons": {
@@ -173,53 +195,108 @@
     "all_reference_small_elements_accepted": false
   },
   "demo": {
-    "source_revision": "211fef0ec0c7edbca2c016d0fd887e4acd977c90",
-    "version": "0.13.0 candidate",
-    "phase_count": 34,
-    "frames": 457,
-    "duration_seconds": 76.17,
-    "bytes": 1800760,
-    "sha256": "b81e97bc17640e04829d1c830d5472f51de64baa2d38936290c7bddb7bf31854",
+    "source_revision": "bb4d46964d3568d1dc2f6743f92050e7a43519d9",
+    "version": "0.13.1",
+    "phase_count": 35,
+    "frames": 471,
+    "duration_seconds": 78.5,
+    "bytes": 1833002,
+    "sha256": "8954f63340dba160cebe81f175dd575a2306c619a41389cc9000a7df27204587",
     "recorded_qpa": "cocoa",
-    "all_frame_text_guards": 457,
+    "all_frame_text_guards": true,
+    "independent_frames_decoded": 471,
+    "unique_decoded_states": 75,
     "human_phase_review_pending": false,
+    "phase_full_size_representatives_reviewed": 35,
+    "first_middle_last_contacts_reviewed": 35,
+    "all_471_frames_visually_viewed": false,
+    "independent_full_frame_ocr_performed": false,
     "copied_to_readme_asset": true,
+    "canonical_gif_receipt_bytes_exact": true,
     "reference_images_used": false,
-    "fixture_cleanup_producer_checks": true,
-    "independent_exact_volume_cleanup_audit": false,
-    "phase_full_size_representatives_reviewed": 34,
-    "reviewer_coverage": {
-      "child": "phases1-23",
-      "root": "phases24-34"
-    },
-    "all_457_frames_visually_viewed": false,
+    "actual_card_regions_checked": 33,
+    "actual_card_region_dominant_rgb_error_max": 0,
+    "encoder_strategy": "global_full_with_reserved_driver_colors",
     "independent_exact_container_absence": true,
-    "public_receipt": "docs/assets/opennavicat-demo.json",
-    "private_review": "artifacts/icon-parity-18/demo-211-review/",
-    "independent_review_passed": true
+    "independent_exact_volume_cleanup_audit": false,
+    "volume_and_temp_cleanup_evidence": "Producer assertions only; original identities not retained independently",
+    "public_receipt": "../assets/opennavicat-demo.json",
+    "private_review": "artifacts/release-0131/demo-bb4-review/verification.json",
+    "independent_review_passed": true,
+    "safe_for_readme": true,
+    "recording_source_inputs_bracketed": 243,
+    "private_wrapper_legacy_prose_count_annotation": "artifacts/release-0131/demo-bb4/record-annotation.json"
   },
   "ci": {
-    "run_id": 43511903905,
-    "head_sha": "ca4d20a858c964d18eff53e97664e4b32d403cc9",
-    "url": "https://github.com/shubolab/opennavicat/actions/runs/43511903905",
+    "run_id": 43524907305,
+    "head_sha": "bb4d46964d3568d1dc2f6743f92050e7a43519d9",
+    "url": "https://github.com/shubolab/opennavicat/actions/runs/43524907305",
+    "event": "push",
     "status_at_checkpoint": "completed",
-    "conclusion": "failure",
-    "success_claimed": false,
+    "conclusion": "success",
+    "success_claimed": true,
     "required_jobs": 9,
-    "successful_required_jobs": 3,
-    "failed_required_jobs": 6,
+    "successful_required_jobs": 9,
     "publisher_actual": "skipped",
-    "six_installer_bytes_audited": false,
-    "artifacts_qualification_audited": false,
-    "diagnostic_artifacts_are_qualification": false,
-    "failure_scopes": {
-      "linux-amd64_linux-arm64_windows-arm64": "Chooser test hardcodes 126x96; actual native font needs 113 / 108 height for direct aliases",
-      "windows-amd64": "Access violation in test_small_controls_18.py manual descendant setStyle loop",
-      "macos-amd64": "Lifecycle regression child imports fail under -Werror: OpenSSL legacy provider warning; original designer case not started",
-      "oracle-arm64": "Fixture startup RuntimeError before tests; exact reason not retained; cleanup verified, readiness timeout remains an inference"
+    "expected_artifacts": 15,
+    "artifacts_downloaded": 15,
+    "six_installer_bytes_audited": true,
+    "independent_audit_in_progress": false,
+    "oracle_native_targets": [
+      "amd64",
+      "arm64"
+    ],
+    "oracle_scopes_per_target": {
+      "backend_required": 14,
+      "window_required": 3,
+      "both_architectures_independent_zero_skip_source_cleanup_passed": true
     },
-    "independent_evidence": "artifacts/release-0131/main-watch-43511903905/terminal.json",
-    "failure_evidence": "artifacts/release-0131/main-43511903905-failures/"
+    "metadata_evidence": "artifacts/release-0131/main-watch-bb4/terminal.json",
+    "independent_evidence": "artifacts/release-0131/main-audit-43524907305/verification.json",
+    "transport_recovery": {
+      "initial_gh_all_download_timeout_seconds": 600,
+      "initial_directories_retained": 13,
+      "same_run_artifacts_recovered": 2,
+      "recovered_zip_api_digest_and_crc_verified": true,
+      "original_13_files_unchanged": true,
+      "not_a_ci_or_source_failure": true,
+      "evidence": "artifacts/release-0131/main-audit-43524907305/download-recovery-01/transport-attempt.json"
+    },
+    "claim_scope": "Exact main preflight only; formal tag/public downloads remain unqualified",
+    "artifacts_audited": 15,
+    "installer_handoff": "artifacts/release-0131/main-audit-43524907305/delivery-handoff.json",
+    "installer_bytes": {
+      "linux-amd64": {
+        "installer": "OpenNavicat-0.13.1-linux-amd64.deb",
+        "bytes": 78683284,
+        "sha256": "1cc2bac660cdd33f20b5e6e10434dec5a89c82ef6cad717ce13c93b6c8b3a254"
+      },
+      "linux-arm64": {
+        "installer": "OpenNavicat-0.13.1-linux-arm64.deb",
+        "bytes": 77188924,
+        "sha256": "4f8c1327255bc6d9348409bbaeba4c9e777b93cb4f162172bd6d8a4631ac164c"
+      },
+      "macos-amd64": {
+        "installer": "OpenNavicat-0.13.1-macos-amd64.dmg",
+        "bytes": 53700687,
+        "sha256": "dd0919b61f65ecc9c3c6c5a3b6cfa700c56d45fa36f5057c8ee3eed316c35cbd"
+      },
+      "macos-arm64": {
+        "installer": "OpenNavicat-0.13.1-macos-arm64.dmg",
+        "bytes": 52771290,
+        "sha256": "d801e9585e53f001e90a8bd2fbae6f66ee641c25d5af9f6ace2bfd793f89f59b"
+      },
+      "windows-amd64": {
+        "installer": "OpenNavicat-0.13.1-windows-amd64-setup.exe",
+        "bytes": 45431276,
+        "sha256": "bef067845f78f207bde934265a04b966006d1d60f8bd4b87aa89d9a4df281e27"
+      },
+      "windows-arm64": {
+        "installer": "OpenNavicat-0.13.1-windows-arm64-setup.exe",
+        "bytes": 36080408,
+        "sha256": "62f23b91e2fdac42465d3edbda78b98491fd86912abdacfc66a9ba13fa44b0d3"
+      }
+    }
   },
   "open_gates": [
     "All retained database-tool functionality and 1:1 UI",
@@ -232,12 +309,11 @@
     "MongoDB full stream preview/output/recovery"
   ],
   "next_actions": [
-    "Keep v0.13.0/81523/43487011620 and failed ca4 main43511903905 as history; no v0.13.1 tag yet.",
-    "Merge platform-test fixes: actual label fit/default+native fixed font; Qt-owned global StyleChange; restore OPENSSL_MODULES environment in existing hook test.",
-    "Add safe Oracle fixture startup phase/reason/state diagnostics without increasing its readiness budget; original failure exact cause remains unknown.",
-    "Resolve actual GIF brand-color distortion with independent encoder color/text/frame/size proof; record a fresh actual generated-workspace 35-phase demo, then privacy/color review before copying the single README asset.",
-    "Freeze new source, qualify affected tests and explicit unchanged-runtime bindings or fresh app/window gates, run new nine-required main CI and audit15/six bytes, then new formal ten-success tag/public8/publicARM Cocoa.",
-    "Continue all icon, UI, tool-function and Windows/Linux/macOS actual-reference gates; never pause or complete at a milestone."
+    "Main43524907305 preflight audit passed: retain the transport recovery evidence and do not reuse its installer hashes as formal/public hashes.",
+    "Commit reviewable documentation and exact reviewed GIF; prove all243 declared source inputs equal bb4 before a fresh normal-message annotated v0.13.1 tag; never move v0.13.0.",
+    "Wait formal ten-job success, audit fresh15/six bytes, anonymously download all8 public assets and verify formal hashes, then isolated publicARM DMG Cocoa smoke.",
+    "Update release/snapshot/README accurately and fast-forward only clean user checkouts without removing branches/dirty work.",
+    "Continue remaining icons, UI/tool-function and Windows/Linux/macOS actual-reference gates; no milestone pause/completion."
   ],
   "formal_release_attempt": {
     "tag": "v0.13.0",
@@ -381,5 +457,135 @@
     "independent_exact_volume_or_temp_path_cleanup": false,
     "evidence": "artifacts/release-0131/demo-ca4-review/verification.json",
     "recording_evidence": "artifacts/release-0131/demo-ca4/record-verification.json"
+  },
+  "historical_local_ca4": {
+    "revision": "ca4d20a858c964d18eff53e97664e4b32d403cc9",
+    "scope": "Historical exact ca4 qualification; subsequent test/recorder/diagnostic changes require their own qualification and explicit runtime-byte binding",
+    "default": {
+      "passed": 2693,
+      "conditional_skipped": 662,
+      "failed": 0,
+      "errors": 0,
+      "total": 3355,
+      "seconds": 112.521,
+      "exact_collection_execution_junit": true,
+      "source_inputs": 242,
+      "source_before_after_git_equal": true,
+      "native_helper_stable": true,
+      "warnings_policy": "error",
+      "evidence": "artifacts/release-0131/default-ca4/verification.json"
+    },
+    "targeted_cocoa": {
+      "passed": 249,
+      "conditional_skipped": 3,
+      "total": 252,
+      "failed": 0,
+      "errors": 0,
+      "actual_qpa": "cocoa",
+      "source_inputs": 242,
+      "source_before_after_git_equal": true,
+      "lifecycle_child_qpa": "offscreen",
+      "evidence": "artifacts/release-0131/cocoa-targeted-ca4/verification.json"
+    },
+    "native_bundle": {
+      "build_exit": 0,
+      "smoke_exit": 0,
+      "os": "Darwin",
+      "architecture": "arm64",
+      "qt_platform_requested": "cocoa",
+      "frozen_smoke_self_reports_qpa": false,
+      "own_pyz_modules": 79,
+      "macho": 61,
+      "symlinks": 95,
+      "static_checks": 24,
+      "oracle_version": "26.1.0",
+      "oracle_native_flags_true": 4,
+      "installer_built": false,
+      "evidence": "artifacts/release-0131/native-ca4/packaged-verification.json",
+      "static_evidence": "artifacts/release-0131/native-ca4-static/verification.json"
+    },
+    "actual_oracle_window": {
+      "passed": 3,
+      "skipped": 0,
+      "actual_qpa": "cocoa",
+      "declared_source_inputs": 24,
+      "source_before_after_current_git_equal": true,
+      "independent_structural_resource_checks": 106,
+      "phase_pngs": 28,
+      "unique_pngs": 16,
+      "visual_review_pending": true,
+      "evidence": "artifacts/release-0131/oracle-cocoa-ca4/verification.json",
+      "independent_evidence": "artifacts/release-0131/oracle-cocoa-ca4-independent/structural-verification.json"
+    },
+    "actual_own_ui": {
+      "screenshots": 20,
+      "actual_qpa": "cocoa",
+      "screen_dpr": 2,
+      "all_fullsize_viewed": true,
+      "reference_parity_accepted": false,
+      "evidence": "artifacts/release-0131/app-cocoa-ca4/report.json"
+    }
+  },
+  "historical_main_43511903905": {
+    "run_id": 43511903905,
+    "head_sha": "ca4d20a858c964d18eff53e97664e4b32d403cc9",
+    "url": "https://github.com/shubolab/opennavicat/actions/runs/43511903905",
+    "status_at_checkpoint": "completed",
+    "conclusion": "failure",
+    "success_claimed": false,
+    "required_jobs": 9,
+    "successful_required_jobs": 3,
+    "failed_required_jobs": 6,
+    "publisher_actual": "skipped",
+    "six_installer_bytes_audited": false,
+    "artifacts_qualification_audited": false,
+    "diagnostic_artifacts_are_qualification": false,
+    "failure_scopes": {
+      "linux-amd64_linux-arm64_windows-arm64": "Chooser test hardcodes 126x96; actual native font needs 113 / 108 height for direct aliases",
+      "windows-amd64": "Access violation in test_small_controls_18.py manual descendant setStyle loop",
+      "macos-amd64": "Lifecycle regression child imports fail under -Werror: OpenSSL legacy provider warning; original designer case not started",
+      "oracle-arm64": "Fixture startup RuntimeError before tests; exact reason not retained; cleanup verified, readiness timeout remains an inference"
+    },
+    "independent_evidence": "artifacts/release-0131/main-watch-43511903905/terminal.json",
+    "failure_evidence": "artifacts/release-0131/main-43511903905-failures/"
+  },
+  "historical_demo_git211": {
+    "source_revision": "211fef0ec0c7edbca2c016d0fd887e4acd977c90",
+    "version": "0.13.0 candidate",
+    "phase_count": 34,
+    "frames": 457,
+    "duration_seconds": 76.17,
+    "bytes": 1800760,
+    "sha256": "b81e97bc17640e04829d1c830d5472f51de64baa2d38936290c7bddb7bf31854",
+    "recorded_qpa": "cocoa",
+    "all_frame_text_guards": 457,
+    "human_phase_review_pending": false,
+    "copied_to_readme_asset": true,
+    "reference_images_used": false,
+    "fixture_cleanup_producer_checks": true,
+    "independent_exact_volume_cleanup_audit": false,
+    "phase_full_size_representatives_reviewed": 34,
+    "reviewer_coverage": {
+      "child": "phases1-23",
+      "root": "phases24-34"
+    },
+    "all_457_frames_visually_viewed": false,
+    "independent_exact_container_absence": true,
+    "public_receipt": "docs/assets/opennavicat-demo.json",
+    "private_review": "artifacts/icon-parity-18/demo-211-review/",
+    "independent_review_passed": true
+  },
+  "toolbar_refresh": {
+    "implementation_leaf": "cc4de0c5479db564074771f8e951aff081a8c083",
+    "fixture_followup": "b147b6294946046a2ab98fa2f56621a04dbe1242",
+    "original_immediate_hidden_observations": 8,
+    "after_event_processing_visible_observations": 8,
+    "final_test_bytes_old_product_failures": 16,
+    "final_product_related_passed": 39,
+    "deferred_delete_old_fixture_error": true,
+    "deferred_delete_new_fixture_passed": true,
+    "new_actual_oracle_captures_have_missing_buttons": false,
+    "new_human_checked_unique_captures": 15,
+    "scope": "Retain driver-specific action order/disabled gates; reorder only when the actual predecessor differs; no new tool behavior"
   }
 }

@@ -6,7 +6,7 @@
 
 当前有限检查点为 `bb4d46964d3568d1dc2f6743f92050e7a43519d9`（0.13.1 候选）；
 本机资格、新 GIF 和 main 预检见本文末节。main 九项 required 已成功，15 份 artifact
-与六安装器的独立字节审查仍在进行。本检查点尚不宣称正式 0.13.1 tag 或公开发布。
+与六安装器的独立字节审查已通过。本检查点尚不宣称正式 0.13.1 tag 或公开发布。
 
 ## 参考依据
 
@@ -104,7 +104,7 @@ Git211 的 main 预检 `43473238808` 已完成：九 required 成功、publisher
 
 随后正式 `v0.13.0` tag 固定在 `81523aa4ff5b8734776f5bf0b6e7217ef0e192f7`，
 run `43487011620` 在 macOS Intel 的测试 fixture teardown 失败，publisher skipped，
-没有发布 0.13 安装器。该失败保留，后续采用新补丁版本重新资格，不能以此前 main 预检抵消。
+没有发布 0.13.0 安装器。该失败保留，后续采用新补丁版本重新资格，不能以此前 main 预检抵消。
 
 ## 端口与 profile 小控件补充观察
 
@@ -206,7 +206,7 @@ Oracle 演示阶段只显示空 host／user／password 的生成表单，未把�
 
 main 预检 [43524907305](https://github.com/shubolab/opennavicat/actions/runs/43524907305)
 在 exact bb4 上九项 required 成功，publisher skipped；15 artifact 与六安装器实际字节的
-独立审查尚在进行，正式 0.13.1 tag／公开发布未在本检查点完成。此前 ca4 main
+独立审查已通过，正式 0.13.1 tag／公开发布未在本检查点完成。此前 ca4 main
 `43511903905` 的失败与 `v0.13.0` 正式流水线失败保持历史归属，不用部分成功产物替代资格。
 旧原生异常和原 `6af3109` GridFS 15 秒超时的完整因果没有因新版通过而得到反向证明。
 

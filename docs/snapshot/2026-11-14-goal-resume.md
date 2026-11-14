@@ -1,98 +1,90 @@
-# 2026-11-14：图标与小控件合流，0.13.1 继续资格
+# 2026-11-14：图标与小控件通过本机和六目标预检
 
-完整 goal 保持 **active**。当前用户重点是尽可能对齐全部图标和小型视觉元素；完整工具、
-1:1 保留 UI 和 Windows/Linux/macOS 实际参考门禁继续由 [完整矩阵](../parity-matrix.md)追踪。
-源码测试、应用包、安装器、演示和参考人工验收分别记录，不将其中一项当作产品完成。
+完整 goal 保持 **active**。本轮用户重点是尽可能对齐全部图标与小型视觉元素；完整工具、
+1:1保留UI及Windows/Linux/macOS实际参考继续由[完整矩阵](../parity-matrix.md)追踪。
+源码测试、本机包、安装器、演示与参考人工验收是不同门禁。
 
 ## 当前恢复点
 
-应用源码 `ca4d20a858c964d18eff53e97664e4b32d403cc9`、版本 **0.13.1 候选**已推 main 与
-`codex_oracle_basic_integration`。本地另有 `edbb58c` / `cb62a39` 两个选择器测试修正，尚未
-推送；其它隔离修正正在合流。工作目录为
-`/Users/wangshubo/.codex/worktrees/oracle-basic-integration/opennavicat`。
+应用源码冻结为 `bb4d46964d3568d1dc2f6743f92050e7a43519d9`，版本 **0.13.1候选**，已推
+main及`codex_oracle_basic_integration`。工作目录
+`/Users/wangshubo/.codex/worktrees/oracle-basic-integration/opennavicat`；后续文档/GIF提交须
+明确243声明源与bb4逐字节一致，不自指未来HEAD。机器索引见[当前JSON](2026-11-14-state.json)。
 
-**最新 main [run43511903905](https://github.com/shubolab/opennavicat/actions/runs/43511903905)
-失败，尚不能发布。** 三个必需 job 成功、六个失败、publisher skipped；没有把诊断 artifact
-或成功 job 当作完整安装器资格。失败范围与修正分别是：
+main [43524907305](https://github.com/shubolab/opennavicat/actions/runs/43524907305)已完成：
+**九必需job成功，publisherSkipped；15artifact/六安装器实际字节审查通过**。原600秒下载
+transport失败保留，13目录不变，同run/ID补齐两ZIP并核API digest/size/CRC后完整审计通过。
+两Mac只读提取挂载均已detach。具体六文件摘要和平台动态测试清单见
+[0.13.1验证](../validation-0.13.1.md)。这是main预检，不能把其摘要借给正式tag或公开下载。
 
-- Linux 两架构和 Windows ARM64 的选择器测试把行高写死96；两个直接别名在平台字体下
-  需要113或108。产品本来会增高以容纳文字；本地修正检查所有实际标签和50px图标可容纳，
-  并覆盖系统默认/等宽字体。没有压缩字或裁掉别名来迎合旧断言。
-- Windows AMD64 在小控件测试逐个给内部 QWidget 设置 QStyle 时访问冲突；改用由 Qt
-  拥有的公共样式传播，并完整恢复测试状态。新 Windows 结果仍须实际 CI 验证。
-- macOS Intel 的生命周期回归子进程在导入阶段遇到 OpenSSL legacy-provider warning，
-  被原有 `-Werror` 拒绝；原 designer 用例尚未开始。已独立证明既有 packaging hook 测试
-  在初始没有 OPENSSL_MODULES 时会泄漏临时路径，正修复环境恢复。不能据此提前宣布 Intel
-  问题全部解决，也不设置 NO_LEGACY 或屏蔽警告。
-- 原生 Linux Oracle ARM64 在 fixture_start 阶段失败，14用例已收集但未执行；Window专项
-  也未开始。已清除精确 owned CID/tmpfs且无数据卷。旧回执没有保留安全原因，readiness
-  超时只能推断；续作增加有限阶段/reason/code/State诊断，不抬360秒预算盲重跑。
+**当前仍未创建v0.13.1 tag，未发布0.13.1安装器。** 最新公开为
+[v0.12.0预发布](https://github.com/shubolab/opennavicat/releases/tag/v0.12.0)，exact
+`b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7`。下一步创建新正常提交的tag候选，重新取得正式
+十job和公开下载资格；不改旧v0.13.0或其它已发布tag。
 
-最新公开安装器仍是 [v0.12.0 预发布](https://github.com/shubolab/opennavicat/releases/tag/v0.12.0)，
-exact `b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7`。0.13.1 尚未创建 tag、发布安装器或验收
-公开下载。机器恢复索引见 [2026-11-14-state.json](2026-11-14-state.json)。
+## 本轮实现及实际观察
 
-## 已完成的图标与小控件实现
+主栏、对象、九驱动、供应商和常用动作使用独立几何绘制：主栏28、树/页签16、查询选择器
+14、连接网格50/列表筛选16逻辑像素；连接、开关、禁用与DPI分开处理。页签灰叉保留平台
+侧别、保存/执行保护，并销毁被替换按钮。未实现的工具没有因换图标而启用。
 
-按 Navicat 18.0.5 build321 实际主/查询/连接窗口，独立重画主栏、对象、九驱动、供应商及
-常用动作图形，分别使用28主栏、16树/页签、14查询选择器、50连接网格与16列表/筛选。
-连接状态、开关、禁用和DPI分别处理；修正灰叉页签关闭及旧按钮释放，未启用缺失工具。
+参考18.0.5 build321实际确认Oracle常规端口为纯文本框，无stepper且Up不改1521；profile
+为蓝/灰pane、灰圈加号。实现保留非法草稿和TNS隐藏原值，Basic连接前严格校验；SSH原
+stepper不变。表单按自然标签宽度居中，解决300px字段被祖先裁右边的问题。通用页复用
+profile图形，不冒称其它driver参考页已经验收。非法值参考交互、大字/滚动仍开放。
 
-Oracle General 实际为纯端口框，没有上下箭头，Up不改1521；配置栏是蓝/灰pane图形，
-新增配置是灰圈加号。实现已合流，并保留非法端口草稿、TNS隐藏原值、原禁用功能和SSH
-现有stepper。表单按自然标签宽度居中，修正父布局裁掉300px字段右边缘的问题。通用连接
-页复用两个profile图形，不能冒充其它驱动参考页已经验收。
+原版两次搜索证实Atlas是橙Mongo叶、Enterprise Cloud是粉Redis R，供应商区为空；另一次
+空搜索完整画面为12供应商筛选。此前14供应商误把两直接别名混入，现更正分类但保留14组
+目录全部别名。[图标记录](../validation-icons-navicat18.md)保留EIDs和静态/运行边界。
+原版证据未进入Git/包，临时SQLite文件已清理，全连接Off，正常Quit且REA export/close。
 
-两次原版实际搜索确认 Atlas 用橙色Mongo叶、Redis Enterprise Cloud用粉色Redis R，供应商
-区均为空；空搜索全画面另确认12供应商筛选。旧“14供应商”是把两个直接数据库别名混入
-供应商的误分类；14组目录数据全部保留。Evidence IDs、限制和独立绘制边界见
-[图标专项](../validation-icons-navicat18.md)。原版证据未进Git或包，临时SQLite已清理，
-所有参考连接Off，正常Quit，REA全部export/close。
+另修复整个“其它/用户”按钮刷新空白：原每次remove/insert重建QToolButton，8/8立即隐藏、
+事件后才显示。按需幂等重排后，最终同字节test旧产品16红→新相关39绿；各driver原顺序、
+可见/禁用和回调保留。新真实Oracle全部主窗口图中按钮均在，旧缺块不再出现。
 
-## Git ca4 的本机资格
+## bb4本机资格
 
-- 默认全源2693通过/662条件跳过，3355 collect/run/JUnit精确，零失败/错误；242声明源和
-  原生helper前后/Git相同，112.521秒，warnings=error。跳过不算真实数据库执行。
-- 合流实际Cocoa七模块249通过/3既有真库条件跳过；252清单精确、242源相同。生命周期
-  子pytest特意使用offscreen，未混称Cocoa。原pool删除修复在真实before_close_func中清理。
-- 本机ARM64 bundle构建及隔离smoke成功，样例6×4、Oracle26.1四项及另13探针true。
-  Cocoa为显式请求，smoke不自行报告Qt平台；独立源窗口报告为实际Cocoa。
-- 包内静态24项通过：79应用模块/入口与源/Git一致、61 Mach-O、4Oracle机器码、32driver
-  Python、55wheel payload/许可证、95包内链接分别核对。不是六目标或安装器验收。
+- 全源2725通过/662条件跳过，3387 collect/run/JUnit精确，零失败/错误，107.837秒。
+  warnings=error；243源和原生helper前后/Git相同。跳过不算实际数据库执行。
+- 实际Cocoa十一模块334通过/3既有真库条件跳过，337精确；243源相同。生命周期子pytest
+  特意offscreen，未混称Cocoa；style子进程请求父平台，不修改父style/palette/font。
+- ARM64 bundle及隔离smoke通过，6×4样例，Oracle26.1四项加其它13项探针true。Cocoa是显式
+  请求，smoke不自报QPA；实际Cocoa由独立窗口scope报告。包内24静态检查、79模块/入口、
+  61MachO、4Oracle机器码、32driverPy、55wheel payload/许可证和95链接通过。
 - fresh owned Oracle实际Cocoa3/0：Test/保存重开/临时密码/schema/表/视图/Decimal，计算
-  视图Stop/同会话复用/Disconnect与Shutdown；独立106结构/资源检查通过。runner声明24源，
-  不冒称全部242源；28阶段图/16种唯一画面目视记录另存。
-- 生成数据的实际Cocoa主栏/查询/表/选择器亮暗12图，加通用profile两驱动On/Off亮暗8图，
-  共20全尺寸画面均实际查看；完整主题、失活/悬浮/焦点、所有向导与三平台参考仍开放。
+  视图Stop/同会话复用/Disconnect与Shutdown。独立106结构/资源检查，runner24源前后匹配；
+  28phase PNG/15unique均实际全尺寸看完。图片不冒称证明Stop时序、清理或完整参考。
+- `combined-bb4-source-verification.json`独立比较default/native/Cocoa/实际录制各243源和Git
+  一致，并绑定Oracle24输入；不把24改称runner已测243。当前源不沿用ca4旧数字。
 
-新源码须重新绑定其测试/录制/诊断范围；若复用ca4运行证据，必须明确证明对应运行源码
-字节一致，不能把其242输入或计数改名成下一版本资格。详见 [0.13.1记录](../validation-0.13.1.md)。
+## README真实GIF
 
-## GIF：已录制，颜色审查未通过
+同一份GIF已替换为bb4真实Cocoa：35阶段、471帧、78.5秒、1833002字节，SHA256
+`8954f63340dba160cebe81f175dd575a2306c619a41389cc9000a7df27204587`。
+生成SQLite/MongoDB、空Oracle表单和空选11卡网格；Oracle表单未保存/连接，不冒称DB功能。
 
-ca4实际Cocoa新35阶段、471帧、78.5秒、1944860字节，摘要
-`14e0d206f81e47873bf7af765ab944a11a8019dac7c5e37e38b25aedc6c79711`。
-全部帧通过可见文本保护和独立解码，35全尺寸中帧及35首/中/尾联系表已目视，无真实数据
-泄漏或缺glyph阻断；但Oracle卡片由原始own PNG的255,0,51变成GIF的205,99,77，颜色明显
-偏棕，**不适合README，未复制公开资产**。偏色具体发生点尚未证明；编码器正在做真实颜色、
-文字、帧序、时长和尺寸对照，再实际录制和审查。不能把离线重编码诊断产物冒充新演示。
+全471帧text guard和独立decode通过；35个fullsize中帧、35首/中/尾联系表均实际目视，
+无隐私/缺glyph/偏色阻断。11卡首中尾33实际区域主色误差为零；未声称471帧全人工看或
+独立OCR。固定完整帧palette保留九主色/透明/黑白，只调色板不添画面，公开GIF+回执精确
+等同已审字节。精确owned CID lifecycle/destroy/不存在独立核对；卷ID/temp路径仍只producer
+断言。私有wrapper旧limits字符串写242，原回执保留并annotation，实际控制清单/计数为243。
 
-README暂保留原Git211的34阶段/457帧同一份GIF。新录制的精确owned容器生命周期已独立
-核销毁/不存在；卷ID和temp路径未独立保留，仍只记producer断言。Oracle表单为空，不冒称
-Oracle数据库执行。私有新证据在 `artifacts/release-0131/`。
+## 保留失败历史与继续顺序
 
-## 必须保留的历史与继续顺序
+旧v0.13.0固定81523aa，正式43487011620因macOS Intel fixture teardown失败、未发布。
+真实framework DeferredDelete红绿、原SQLite allocation原因未知分别保留；原cleanup移入
+before_close，不靠invalidguard。新toolbar测试fixture也取得同样真实销毁的独立红绿。
 
-`v0.13.0` 保持在81523aa，正式43487011620因macOS Intel fixture teardown失败、publisher
-skipped，未发布。其真实framework DeferredDelete红/绿证明及原SQLite allocation原因未知
-分别保留；不要与本次OpenSSL导入故障混为一个原因。此前Git211 main43473238808的九必需
-成功、15artifact/六安装器字节资格也保留为历史，不抵消任一失败，不借给下一tag。
+ca4 main43511903905六项失败：旧96行高断言、Windows逐子控件setStyle、MacIntel子进程
+OpenSSL导入和OracleARM服务准备。现保留原文字/50px图标、隔离Qt公共style全factory并
+恢复真正hook测试环境；新增有限Oracle启动phase/reason/code/ownedState，不抬360秒预算。
+原ARM原因未知，新run成功不回填因果。ca4首轮35phase GIF的Oracle偏棕失败也保留，未发布；
+其精确中间发生点未知，本次新录制单独通过颜色核对。
 
-1. 合流三平台测试修正、OpenSSL测试环境恢复和Oracle安全启动诊断；完成GIF颜色修复。
-2. 冻结新源，验证受影响测试，明确运行源码字节绑定；重新实际录制/审查同一份GIF。
-3. 新main九必需通过后实际核15artifact/六字节；新正式tag十job通过后另核六安装器、
-   checksums/manifest、匿名八资产及公开ARM64 DMG隔离Cocoa smoke，不改旧tag。
-4. 持续逐项对齐剩余小元素、完整Oracle和其它数据库工具。Query事务/DDL、及时取消
-   server SLEEP、所有认证/安全/类型及三平台实际参考仍开放，不在里程碑后暂停goal。
+1. 提交本次文档及精确已审GIF；证明全部243源等同bb4后，创建全新v0.13.1 tag。
+2. 正式十job成功后另核15artifact/六实际字节、checksums/manifest及匿名八公开资产。
+3. 本机对公开ARM64 DMG隔离Cocoa smoke、清理后准确更新版本/快照；只快进干净用户checkout。
+4. 继续全部小元素、主题/失活/焦点/悬浮、向导及Windows/Linux实际参考；完整Oracle Query、
+   事务/DDL、类型/认证/安全/写入、serverSLEEP及时取消等功能门禁不缩小，不在里程碑后暂停。
 
-不清理未合并分支或带改动工作树，不导入真实连接或操作用户数据库来验收。
+不清理未合并或带改动工作树，不导入真实连接或操作用户数据库来验收。

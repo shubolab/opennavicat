@@ -16,36 +16,149 @@
     "remote": "git@github.com:shubolab/opennavicat.git",
     "working_branch": "codex_oracle_basic_integration",
     "workspace": "/Users/wangshubo/.codex/worktrees/oracle-basic-integration/opennavicat",
-    "application_source_checkpoint": "bb4d46964d3568d1dc2f6743f92050e7a43519d9",
-    "main_source_at_checkpoint": "bb4d46964d3568d1dc2f6743f92050e7a43519d9",
+    "application_source_checkpoint": "b9261016de530dda0311683223a1862efdb05d26",
+    "main_source_at_checkpoint": "26bb917dd63a1323aec942671bfe4e12e5180c75",
     "source_pushed_to_main_and_candidate": true,
-    "documentation_head_scope": "Later documentation/GIF-only commits must be reconciled with this explicit application-source checkpoint; do not infer a self-referential final HEAD",
+    "documentation_head_scope": "At this capture, origin/main and candidate branch are independently observed at 26bb917 with the fixed b926 formal tag as ancestor. All 243 application/test/build inputs match bb4 and b926. This snapshot is a documentation-only follow-up; it does not redefine local bb4, tag b926, or CI provenance.",
     "branches_or_dirty_work_removed": false,
     "latest_local_test_fix_checkpoint": "bb4d46964d3568d1dc2f6743f92050e7a43519d9",
     "latest_test_fixes_pushed": true,
-    "latest_integrated_source": "bb4d46964d3568d1dc2f6743f92050e7a43519d9"
+    "latest_integrated_source": "b9261016de530dda0311683223a1862efdb05d26",
+    "local_application_source_checkpoint": "bb4d46964d3568d1dc2f6743f92050e7a43519d9",
+    "formal_release_source": "b9261016de530dda0311683223a1862efdb05d26",
+    "main_preflight_source_checkpoint": "bb4d46964d3568d1dc2f6743f92050e7a43519d9",
+    "candidate_branch_source": "b9261016de530dda0311683223a1862efdb05d26",
+    "candidate_branch_source_pushed": true,
+    "formal_tag_source_pushed": true,
+    "main_final_documentation_push_status": "Release delivery documentation pushed and independently observed; this snapshot is the following documentation-only commit.",
+    "latest_integrated_source_scope": "Frozen b926 source is present in both main and candidate; qualified application inputs equal bb4; later documentation commits do not requalify tests.",
+    "main_release_documentation_commit": "26bb917dd63a1323aec942671bfe4e12e5180c75",
+    "candidate_branch_head_at_checkpoint": "26bb917dd63a1323aec942671bfe4e12e5180c75"
   },
   "public_release": {
-    "tag": "v0.12.0",
-    "source_sha": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
+    "tag": "v0.13.1",
+    "version": "0.13.1",
+    "source_sha": "b9261016de530dda0311683223a1862efdb05d26",
+    "url": "https://github.com/shubolab/opennavicat/releases/tag/v0.13.1",
+    "published": true,
+    "draft": false,
     "prerelease": true,
+    "published_at_utc": "2026-11-14T00:18:33Z",
+    "published_at_beijing": "2026-11-14T08:18:33+08:00",
     "installers": 6,
     "assets": 8,
-    "prior_verification": "../validation-0.12.md"
+    "formal_run_id": 43531823280,
+    "formal_audit_passed": true,
+    "anonymous_assets_verified": 8,
+    "anonymous_public_bytes_verified": true,
+    "anonymous_curl_config_disabled": true,
+    "authorization_header_used": false,
+    "authenticated_fallback_used": false,
+    "public_tag_source_matched": true,
+    "installer_bytes": {
+      "linux-amd64": {
+        "installer": "OpenNavicat-0.13.1-linux-amd64.deb",
+        "bytes": 78680894,
+        "sha256": "cb270629965402fc4654de7d154ba947b7caf5bb85405a139e9d2d44516d651a"
+      },
+      "linux-arm64": {
+        "installer": "OpenNavicat-0.13.1-linux-arm64.deb",
+        "bytes": 77189062,
+        "sha256": "59c8939d7669608d25e71616ab5e4e1c299ba378423f30d4d9f116f48d4e9df8"
+      },
+      "macos-amd64": {
+        "installer": "OpenNavicat-0.13.1-macos-amd64.dmg",
+        "bytes": 53699609,
+        "sha256": "f983fc48551d36e6e4f1ef09002a7f39ad05b94742dfe6ef6d44c6f04bb0bfaf"
+      },
+      "macos-arm64": {
+        "installer": "OpenNavicat-0.13.1-macos-arm64.dmg",
+        "bytes": 52689861,
+        "sha256": "8aeb2fd1d3f6b506d82a55f8d232be045a974e7bac6ccfa6842e5be904ee9739"
+      },
+      "windows-amd64": {
+        "installer": "OpenNavicat-0.13.1-windows-amd64-setup.exe",
+        "bytes": 45428983,
+        "sha256": "8a34abfee619ad7c6914ad365f251e41db9cf478a1e0ee1f246a6f0bf1d9f6ca"
+      },
+      "windows-arm64": {
+        "installer": "OpenNavicat-0.13.1-windows-arm64-setup.exe",
+        "bytes": 36070717,
+        "sha256": "c2fa23f1bf11b73d023bed0f879d302a9d1f70562078966101d82a633d687d11"
+      }
+    },
+    "asset_bytes": {
+      "build-manifests.json": {
+        "bytes": 211923,
+        "sha256": "5ce67df23286d01c52fa93a13f6d4039c556c3b0c10e36aa66e7cd35ba71c3c8",
+        "api_digest_matched": true,
+        "anonymous_http_status": 200
+      },
+      "OpenNavicat-0.13.1-linux-amd64.deb": {
+        "bytes": 78680894,
+        "sha256": "cb270629965402fc4654de7d154ba947b7caf5bb85405a139e9d2d44516d651a",
+        "api_digest_matched": true,
+        "anonymous_http_status": 200
+      },
+      "OpenNavicat-0.13.1-linux-arm64.deb": {
+        "bytes": 77189062,
+        "sha256": "59c8939d7669608d25e71616ab5e4e1c299ba378423f30d4d9f116f48d4e9df8",
+        "api_digest_matched": true,
+        "anonymous_http_status": 200
+      },
+      "OpenNavicat-0.13.1-macos-amd64.dmg": {
+        "bytes": 53699609,
+        "sha256": "f983fc48551d36e6e4f1ef09002a7f39ad05b94742dfe6ef6d44c6f04bb0bfaf",
+        "api_digest_matched": true,
+        "anonymous_http_status": 200
+      },
+      "OpenNavicat-0.13.1-macos-arm64.dmg": {
+        "bytes": 52689861,
+        "sha256": "8aeb2fd1d3f6b506d82a55f8d232be045a974e7bac6ccfa6842e5be904ee9739",
+        "api_digest_matched": true,
+        "anonymous_http_status": 200
+      },
+      "OpenNavicat-0.13.1-windows-amd64-setup.exe": {
+        "bytes": 45428983,
+        "sha256": "8a34abfee619ad7c6914ad365f251e41db9cf478a1e0ee1f246a6f0bf1d9f6ca",
+        "api_digest_matched": true,
+        "anonymous_http_status": 200
+      },
+      "OpenNavicat-0.13.1-windows-arm64-setup.exe": {
+        "bytes": 36070717,
+        "sha256": "c2fa23f1bf11b73d023bed0f879d302a9d1f70562078966101d82a633d687d11",
+        "api_digest_matched": true,
+        "anonymous_http_status": 200
+      },
+      "SHA256SUMS": {
+        "bytes": 622,
+        "sha256": "f7ae0ebe88ab15bdb397111375aa41ce14c45905f276913f4a6e4083c3c060c5",
+        "api_digest_matched": true,
+        "anonymous_http_status": 200
+      }
+    },
+    "verification": "../validation-0.13.1.md",
+    "formal_evidence": "artifacts/release-0131/tag-audit-43531823280/verification.json",
+    "anonymous_evidence": "artifacts/release-0131/public-43531823280-r2/verification.json",
+    "delivery_handoff": "artifacts/release-0131/public-43531823280-r2/delivery-handoff.json",
+    "public_macos_arm64_application_smoke_status": "passed"
   },
   "candidate": {
     "version": "0.13.1",
-    "published": false,
-    "tag_created": false,
+    "published": true,
+    "tag_created": true,
     "six_native_targets_qualified": true,
     "reference_full_parity_verified": false,
     "validation": "../validation-0.13.1.md",
     "icons_validation": "../validation-icons-navicat18.md",
     "main_preflight_qualified": true,
-    "formal_tag_qualification": false,
-    "public_bytes_verified": false,
-    "tag": null,
-    "tag_source": null
+    "formal_tag_qualification": true,
+    "public_bytes_verified": true,
+    "tag": "v0.13.1",
+    "tag_source": "b9261016de530dda0311683223a1862efdb05d26",
+    "prerelease": true,
+    "release_url": "https://github.com/shubolab/opennavicat/releases/tag/v0.13.1",
+    "public_macos_arm64_application_smoke_status": "passed"
   },
   "reference": {
     "path": "/Users/wangshubo/Downloads/Navicat Premium.app",
@@ -228,118 +341,103 @@
     "private_wrapper_legacy_prose_count_annotation": "artifacts/release-0131/demo-bb4/record-annotation.json"
   },
   "ci": {
-    "run_id": 43524907305,
-    "head_sha": "bb4d46964d3568d1dc2f6743f92050e7a43519d9",
-    "url": "https://github.com/shubolab/opennavicat/actions/runs/43524907305",
+    "run_id": 43531823280,
+    "head_sha": "b9261016de530dda0311683223a1862efdb05d26",
+    "url": "https://github.com/shubolab/opennavicat/actions/runs/43531823280",
     "event": "push",
+    "head_branch": "v0.13.1",
     "status_at_checkpoint": "completed",
     "conclusion": "success",
     "success_claimed": true,
-    "required_jobs": 9,
-    "successful_required_jobs": 9,
-    "publisher_actual": "skipped",
+    "required_jobs": 10,
+    "successful_required_jobs": 10,
+    "publisher_actual": "success",
     "expected_artifacts": 15,
     "artifacts_downloaded": 15,
+    "artifacts_audited": 15,
     "six_installer_bytes_audited": true,
     "independent_audit_in_progress": false,
-    "oracle_native_targets": [
-      "amd64",
-      "arm64"
-    ],
-    "oracle_scopes_per_target": {
-      "backend_required": 14,
-      "window_required": 3,
-      "both_architectures_independent_zero_skip_source_cleanup_passed": true
-    },
-    "metadata_evidence": "artifacts/release-0131/main-watch-bb4/terminal.json",
-    "independent_evidence": "artifacts/release-0131/main-audit-43524907305/verification.json",
-    "transport_recovery": {
-      "initial_gh_all_download_timeout_seconds": 600,
-      "initial_directories_retained": 13,
-      "same_run_artifacts_recovered": 2,
-      "recovered_zip_api_digest_and_crc_verified": true,
-      "original_13_files_unchanged": true,
-      "not_a_ci_or_source_failure": true,
-      "evidence": "artifacts/release-0131/main-audit-43524907305/download-recovery-01/transport-attempt.json"
-    },
-    "claim_scope": "Exact main preflight only; formal tag/public downloads remain unqualified",
-    "artifacts_audited": 15,
-    "installer_handoff": "artifacts/release-0131/main-audit-43524907305/delivery-handoff.json",
+    "independent_evidence": "artifacts/release-0131/tag-audit-43531823280/verification.json",
+    "installer_handoff": "artifacts/release-0131/tag-audit-43531823280/delivery-handoff.json",
     "installer_bytes": {
       "linux-amd64": {
         "installer": "OpenNavicat-0.13.1-linux-amd64.deb",
-        "bytes": 78683284,
-        "sha256": "1cc2bac660cdd33f20b5e6e10434dec5a89c82ef6cad717ce13c93b6c8b3a254"
+        "bytes": 78680894,
+        "sha256": "cb270629965402fc4654de7d154ba947b7caf5bb85405a139e9d2d44516d651a"
       },
       "linux-arm64": {
         "installer": "OpenNavicat-0.13.1-linux-arm64.deb",
-        "bytes": 77188924,
-        "sha256": "4f8c1327255bc6d9348409bbaeba4c9e777b93cb4f162172bd6d8a4631ac164c"
+        "bytes": 77189062,
+        "sha256": "59c8939d7669608d25e71616ab5e4e1c299ba378423f30d4d9f116f48d4e9df8"
       },
       "macos-amd64": {
         "installer": "OpenNavicat-0.13.1-macos-amd64.dmg",
-        "bytes": 53700687,
-        "sha256": "dd0919b61f65ecc9c3c6c5a3b6cfa700c56d45fa36f5057c8ee3eed316c35cbd"
+        "bytes": 53699609,
+        "sha256": "f983fc48551d36e6e4f1ef09002a7f39ad05b94742dfe6ef6d44c6f04bb0bfaf"
       },
       "macos-arm64": {
         "installer": "OpenNavicat-0.13.1-macos-arm64.dmg",
-        "bytes": 52771290,
-        "sha256": "d801e9585e53f001e90a8bd2fbae6f66ee641c25d5af9f6ace2bfd793f89f59b"
+        "bytes": 52689861,
+        "sha256": "8aeb2fd1d3f6b506d82a55f8d232be045a974e7bac6ccfa6842e5be904ee9739"
       },
       "windows-amd64": {
         "installer": "OpenNavicat-0.13.1-windows-amd64-setup.exe",
-        "bytes": 45431276,
-        "sha256": "bef067845f78f207bde934265a04b966006d1d60f8bd4b87aa89d9a4df281e27"
+        "bytes": 45428983,
+        "sha256": "8a34abfee619ad7c6914ad365f251e41db9cf478a1e0ee1f246a6f0bf1d9f6ca"
       },
       "windows-arm64": {
         "installer": "OpenNavicat-0.13.1-windows-arm64-setup.exe",
-        "bytes": 36080408,
-        "sha256": "62f23b91e2fdac42465d3edbda78b98491fd86912abdacfc66a9ba13fa44b0d3"
+        "bytes": 36070717,
+        "sha256": "c2fa23f1bf11b73d023bed0f879d302a9d1f70562078966101d82a633d687d11"
       }
-    }
+    },
+    "main_installer_hashes_reused": false,
+    "job_conclusions": {
+      "Oracle native arm64": "success",
+      "windows-arm64": "success",
+      "linux-arm64": "success",
+      "windows-amd64": "success",
+      "macos-arm64": "success",
+      "Oracle native amd64": "success",
+      "macos-amd64": "success",
+      "linux-amd64": "success",
+      "Real database TLS and SSH": "success",
+      "Publish complete six-target release": "success"
+    },
+    "claim_scope": "Exact formal v0.13.1 source/tag/native-installed artifact audit; anonymous public8 and fresh public ARM64 full packaged-application bounded asynchronous smoke have separate receipts. No full parity or three-OS human reference acceptance."
   },
   "open_gates": [
     "All retained database-tool functionality and 1:1 UI",
     "Windows/Linux/macOS actual reference and human acceptance",
     "Remaining small elements, inactive main toolbar, themes/hover/focus and dialogs/wizards",
-    "Redis Enterprise Cloud provider artwork applicability",
-    "Current 0.13 six native installer qualification and public bytes",
+    "Remaining chooser layout/filter/card behavior and all small elements (U03/U15); Atlas/Enterprise direct-alias classification is observed",
+    "Public installers still require complete workflow/reference/human acceptance across Windows/Linux/macOS; the public ARM64 bounded application smoke is not that acceptance",
     "Oracle Query/transactions/writes/designers/DataPump/other tools/types/auth/security/advanced",
     "Server-side SLEEP timely cancellation",
-    "MongoDB full stream preview/output/recovery"
+    "MongoDB full stream preview/output/recovery",
+    "Post-freeze SQLite success bar/Database page and Oracle Database bare controls remain unimplemented (U08/U15/C18)"
   ],
   "next_actions": [
-    "Main43524907305 preflight audit passed: retain the transport recovery evidence and do not reuse its installer hashes as formal/public hashes.",
-    "Commit reviewable documentation and exact reviewed GIF; prove all243 declared source inputs equal bb4 before a fresh normal-message annotated v0.13.1 tag; never move v0.13.0.",
-    "Wait formal ten-job success, audit fresh15/six bytes, anonymously download all8 public assets and verify formal hashes, then isolated publicARM DMG Cocoa smoke.",
-    "Update release/snapshot/README accurately and fast-forward only clean user checkouts without removing branches/dirty work.",
-    "Continue remaining icons, UI/tool-function and Windows/Linux/macOS actual-reference gates; no milestone pause/completion."
+    "Implement the newly observed scene-specific success/copy/dismiss and Database bare plus/minus/refresh controls, retaining callbacks/disabled behavior; verify actual sizes/DPI/theme/clipping. Do not infer driver defaults from possibly retained pane state.",
+    "Continue all remaining icons, retained UI/tool-function and Windows/Linux/macOS actual-reference gates, including complete Oracle Query/transactions/types/auth/security/writes and server SLEEP cancellation; goal remains active with no milestone pause/completion."
   ],
   "formal_release_attempt": {
-    "tag": "v0.13.0",
-    "source_sha": "81523aa4ff5b8734776f5bf0b6e7217ef0e192f7",
-    "run_id": 43487011620,
-    "url": "https://github.com/shubolab/opennavicat/actions/runs/43487011620",
+    "tag": "v0.13.1",
+    "source_sha": "b9261016de530dda0311683223a1862efdb05d26",
+    "run_id": 43531823280,
+    "url": "https://github.com/shubolab/opennavicat/actions/runs/43531823280",
     "status": "completed",
-    "conclusion": "failure",
-    "required_success": 8,
-    "failed_job": "macos-amd64",
-    "publisher": "skipped",
-    "published": false,
-    "formal_installer_or_public_bytes_qualified": false,
-    "failure_scope": "Verify application teardown of tests/test_ui.py::test_designer_review_execute_and_table_browser: pool wrapper already deleted",
-    "counts_macos_amd64": {
-      "passed": 2632,
-      "skipped": 663,
-      "teardown_errors": 1,
-      "seconds": 400.81
-    },
-    "controlled_evidence": "Real pytest-qt closes/deletes registered QWidget before fixture yield-finalizer; delivering its queued DeferredDelete reproduces same QThreadPool error after successful test body; no product delete injected",
-    "fix_branch": "codex_qt_fixture_teardown_fix",
-    "fix_scope": "Move original fixture cleanup to before_close_func; no invalid-object guard/product change/timeout or warning suppression",
-    "sqlite_unclosed_warning_cause": "unknown; original CI had no allocation traceback",
-    "history_policy": "Preserve failed v0.13.0 tag/source/run; next patch tag after fixes and fresh qualification",
-    "fixture_fix_merged": "684854f"
+    "conclusion": "success",
+    "required_success": 10,
+    "publisher": "success",
+    "published": true,
+    "draft": false,
+    "prerelease": true,
+    "formal_installer_bytes_qualified": true,
+    "anonymous_public_assets_qualified": true,
+    "anonymous_assets_verified": 8,
+    "evidence": "artifacts/release-0131/tag-audit-43531823280/verification.json",
+    "public_packaged_application_smoke_status": "passed"
   },
   "historical_candidate_0_13_0": {
     "version": "0.13.0",
@@ -587,5 +685,281 @@
     "new_actual_oracle_captures_have_missing_buttons": false,
     "new_human_checked_unique_captures": 15,
     "scope": "Retain driver-specific action order/disabled gates; reorder only when the actual predecessor differs; no new tool behavior"
+  },
+  "historical_public_release_0_12_0": {
+    "tag": "v0.12.0",
+    "source_sha": "b6e1da4f5fa9599cd84de69b1dbf4055fdbbcba7",
+    "prerelease": true,
+    "installers": 6,
+    "assets": 8,
+    "prior_verification": "../validation-0.12.md"
+  },
+  "historical_main_preflight_0_13_1": {
+    "run_id": 43524907305,
+    "head_sha": "bb4d46964d3568d1dc2f6743f92050e7a43519d9",
+    "url": "https://github.com/shubolab/opennavicat/actions/runs/43524907305",
+    "event": "push",
+    "status_at_checkpoint": "completed",
+    "conclusion": "success",
+    "success_claimed": true,
+    "required_jobs": 9,
+    "successful_required_jobs": 9,
+    "publisher_actual": "skipped",
+    "expected_artifacts": 15,
+    "artifacts_downloaded": 15,
+    "six_installer_bytes_audited": true,
+    "independent_audit_in_progress": false,
+    "oracle_native_targets": [
+      "amd64",
+      "arm64"
+    ],
+    "oracle_scopes_per_target": {
+      "backend_required": 14,
+      "window_required": 3,
+      "both_architectures_independent_zero_skip_source_cleanup_passed": true
+    },
+    "metadata_evidence": "artifacts/release-0131/main-watch-bb4/terminal.json",
+    "independent_evidence": "artifacts/release-0131/main-audit-43524907305/verification.json",
+    "transport_recovery": {
+      "initial_gh_all_download_timeout_seconds": 600,
+      "initial_directories_retained": 13,
+      "same_run_artifacts_recovered": 2,
+      "recovered_zip_api_digest_and_crc_verified": true,
+      "original_13_files_unchanged": true,
+      "not_a_ci_or_source_failure": true,
+      "evidence": "artifacts/release-0131/main-audit-43524907305/download-recovery-01/transport-attempt.json"
+    },
+    "claim_scope": "Exact main preflight only; formal tag/public downloads remain unqualified",
+    "artifacts_audited": 15,
+    "installer_handoff": "artifacts/release-0131/main-audit-43524907305/delivery-handoff.json",
+    "installer_bytes": {
+      "linux-amd64": {
+        "installer": "OpenNavicat-0.13.1-linux-amd64.deb",
+        "bytes": 78683284,
+        "sha256": "1cc2bac660cdd33f20b5e6e10434dec5a89c82ef6cad717ce13c93b6c8b3a254"
+      },
+      "linux-arm64": {
+        "installer": "OpenNavicat-0.13.1-linux-arm64.deb",
+        "bytes": 77188924,
+        "sha256": "4f8c1327255bc6d9348409bbaeba4c9e777b93cb4f162172bd6d8a4631ac164c"
+      },
+      "macos-amd64": {
+        "installer": "OpenNavicat-0.13.1-macos-amd64.dmg",
+        "bytes": 53700687,
+        "sha256": "dd0919b61f65ecc9c3c6c5a3b6cfa700c56d45fa36f5057c8ee3eed316c35cbd"
+      },
+      "macos-arm64": {
+        "installer": "OpenNavicat-0.13.1-macos-arm64.dmg",
+        "bytes": 52771290,
+        "sha256": "d801e9585e53f001e90a8bd2fbae6f66ee641c25d5af9f6ace2bfd793f89f59b"
+      },
+      "windows-amd64": {
+        "installer": "OpenNavicat-0.13.1-windows-amd64-setup.exe",
+        "bytes": 45431276,
+        "sha256": "bef067845f78f207bde934265a04b966006d1d60f8bd4b87aa89d9a4df281e27"
+      },
+      "windows-arm64": {
+        "installer": "OpenNavicat-0.13.1-windows-arm64-setup.exe",
+        "bytes": 36080408,
+        "sha256": "62f23b91e2fdac42465d3edbda78b98491fd86912abdacfc66a9ba13fa44b0d3"
+      }
+    }
+  },
+  "historical_formal_release_0_13_0": {
+    "tag": "v0.13.0",
+    "source_sha": "81523aa4ff5b8734776f5bf0b6e7217ef0e192f7",
+    "run_id": 43487011620,
+    "url": "https://github.com/shubolab/opennavicat/actions/runs/43487011620",
+    "status": "completed",
+    "conclusion": "failure",
+    "required_success": 8,
+    "failed_job": "macos-amd64",
+    "publisher": "skipped",
+    "published": false,
+    "formal_installer_or_public_bytes_qualified": false,
+    "failure_scope": "Verify application teardown of tests/test_ui.py::test_designer_review_execute_and_table_browser: pool wrapper already deleted",
+    "counts_macos_amd64": {
+      "passed": 2632,
+      "skipped": 663,
+      "teardown_errors": 1,
+      "seconds": 400.81
+    },
+    "controlled_evidence": "Real pytest-qt closes/deletes registered QWidget before fixture yield-finalizer; delivering its queued DeferredDelete reproduces same QThreadPool error after successful test body; no product delete injected",
+    "fix_branch": "codex_qt_fixture_teardown_fix",
+    "fix_scope": "Move original fixture cleanup to before_close_func; no invalid-object guard/product change/timeout or warning suppression",
+    "sqlite_unclosed_warning_cause": "unknown; original CI had no allocation traceback",
+    "history_policy": "Preserve failed v0.13.0 tag/source/run; next patch tag after fixes and fresh qualification",
+    "fixture_fix_merged": "684854f"
+  },
+  "historical_public_43531823280_initial": {
+    "directory": "artifacts/release-0131/public-43531823280",
+    "http_status": 403,
+    "cause": "anonymous GitHub API core quota exhausted",
+    "assets_requested": 0,
+    "phase": "metadata only; no public asset bytes requested or qualified",
+    "anonymous_asset_bytes_verified": false,
+    "authenticated_fallback_used": false,
+    "diagnostic": "artifacts/release-0131/public-43531823280-transport-diagnostic/rate-limit.json",
+    "retry_after_api_reset": true,
+    "later_successful_anonymous_retry": "artifacts/release-0131/public-43531823280-r2/verification.json"
+  },
+  "public_macos_arm64_application_smoke": {
+    "status": "passed",
+    "passed": true,
+    "owner": "root",
+    "version": "0.13.1",
+    "source_sha": "b9261016de530dda0311683223a1862efdb05d26",
+    "asset": "OpenNavicat-0.13.1-macos-arm64.dmg",
+    "bytes": 52689861,
+    "sha256": "8aeb2fd1d3f6b506d82a55f8d232be045a974e7bac6ccfa6842e5be904ee9739",
+    "anonymous_formal_bytes_verified": true,
+    "entrypoint": "OpenNavicat.app/Contents/MacOS/OpenNavicat --smoke-test",
+    "execution_scope": "Full packaged application, bounded asynchronous path with a new owned generated SQLite store; not helper-only and not full UI/tool parity.",
+    "architecture": "arm64",
+    "own_modules_exact_source": 79,
+    "entrypoint_exact_source_verified": true,
+    "whole_bundle_copy_inventory_equal": true,
+    "copy_files": 404,
+    "copy_symlinks": 103,
+    "sample_rows": 6,
+    "sample_columns": 4,
+    "oracle_version": "26.1.0",
+    "oracle_flags": {
+      "oracle_adapter_constructed": true,
+      "oracle_native_extensions_loaded": true,
+      "oracle_parameters_ready": true,
+      "oracle_thin_mode_ready": true
+    },
+    "other_runtime_flags": {
+      "crypto_legacy_probe": true,
+      "extra_adapters_constructed": true,
+      "mongodb_adapter_constructed": true,
+      "mongodb_bson_probe": true,
+      "mongodb_tls_context_ready": true,
+      "native_js_bigint_bson_probe": true,
+      "native_js_bundled": true,
+      "native_js_cancel_probe": true,
+      "native_js_child_reaped": true,
+      "native_js_helper_ready": true,
+      "native_js_no_console": true,
+      "sqlserver_default_ca_present": true,
+      "sqlserver_tls_context_ready": true
+    },
+    "oracle_flags_are_database_connection_qualification": false,
+    "qt_platform_requested": "cocoa",
+    "actual_qpa_reported": null,
+    "application_normal_exit": true,
+    "root_full_size_screenshot_viewed": true,
+    "independent_cleanup_verified": true,
+    "exact_disk_detached": "/dev/disk4",
+    "copy_and_temp_root_absent": true,
+    "all_recorded_pid_pgid_absent": true,
+    "evidence": "artifacts/release-0131/public-arm-cocoa-43531823280-r2/verification.json",
+    "verification_sha256": "b61d62ab848b78ea2331f1c163a4627539e6c8653e5b4a7b7c61a56414cb0fed",
+    "root_review": "artifacts/release-0131/public-arm-cocoa-43531823280-r2/root-visual-cleanup-review.json",
+    "full_parity_or_three_os_human_acceptance_claimed": false
+  },
+  "historical_public_arm_smoke_initial": {
+    "evidence": "artifacts/release-0131/public-arm-cocoa-43531823280/verification.json",
+    "source_sha": "b9261016de530dda0311683223a1862efdb05d26",
+    "passed": false,
+    "failure_phase": "Before app copy and application launch",
+    "application_launched": false,
+    "cause": "Valid hdiutil XML combined with deprecation stderr caused private plist parser ExpatError",
+    "error_class": "ExpatError",
+    "exact_disk_detach_verified": true,
+    "temporary_root_removed": true,
+    "all_recorded_pid_pgid_absent": true,
+    "cleanup_passed": true,
+    "private_parser_pure_tests_passed": 42,
+    "fresh_retry_evidence": "artifacts/release-0131/public-arm-cocoa-43531823280-r2/verification.json",
+    "failed_attempt_preserved": true
+  },
+  "remaining_controls_post_freeze": {
+    "reference": "Navicat Premium18.0.5 build321",
+    "reference_executable_sha256": "3857a354fde7f42f8afbf9ef3a25956e6ff3b9745f598f77bbab1d27e7493bd1",
+    "evidence_doc": "../validation-icons-navicat18.md#正式冻结后的剩余控件实际观察",
+    "observed_after_release_source_freeze": true,
+    "implemented_or_accepted_in_v0_13_1": false,
+    "observations": [
+      {
+        "evidence_id": "ev_21af74afaabd003c73a5ead0b30bb869f14502438e6c1630704996e8c6f87550",
+        "surface": "Unsaved owned SQLite Test success result bar",
+        "observed": "Solid green circle/white check, blue double-paper copy, gray thin dismiss; dismiss clicked, copy not clicked, failure appearance unobserved.",
+        "current_gap": "Generic SQLite footer text lacks the full result bar; Oracle existing textual success/copy/dismiss still need their own scene-backed replacement."
+      },
+      {
+        "evidence_id": "ev_138660b4d8922e4312a93dac9b255ea2cd7a5cf2cbfb8ce9ec09ad263a206c71",
+        "surface": "Unsaved owned SQLite Database tab",
+        "observed": "Database/File/Encrypted columns, gray bare plus/minus; profile circle-plus is not the matching geometry.",
+        "current_gap": "SQLite Database page and new-profile placement remain incomplete."
+      },
+      {
+        "evidence_id": "ev_26201446796aad31dfb449580794c4739ee64f492603f2c51ae2566d4152fb7b",
+        "surface": "Unsaved empty Oracle Database tab",
+        "observed": "Custom list unchecked; disabled gray bare plus/minus and clockwise refresh; no Test/Save/refresh clicked.",
+        "current_gap": "Full-width plus/minus and Refresh text need vectors while preserving local callbacks and disabled refresh."
+      }
+    ],
+    "pane_initial_on_off_determines_driver_default": false,
+    "copy_clipboard_and_failure_style_accepted": false,
+    "reference_quit_and_owned_fixture_cleanup_observed": true,
+    "raw_reference_images_committed": false,
+    "open_gates": [
+      "U08",
+      "U15",
+      "C18"
+    ]
+  },
+  "captured_at_utc": "2026-11-14T01:07:08.616579+00:00",
+  "workspace_delivery": {
+    "status": "verified at release-documentation checkpoint",
+    "delivery_commit": "26bb917dd63a1323aec942671bfe4e12e5180c75",
+    "remote_main_and_candidate_verified": true,
+    "formal_tag_unchanged": "b9261016de530dda0311683223a1862efdb05d26",
+    "fast_forward_only": true,
+    "workspaces": [
+      {
+        "workspace": "/Users/wangshubo/develop/opennavicat",
+        "branch": "main",
+        "before": "d9ea3880d43ae2d391df91d66fa2704457c1d47a",
+        "before_clean": true,
+        "after": "26bb917dd63a1323aec942671bfe4e12e5180c75",
+        "after_clean": true,
+        "fast_forward_only": true
+      },
+      {
+        "workspace": "/Users/wangshubo/.codex/worktrees/release-0-10/opennavicat",
+        "branch": "codex_mongodb_pipeline_tasks",
+        "before": "d9ea3880d43ae2d391df91d66fa2704457c1d47a",
+        "before_clean": true,
+        "after": "26bb917dd63a1323aec942671bfe4e12e5180c75",
+        "after_clean": true,
+        "fast_forward_only": true
+      }
+    ],
+    "environment_version": "0.13.1",
+    "python": "3.13.11",
+    "physical_venvs": true,
+    "frozen_offline_inexact_sync": true,
+    "unmanaged_extras_preserved": {
+      "/Users/wangshubo/develop/opennavicat": {
+        "cmake": "4.4.4",
+        "ninja": "1.13.2"
+      },
+      "/Users/wangshubo/.codex/worktrees/release-0-10/opennavicat": {
+        "imageio-ffmpeg": "0.8.1",
+        "cmake": "4.4.4",
+        "ninja": "1.13.2"
+      }
+    },
+    "removed_distributions": [],
+    "global_config_changed": false,
+    "other_worktrees_or_branches_removed": false,
+    "private_evidence": [
+      "artifacts/release-0131/user-workspace-delivery.json",
+      "artifacts/release-0131/user-environment-delivery.json"
+    ],
+    "capture_limit": "Exact checkpoint before this snapshot-only commit; subsequent documentation-only fast-forward does not change the 243 application inputs."
   }
 }

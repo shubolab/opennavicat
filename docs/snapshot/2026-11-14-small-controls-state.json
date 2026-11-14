@@ -1,6 +1,6 @@
 {
   "schema_version": 7,
-  "captured_at_utc": "2026-11-14T04:34:06.250862+00:00",
+  "captured_at_utc": "2026-11-14T07:12:24.726136+00:00",
   "handoff": "2026-11-14-small-controls.md",
   "previous_handoff": "2026-11-14-goal-resume.md",
   "goal": {
@@ -20,10 +20,58 @@
     "remote_candidate_branch_retained": false
   },
   "public_release": {
-    "tag": "v0.13.1",
-    "source": "b9261016de530dda0311683223a1862efdb05d26",
+    "tag": "v0.13.2",
+    "source": "12be93d83116956beab1982c9a02bc3dedb19e77",
     "prerelease": true,
-    "v0_13_2_tag_or_release": false
+    "draft": false,
+    "release_id": 445027340,
+    "published_at_utc": "2026-11-14T04:59:53Z",
+    "anonymous_assets_verified": 8,
+    "six_installer_bytes_verified": true,
+    "installers": {
+      "linux-amd64": {
+        "installer": "OpenNavicat-0.13.2-linux-amd64.deb",
+        "bytes": 78636826,
+        "sha256": "be9c920dd0e67d8f8db2897e2438f2d2de5a27c26c15e3f719aac89551fc505d"
+      },
+      "linux-arm64": {
+        "installer": "OpenNavicat-0.13.2-linux-arm64.deb",
+        "bytes": 77212558,
+        "sha256": "aea0bb1d4cc7ed06d0a028bd0e3cbc607f8af637ac089cf210380c4374bd6f95"
+      },
+      "macos-amd64": {
+        "installer": "OpenNavicat-0.13.2-macos-amd64.dmg",
+        "bytes": 53711191,
+        "sha256": "cd3d7f741a708aabbee37f4502ec4b6ba725d3da3f730df670b03cbfd43a9e88"
+      },
+      "macos-arm64": {
+        "installer": "OpenNavicat-0.13.2-macos-arm64.dmg",
+        "bytes": 52777995,
+        "sha256": "eb362973cd89adef9b3ca41fb44aff9df6733c2d7129d9d8ea8195474a4c849e"
+      },
+      "windows-amd64": {
+        "installer": "OpenNavicat-0.13.2-windows-amd64-setup.exe",
+        "bytes": 45435203,
+        "sha256": "9c0e998fa0addd7b701fe8ed49534277c2457be1f9bad97207f6acb9d673356a"
+      },
+      "windows-arm64": {
+        "installer": "OpenNavicat-0.13.2-windows-arm64-setup.exe",
+        "bytes": 36068311,
+        "sha256": "5922569591728c1d43d36a1772f37cbbdc32c6f1120c39ef0c06924acb9d9c13"
+      }
+    },
+    "public_arm": {
+      "passed": true,
+      "actual_qpa": "cocoa",
+      "rows": 6,
+      "columns": 4,
+      "oracle_flags_are_database_connection": false,
+      "own_modules": 80,
+      "entry_source_matches": true,
+      "copy_files": 404,
+      "copy_symlinks": 103,
+      "root_visual_review_and_resource_cleanup": true
+    }
   },
   "local_checks": {
     "default": {
@@ -85,24 +133,13 @@
       "Oracle ARM fixture exit24; cause unknown"
     ]
   },
-  "new_ci": {
-    "run": 43555639933,
-    "url": "https://github.com/shubolab/opennavicat/actions/runs/43555639933",
-    "source": "12be93d83116956beab1982c9a02bc3dedb19e77",
-    "status_at_capture": "in_progress",
-    "required_pass_at_capture": 8,
-    "pending_at_capture": [
-      "windows-arm64"
-    ],
-    "qualification_claimed": false
-  },
   "open_gates": [
     "Full icons and all UI states",
-    "SQLite database tab and full form proportions",
+    "SQLite database tab integration and full form proportions",
+    "Actual encrypted provider/Cipher Name/invalid configuration and process restart reference",
     "All retained database tool functionality",
     "Windows and Linux actual reference",
-    "Six current installers",
-    "Formal tag and anonymous eight downloads"
+    "Next milestone full source/Cocoa/native/demo/six targets"
   ],
   "remote_branch_cleanup": {
     "initial_count": 44,
@@ -122,5 +159,53 @@
     "physical_venv_version": "0.13.2",
     "all_other_distribution_versions_preserved": true,
     "running_application_overwritten_or_restarted": false
+  },
+  "main_ci": {
+    "run": 43555639933,
+    "source": "12be93d83116956beab1982c9a02bc3dedb19e77",
+    "status": "completed",
+    "required_pass": 9,
+    "publisher": "skipped",
+    "artifacts_verified": 15,
+    "six_installer_bytes_verified": true
+  },
+  "formal_ci": {
+    "run": 43558286471,
+    "tag": "v0.13.2",
+    "source": "12be93d83116956beab1982c9a02bc3dedb19e77",
+    "status": "completed",
+    "all_jobs_passed": 10,
+    "publisher": "success",
+    "artifacts_verified": 15,
+    "six_installer_bytes_verified": true,
+    "actual_qpa_scope_reports": 12,
+    "full_ci_default_collect_manifest_provided": false,
+    "static_partial_module_membership_cases": 310
+  },
+  "next_local_development": {
+    "workspace": "/Users/wangshubo/.codex/worktrees/sqlite-databases/opennavicat",
+    "branch": "codex_sqlite_databases",
+    "head_at_capture": "8005162a8358039afb0af78b51212d8929bf1c9f",
+    "version": "0.13.3",
+    "remote_task_branch_pushed": false,
+    "first_integrated_scope": {
+      "modules": 8,
+      "passed": 155,
+      "skipped": 0,
+      "failed": 0,
+      "full_default_or_native_qualification_claimed": false
+    },
+    "ui_leaf": "ede14d25eab48dbb863544fc098e133e90d89bc9",
+    "ui_leaf_integrated": true,
+    "ui_visual_fixes_pending": [],
+    "ui_followup": "f2233a1afda07d822449c8369cf11cbf5782ad1b",
+    "integrated_scope": {
+      "modules": 14,
+      "passed": 378,
+      "skipped": 0,
+      "failed": 0,
+      "full_default_or_native_qualification_claimed": false
+    },
+    "cocoa_scope": "running exact 8005162; not yet qualified"
   }
 }

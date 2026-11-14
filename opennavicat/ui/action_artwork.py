@@ -159,6 +159,20 @@ def _save(p, c):
     _path(p, [(5.1, 15.5), (5.1, 10.3), (12.9, 10.3), (12.9, 15.5)], c['blue'])
 
 
+def _test_success(p, c):
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(c['green'])
+    p.drawEllipse(QRectF(2.5, 2.5, 13, 13))
+    _path(p, [(5.4, 8.7), (7.7, 10.9), (11.9, 6.2)], c['white'], 1.3)
+
+
+def _copy(p, c):
+    # Only the exposed rear edges are visible behind the front paper.
+    _path(p, [(4.5, 12.8), (2.8, 12.8), (2.8, 2.3),
+              (11.1, 2.3), (11.1, 3.7)], c['blue'], 1)
+    _box(p, 5.9, 5, 8.7, 10.7, c['blue'], 1)
+
+
 def _format(p, c):
     _path(p, [(3, 14.9), (11.2, 6.7), (13, 8.5), (4.8, 16.7)],
           c['gray'], 1.05, closed=True)
@@ -526,6 +540,7 @@ def _database(p, c):
 _DRAWERS = {
     'open': _open, 'design': _design, 'add': _add, 'delete': _delete,
     'import': _import, 'export': _export, 'refresh': _refresh, 'save': _save,
+    'test_success': _test_success, 'copy': _copy, 'dismiss': _record_cancel,
     'format': _format, 'snippets': _snippets, 'code_braces': _code_braces,
     'filter': _filter, 'sort': _sort,
     'columns': _columns, 'chart': _chart, 'builder': _builder, 'query_builder': _builder,

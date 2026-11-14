@@ -66,7 +66,7 @@ def host(qtbot, tmp_path, monkeypatch):
     idle(qtbot, window)
 
 
-def create_through_good(qtbot, host, path, key, *, failed=False, monkeypatch=None):
+def create_through_good(qtbot, host, path, key, monkeypatch, *, failed=False):
     callbacks, dialogs = [], []
     def fill_and_accept():
         dialog = QApplication.activeModalWidget()
@@ -84,27 +84,30 @@ def create_through_good(qtbot, host, path, key, *, failed=False, monkeypatch=Non
         except BaseException as error:
             callbacks.append(error)
             if isinstance(dialog, ConnectionDialog): dialog.reject()
-    if failed:
-        def warning(parent, title, message):
-            callbacks.append(str(message))
-            assert not parent._creating and not parent._testing
-            assert parent.sqlite_mode_combo.currentData() == "create"
-            assert parent.buttons.isEnabled() and parent.content.isEnabled()
-            QTimer.singleShot(0, parent.reject)
-        monkeypatch.setattr(QMessageBox, "warning", warning)
+    def warning(parent, title, message):
+        callbacks.append(str(message))
+        assert not parent._creating and not parent._testing
+        assert parent.sqlite_mode_combo.currentData() == "create"
+        assert parent.buttons.isEnabled() and parent.content.isEnabled()
+        QTimer.singleShot(0, parent.reject)
+    # An unexpected backend failure must fail this test with its message,
+    # rather than waiting forever inside an unhandled native message box.
+    monkeypatch.setattr(QMessageBox, "warning", warning)
     QTimer.singleShot(0, fill_and_accept)
     host.window.new_connection(driver="sqlite")
     idle(qtbot, host.window)
     if any(isinstance(value, BaseException) for value in callbacks):
         raise next(value for value in callbacks if isinstance(value, BaseException))
     assert len(dialogs) == 1
+    if not failed:
+        assert not callbacks, callbacks
     return callbacks
 
 
 def test_real_good_store_open_rows_readonly_and_wrong_key(qtbot, host, monkeypatch):
     path = host.root / "generated-aes256.sqlite"
     key = "generated-window-only-key"
-    create_through_good(qtbot, host, path, key)
+    create_through_good(qtbot, host, path, key, monkeypatch)
     saved, = host.store.connections()
     assert saved.sqlite_open_mode == "existing" and saved.sqlite_encryption_enabled
     assert not host.window.sessions and saved.id not in host.window._connecting
@@ -169,7 +172,7 @@ def test_real_create_failure_after_native_initialization_cleans_only_owned_file(
         calls.append(type(connection).__name__)
         raise DatabaseError("generated failure after actual native initialization")
     monkeypatch.setattr(DatabaseSession, "_sqlite_initialize_candidate", fail_after_native)
-    messages = create_through_good(qtbot, host, path, "generated-create-failure-key", failed=True, monkeypatch=monkeypatch)
+    messages = create_through_good(qtbot, host, path, "generated-create-failure-key", monkeypatch, failed=True)
     assert calls == ["CipherConnection"] and len(messages) == 1
     assert not path.exists() and protected.read_bytes() == b"generated keep"
     assert not host.store.connections() and not host.vault and not host.window.sessions

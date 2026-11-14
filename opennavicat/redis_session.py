@@ -10,7 +10,6 @@ from __future__ import annotations
 import contextlib
 import math
 import secrets
-import threading
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -157,11 +156,8 @@ class RedisSession(DatabaseSession):
         if config.driver != "redis":
             raise ValueError("RedisSession requires driver='redis'")
         self.config = config
-        self.connection: Connection | None = None
-        self._tunnel = None
+        self._initialize_session_state()
         self._tls = None
-        self._cancel_requested = threading.Event()
-        self._active = False
         self._selected_schema = self._database(config.database or "0")
         self._command_cache: dict[bytes, list | None] = {}
         self.server_info: dict[str, str] = {}

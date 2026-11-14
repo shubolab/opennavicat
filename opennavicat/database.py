@@ -208,6 +208,14 @@ class DatabaseSession:
         self.config = config
         if config.driver not in SUPPORTED_DRIVERS:
             raise ValueError(f"Unsupported database driver: {config.driver}")
+        self._initialize_session_state()
+
+    def _initialize_session_state(self):
+        """Initialize the common state used by inherited lifecycle methods.
+
+        Adapters retain their own config validation and namespace defaults.
+        Call once from construction, never lazily while closing or cancelling.
+        """
         self.connection: Any = None
         self._cancel_requested = threading.Event()
         self._cancel_lock = threading.Lock()

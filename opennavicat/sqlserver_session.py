@@ -201,16 +201,10 @@ class SqlServerSession(DatabaseSession):
     def __init__(self, config: ConnectionConfig):
         if config.driver != "sqlserver":
             raise ValueError("SqlServerSession requires driver='sqlserver'")
-        # Independent initialization also permits adapter tests before the root
-        # factory/driver registry has been integrated into DatabaseSession.
         self.config = config
-        self.connection = None
-        self._cancel_requested = threading.Event()
-        self._active = False
-        self._selected_schema = None
+        self._initialize_session_state()
         self._default_schema = None
         self._transaction_count = 0
-        self._tunnel = None
         self._active_cursor = None
         self._writer_lock = threading.RLock()
 

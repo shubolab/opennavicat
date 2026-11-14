@@ -93,11 +93,7 @@ class OracleSession(DatabaseSession):
         if config.driver != "oracle":
             raise ValueError("OracleSession requires driver='oracle'")
         self.config = config
-        self.connection = None
-        self._selected_schema = None
-        self._tunnel = None
-        self._active = False
-        self._cancel_requested = threading.Event()
+        self._initialize_session_state()
         self._operation_lock = threading.RLock()
         self._operation_token: _Operation | None = None
         self._connected_config = None

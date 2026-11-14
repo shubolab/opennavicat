@@ -580,19 +580,18 @@ class MongoSession(DatabaseSession):
 
     def __init__(self, config: ConnectionConfig):
         self.config = config
-        self.connection = None
+        self._initialize_session_state()
         self._control = None
         self._connected_options = None
         self._pipeline_clients = {}
         self._finite_stream_client = None
-        self._tunnel = self._pem_dir = None
+        self._pem_dir = None
         self._selected_schema = config.database or "admin"
         self._seal_key = secrets.token_bytes(32)
         self._generation = secrets.token_hex(16)
         self._active_lock = threading.Lock()
         self._active_comment = None
         self._operation_depth = 0
-        self._cancel_requested = threading.Event()
         self._server_major = 0
         self.metadata_issues = []
 

@@ -1,6 +1,6 @@
 {
-  "schema_version": 9,
-  "captured_at_utc": "2026-11-14T09:46:40.382118+00:00",
+  "schema_version": 10,
+  "captured_at_utc": "2026-11-14T10:31:18.425503+00:00",
   "handoff": "2026-11-14-small-controls.md",
   "previous_handoff": "2026-11-14-goal-resume.md",
   "goal": {
@@ -13,10 +13,10 @@
     "remote": "git@github.com:shubolab/opennavicat.git",
     "workspace": "/Users/wangshubo/.codex/worktrees/sqlite-databases/opennavicat",
     "branch": "codex_sqlite_databases",
-    "qualified_source": "10ca18a8bc2cb804b3492c4f3f661131745133ad",
-    "source_inputs": 269,
+    "qualified_source": "272f1188b3076ce4590fca45233192413e27c6a7",
+    "source_inputs": 270,
     "version": "0.13.3",
-    "pushed_checkpoint": "40e8b7e723779bca9cc5606a1cce3bac0c092391",
+    "pushed_checkpoint": "d15c87ce01ce031236457f4dc79e1175b4dac06c",
     "remote_candidate_branch_retained": false,
     "main_push_pending_at_capture": true
   },
@@ -198,7 +198,7 @@
   "next_local_development": {
     "workspace": "/Users/wangshubo/.codex/worktrees/sqlite-databases/opennavicat",
     "branch": "codex_sqlite_databases",
-    "head_at_capture": "10ca18a8bc2cb804b3492c4f3f661131745133ad",
+    "head_at_capture": "272f1188b3076ce4590fca45233192413e27c6a7",
     "version": "0.13.3",
     "remote_task_branch_pushed": false,
     "first_integrated_scope": {
@@ -237,7 +237,7 @@
       ],
       "qualification_passed": false
     },
-    "source_inputs": 269,
+    "source_inputs": 270,
     "merged_main_checkpoint": "40e8b7e723779bca9cc5606a1cce3bac0c092391",
     "recorder_followup": {
       "leaf": "17cfc74324b595d8b685d536e49321d810173e99",
@@ -272,10 +272,9 @@
       "final_frozen_inputs_equal_build_owner_map": true
     },
     "pending": [
-      "Push reviewed checkpoint to main",
-      "Six-target main CI including native SQLite actual-QPA scope",
-      "Verify all CI artifacts and six installers",
-      "Formal tag pipeline and fresh six installer audit",
+      "Push follow-up qualification fixes to main",
+      "Fresh six-target main CI and all artifacts/native installer byte audits",
+      "Formal new immutable tag and fresh six installer audit",
       "Anonymous public eight-asset verification and public ARM execution"
     ],
     "application_modules": 83,
@@ -369,13 +368,86 @@
     },
     "native_ci_scope": {
       "modules": 5,
-      "source_case_count_at_capture": 58,
+      "source_case_count_at_capture": 59,
       "source_snapshot_paths_at_capture": 92,
       "counts_recomputed_from_frozen_source": true,
       "all_six_desktop_targets_wired": true,
       "six_target_execution_claimed": false,
       "source_checkout_lf": true,
       "windows_cleanup_scope": "owned leader only, file-backed output; Python process spawns blocked"
+    },
+    "first_main_ci": {
+      "source": "d15c87ce01ce031236457f4dc79e1175b4dac06c",
+      "id": 43582451879,
+      "status": "completed",
+      "conclusion": "failure",
+      "required_success": 7,
+      "required_failure": 2,
+      "publisher": "skipped",
+      "artifacts": 13,
+      "expected_artifacts": 15,
+      "native_four_non_windows": {
+        "cases_each": 58,
+        "zero_skip": true,
+        "actual_qpa": [
+          "xcb",
+          "cocoa"
+        ]
+      },
+      "windows_amd64": {
+        "case_calls": 58,
+        "passed": 19,
+        "failed": 3,
+        "setup_errors": 36,
+        "cause": "reserved AUX fixture basename and unnecessary width-growth assertions"
+      },
+      "windows_arm64": {
+        "case_calls": 58,
+        "junit_records": 61,
+        "passed": 50,
+        "failed": 8,
+        "teardown_errors": 3,
+        "causes": [
+          "SDK bootstrap environment removed and import order before hashlib/pytest",
+          "native 81px baseline versus test hardcoded80",
+          "unnecessary strict browse width-growth chain"
+        ]
+      },
+      "oracle_each_arch": {
+        "backend": 14,
+        "window": 3,
+        "zero_skip": true
+      },
+      "installer_large_bytes_downloaded": false,
+      "no_tag_or_release_created": true
+    },
+    "frozen_followup_qualification": {
+      "source": "272f1188b3076ce4590fca45233192413e27c6a7",
+      "source_inputs": 270,
+      "default": {
+        "total": 3791,
+        "passed": 3129,
+        "failed": 0,
+        "errors": 0,
+        "skipped": 662,
+        "actual_qpa": "offscreen",
+        "collect_run_junit_exact": true
+      },
+      "native_sqlite": {
+        "modules": 5,
+        "total": 59,
+        "passed": 59,
+        "failed": 0,
+        "errors": 0,
+        "skipped": 0,
+        "actual_qpa": "cocoa",
+        "collect_run_junit_exact": true,
+        "source_snapshot_paths": 92
+      },
+      "runtime_inputs_same_as_built_recorded_10ca": 99,
+      "application_modules_unchanged": 83,
+      "native_bundle_and_gif_rebuilt_or_rerecorded": false,
+      "windows_native_fix_proven": false
     }
   },
   "previous_demo_0_13_2": {

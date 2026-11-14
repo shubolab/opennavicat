@@ -119,3 +119,18 @@ ROOT已看全尺寸查询截图并独立核对进程不存在，未把本地探�
 参考plain ATTACH五检查点及此前九个草稿检查点见
 [数据库页合同](../sqlite-connection-databases.md)。真实加密/Cipher/进程重启/invalid规则、
 完整工具功能与Windows/Linux实际参考继续开放。
+
+## 首次0.13.3主线CI失败与跟进
+
+main d15c87c 的 run43582451879 已完成：7必需任务成功、2个Windows失败，13产物，
+没有tag/发布。四非Win原生SQLite各58项零跳过及actualQPA/source/JUnit严格通过，
+Oracle两架构14/3与服务ready/cleanup也通过；未把未下载的四个大安装器当字节审查。
+AMD fixture使用Windows保留名aux.sqlite导致36setup error；尺寸测试还误要求每档字体
+必须增宽。ARM实际另有81px自然按钮和SDK环境被新runner删去、bootstrap迟于hashlib/
+pytest的问题，触发真实Qt teardown的OpenSSL warning；原失败原样保留。
+
+修正272f118：只改portable fixture/真实glyph-content测试合同及资格runner初始化，
+保留已观察Cocoa几何、其他QPA实际native baseline、Werror/零optin/进程门禁。
+新完整默认3791=3129通过/662条件跳过、Cocoa native runner59项零跳过，source270/
+collect-run-JUnit/helper/工具/清理均通过。99应用/打包/native依赖输入与10ca完全相同，
+83模块整包和38阶段实录保留原源码身份，没有冒称重建/重录。还须全新的实际六目标CI。

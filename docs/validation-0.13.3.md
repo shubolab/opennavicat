@@ -134,6 +134,39 @@ ID 独立 inspect 证明不存在，daemon 前后健康；未读取环境变量�
 随后六个目标仍须各自在其 OS/架构构建、安装、smoke、卸载；全部安装器和校验和核实
 后才可发布。当前没有新六目标或公开资产通过声明。
 
+## 首次主线 CI 与验证脚本修正
+
+主线 `d15c87ce01ce031236457f4dc79e1175b4dac06c` 的
+[run43582451879](https://github.com/shubolab/opennavicat/actions/runs/43582451879)
+完成为失败：9 个必需任务中 7 成功、2 个 Windows 失败，publisher 跳过；保留 13 个产物
+及原始失败回执，不据四份非 Windows 安装器发布不完整 Release。
+四个非 Windows 目标的原生 SQLite 58 项均严格零跳过通过，实际 QPA 为 xcb/cocoa；
+Oracle 两架构各 backend14/window3 和 ready/cleanup 回执分别通过。只审查了验证 ZIP
+及安装 smoke 收据，没有把未下载的大安装器当成字节审查通过。
+
+Windows amd64 的 36 个 setup error 来自 fixture 使用 `aux.sqlite`，触及
+[Windows 保留文件名](https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file#naming-conventions)；
+三处 failure 是测试错误要求字体增大必然增宽。ARM 还观察到默认按钮 81px 而非硬编码
+80px，以及三项 async Test 的 Qt teardown 出现 cryptography/OpenSSL provider warning。
+新 runner 清环境时误删了 source-build 的 `OPENNAVICAT_LIBPQ_DIR`，又在应用 bootstrap
+之前导入 hashlib/pytest；已有 source SDK 初始化因此未生效。
+
+修正把三个真实 owned-file fixture 改为 `generated-` 前缀，SQL 别名 aux 保留；字体合同
+继续严格检查实际 glyph、SE_*Contents、右沿、顺序和取消，并保留已观察 Cocoa 几何。
+其他 QPA 使用实际 native baseline，另有真实长 caption 必须增宽并恢复原尺寸的回归，
+不强迫无必要增宽。runner 只把该明确 SDK 变量保留至现有初始化，早于 hashlib/pytest，
+随后消费移除；保留零 DB opt-in、Werror、keyring 和进程清理门禁，没有吞 provider warning。
+
+冻结修正源码 `272f1188b3076ce4590fca45233192413e27c6a7`：270 输入，完整默认
+3791 项=3129 通过/662 条件跳过、0 failure/error，完整 collect/run/JUnit 对应，源/Git、
+helper、工具和隔离清理通过；实际 Cocoa 原生 runner 的 5 模块 59 项零跳过通过。
+三个真实文件名回归在旧 d15 全红、新源全绿；三个 fresh-child bootstrap 顺序回归亦
+同最终测试旧红新绿。其 DLL loader 是受控标记，不能代替真实 Windows ARM DLL 运行。
+
+本次只改测试及资格 runner，99 个应用/native/packaging/依赖声明输入与原生整包、
+38 阶段 GIF 的冻结 10ca 完全相同，83 个应用模块未变；没有重建或重录并冒充新结果。
+新的完整 Windows/Linux/macOS CI 仍须实际执行，通过全部六安装器及正式标签门禁后才可发布。
+
 真实加密、Cipher Name、密码保存策略、进程重启、多附件及无效配置规则、HTTP/备注
 完整行为、全量字体/主题/状态和各平台参考保持开放。其余数据库工具门禁继续见
 [完整矩阵](parity-matrix.md)，不因本片段变窄。

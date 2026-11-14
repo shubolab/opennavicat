@@ -239,16 +239,20 @@ def run_owned_child(argv, env, raw_log, *, cwd, timeout, grace=5, limit=4 * 1024
                 result["winerror"] = error.winerror
         finally:
             try:
+                job_terminated = False
                 if process:
                     if not api.exited(process) and result["job_bound_before_resume"]:
                         api.k.GenerateConsoleCtrlEvent(1, result["pid"])  # CTRL_BREAK_EVENT
                         api.exited(process, round(grace * 1000))
                 if job and api.active(job):
                     api.check(api.k.TerminateJobObject(job, 1))
+                    job_terminated = True
                 if process:
-                    if not result["job_bound_before_resume"] and not api.exited(process):
+                    if not result["job_bound_before_resume"] and not job_terminated and not api.exited(process):
                         # A membership verification error must never resume a
                         # suspended leader. Terminate via our creation HANDLE.
+                        # A successful job termination is asynchronous; wait
+                        # for it instead of terminating that same leader twice.
                         api.check(api.k.TerminateProcess(process, 1))
                     result["reaped"] = api.exited(process, 5000)
                     if result["reaped"]:

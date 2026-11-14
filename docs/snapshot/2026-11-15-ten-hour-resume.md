@@ -51,3 +51,28 @@ Windows API 已本地执行。完整 U15、三平台参考和全部状态仍开�
 默认输入枚举现含 JS、native C、JSON fixture 和打包资源，并拒绝未跟踪相关输入；
 raw/processed JS helper 共七份现有输入单独校验来源和前后哈希。CI 必须具备 raw helper。
 collect/run runtime 另记录该 host 的 Qt style 清单；这不替代 actual QPA 或参考验收。
+
+## 新增验证与 Windows 竞态
+
+冻结 `b0e407af5f8f8ad4e9fd269270c39e6808d00265` 的本机完整默认 suite 已通过：
+3,825 项=3,152 通过、673 条件跳过、零 failure/error；两个 collection 序列与 JUnit
+完全对应，272 源输入和七份 helper 输入前后相同且与 Git/receipt 对应，隔离目录已清理。
+新增 11 项跳过为 Windows Job 原生测试，不把本机结果当 Windows API 验收。
+
+同源 CI `43607997557` 的 Oracle 两架构已成功，原失败不能据此推断具体锁成因。
+Windows amd64 完整 suite 为 3,843 项=3,031 通过、811 跳过、1 失败：只在 membership
+故障注入的主进程回收断言失败；外层真实 Job 的 334 个进程均已归零、句柄已关闭。
+故障路径先请求异步 TerminateJobObject，又尝试 TerminateProcess 同一个正在终止的 leader，
+可能因 AccessDenied 跳过等待。修正记录成功的 job 终止请求后直接等待自有 leader；
+保留故障注入并增加完整 result 失败详情。相关本机 46 项通过、11 原生 Windows 条件跳过，
+真实 Windows 修正后结果仍待下一 CI，不假装本机能复验。
+
+六模块 67 项的 Cocoa 新门禁已在隔离工作树实际零跳过通过，93 项 scope 源输入与 Git
+对应、collect/run/JUnit 相同，actual QPA=cocoa，keyring/spawn/可见窗计数均零，进程和
+Store 已清理；参见 [原生门禁](../native-sqlite-ui-qualification.md)。新主线会执行此扩展
+scope，并上传完整 helper 字节以便独立审查默认测试的全部输入。
+
+源码 `487584d5ea1ee6357c49c46566cf2d4e91b81345` 已新录 38 阶段/522 帧的真实 Cocoa
+演示，源与 helper 前后核对通过；GIF SHA256 为
+`030070a8a0866001a4983b89f559737ef1da4444153a51dddfa2f229c1ae61d9`。
+录制成功与 README 素材验收分开，完整画面/隐私/颜色审查尚在进行，暂未替换旧 GIF。

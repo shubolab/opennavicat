@@ -120,7 +120,7 @@ def test_failure_before_resume_never_executes_child_code(tmp_path, failure):
         api.resume = refuse
     result = run(tmp_path, "from pathlib import Path;Path(" + repr(str(marker)) + ").touch()", _api=api)
     assert not marker.exists() and not owner.process_passed(result)
-    assert result["error_class"] == "RuntimeError" and result["reaped"]
+    assert result["error_class"] == "RuntimeError" and result["reaped"], result
     assert result["job_active_processes_zero"] and result["job_handle_closed"]
     assert result["thread_handle_closed"] and result["process_handle_closed"]
 

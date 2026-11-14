@@ -1,6 +1,6 @@
 {
-  "schema_version": 8,
-  "captured_at_utc": "2026-11-14T07:56:33.198942+00:00",
+  "schema_version": 9,
+  "captured_at_utc": "2026-11-14T09:46:40.382118+00:00",
   "handoff": "2026-11-14-small-controls.md",
   "previous_handoff": "2026-11-14-goal-resume.md",
   "goal": {
@@ -11,13 +11,14 @@
   },
   "repository": {
     "remote": "git@github.com:shubolab/opennavicat.git",
-    "workspace": "/Users/wangshubo/.codex/worktrees/small-controls-0132/opennavicat",
-    "branch": "codex_small_controls_0132",
-    "qualified_source": "6af4335232e9cfadb5f9c3668490fc22c86da9e2",
-    "source_inputs": 250,
-    "version": "0.13.2",
+    "workspace": "/Users/wangshubo/.codex/worktrees/sqlite-databases/opennavicat",
+    "branch": "codex_sqlite_databases",
+    "qualified_source": "10ca18a8bc2cb804b3492c4f3f661131745133ad",
+    "source_inputs": 269,
+    "version": "0.13.3",
     "pushed_checkpoint": "40e8b7e723779bca9cc5606a1cce3bac0c092391",
-    "remote_candidate_branch_retained": false
+    "remote_candidate_branch_retained": false,
+    "main_push_pending_at_capture": true
   },
   "public_release": {
     "tag": "v0.13.2",
@@ -103,18 +104,30 @@
     }
   },
   "demo": {
-    "source": "59fa01ddc48fea0b605a8322478010b4adcff17a",
-    "phases": 36,
-    "frames": 492,
-    "seconds": 82.0,
-    "bytes": 1923259,
-    "sha256": "d0bcdd75f7cb27d65003c2b84ea8bf20677b734b99fdeac08b1cd9c5e9982e1b",
+    "source": "10ca18a8bc2cb804b3492c4f3f661131745133ad",
+    "phases": 38,
+    "frames": 522,
+    "seconds": 87.0,
+    "bytes": 2015909,
+    "sha256": "0985e27ee91dc01b1185202a9320f50d17588972c0a82e69c6e07ab93b419711",
     "actual_qpa": "cocoa",
     "all_frames_decoded": true,
-    "marker_and_33_driver_roi_source_color_max_error": 0,
-    "all_phase_manual_review": "passed: 36 full-size representatives and 36 first/middle/last contact sheets",
+    "all_frame_rgba_two_decoders_equal": true,
+    "exact_marker_roi_count": 34,
+    "exact_driver_roi_count": 198,
+    "primary_fill_source_rgb_max_error": 0,
+    "secondary_band_text_line_max_scalar_errors": [
+      1,
+      9,
+      20
+    ],
+    "secondary_error_cause_proven": false,
+    "team_full_size_mid_frames_viewed": 38,
+    "root_triptychs_viewed": 38,
+    "root_full_size_sqlite_frames_viewed": 3,
     "canonical_readme_replaced": true,
     "independent_exact_container_and_two_volume_absence": true,
+    "independent_fixture_ids_recovered_from_bounded_docker_events": true,
     "temporary_app_paths_independently_retained": false,
     "all_frames_manual_view_or_ocr_claimed": false
   },
@@ -134,12 +147,12 @@
     ]
   },
   "open_gates": [
-    "Full icons and all UI states",
-    "SQLite database tab final integration qualification and full form proportions",
+    "Full icons, long text, all themes/focus/inactive UI states",
+    "SQLite full form proportions and all settings behavior",
     "Actual encrypted provider/Cipher Name/invalid configuration and process restart reference",
     "All retained database tool functionality",
     "Windows and Linux actual reference",
-    "Next milestone full source/Cocoa/native/demo/six targets"
+    "Next milestone six native installer targets and public-byte verification"
   ],
   "remote_branch_cleanup": {
     "initial_count": 44,
@@ -185,7 +198,7 @@
   "next_local_development": {
     "workspace": "/Users/wangshubo/.codex/worktrees/sqlite-databases/opennavicat",
     "branch": "codex_sqlite_databases",
-    "head_at_capture": "18c7f3d3f2fa6e5014368e1482b1cebfacaf3dec",
+    "head_at_capture": "10ca18a8bc2cb804b3492c4f3f661131745133ad",
     "version": "0.13.3",
     "remote_task_branch_pushed": false,
     "first_integrated_scope": {
@@ -224,7 +237,7 @@
       ],
       "qualification_passed": false
     },
-    "source_inputs": 261,
+    "source_inputs": 269,
     "merged_main_checkpoint": "40e8b7e723779bca9cc5606a1cce3bac0c092391",
     "recorder_followup": {
       "leaf": "17cfc74324b595d8b685d536e49321d810173e99",
@@ -254,16 +267,131 @@
       "native_target": "Darwin arm64",
       "fresh_raw_helper": true,
       "builder_native_source_archive_hashes_before_after": true,
-      "processed_payload_built": false,
-      "whole_source_or_package_qualification_claimed": false
+      "processed_payload_built": true,
+      "whole_source_or_package_qualification_claimed": false,
+      "final_frozen_inputs_equal_build_owner_map": true
     },
     "pending": [
-      "Freeze final recorder and integrated source",
-      "Full default collect/run/JUnit qualification",
-      "Fresh actual Cocoa integrated scope including native contents",
-      "Native application build and actual smoke",
-      "New actual GIF and every phase privacy/visual review",
-      "Six native installer targets and public-byte verification"
-    ]
+      "Push reviewed checkpoint to main",
+      "Six-target main CI including native SQLite actual-QPA scope",
+      "Verify all CI artifacts and six installers",
+      "Formal tag pipeline and fresh six installer audit",
+      "Anonymous public eight-asset verification and public ARM execution"
+    ],
+    "application_modules": 83,
+    "native_browse_followup": {
+      "leaf": "a735f2349d0db8e3a700b5bf375335d427ffe588",
+      "integrated": "7b4f549",
+      "leaf_cocoa_passed": 133,
+      "leaf_offscreen_passed": 133,
+      "grow_only_preserves_user_size": true
+    },
+    "historical_d0a": {
+      "source": "d0a49f238d8a0b2f711e33af578d7b5e49fd21eb",
+      "source_inputs": 267,
+      "native_build_passed": true,
+      "native_smoke_passed": false,
+      "native_smoke_cause": "SqlServerSession missing inherited cancellation lock",
+      "default": {
+        "total": 3762,
+        "passed": 3099,
+        "failed": 1,
+        "errors": 0,
+        "skipped": 662
+      },
+      "cocoa": {
+        "modules": 25,
+        "total": 748,
+        "passed": 744,
+        "failed": 1,
+        "errors": 0,
+        "skipped": 3
+      },
+      "cocoa_cause": "Actual QMacStyle browser content42 smaller than font43 due layout item and constrained parent",
+      "original_evidence_retained": true
+    },
+    "adapter_lifecycle_followup": {
+      "leaf": "e4fa5bfa9e8abbda12da2e80705043cb36c9a0f9",
+      "integrated": "6e8608a",
+      "same_final_tests_old_failed": 12,
+      "same_final_tests_old_passed": 9,
+      "same_final_tests_new_passed": 21,
+      "related_passed": 326,
+      "related_conditional_skipped": 96,
+      "existing_close_cancel_ast_unchanged": true
+    },
+    "frozen_local_qualification": {
+      "source": "10ca18a8bc2cb804b3492c4f3f661131745133ad",
+      "source_inputs": 269,
+      "application_modules": 83,
+      "default": {
+        "total": 3784,
+        "passed": 3122,
+        "failed": 0,
+        "errors": 0,
+        "skipped": 662,
+        "actual_qpa": "offscreen",
+        "full_collect_run_junit_exact": true
+      },
+      "cocoa": {
+        "modules": 26,
+        "total": 749,
+        "passed": 746,
+        "failed": 0,
+        "errors": 0,
+        "skipped": 3,
+        "actual_qpa": "cocoa",
+        "collect_run_junit_exact": true
+      },
+      "native_bundle": {
+        "fresh_build_and_run": true,
+        "actual_qpa": "cocoa",
+        "sample": [
+          6,
+          4
+        ],
+        "local_driver_probe_flags": 17,
+        "source_and_helper_stable": true,
+        "app_manifest_unchanged_after_smoke": true,
+        "owned_directory_removed_by_producer": true,
+        "root_full_size_screenshot_viewed": true,
+        "root_independent_processes_absent": true
+      },
+      "static_app": {
+        "verified": true,
+        "checks": 30,
+        "application_modules": 83,
+        "oracle_python_modules": 32,
+        "wheel_payload_files": 55,
+        "native_images": 61,
+        "symlinks": 95
+      }
+    },
+    "native_ci_scope": {
+      "modules": 5,
+      "source_case_count_at_capture": 58,
+      "source_snapshot_paths_at_capture": 92,
+      "counts_recomputed_from_frozen_source": true,
+      "all_six_desktop_targets_wired": true,
+      "six_target_execution_claimed": false,
+      "source_checkout_lf": true,
+      "windows_cleanup_scope": "owned leader only, file-backed output; Python process spawns blocked"
+    }
+  },
+  "previous_demo_0_13_2": {
+    "source": "59fa01ddc48fea0b605a8322478010b4adcff17a",
+    "phases": 36,
+    "frames": 492,
+    "seconds": 82.0,
+    "bytes": 1923259,
+    "sha256": "d0bcdd75f7cb27d65003c2b84ea8bf20677b734b99fdeac08b1cd9c5e9982e1b",
+    "actual_qpa": "cocoa",
+    "all_frames_decoded": true,
+    "marker_and_33_driver_roi_source_color_max_error": 0,
+    "all_phase_manual_review": "passed: 36 full-size representatives and 36 first/middle/last contact sheets",
+    "canonical_readme_replaced": true,
+    "independent_exact_container_and_two_volume_absence": true,
+    "temporary_app_paths_independently_retained": false,
+    "all_frames_manual_view_or_ocr_claimed": false
   }
 }

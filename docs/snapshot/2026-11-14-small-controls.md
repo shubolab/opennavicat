@@ -82,28 +82,40 @@ atomic push 加每个 ref 的 exact SHA lease，之后直接 ls-remote 复查；
 origin 现在仅保留 `main` 与关联工作树有未提交改动的 `codex_mongodb_finite_stream`。
 保留本地分支、工作树、私有运行证据与资产，未猜测性清理 dirty 工作。后续进展只推 main。
 
-## 下一本地开发树（未发布）
+## 0.13.3 本地整合（未发布）
 
-`/Users/wangshubo/.codex/worktrees/sqlite-databases/opennavicat`，本地分支
-`codex_sqlite_databases`，物理Python3.13环境/版本0.13.3。未推远端任务分支，未冒称六目标
-资格。已接AI图标语义、稳定附加库元数据与process-only密码来源、普通ATTACH原子会话
-发布、取消代次、比较实际namespace/配置失效、worker捕获备份source、新SQLite保存Off。
+当前工作树 `/Users/wangshubo/.codex/worktrees/sqlite-databases/opennavicat`，仅本地分支
+`codex_sqlite_databases`。最新40e主线文档已合入；固定代码
+`10ca18a8bc2cb804b3492c4f3f661131745133ad`，269输入、83自有模块、物理Python3.13。
+已接AI图标语义、SQLite数据库页/新增编辑sheet、稳定元数据及process-only凭据来源，
+普通附加会话原子发布/取消代次、比较namespace/配置失效、worker捕获备份source，
+新SQLite保存Off、两处三点按钮/窄透明轮廓及原生字体布局。
 
-整合首次八模块155通过，无跳过；随后14模块378通过，源码8005162，只算本地定向集合。保留并已修的真实失败包括：
-旧hydrated凭据跨file/flag复用、helper返回与publication之间取消丢失、旧比较写到换绑文件、
-选择aux却备份main、worker关闭期间GUI读取事务状态。各自红绿证据不合计成全源通过。
-数据库页/新增编辑sheet已整合ede+f223：旧版长路径换行、密码行左沿和纯QFont/行高的
-8项同字节测试先红后绿；独立复核单行、12/36px自然行高、密码缩进及销毁后无定时回调。
-固定8005162的实际Cocoa集合已经结束：720项中711通过、6失败、3个既有数据库条件
-跳过、0error；源码260输入前后与Git一致，隔离数据及进程清理通过。两项真实录制失败
-为后台Store快照缺新缓存，已补独立副本，同字节2红→2绿；不是Cocoa样式故障。另四项
-暴露真实QMacStyle输入框内容区仍21px、大字体裁切，新增7同字节native测试旧源全红、
-后续修复全绿；修复叶Cocoa126通过、离屏230通过、两个缩放档各22通过。ROOT已查看
-三张原始组件图并独立核对捕获PID不存在，不能算最终整合或全平台通过。
-最新主线40e文档已合入本地整合，recorder修复与native字体修复已接入；完整整合资格
-仍待最后源码冻结。后续必须补字体/状态、完整默认集合、原生包、真实演示与六目标
-安装器；完整goal不在v0.13.2后暂停，详见[0.13.3开发记录](../validation-0.13.3.md)。
+保留800的Cocoa720中6失败，以及d0a的真实整包smoke失败/default1失败和Cocoa1失败。
+前者为recorder缓存与QMacStyle输入框；后者为SQLServer继承初始化缺锁及General浏览按钮
+大字体被父layout挤短。已分别修复并保留同字节红绿，原日志不回填；详见
+[0.13.3开发记录](../validation-0.13.3.md)。
 
-参考另有五个plain ATTACH实连/同进程保存重开检查点，见[数据库页合同](../sqlite-connection-databases.md)。
-新profile正常删除后留下独占缓存目录，有限metadata核实后精确清理；输入失败与首轮
-cleanup失败均保留。真实加密/Cipher/进程重启/invalid规则/三平台仍开放。
+10ca新资格：完整默认3784项=3122通过/662原条件跳过，实际Cocoa26模块749项=
+746通过/3条件跳过，各自collect/run/JUnit完全对应，269源/Git和进程/隔离清理通过。
+当前源码新建原生ARM应用包，实际Cocoa异步6×4及17本地探针通过；30项静态检查、83模块/
+入口、Oracle32模块/55wheel payload、61Mach-O/95symlink及处理后JS payload通过。
+ROOT已看全尺寸查询截图并独立核对进程不存在，未把本地探针说成真实外部数据库连接。
+
+新实际Cocoa单GIF为38阶段、522帧、87秒、2,015,909字节，SHA
+`0985e27ee91dc01b1185202a9320f50d17588972c0a82e69c6e07ab93b419711`。
+新增空数据库页和实际+打开空sheet并取消，生成文件两行/摘要未变。团队已实看38张全尺寸
+中帧，ROOT另看38首/中/尾联系表及SQLite3张全图；全部522帧经文本保护和双解码一致。
+34成功圆点及198驱动卡片ROI主色精确；次要band/text/line仍有最大1/9/20标量差，
+未借无原PNG猜编码因果。独立Docker有界历史恢复唯一CID和两匿名卷，再按精确ID确认
+均不存在；不读env/log或清理别的资源。原GIF/收据原样替换README唯一演示。
+长inspector/combobox/node文字截短和完整主题/焦点/状态继续保留U15门禁。
+
+六目标CI新增5模块原生SQLite窗口资格，case和源路径动态读取；当前声明58/92不是
+六平台执行结果。所有源checkout固定LF；Windows文件日志owner只声明本leader清理。
+本机通过后仍须主线六目标CI、全部产物审查、正式tag六目标、匿名八资产与公开ARM运行。
+当前公开版本仍v0.13.2。没有新远端任务分支；进展和snapshot直接进入main，完整goal保持active。
+
+参考plain ATTACH五检查点及此前九个草稿检查点见
+[数据库页合同](../sqlite-connection-databases.md)。真实加密/Cipher/进程重启/invalid规则、
+完整工具功能与Windows/Linux实际参考继续开放。

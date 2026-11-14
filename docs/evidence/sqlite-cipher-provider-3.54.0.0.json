@@ -1,0 +1,392 @@
+{
+  "observed_on": "2026-11-14",
+  "kind": "isolated-provider-feasibility-not-product-qualification",
+  "provider_distribution": "apsw-sqlite3mc==3.54.0.0",
+  "metadata_source": "https://pypi.org/pypi/apsw-sqlite3mc/json",
+  "product_dependencies_changed": false,
+  "native_wheels": [
+    {
+      "filename": "apsw_sqlite3mc-3.54.0.0-cp313-cp313-macosx_10_13_x86_64.whl",
+      "sha256": "8f846579396acdaf7a5e348dc3dc4c9c7a1a2b152a8c325e72f801d06959899f",
+      "bytes": 3726454,
+      "native_core_sha256": "7e2c41c58db7b7ccbe38aacbc6c69d72ec138868e7f90b2cc7cee356ecc7ada4",
+      "native_core_file_identity": "Mach-O 64-bit bundle x86_64"
+    },
+    {
+      "filename": "apsw_sqlite3mc-3.54.0.0-cp313-cp313-macosx_11_0_arm64.whl",
+      "sha256": "58f535d6a84590c58672feb8bfe94d91c28ad88a4c78c43982ad3f166f1d2927",
+      "bytes": 3389341,
+      "native_core_sha256": "02cfef98a5a6e38c79056c20554f3c8cceb2857e244d03d12cc88d67d3ab58e8",
+      "native_core_file_identity": "Mach-O 64-bit bundle arm64"
+    },
+    {
+      "filename": "apsw_sqlite3mc-3.54.0.0-cp313-cp313-manylinux_2_28_aarch64.whl",
+      "sha256": "37e6e4077c46d611bd59449a4a284c649091631aa08ea4280cffe91bf47081ed",
+      "bytes": 4013260,
+      "native_core_sha256": "694b6790baf845332f35290a47bededd0a6d0cc478fc1f40f230c849b6a65e2f",
+      "native_core_file_identity": "ELF 64-bit LSB shared object, ARM aarch64, version 1 (SYSV), dynamically linked, BuildID[sha1]=bc129e22c85235a714ee61434a26ce1a0eaf79f2, not stripped"
+    },
+    {
+      "filename": "apsw_sqlite3mc-3.54.0.0-cp313-cp313-manylinux_2_28_x86_64.whl",
+      "sha256": "c65b0e89c161f54776d226099a780c672661249d3b351f77b1c92bab662752b9",
+      "bytes": 4231905,
+      "native_core_sha256": "6d3a0adc70507b755da44303b5bf4a23fc55549c25ea45a4849d58302f19d6d3",
+      "native_core_file_identity": "ELF 64-bit LSB shared object, x86-64, version 1 (SYSV), dynamically linked, BuildID[sha1]=0ea8167849763e2f89ba130c55abf3747fe419f9, not stripped"
+    },
+    {
+      "filename": "apsw_sqlite3mc-3.54.0.0-cp313-cp313-win_amd64.whl",
+      "sha256": "17300015c77e9346b436e035577daa53fc0450cf2fc86f59ac720193962cab5d",
+      "bytes": 3765680,
+      "native_core_sha256": "fac86d3803177fb4958f7156c70fcab404008d344f41e4438411c91c3c326a65",
+      "native_core_file_identity": "PE32+ executable (DLL) (GUI) x86-64, for MS Windows"
+    },
+    {
+      "filename": "apsw_sqlite3mc-3.54.0.0-cp313-cp313-win_arm64.whl",
+      "sha256": "e21e2990f40eb75a576a465eda9728e8e60a775133eee8e7e6583324b4c2dbfe",
+      "bytes": 3423631,
+      "native_core_sha256": "6d5ff6c0e1345da82e016b4a2a4b7617cb116c59903aad2b10e556b3ae7301ec",
+      "native_core_file_identity": "PE32+ executable (DLL) (GUI) Aarch64, for MS Windows"
+    }
+  ],
+  "namespace": {
+    "ordinary_apsw_version": "3.54.1.0",
+    "ordinary_wheel": "apsw-3.54.1.0-cp313-cp313-macosx_11_0_arm64.whl",
+    "ordinary_wheel_sha256": "620db408609dc28097333bc2fce04a4c3e3a1fb65a2dec71fc7a9992a7c142cc",
+    "overlapping_package_files": 86,
+    "core_extension_overlap": true,
+    "regular_apsw_installed": false
+  },
+  "runtime": {
+    "python": "3.13.11",
+    "platform": "Darwin",
+    "machine": "arm64",
+    "apsw": "3.54.0.0",
+    "sqlite": "3.54.0",
+    "multiple_ciphers": "SQLite3 Multiple Ciphers 2.6.1",
+    "credentials_persisted": false,
+    "navicat_compatibility_claimed": false,
+    "cases": [
+      {
+        "label": "aes128cbc",
+        "cipher": "aes128cbc",
+        "legacy_requested": null,
+        "applied_configuration": {
+          "cipher": "aes128cbc",
+          "legacy": "0"
+        },
+        "create": true,
+        "header_is_plain_sqlite": false,
+        "reopen_and_integrity": true,
+        "wrong_key_rejected": true,
+        "readonly_read_and_write_rejection": true,
+        "ordinary_sqlite_rejected": true,
+        "plain_main_encrypted_attach_bound_values": true,
+        "wrong_attach_key_rejected": true,
+        "passed": true,
+        "sha256": "466138327ace4d7bd2fcc590a5e5e9e3f54e61193e1c6106dcced406b7eba230",
+        "hash_stable": true,
+        "bytes": 8192
+      },
+      {
+        "label": "aes256cbc",
+        "cipher": "aes256cbc",
+        "legacy_requested": null,
+        "applied_configuration": {
+          "cipher": "aes256cbc",
+          "legacy": "0"
+        },
+        "create": true,
+        "header_is_plain_sqlite": false,
+        "reopen_and_integrity": true,
+        "wrong_key_rejected": true,
+        "readonly_read_and_write_rejection": true,
+        "ordinary_sqlite_rejected": true,
+        "plain_main_encrypted_attach_bound_values": true,
+        "wrong_attach_key_rejected": true,
+        "passed": true,
+        "sha256": "582220248ced31e830891ff5085187ec7df0e0cf08cfbb7f93faef63cd5a1eb4",
+        "hash_stable": true,
+        "bytes": 8192
+      },
+      {
+        "label": "chacha20",
+        "cipher": "chacha20",
+        "legacy_requested": null,
+        "applied_configuration": {
+          "cipher": "chacha20",
+          "legacy": "0"
+        },
+        "create": true,
+        "header_is_plain_sqlite": false,
+        "reopen_and_integrity": true,
+        "wrong_key_rejected": true,
+        "readonly_read_and_write_rejection": true,
+        "ordinary_sqlite_rejected": true,
+        "plain_main_encrypted_attach_bound_values": true,
+        "wrong_attach_key_rejected": true,
+        "passed": true,
+        "sha256": "45555f0ee39d96c79c82d5b742e7eec38240351b0441cad7106fb44eaa7dcb81",
+        "hash_stable": true,
+        "bytes": 8192
+      },
+      {
+        "label": "sqlcipher",
+        "cipher": "sqlcipher",
+        "legacy_requested": null,
+        "applied_configuration": {
+          "cipher": "sqlcipher",
+          "legacy": "0"
+        },
+        "create": true,
+        "header_is_plain_sqlite": false,
+        "reopen_and_integrity": true,
+        "wrong_key_rejected": true,
+        "readonly_read_and_write_rejection": true,
+        "ordinary_sqlite_rejected": true,
+        "plain_main_encrypted_attach_bound_values": true,
+        "wrong_attach_key_rejected": true,
+        "passed": true,
+        "sha256": "db916ad314e85ce8b098aa03dccc6d3debb7158f3f40c2c2ec56773410c79fbe",
+        "hash_stable": true,
+        "bytes": 8192
+      },
+      {
+        "label": "rc4",
+        "cipher": "rc4",
+        "legacy_requested": null,
+        "applied_configuration": {
+          "cipher": "rc4",
+          "legacy": "1"
+        },
+        "create": true,
+        "header_is_plain_sqlite": false,
+        "reopen_and_integrity": true,
+        "wrong_key_rejected": true,
+        "readonly_read_and_write_rejection": true,
+        "ordinary_sqlite_rejected": true,
+        "plain_main_encrypted_attach_bound_values": true,
+        "wrong_attach_key_rejected": true,
+        "passed": true,
+        "sha256": "a6366fdb639dca527e078ecba14a892d253cce5b4312959343408055f4a11ea3",
+        "hash_stable": true,
+        "bytes": 8192
+      },
+      {
+        "label": "ascon128",
+        "cipher": "ascon128",
+        "legacy_requested": null,
+        "applied_configuration": {
+          "cipher": "ascon128",
+          "legacy": null
+        },
+        "create": true,
+        "header_is_plain_sqlite": false,
+        "reopen_and_integrity": true,
+        "wrong_key_rejected": true,
+        "readonly_read_and_write_rejection": true,
+        "ordinary_sqlite_rejected": true,
+        "plain_main_encrypted_attach_bound_values": true,
+        "wrong_attach_key_rejected": true,
+        "passed": true,
+        "sha256": "2a6958b4df4db70a45c9b3a9658561352049a6f463a35119d5b36c52e8647dfd",
+        "hash_stable": true,
+        "bytes": 8192
+      },
+      {
+        "label": "aes128cbc legacy",
+        "cipher": "aes128cbc",
+        "legacy_requested": 1,
+        "applied_configuration": {
+          "cipher": "aes128cbc",
+          "legacy": "1"
+        },
+        "create": true,
+        "header_is_plain_sqlite": false,
+        "reopen_and_integrity": true,
+        "wrong_key_rejected": true,
+        "readonly_read_and_write_rejection": true,
+        "ordinary_sqlite_rejected": true,
+        "plain_main_encrypted_attach_bound_values": true,
+        "wrong_attach_key_rejected": true,
+        "passed": true,
+        "sha256": "dd06eb585f35eca50a68ab57ed77dae3bbfc59880ad8d664af0adcd8a9ac3987",
+        "hash_stable": true,
+        "bytes": 8192
+      },
+      {
+        "label": "aes256cbc legacy",
+        "cipher": "aes256cbc",
+        "legacy_requested": 1,
+        "applied_configuration": {
+          "cipher": "aes256cbc",
+          "legacy": "1"
+        },
+        "create": true,
+        "header_is_plain_sqlite": false,
+        "reopen_and_integrity": true,
+        "wrong_key_rejected": true,
+        "readonly_read_and_write_rejection": true,
+        "ordinary_sqlite_rejected": true,
+        "plain_main_encrypted_attach_bound_values": true,
+        "wrong_attach_key_rejected": true,
+        "passed": true,
+        "sha256": "b8a9f00ecb1e8adf354788dc00bb289c21e9a2396057141dc39cd8d93293efe5",
+        "hash_stable": true,
+        "bytes": 8192
+      },
+      {
+        "label": "chacha20 legacy",
+        "cipher": "chacha20",
+        "legacy_requested": 1,
+        "applied_configuration": {
+          "cipher": "chacha20",
+          "legacy": "1"
+        },
+        "create": true,
+        "header_is_plain_sqlite": false,
+        "reopen_and_integrity": true,
+        "wrong_key_rejected": true,
+        "readonly_read_and_write_rejection": true,
+        "ordinary_sqlite_rejected": true,
+        "plain_main_encrypted_attach_bound_values": true,
+        "wrong_attach_key_rejected": true,
+        "passed": true,
+        "sha256": "c2335f55fc06162ebaae7ba52b90899e040c2d7ccb999ed9e824f3a9cf2491d0",
+        "hash_stable": true,
+        "bytes": 8192
+      },
+      {
+        "label": "sqlcipher legacy v1",
+        "cipher": "sqlcipher",
+        "legacy_requested": 1,
+        "applied_configuration": {
+          "cipher": "sqlcipher",
+          "legacy": "1"
+        },
+        "create": true,
+        "header_is_plain_sqlite": false,
+        "reopen_and_integrity": true,
+        "wrong_key_rejected": true,
+        "readonly_read_and_write_rejection": true,
+        "ordinary_sqlite_rejected": true,
+        "plain_main_encrypted_attach_bound_values": true,
+        "wrong_attach_key_rejected": true,
+        "passed": true,
+        "sha256": "1830426884273f0a1b4371068f8608080d742f3946e26c040d182b25fe04e70c",
+        "hash_stable": true,
+        "bytes": 2048
+      },
+      {
+        "label": "sqlcipher legacy v2",
+        "cipher": "sqlcipher",
+        "legacy_requested": 2,
+        "applied_configuration": {
+          "cipher": "sqlcipher",
+          "legacy": "2"
+        },
+        "create": true,
+        "header_is_plain_sqlite": false,
+        "reopen_and_integrity": true,
+        "wrong_key_rejected": true,
+        "readonly_read_and_write_rejection": true,
+        "ordinary_sqlite_rejected": true,
+        "plain_main_encrypted_attach_bound_values": true,
+        "wrong_attach_key_rejected": true,
+        "passed": true,
+        "sha256": "32f96e4dfa22d15a901299bc723561e2879b4052a8b6e12884260b3634618a20",
+        "hash_stable": true,
+        "bytes": 2048
+      },
+      {
+        "label": "sqlcipher legacy v3",
+        "cipher": "sqlcipher",
+        "legacy_requested": 3,
+        "applied_configuration": {
+          "cipher": "sqlcipher",
+          "legacy": "3"
+        },
+        "create": true,
+        "header_is_plain_sqlite": false,
+        "reopen_and_integrity": true,
+        "wrong_key_rejected": true,
+        "readonly_read_and_write_rejection": true,
+        "ordinary_sqlite_rejected": true,
+        "plain_main_encrypted_attach_bound_values": true,
+        "wrong_attach_key_rejected": true,
+        "passed": true,
+        "sha256": "0514d24390133994020817442ee13b78593db6491e9170a7eaa524a4938b2272",
+        "hash_stable": true,
+        "bytes": 2048
+      },
+      {
+        "label": "sqlcipher legacy v4",
+        "cipher": "sqlcipher",
+        "legacy_requested": 4,
+        "applied_configuration": {
+          "cipher": "sqlcipher",
+          "legacy": "4"
+        },
+        "create": true,
+        "header_is_plain_sqlite": false,
+        "reopen_and_integrity": true,
+        "wrong_key_rejected": true,
+        "readonly_read_and_write_rejection": true,
+        "ordinary_sqlite_rejected": true,
+        "plain_main_encrypted_attach_bound_values": true,
+        "wrong_attach_key_rejected": true,
+        "passed": true,
+        "sha256": "4e3e298b27ead95a63465e050b82a4d6371d2d2ff5bf01f5a08226dbb54b7833",
+        "hash_stable": true,
+        "bytes": 8192
+      },
+      {
+        "label": "rc4 legacy",
+        "cipher": "rc4",
+        "legacy_requested": 1,
+        "applied_configuration": {
+          "cipher": "rc4",
+          "legacy": "1"
+        },
+        "create": true,
+        "header_is_plain_sqlite": false,
+        "reopen_and_integrity": true,
+        "wrong_key_rejected": true,
+        "readonly_read_and_write_rejection": true,
+        "ordinary_sqlite_rejected": true,
+        "plain_main_encrypted_attach_bound_values": true,
+        "wrong_attach_key_rejected": true,
+        "passed": true,
+        "sha256": "a6366fdb639dca527e078ecba14a892d253cce5b4312959343408055f4a11ea3",
+        "hash_stable": true,
+        "bytes": 8192
+      },
+      {
+        "label": "ascon128 legacy",
+        "cipher": "ascon128",
+        "legacy_requested": 1,
+        "passed": false,
+        "error_class": "ValueError"
+      }
+    ]
+  },
+  "macos_arm64_frozen_probe": {
+    "passed": true,
+    "apsw": "3.54.0.0",
+    "sqlite": "3.54.0",
+    "mc": "SQLite3 Multiple Ciphers 2.6.1",
+    "encrypted_header": true,
+    "ordinary_sqlite_rejected": true,
+    "read_hash_unchanged": true,
+    "credentials_persisted": false,
+    "owned_fixture_removed": true
+  },
+  "private_evidence_sha256": {
+    "probe.py": "477db01aac59e1643dbb73f5e10427f54b677504ba7522ae46ed19172160dd07",
+    "probe-receipt.json": "45d8cec4a79ecf40abb7773169173c762123fe9fb56c9209f65d9f45b83c9451",
+    "wheel-receipt.json": "dec06ef3737e9215748469ea635ddd7e23c0ad65183368b44f3786a73bc8558b",
+    "freeze_probe.py": "e35f5681b7fa584a7ec9d67c8357b6dba88fc7afb7752548378afc9bf0df2be1",
+    "freeze-runtime.json": "57c78829f0630f2b7e3d91cb65ef7712ccbec09bc2831dd2309fc851cc86fb2a",
+    "freeze-build.log": "9d486258baa68c912f4a322b72ee171e16b47231294ac01fffbe87461c59743c",
+    "reference-fixture-manifest.json": "cdcfa0df56118314ed59c87192af36da7951deada6f8c6c225a47684a57e9146"
+  }
+}

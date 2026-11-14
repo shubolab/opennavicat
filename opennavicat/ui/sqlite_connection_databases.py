@@ -4,12 +4,12 @@ from __future__ import annotations
 from pathlib import Path
 import uuid
 
-from PySide6.QtCore import QEvent, Qt, QSize, QTimer, Signal
+from PySide6.QtCore import QEvent, Qt, QRect, QSize, QTimer, Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QAbstractItemView, QCheckBox, QDialog, QDialogButtonBox, QFileDialog,
     QFormLayout, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMessageBox, QPushButton,
-    QStyle, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
+    QStyle, QStyleOptionFrame, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
 from opennavicat.database import ConnectionConfig
@@ -32,6 +32,41 @@ def _normalized_draft(config: ConnectionConfig) -> ConnectionConfig:
     # Existing carriers keep their original literal binding. Normalizing an
     # old relative filename is not evidence of newly entered credentials.
     return copy_connection_config(draft)
+
+
+class _FontLineEdit(QLineEdit):
+    """Reserve actual native content space instead of a fixed style height."""
+
+    def _content_hint(self, hint):
+        hint = QSize(hint)
+        margins = self.textMargins()
+        frame_margins = self.contentsMargins()
+        padding = max(1, self.style().pixelMetric(QStyle.PixelMetric.PM_FocusFrameVMargin, None, self))
+        required = self.fontMetrics().height() + margins.top() + margins.bottom() + 2 * padding
+        option = QStyleOptionFrame()
+        self.initStyleOption(option)
+        for _ in range(8):
+            option.rect = QRect(0, 0, hint.width(), hint.height())
+            content = self.style().subElementRect(QStyle.SubElement.SE_LineEditContents, option, self)
+            available = min(content.height(), hint.height() - frame_margins.top() - frame_margins.bottom())
+            deficit = required - available
+            if deficit <= 0:
+                break
+            hint.setHeight(hint.height() + deficit)
+        return hint
+
+    def sizeHint(self):
+        return self._content_hint(super().sizeHint())
+
+    def minimumSizeHint(self):
+        return self._content_hint(super().minimumSizeHint())
+
+    def event(self, event):
+        handled = super().event(event)
+        if event.type() in (QEvent.Type.FontChange, QEvent.Type.StyleChange, QEvent.Type.ApplicationFontChange,
+                            QEvent.Type.Polish, QEvent.Type.ContentsRectChange, QEvent.Type.DevicePixelRatioChange):
+            self.updateGeometry()
+        return handled
 
 
 class _BrowseButton(QPushButton):
@@ -79,17 +114,18 @@ class SQLiteDatabaseDialog(QDialog):
         layout.setContentsMargins(20, 14, 20, 14)
         layout.setSpacing(10)
         form = QFormLayout()
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         form.setHorizontalSpacing(8)
         form.setVerticalSpacing(7)
-        self.name_edit = QLineEdit(entry.name if entry else "")
+        self.name_edit = _FontLineEdit(entry.name if entry else "")
         self.name_edit.setObjectName("sqliteDatabaseName")
         form.addRow("数据库名称:", self.name_edit)
         file_field = QWidget()
         file_layout = QHBoxLayout(file_field)
         file_layout.setContentsMargins(0, 0, 0, 0)
         file_layout.setSpacing(3)
-        self.file_edit = QLineEdit(entry.database if entry else "")
+        self.file_edit = _FontLineEdit(entry.database if entry else "")
         self.file_edit.setObjectName("sqliteDatabaseFile")
         file_layout.addWidget(self.file_edit, 1)
         self.browse_button = _BrowseButton("...")
@@ -101,7 +137,7 @@ class SQLiteDatabaseDialog(QDialog):
         self.encrypted_check = QCheckBox("加密")
         self.encrypted_check.setChecked(bool(entry and entry.encrypted))
         form.addRow(self.encrypted_check)
-        self.password_edit = QLineEdit(self._base.sqlite_database_passwords.get(self._row_id, "")
+        self.password_edit = _FontLineEdit(self._base.sqlite_database_passwords.get(self._row_id, "")
                                        if entry and entry.encrypted else "")
         self.password_edit.setObjectName("sqliteDatabasePassword")
         self.password_edit.setEchoMode(QLineEdit.EchoMode.Password)

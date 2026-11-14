@@ -2,10 +2,11 @@
 from hashlib import sha256
 
 import pytest
-from PySide6.QtCore import QSize
-from PySide6.QtGui import QColor, QIcon, QImage, QPalette
+from PySide6.QtCore import QSize, Qt
+from PySide6.QtGui import QColor, QIcon, QImage, QPainter, QPalette
 
 from opennavicat.ui import icons
+from opennavicat.ui.action_artwork import draw_action
 
 
 NAMES = ("test_success", "copy", "dismiss")
@@ -68,6 +69,11 @@ def test_success_is_a_filled_green_disc_with_a_white_check(qapp, dpr):
     white = [c for c in opaque if min(c.red(), c.green(), c.blue()) > 230]
     assert len(green) > 45 * dpr * dpr  # Filled body, not a thin circle or bare tick.
     assert len(white) >= 2 * dpr * dpr
+    assert any(c.alpha() == 255 and c.name() == '#70d35d' for c in green)
+    points = [(x, y) for y in range(result.height()) for x in range(result.width())
+              if result.pixelColor(x, y).alpha() > 200]
+    assert max(x for x, _ in points) - min(x for x, _ in points) + 1 >= 12 * dpr
+    assert max(y for _, y in points) - min(y for _, y in points) + 1 >= 12 * dpr
     assert all(c.alpha() > 200 for c in region(result, .40, .24, .60, .38))
     assert all(c.alpha() == 0 for c in region(result, 0, 0, .15, .15))
     # Both strokes must remain visible at the actual 16px control size.
@@ -76,6 +82,25 @@ def test_success_is_a_filled_green_disc_with_a_white_check(qapp, dpr):
     assert any(min(c.red(), c.green(), c.blue()) > 230
                for c in region(result, .50, .32, .75, .58))
     assert digest(result) != digest(image("record_apply", dpr))
+
+
+@pytest.mark.parametrize('override', ['#245acf', QColor('#245acf')], ids=['string', 'QColor'])
+def test_success_palette_is_separate_from_existing_green_action_artwork(qapp, override):
+    # Connection status has its own observed color; ordinary green add/check
+    # actions must retain their existing palette and may still be overridden.
+    assert any(c.alpha() == 255 and c.name() == '#6eb950' for c in colors(image('add', 3)))
+    result = QImage(54, 54, QImage.Format.Format_RGBA8888)
+    result.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(result)
+    try:
+        painter.scale(3, 3)
+        assert draw_action(painter, 'test_success', palette={
+            'green': '#ff00ff', 'success_green': override,
+        })
+    finally:
+        painter.end()
+    assert any(c.alpha() == 255 and c.name() == '#245acf' for c in colors(result))
+    assert not any(c.alpha() == 255 and c.name() == '#ff00ff' for c in colors(result))
 
 
 @pytest.mark.parametrize("dpr", [1, 2, 3])

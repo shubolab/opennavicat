@@ -16,7 +16,7 @@ from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
 _DEFAULT_COLORS = {
     "blue": "#3098ee", "gray": "#96999d", "light": "#b9bdc1",
     "green": "#6eb950", "yellow": "#d5ab40", "red": "#d4635d",
-    "white": "#ffffff",
+    "white": "#ffffff", "success_green": "#70d35d",
 }
 
 
@@ -161,8 +161,8 @@ def _save(p, c):
 
 def _test_success(p, c):
     p.setPen(Qt.PenStyle.NoPen)
-    p.setBrush(c['green'])
-    p.drawEllipse(QRectF(2.5, 2.5, 13, 13))
+    p.setBrush(c['success_green'])
+    p.drawEllipse(QRectF(1.2, 1.2, 15.6, 15.6))
     _path(p, [(5.4, 8.7), (7.7, 10.9), (11.9, 6.2)], c['white'], 1.3)
 
 
@@ -570,7 +570,7 @@ ACTION_NAMES = frozenset(_DRAWERS)
 def draw_action(painter: QPainter, name: str, *, palette: Mapping | None = None) -> bool:
     """Paint one 18x18 logical pictogram and preserve the caller's paint state.
 
-    ``palette`` may override blue/gray/light/green/yellow/red/white with QColor or Qt
+    ``palette`` may override blue/gray/light/green/yellow/red/white/success_green with QColor or Qt
     color strings. The caller chooses the mode/theme colors. An unknown name
     returns False without changing the painter or substituting unrelated art.
     """

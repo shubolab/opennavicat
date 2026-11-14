@@ -177,6 +177,13 @@ def _tls_context(config):
     return context
 
 
+@dataclass(frozen=True)
+class _SQLiteBackupSource:
+    schema: str
+    database: str
+    connection: Any = field(repr=False, compare=False)
+
+
 class DatabaseSession:
     def __new__(cls, config):
         if cls is DatabaseSession:
@@ -915,20 +922,39 @@ class DatabaseSession:
                 raise
             raise DatabaseError(str(exc)) from exc
 
-    def backup_to(self, path: str) -> None:
+    def backup_source(self, schema: str = "main") -> _SQLiteBackupSource:
+        """Capture a worker-owned namespace and retain its connection object."""
+        if self.config.driver != "sqlite":
+            raise DatabaseError("Physical backup is currently available for SQLite only")
+        if self.connection is None:
+            raise DatabaseError("The backup connection changed. Select the database again")
+        if self.in_transaction:
+            raise DatabaseError("Commit or roll back the open transaction before backing up")
+        database = next((row[2] for row in self._query("PRAGMA database_list") if row[1] == schema), None)
+        if database is None:
+            raise DatabaseError("The backup database is no longer attached")
+        return _SQLiteBackupSource(schema, database, self.connection)
+
+    def backup_to(self, path: str, schema: str = "main", *, source: _SQLiteBackupSource | None = None) -> None:
         """Write a consistent SQLite snapshot through SQLite's online backup API.
 
         Refuse an overwrite and an open write transaction. Other database engines
         need vendor dump tools rather than a misleading partial SQL export.
+        The default remains main; a worker-captured source also guards a later
+        queued backup against connection or namespace/file rebinding.
         """
         if self.config.driver != "sqlite":
             raise DatabaseError("Physical backup is currently available for SQLite only")
-        self.connect()
-        if self.in_transaction:
-            raise DatabaseError("Commit or roll back the open transaction before backing up")
+        if source is not None:
+            if not isinstance(source, _SQLiteBackupSource) or self.connection is not source.connection:
+                raise DatabaseError("The backup connection changed. Select the database again")
+        else:
+            self.connect()
+        current = self.backup_source(schema)
+        if source is not None and (current.schema, current.database) != (source.schema, source.database):
+            raise DatabaseError("The backup database changed. Select the database again")
         destination = Path(path).expanduser().resolve()
-        source = self.config.database
-        if source and source != ":memory:" and destination == Path(source).expanduser().resolve():
+        if current.database and destination == Path(current.database).expanduser().resolve():
             raise DatabaseError("Backup destination must differ from the source database")
         # Exclusive creation ensures an existing file is never accidentally lost.
         with destination.open("xb"):
@@ -936,7 +962,7 @@ class DatabaseSession:
         try:
             target = sqlite3.connect(destination)
             try:
-                self.connection.backup(target)
+                self.connection.backup(target, name=schema)
             finally:
                 target.close()
         except BaseException:

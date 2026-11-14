@@ -4533,12 +4533,17 @@ class MainWindow(QMainWindow):
 
     def backup_sqlite(self):
         session = self.sessions.get(self.active_id)
+        schema = self.active_schema
         if not session or session.config.driver != "sqlite":
             QMessageBox.information(self, "SQLite 备份", "请选择一个已打开的 SQLite 连接。")
             return
-        filename, _ = QFileDialog.getSaveFileName(self, "Back up SQLite database", "backup.sqlite3", "SQLite (*.sqlite3 *.db)")
-        if filename:
-            self.submit(lambda: session.backup_to(filename), lambda _: self.statusBar().showMessage("Database backup completed", 7000), label="Backing up database")
+        def select_destination(source):
+            filename, _ = QFileDialog.getSaveFileName(self, "Back up SQLite database", "backup.sqlite3", "SQLite (*.sqlite3 *.db)")
+            if filename:
+                self.submit(lambda: session.backup_to(filename, schema=schema, source=source),
+                            lambda _: self.statusBar().showMessage("Database backup completed", 7000),
+                            label="Backing up database")
+        self.submit(lambda: session.backup_source(schema), select_destination, label="Preparing database backup")
 
     def sample_workspace(self):
         if self.tasks:

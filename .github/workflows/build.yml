@@ -73,6 +73,16 @@ jobs:
         run: python scripts/test-js-engine.py --mode vm --evidence artifacts/js-engine/qualification
       - name: Qualify Qt component scope without skipped cases
         run: python scripts/test-js-engine.py --mode qt --evidence artifacts/js-engine/qt
+      - name: Qualify SQLite database page on the native desktop QPA
+        if: runner.os != 'Linux'
+        env:
+          QT_QPA_PLATFORM: ${{ runner.os == 'Windows' && 'windows' || 'cocoa' }}
+        run: python scripts/test-sqlite-window.py --qt-platform "${{ runner.os == 'Windows' && 'windows' || 'cocoa' }}" --output artifacts/sqlite-window-native
+      - name: Qualify SQLite database page on native X11
+        if: runner.os == 'Linux'
+        env:
+          QT_QPA_PLATFORM: xcb
+        run: xvfb-run -a python scripts/test-sqlite-window.py --qt-platform xcb --output artifacts/sqlite-window-native
       - name: Verify application
         run: python -c "import opennavicat, pytest, sys; sys.exit(pytest.main(['-q', '-W', 'error', '--junitxml=artifacts/pytest-results.xml']))"
       - name: Build native desktop distribution
@@ -121,6 +131,7 @@ jobs:
             artifacts/js-engine/LICENSE.quickjs-ng
             artifacts/js-engine/qualification/
             artifacts/js-engine/qt/
+            artifacts/sqlite-window-native/
             release-assets/*manifest*.json
           if-no-files-found: ignore
 

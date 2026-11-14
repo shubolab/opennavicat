@@ -24,6 +24,7 @@ SCOPES = (
     "tests/test_sqlite_connection_databases_font_ui.py",
     "tests/test_sqlite_connection_databases_native_contents.py",
     "tests/test_sqlite_small_visuals.py",
+    "tests/test_sqlite_browse_native_layout.py",
 )
 NATIVE = {"Windows": "windows", "Darwin": "cocoa", "Linux": "xcb"}
 LIMIT = 4 * 1024 * 1024

@@ -123,6 +123,80 @@ print(json.dumps({'passed':True,'failure':failure,'parent_cwd_unchanged':True}))
     assert json.loads(result.stdout.splitlines()[-1])['passed']
 
 
+@pytest.mark.parametrize('include_sqlite_test', [False, True], ids=['default-six', 'sqlite-test-seven'])
+def test_real_no_mongo_record_returns_truthful_receipt_after_all_actual_phases(recorder, include_sqlite_test):
+    # This calls record(), its native Qt event loop, async SQL, real Test and
+    # frame privacy guards. Only long presentation holds are capped; no probe,
+    # result signal, widget, store, phase or captured frame is fabricated.
+    source = '''
+import hashlib,importlib.util,json,os,sys,tempfile
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+from types import SimpleNamespace
+from PySide6.QtCore import QTimer
+path=Path(sys.argv[1]);include=sys.argv[2]=='1'
+sys.path.insert(0,str(path.parents[1]))
+import opennavicat.ui.dialogs as actual_dialogs
+assert Path(actual_dialogs.__file__).resolve().is_relative_to(path.parents[1])
+spec=importlib.util.spec_from_file_location('actual_record_no_mongo_child',path)
+module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+def forbidden(*unused,**kwargs):raise AssertionError('No FFmpeg or Docker in actual record() regression')
+module.dependencies=forbidden;module.encode=forbidden;module.verify_gif=forbidden;module.OwnedMongoDemo=forbidden
+original_single_shot=QTimer.singleShot
+def bounded_presentation_hold(*args):
+ if args and type(args[0]) is int:args=(min(args[0],250),*args[1:])
+ return original_single_shot(*args)
+QTimer.singleShot=staticmethod(bounded_presentation_hold)
+args=SimpleNamespace(width=950,height=620,fps=10,theme='dark',include_stream=False,
+ include_oracle_form=False,include_connection_chooser=False,include_sqlite_test=include)
+original=Path.cwd()
+with tempfile.TemporaryDirectory(prefix='opennavicat-real-record-unit-') as directory:
+ temporary=Path(directory).resolve()
+ with ThreadPoolExecutor(max_workers=1,thread_name_prefix='actual-record-unit-io') as pool:
+  with module.owned_recording_cwd(temporary,enabled=include):
+   try:frames,receipt=module.record(args,temporary,pool)
+   finally:pool.submit(lambda:None).result(timeout=10)
+   expected=module.required_demo_phases(sqlite_test=include)
+   assert tuple(row['name'] for row in receipt['phases'])==expected
+   assert len(expected)==(7 if include else 6)
+   assert all(row['frames']>0 and row['privacy_checked_frames']==row['frames'] for row in receipt['phases'])
+   files=sorted(frames.glob('frame-*.png'))
+   assert len(files)==receipt['frames'] and all(p.stat().st_size>0 for p in files)
+   phase_hashes={hashlib.sha256(files[row['first_frame']].read_bytes()).hexdigest() for row in receipt['phases']}
+   assert len(phase_hashes)==len(expected)
+   for name in ('mongodb_included','mongodb_gridfs_image_previewed','mongodb_javascript_read_completed',
+    'mongodb_inline_key_editor_opened','mongodb_collection_collation_save','mongodb_collection_storage_reopened_readonly',
+    'mongodb_collection_options_reopened_readonly','mongodb_collection_options_verified','mongodb_aggregation_pipeline_stage_template'):
+    assert receipt[name] is False,(name,receipt[name])
+   for name in ('mongodb_collection_storage_save','mongodb_aggregation_pipeline_options','mongodb_aggregation_pipeline_preview',
+    'mongodb_aggregation_pipeline_explain','mongodb_aggregation_pipeline_results','mongodb_batch_job','mongodb_finite_stream'):
+    assert receipt[name] is None,(name,receipt[name])
+   assert receipt['mongodb_products']==0 and receipt['mongodb_bson_types_checked']==[]
+   assert receipt['query_result']=={'rows':6,'columns':4}
+   assert receipt['sqlite_closed_in_worker'] and receipt['native_window_closed_before_quit']
+   assert receipt['background_io_completed_before_quit'] and receipt['qt_platform']=='offscreen'
+   if include:
+    result=receipt['sqlite_connection_test']
+    assert result['actual_probe_completed'] and result['test_session_closed_in_worker'] and result['fixture_unchanged']
+    assert result['success_diagram_line'] and result['form_closed_after_worker_idle']
+    assert result['relative_file_used_by_real_test'] and not result['profile_saved']
+   else:assert receipt['sqlite_connection_test'] is None
+   text=json.dumps(receipt,ensure_ascii=False)
+   assert not any(value in text for value in (str(module.ROOT),str(temporary),str(Path.home())))
+assert Path.cwd()==original and not temporary.exists()
+print(json.dumps({'passed':True,'phases':len(expected),'frames':receipt['frames'],'actual_qpa':receipt['qt_platform']}))
+'''
+    env = {key: value for key, value in os.environ.items() if not key.startswith('OPENNAVICAT_TEST_')}
+    env['QT_QPA_PLATFORM'] = 'offscreen'
+    original = Path.cwd()
+    result = subprocess.run([recorder.sys.executable, '-W', 'error', '-c', source, recorder.__file__, '1' if include_sqlite_test else '0'],
+        env=env, capture_output=True, text=True, timeout=40)
+    assert Path.cwd() == original
+    assert result.returncode == 0, (result.stdout + result.stderr)[-16000:]
+    facts = json.loads(result.stdout.splitlines()[-1])
+    assert facts['passed'] and facts['phases'] == (7 if include_sqlite_test else 6)
+
+
 def _complete_generated_sqlite_test(qtbot, recorder, dialog, fixture, pool):
     from PySide6.QtCore import Qt
     dialog.show()

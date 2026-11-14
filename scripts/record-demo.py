@@ -1324,6 +1324,7 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
              "phases": [], "query": None, "designer": None, "shutdown": False,
              "mongo_page": None, "gridfs_page": None, "mongo_query": None,
              "mongo_index_page": None, "sqlite_closed_in_worker": False,
+             "inline_key_editor_opened": False,
              "mongo_storage_page": None, "mongo_storage_verification": None,
              "mongo_batch_page": None, "mongo_batch_verification": None,
              "mongo_stream_page": None, "mongo_stream_verification": None,
@@ -2299,6 +2300,8 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
                 if "customers" not in names or "customers_demo" in names:
                     raise RuntimeError("The preview unexpectedly changed the demo database.")
             if mongo is not None:
+                if not state["inline_key_editor_opened"]:
+                    raise RuntimeError("The generated MongoDB inline key editor was not actually opened.")
                 entry = mongo_session.connection[MONGO_DATABASE][MONGO_COLLECTION]
                 actual = entry.index_information().get("demo_stock_sku", {})
                 if actual.get("sparse") or list(actual.get("key", ())) != [("stock", -1), ("sku", 1)]:

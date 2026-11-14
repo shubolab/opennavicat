@@ -11,6 +11,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from .database import DatabaseSession
+from .sqlite_database_config import encode_sqlite_databases
 
 
 @dataclass
@@ -59,7 +60,12 @@ def fingerprint(session, schema=None):
         if getattr(session, "_compare_identity_connection", None) is not connection:
             session._compare_identity_connection = connection
             session._compare_identity_token = uuid.uuid4().hex
-        binding.append([schema, databases, session._compare_identity_token])
+        # A saved/draft profile can change before its active connection is
+        # replaced. Bind the reviewed intent as well as the actual namespaces;
+        # runtime passwords and their provenance never enter a preview.
+        profile = [config.read_only, getattr(config, "sqlite_open_mode", "legacy"),
+                   encode_sqlite_databases(config.sqlite_databases)]
+        binding.append([schema, databases, session._compare_identity_token, profile])
     return json.dumps(binding)
 
 

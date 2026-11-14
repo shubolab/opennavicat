@@ -1,5 +1,6 @@
 """Stale previews must never follow a SQLite alias onto another owned file."""
 from contextlib import closing
+from dataclasses import replace
 from pathlib import Path
 import re
 import sqlite3
@@ -8,7 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from opennavicat.compare import apply_plan, compare_tables
-from opennavicat.database import ConnectionConfig, DatabaseSession
+from opennavicat.database import ConnectionConfig, DatabaseSession, SQLiteDatabaseEntry
 
 
 OLD = [(1, "old"), (2, "extra")]
@@ -67,6 +68,27 @@ def assert_rejected_before_writes(target, plan, error, statements):
     assert not any(re.match(r"\s*(BEGIN|INSERT|UPDATE|DELETE)\b", sql, re.I)
                    for sql in statements), statements
     assert not target.in_transaction and not plan.applied
+
+
+@pytest.mark.parametrize('change', ['name', 'database', 'encrypted', 'id', 'order'])
+def test_pending_attached_profile_change_invalidates_preview_before_writes(databases, change):
+    target, paths = databases.target, databases.paths
+    target._query('ATTACH DATABASE ? AS "other"', (str(paths['aux_b']),))
+    first = SQLiteDatabaseEntry('first', 'aux', str(paths['aux_a']))
+    second = SQLiteDatabaseEntry('second', 'other', str(paths['aux_b']))
+    target.config.sqlite_databases = (first, second)
+    target.config.sqlite_database_passwords = {'first': 'NEVER-FINGERPRINT-PASSWORD'}
+    plan = preview(databases)
+    assert 'NEVER-FINGERPRINT-PASSWORD' not in plan.target_fingerprint
+    if change == 'order':
+        target.config.sqlite_databases = (second, first)
+    else:
+        changed = {'name': 'renamed', 'database': str(paths['aux_b']),
+                   'encrypted': True, 'id': 'replacement'}[change]
+        target.config.sqlite_databases = (replace(first, **{change: changed}), second)
+    error, statements = attempt_apply(target, plan)
+    assert_rejected_before_writes(target, plan, error, statements)
+    assert read_file(paths['aux_a']) == OLD and read_file(paths['aux_b']) == OLD
 
 
 def test_same_session_alias_retarget_cannot_apply_old_preview_to_identical_file(databases):

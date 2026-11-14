@@ -3349,6 +3349,7 @@ class MainWindow(QMainWindow):
 
     def _store_connection_edit(self, payload):
         result = payload.config()
+        new_sqlite = result.driver == "sqlite" and result.id not in self.configs
         remember, remember_ssh, remember_ssh_key, remember_ssl = payload.remember
         if result.driver == "oracle" and not remember:
             result = replace(result, password="")
@@ -3362,7 +3363,8 @@ class MainWindow(QMainWindow):
         self.active_id = result.id
         self.populate_connections()
         self.set_active(result.id)
-        if result.driver != "oracle" and result.id not in self.store.state.get("navicat_imports", {}):
+        if (result.driver != "oracle" and not new_sqlite
+                and result.id not in self.store.state.get("navicat_imports", {})):
             self.connect_id(result.id)
 
     def connection_type_selected(self, driver, preset):

@@ -63,6 +63,9 @@ from pathlib import Path
 path=Path(sys.argv[1]);failure=sys.argv[2]
 spec=importlib.util.spec_from_file_location('record_demo_cwd_child',path)
 module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+# Qt's Windows loader legitimately adds its DLL directory to PATH on first
+# import. Capture the CWD context's baseline after that process bootstrap.
+from PySide6.QtWidgets import QApplication
 seen={}
 class Pool(ThreadPoolExecutor):
  def submit(self,*args,**kwargs):
@@ -102,7 +105,8 @@ with tempfile.TemporaryDirectory(prefix='opennavicat-main-lifecycle-test-') as d
    assert failure and str(error)=='controlled '+failure+' failure',str(error)
   else:assert not failure
   assert Path.cwd()==owned and seen['first_submit_owned'] and seen['absolute_output']
-  assert seen['relative_path_tool_preserved'] and os.environ['PATH']==before_path
+  assert seen['relative_path_tool_preserved'], 'relative tool lookup changed inside the owned CWD'
+  assert os.environ['PATH']==before_path, 'owned CWD context did not restore the bootstrapped PATH'
   assert seen['pending_owned'] and not seen['temporary'].exists()
   assert not (owned/'owned-pending.txt').exists() and (owned/'keep.txt').read_text()=='unchanged'
   if not failure:

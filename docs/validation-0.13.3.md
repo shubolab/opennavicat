@@ -173,3 +173,5 @@ helper、工具和隔离清理通过；实际 Cocoa 原生 runner 的 5 模块 5
 
 并行开发分支保持本地；当前 origin 仅 main 与保留 dirty 工作的有限 stream 分支。
 验证后的进展与 snapshot 直接进入 main，不再为阶段性记录新建远端分支。
+
+随后 main `9f2104fd1a920adb52db0c83196b657781add381` 的 run [`43585915945`](https://github.com/shubolab/opennavicat/actions/runs/43585915945) 虽通过六目标原生 SQLite UI 门禁，仍在两项 Windows 完整测试中被相同的 `width() < 80` 断言拦下。Windows 36px 字体的实际内容需要 116px；字形内容矩形、右边界及布局约束均通过，因此纠正的是测试的固定宽度预期。当前修订只将“小于 80px”限定于默认主题的 12px 紧凑控件，并在实测字形需求加边距超过 80px 时检查自然扩宽。macOS offscreen 两个相关模块 7 项通过，`git diff --check` 通过；这不是 Windows/ARM 复验。新主线 CI 仍待推送触发并观察，v0.13.3 未打 tag、未发布，公开版本仍是 v0.13.2。

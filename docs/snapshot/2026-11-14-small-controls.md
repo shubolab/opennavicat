@@ -134,3 +134,9 @@ pytest的问题，触发真实Qt teardown的OpenSSL warning；原失败原样保
 新完整默认3791=3129通过/662条件跳过、Cocoa native runner59项零跳过，source270/
 collect-run-JUnit/helper/工具/清理均通过。99应用/打包/native依赖输入与10ca完全相同，
 83模块整包和38阶段实录保留原源码身份，没有冒称重建/重录。还须全新的实际六目标CI。
+
+## 最后 CI 收尾记录
+
+后续 main `9f2104f` 的 Actions run `43585915945` 完成失败：六个原生 SQLite UI 目标门禁均通过；Windows amd64/arm64 的完整测试各被 `assert_browse_contents` 中“按钮宽度必须小于 80px”这一字体无关断言拦下。36px 字体下 Windows 实际三点字形要求按钮宽 116px，而 glyph/content、相邻布局和边界检查均通过。此处是测试过窄，不能据此判定产品缺陷或 release 通过。
+
+本地修正移除通用 80px 上限；仍保留默认主题 12px 控件小于 80px 的紧凑性断言，且当真实字形加边距超过 80px 时要求按钮随内容增长。两个受影响 macOS offscreen 测试模块 7 项通过，`git diff --check` 通过。只改测试合同和记录；六平台新 CI 尚待此次主线推送后的结果。公开版本仍为 v0.13.2；没有创建 0.13.3 tag 或 release，完整 parity 仍未完成。

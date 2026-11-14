@@ -54,7 +54,6 @@ def assert_browse_contents(dialog, sheet):
         assert content.height() >= button.fontMetrics().height()
         assert button.parentWidget().rect().contains(button.geometry())
         assert not button.autoDefault() and not button.isDefault()
-        assert button.width() < 80  # Avoid native standard-button minimum width.
 
 
 @pytest.mark.parametrize("theme", [None, "dark", "light"], ids=["bare", "dark", "light"])
@@ -63,6 +62,9 @@ def test_matching_three_dot_browse_controls_fit_actual_style_content(qtbot, qapp
         apply_theme(qapp, theme)
     dialog, sheet = controls(qtbot, qapp)
     assert_browse_contents(dialog, sheet)
+    if theme is None:
+        # At the ordinary 12px font, the default native controls stay compact.
+        assert all(button.width() < 80 for button in (dialog.browse_button, sheet.browse_button))
 
 
 def test_browse_controls_follow_live_parent_font_and_application_theme(qtbot, qapp):
@@ -79,6 +81,8 @@ def test_browse_controls_follow_live_parent_font_and_application_theme(qtbot, qa
         # minimum. A larger font may grow only the height while still fitting
         # three dots in that width (observed on the Windows native QPA).
         assert dialog.browse_button.width() >= max(20, dialog.browse_button.fontMetrics().horizontalAdvance("...") + 8)
+        if dialog.browse_button.fontMetrics().horizontalAdvance("...") + 8 > 80:
+            assert dialog.browse_button.width() > 80
     assert sizes[36].height() > sizes[20].height() > sizes[12].height()
     assert sizes[36].width() >= sizes[20].width() >= sizes[12].width()
     font = QFont(dialog.font()); font.setPixelSize(36); dialog.setFont(font)

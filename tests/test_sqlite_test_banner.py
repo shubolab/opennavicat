@@ -87,8 +87,10 @@ def test_real_async_sqlite_version_strip_close_and_dismiss_retest_preserve_datab
         assert dialog.buttons.x() > dialog.test_button.geometry().right()+50
         assert dialog.buttons.geometry().right() >= dialog.footer.width()-21
         save = dialog.buttons.button(QDialogButtonBox.StandardButton.Save)
+        cancel = dialog.buttons.button(QDialogButtonBox.StandardButton.Cancel)
         save_right = save.mapTo(dialog.footer, QPoint(save.width(), 0)).x()
         assert save_right >= dialog.footer.width()-32  # Check the actual button, not its larger box.
+        assert save.mapTo(dialog.footer, QPoint()).x() >= cancel.mapTo(dialog.footer, QPoint(cancel.width(), 0)).x()
         rail_bottom = dialog.profile_pane.mapTo(dialog, QPoint(0, dialog.profile_pane.height())).y()
         footer_bottom = dialog.footer.mapTo(dialog, QPoint(0, dialog.footer.height())).y()
         assert rail_bottom == footer_bottom  # The rail continues beside the footer.
@@ -449,3 +451,48 @@ print(json.dumps({'passed': True, 'explicit': explicit, 'observed': observed, 'p
     report = json.loads(result.stdout)
     assert report['passed'] and report['explicit'] is explicit and report['plugin'] == 'offscreen'
     assert [r['parent_pixels'] for r in report['observed']] == [36, 12, 24]
+
+
+@pytest.mark.parametrize('theme', ['dark', 'light'])
+def test_profile_button_restores_current_application_stylesheet_font(theme):
+    source = '''
+import json, sys
+from PySide6.QtCore import QCoreApplication, QEvent, Qt
+from PySide6.QtGui import QFont
+from PySide6.QtWidgets import QApplication
+from opennavicat.database import ConnectionConfig
+from opennavicat.ui.dialogs import ConnectionDialog
+from opennavicat.ui.theme import apply_theme
+app = QApplication([])
+apply_theme(app, sys.argv[1])
+observed = []
+for driver in ('postgresql', 'mysql', 'mariadb', 'sqlserver', 'redis', 'mongodb'):
+    dialog = ConnectionDialog(config=ConnectionConfig('generated-styled', 'Generated styled font', database=':memory:'))
+    dialog.show()
+    button = dialog.new_profile_button
+    for pixels in (36, 12, 24):
+        dialog.driver_combo.setCurrentIndex(dialog.driver_combo.findData('sqlite'))
+        font = QFont(dialog.font()); font.setPixelSize(pixels); dialog.setFont(font); app.processEvents()
+        dialog.driver_combo.setCurrentIndex(dialog.driver_combo.findData(driver)); app.processEvents()
+        native = ConnectionDialog(config=ConnectionConfig('generated-styled-native', 'Generated native font', driver=driver, database='generated'))
+        native.setFont(font); native.show(); app.processEvents()
+        expected = native.new_profile_button
+        assert button.font() == expected.font(), (driver, pixels, button.font().toString(), expected.font().toString())
+        assert button.font().resolveMask() == expected.font().resolveMask()
+        assert button.testAttribute(Qt.WidgetAttribute.WA_SetFont) == expected.testAttribute(Qt.WidgetAttribute.WA_SetFont)
+        assert button.fontMetrics().horizontalAdvance(button.text()) == expected.fontMetrics().horizontalAdvance(expected.text())
+        assert button.fontMetrics().height() == expected.fontMetrics().height()
+        assert button.minimumSize() == expected.minimumSize() and button.maximumSize() == expected.maximumSize()
+        assert not dialog._test_pool.activeThreadCount() and not native._test_pool.activeThreadCount()
+        observed.append({'driver': driver, 'parent_pixels': pixels, 'actual_button_pixels': button.font().pixelSize()})
+        native.close(); native.deleteLater(); QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    dialog.close(); dialog.deleteLater(); QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+print(json.dumps({'passed': True, 'plugin': app.platformName(), 'theme': sys.argv[1], 'observed': observed}))
+'''
+    result = subprocess.run([sys.executable, '-c', source, theme], cwd=Path(__file__).resolve().parents[1],
+        env={**os.environ, 'QT_QPA_PLATFORM': 'offscreen', 'PYTHONWARNINGS': 'error'},
+        capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stdout+result.stderr
+    report = json.loads(result.stdout)
+    assert report['passed'] and report['plugin'] == 'offscreen' and report['theme'] == theme
+    assert len(report['observed']) == 18

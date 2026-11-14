@@ -823,6 +823,11 @@ class ConnectionDialog(QDialog):
         previous_driver = getattr(self, "_active_driver", None)
         local = driver == "sqlite"
         self._set_sqlite_profile_header(local)
+        # macOS already places Reject before Accept. Mirroring that native
+        # layout moves Save to the left; Fusion's WinLayout needs the mirror.
+        mac_buttons = self.buttons.style().styleHint(QStyle.StyleHint.SH_DialogButtonLayout) == QDialogButtonBox.ButtonLayout.MacLayout.value
+        self.buttons.setLayoutDirection(Qt.LayoutDirection.LeftToRight if local and mac_buttons
+                                        else Qt.LayoutDirection.RightToLeft)
         if driver != previous_driver:
             self._reset_sqlite_test_diagram()
             self.sqlite_test_banner.clear_result()
@@ -941,6 +946,12 @@ class ConnectionDialog(QDialog):
                 # font() includes resolved attributes inherited from the old
                 # parent. Reapplying that value would pin an inherited font.
                 button.setFont(original['font'] if original['font_explicit'] else QFont())
+                # Resetting font ownership also removes QStyleSheet's resolved
+                # font. Let the CURRENT application/parent style supply it,
+                # exactly as it does for a newly created native button.
+                button.style().unpolish(button)
+                button.style().polish(button)
+                button.updateGeometry()
             button.show()
         self.profile_header.setVisible(local)
         # Only the built-in placeholder profile is localized. Do not rebuild

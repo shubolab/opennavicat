@@ -2366,19 +2366,29 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
 
     def open_sqlite_database_sheet():
         from PySide6.QtWidgets import QApplication
+        from opennavicat.ui.sqlite_connection_databases import SQLiteDatabaseDialog
 
         capture(); capture_timer.stop()
         if state["shutdown"]:
             return
         dialog = state["sqlite_test_dialog"]
         ledger = dialog._demo_sqlite_databases_ledger
+        # Keep strong identities for pre-existing children. Only the new exact
+        # sheet created by this component invocation may be rejected on error.
+        existing = tuple(dialog.findChildren(SQLiteDatabaseDialog,
+            options=Qt.FindChildOption.FindDirectChildrenOnly))
 
         def ready():
             if state["shutdown"]:
                 return
             try:
+                created = [child for child in dialog.findChildren(SQLiteDatabaseDialog,
+                    options=Qt.FindChildOption.FindDirectChildrenOnly)
+                    if type(child) is SQLiteDatabaseDialog and all(child is not old for old in existing)]
+                state["sqlite_database_sheet"] = created[0] if len(created) == 1 else None
                 sheet = QApplication.activeModalWidget()
-                state["sqlite_database_sheet"] = sheet
+                if sheet is None or sheet is not state["sqlite_database_sheet"]:
+                    raise RuntimeError("The generated database add sheet was not opened by its actual component.")
                 observe_sqlite_database_sheet(dialog, sheet)
                 state["capture_target"] = sheet
                 phase(SQLITE_DATABASES_PHASES[1])

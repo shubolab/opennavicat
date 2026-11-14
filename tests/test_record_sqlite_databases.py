@@ -116,8 +116,10 @@ def test_sheet_verifier_rejects_changed_actual_fields_before_capture(qtbot, reco
             assert dialog.sqlite_databases_page.snapshot().sqlite_databases == ()
 
 
-@pytest.mark.parametrize('include_test,fail_sheet', [(False, False), (True, False), (False, True), (True, True)],
-                         ids=['database-eight', 'test-database-nine', 'real-sheet-capture-error', 'test-sheet-capture-error'])
+@pytest.mark.parametrize('include_test,fail_sheet', [(False, False), (True, False), (False, True), (True, True),
+                                                   (False, 'none-modal')],
+                         ids=['database-eight', 'test-database-nine', 'real-sheet-capture-error',
+                              'test-sheet-capture-error', 'owned-modal-observer-missing'])
 def test_real_record_database_opt_in_and_error_cleanup(recorder, include_test, fail_sheet):
     # Real UI callbacks/modal loops, actual frames/privacy checks and owned
     # SQLite I/O. Only presentation holds are capped; no encoder/container.
@@ -128,7 +130,8 @@ import hashlib,importlib.util,json,os,sys,tempfile
 from pathlib import Path
 from types import SimpleNamespace
 from PySide6.QtCore import QCoreApplication,QEvent,QTimer
-path=Path(sys.argv[1]);include=sys.argv[2]=='1';failure=sys.argv[3]=='1'
+from PySide6.QtWidgets import QApplication
+path=Path(sys.argv[1]);include=sys.argv[2]=='1';failure=sys.argv[3]!='0';missing=sys.argv[3]=='none-modal'
 sys.path.insert(0,str(path.parents[1]))
 import opennavicat.ui.dialogs as actual_dialogs
 from opennavicat.ui.sqlite_connection_databases import SQLiteDatabaseDialog
@@ -159,10 +162,31 @@ def observed_sheet(dialog,sheet):
  sheet.destroyed.connect(lambda *_:state.update(destroyed=True))
  return facts
 module.observe_sqlite_database_sheet=observed_sheet
+# Lose only the Python observer's modal lookup while the genuine owned sheet
+# is inside exec(). A separate bounded rescue prevents the old implementation
+# hanging the child; a passing implementation must never need that rescue.
+modal_fault={'observed':False,'rescued':False,'timer':None,'finished':[]}
+real_active_modal=QApplication.activeModalWidget
+if missing:
+ def missing_owned_modal():
+  actual=real_active_modal()
+  if type(actual) is SQLiteDatabaseDialog:
+   if not modal_fault['observed']:
+    modal_fault['observed']=True
+    actual.finished.connect(lambda code:modal_fault['finished'].append(int(code)))
+    timer=QTimer(QApplication.instance());timer.setSingleShot(True)
+    def bounded_rescue():
+     if real_active_modal() is actual:
+      modal_fault['rescued']=True
+      actual.reject()
+    timer.timeout.connect(bounded_rescue);modal_fault['timer']=timer;timer.start(1000)
+   return None
+  return actual
+ QApplication.activeModalWidget=staticmethod(missing_owned_modal)
 real_privacy=module.assert_visible_privacy
 def guarded_privacy(widget,*args):
  real_privacy(widget,*args)
- if failure and type(widget) is SQLiteDatabaseDialog:raise RuntimeError('controlled actual sheet capture failure')
+ if failure and not missing and type(widget) is SQLiteDatabaseDialog:raise RuntimeError('controlled actual sheet capture failure')
 module.assert_visible_privacy=guarded_privacy
 args=SimpleNamespace(width=950,height=620,fps=10,theme='dark',include_stream=False,
  include_oracle_form=False,include_connection_chooser=False,include_sqlite_test=include,include_sqlite_databases=True)
@@ -174,7 +198,9 @@ with tempfile.TemporaryDirectory(prefix='opennavicat-real-databases-record-') as
    try:
     frames,receipt=module.record(args,temporary,pool)
    except RuntimeError as error:
-    assert failure and str(error)=='controlled actual sheet capture failure',type(error).__name__
+    expected_error=('The generated database add sheet was not opened by its actual component.'
+                    if missing else 'controlled actual sheet capture failure')
+    assert failure and str(error)==expected_error,type(error).__name__
    else:
     assert not failure
     expected=module.required_demo_phases(sqlite_test=include,sqlite_databases=True)
@@ -201,22 +227,28 @@ with tempfile.TemporaryDirectory(prefix='opennavicat-real-databases-record-') as
     text=json.dumps(receipt,ensure_ascii=False)
     assert not any(value in text for value in (str(module.ROOT),str(temporary),str(Path.home())))
    finally:pool.submit(lambda:None).result(timeout=10)
-   assert len(fixtures)==len(dialog_ledgers)==len(sheets)==1
+   if modal_fault['timer'] is not None:modal_fault['timer'].stop()
+   assert len(fixtures)==len(dialog_ledgers)==1
+   assert len(sheets)==(0 if missing else 1)
    assert pool.submit(module.verify_sqlite_test_fixture,fixtures[0]).result(timeout=5)['fixture_unchanged']
    assert dialog_ledgers[0]['closed'] and dialog_ledgers[0]['accepted']==0
    assert len(dialog_ledgers[0]['probe_threads'])==int(include)
    assert dialog_ledgers[0]['close_threads']==dialog_ledgers[0]['probe_threads']
    QCoreApplication.sendPostedEvents(None,QEvent.Type.DeferredDelete)
-   assert sheets[0]['finished']==[0] and sheets[0]['destroyed']
+   if not missing:assert sheets[0]['finished']==[0] and sheets[0]['destroyed']
+   else:assert modal_fault['observed'] and modal_fault['finished']==[0]
  assert cwd['restored'] and Path.cwd()==original
 assert not temporary.exists()
+if missing:
+ print(json.dumps({'lost_real_owned_modal':True,'bounded_rescue_needed':modal_fault['rescued']}))
+ assert not modal_fault['rescued'],'The real owned sheet exec needed the test rescue to unwind'
 print(json.dumps({'passed':True,'include_test':include,'capture_failure':failure,'actual_qpa':'offscreen'}))
 '''
     env = {key: value for key, value in os.environ.items() if not key.startswith('OPENNAVICAT_TEST_')}
     env['QT_QPA_PLATFORM'] = 'offscreen'
     original = Path.cwd()
     result = subprocess.run([recorder.sys.executable, '-W', 'error', '-c', source, recorder.__file__,
-                             str(int(include_test)), str(int(fail_sheet))],
+                             str(int(include_test)), fail_sheet if isinstance(fail_sheet,str) else str(int(fail_sheet))],
                             env=env, capture_output=True, text=True, timeout=40)
     assert Path.cwd() == original
     assert result.returncode == 0, (result.stdout + result.stderr)[-16000:]

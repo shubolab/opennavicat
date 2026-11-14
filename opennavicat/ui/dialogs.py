@@ -11,11 +11,11 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QEvent, QRect, QThreadPool, QTimer, QSize, Signal, QRegularExpression
+from PySide6.QtCore import Qt, QEvent, QRect, QThreadPool, QTimer, QSize, Signal, SIGNAL, QRegularExpression
 from PySide6.QtGui import QFont, QFontMetricsF, QRegularExpressionValidator
 from PySide6.QtWidgets import (
     QButtonGroup, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout,
-    QFrame, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QListWidget, QMessageBox, QPlainTextEdit,
+    QFrame, QHBoxLayout, QHeaderView, QInputDialog, QLabel, QLineEdit, QListWidget, QMessageBox, QPlainTextEdit,
     QPushButton, QRadioButton, QScrollArea, QSizePolicy, QSpinBox, QTableWidget, QTableWidgetItem,
     QStyle, QStyleOptionFrame, QStyleOptionSpinBox, QTabWidget, QVBoxLayout, QWidget,
 )
@@ -25,6 +25,7 @@ from .connection_test_banner import ConnectionTestBanner
 from .icons import tool_icon, toggle_icon
 from .sqlite_browse_button import SQLiteBrowseButton
 from .sqlite_connection_databases import SQLiteConnectionDatabases
+from .sqlite_advanced_settings import SQLiteAdvancedSettings
 
 
 def _hint(text: str) -> QLabel:
@@ -148,6 +149,24 @@ class _ConnectionDiagram(QWidget):
         self.setObjectName("connectionDiagram")
         self.setAccessibleName("OpenNavicat 与数据库连接示意图")
 
+    def _fit_sqlite_captions(self):
+        if self.driver == "SQLite":
+            metrics = self.fontMetrics()
+            width = max(150, metrics.horizontalAdvance("OpenNavicat") + 8,
+                        metrics.horizontalAdvance("数据库") + 8)
+            self.setMinimumWidth(math.ceil(width / .48))
+            self.setFixedHeight(max(140, 104 + metrics.height() + 8))
+        else:
+            self.setMinimumWidth(0)
+            self.setFixedHeight(140)
+
+    def event(self, event):
+        result = super().event(event)
+        if event.type() in (QEvent.Type.FontChange, QEvent.Type.ApplicationFontChange,
+                            QEvent.Type.StyleChange, QEvent.Type.Polish, QEvent.Type.Show):
+            self._fit_sqlite_captions()
+        return result
+
     def paintEvent(self, event):
         from PySide6.QtCore import QRectF
         from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
@@ -205,8 +224,11 @@ class _ConnectionDiagram(QWidget):
             painter.drawArc(QRectF(lock_x - 4, y + 6, 8, 10), 0, 180 * 16)
             painter.drawRoundedRect(QRectF(lock_x - 6, y + 11, 12, 10), 1, 1)
         painter.setPen(palette.text().color())
-        painter.drawText(QRectF(left - 75, 104, 150, 24), Qt.AlignmentFlag.AlignCenter, "OpenNavicat")
-        painter.drawText(QRectF(right - 75, 104, 150, 24), Qt.AlignmentFlag.AlignCenter, "数据库")
+        caption_width = max(150, painter.fontMetrics().horizontalAdvance("OpenNavicat") + 8,
+                            painter.fontMetrics().horizontalAdvance("数据库") + 8) if sqlite_outline else 150
+        caption_height = max(24, painter.fontMetrics().height() + 4) if sqlite_outline else 24
+        painter.drawText(QRectF(left - caption_width/2, 104, caption_width, caption_height), Qt.AlignmentFlag.AlignCenter, "OpenNavicat")
+        painter.drawText(QRectF(right - caption_width/2, 104, caption_width, caption_height), Qt.AlignmentFlag.AlignCenter, "数据库")
         if self.tunnel_enabled:
             painter.drawText(QRectF(center - 65, 104, 130, 24), Qt.AlignmentFlag.AlignCenter, "SSH Server")
 
@@ -225,6 +247,10 @@ class ConnectionDialog(QDialog):
     """
 
     test_finished = Signal(bool, str)
+    # The window owns filesystem/database work through its serial task queue.
+    # A token identifies this exact request; the emitted config is a private
+    # independent snapshot with no subsequent reads from widgets by workers.
+    create_requested = Signal(object, object)
 
     def __init__(self, parent=None, config: ConnectionConfig | None = None):
         super().__init__(parent)
@@ -234,9 +260,13 @@ class ConnectionDialog(QDialog):
         self._original = config
         self._config = None
         self._testing = False
+        self._creating = False
+        self._pending_sqlite_creation = None
+        self._sqlite_revision = 0
         self._tested_driver = None
         self._test_server_version = ''
         self._test_task = None
+        self._test_sqlite_secrets = ()
         self._test_pool = QThreadPool(self)
         self._test_pool.setMaxThreadCount(1)
         self._reference_frame_size = QSize(749, 668)
@@ -388,7 +418,7 @@ class ConnectionDialog(QDialog):
         form.addRow("密码", self.password_edit)
         self.general_form = form
         self.remember_check = QCheckBox("保存密码")
-        self.remember_check.setChecked(bool(config and config.password))
+        self.remember_check.setChecked(bool(config.password) if config else True)
         self.remember_check.setToolTip("密码仅保存在本机系统钥匙串中。")
         form.addRow("", self.remember_check)
         general.addLayout(form)
@@ -511,6 +541,10 @@ class ConnectionDialog(QDialog):
         self.sqlite_database_diagram = _ConnectionDiagram()
         self.sqlite_databases_page = SQLiteConnectionDatabases(self.sqlite_database_diagram, config)
         databases.addWidget(self.sqlite_databases_page, 1)
+        self.sqlite_advanced_diagram = _ConnectionDiagram()
+        self.sqlite_advanced_tab = SQLiteAdvancedSettings(
+            self.sqlite_advanced_diagram, self.sqlite_databases_page.snapshot())
+        self.sqlite_advanced = self.sqlite_advanced_tab
         self.network_database_note = QLabel("初始数据库在“常规”页中设置。可用数据库列表由连接后的服务器提供。")
         self.network_database_note.setWordWrap(True)
         databases.addWidget(self.network_database_note)
@@ -692,10 +726,13 @@ class ConnectionDialog(QDialog):
         if config and config.port:
             self.port_spin.setValue(config.port)
         self.database_edit.textChanged.connect(self._sqlite_profile_changed)
+        self.database_edit.textChanged.connect(self._sqlite_encryption_endpoint_changed)
         self.sqlite_mode_combo.currentIndexChanged.connect(self._sqlite_profile_changed)
         self.read_only_check.toggled.connect(self._sqlite_profile_changed)
         self.timeout_spin.valueChanged.connect(self._sqlite_profile_changed)
         self.sqlite_databases_page.changed.connect(self._sqlite_profile_changed)
+        self.sqlite_advanced_tab.changed.connect(self._sqlite_advanced_changed)
+        self.remember_check.toggled.connect(self._general_password_state)
 
     @staticmethod
     def _restore_mongo_choice(combo, value):
@@ -745,6 +782,14 @@ class ConnectionDialog(QDialog):
     def remember_password(self) -> bool:
         return (self.remember_check.isChecked() and self.driver_combo.currentData() != "sqlite"
                 and (self.driver_combo.currentData() != "mongodb" or self.mongo_auth_combo.currentData() == "PASSWORD"))
+
+    @property
+    def remember_sqlite_encryption_password(self) -> bool:
+        return self.driver_combo.currentData() == "sqlite" and self.sqlite_advanced_tab.remember_password
+
+    def set_remember_sqlite_encryption(self, remember: bool):
+        """Restore only the dedicated encryption flag from Store metadata."""
+        self.sqlite_advanced_tab.remember_check.setChecked(bool(remember))
 
     @property
     def remember_ssh_password(self) -> bool:
@@ -873,6 +918,7 @@ class ConnectionDialog(QDialog):
         label = self.driver_combo.currentText()
         self.setWindowTitle(f"{label} - {'编辑连接' if self._original else '新建连接'}")
         self.diagram.driver = label
+        self.diagram._fit_sqlite_captions()
         self.diagram.update()
         if driver != previous_driver and (self._original is None or self._original.driver != driver):
             if driver == "sqlserver":
@@ -881,7 +927,8 @@ class ConnectionDialog(QDialog):
                 self.ssl_enabled_check.setChecked(False)
         self._set_ssl_modes(driver)
         self.tabs.clear()
-        for widget, name in [(self.general_tab, "常规"), (self.advanced_tab, "高级"),
+        for widget, name in [(self.general_tab, "常规"),
+                             (self.sqlite_advanced_tab if local else self.advanced_tab, "高级"),
                              (self.databases_tab, "数据库")]:
             self.tabs.addTab(widget, name)
         if not local:
@@ -918,9 +965,11 @@ class ConnectionDialog(QDialog):
             row_label.setVisible(not local)
             field.setVisible(not local)
         for field in (self.user_edit, self.password_edit, self.remember_check):
-            field.setEnabled(not local)
-            field.setToolTip("SQLite 3 直连不使用用户名及密码；加密扩展尚未实现。" if local else "")
-        self.remember_check.setToolTip("SQLite 3 直连不使用用户名及密码；加密扩展尚未实现。" if local else "密码仅保存在本机系统钥匙串中。")
+            field.setEnabled(True)
+            field.setToolTip("SQLite 用户名/密码验证尚未实现；数据库加密密码在高级页设置。" if local else "")
+        self.remember_check.setToolTip("SQLite 用户名/密码验证尚未实现。" if local else "密码仅保存在本机系统钥匙串中。")
+        self._general_password_state()
+        self._update_sqlite_test_state()
         self.port_spin.setValue({"postgresql": 5432, "mysql": 3306, "mariadb": 3306,
                                  "sqlserver": 1433, "redis": 6379, "mongodb": 27017}.get(driver, 3306))
         if not local:
@@ -942,6 +991,30 @@ class ConnectionDialog(QDialog):
         self.profile_toggle.setChecked(local)
         self.profile_toggle.blockSignals(False)
         self._toggle_profiles(local)
+
+    def _general_password_state(self, *_):
+        self.password_edit.setEnabled(self.driver_combo.currentData() != "sqlite" or self.remember_check.isChecked())
+
+    def _sqlite_encryption_endpoint_changed(self, *_):
+        self.sqlite_advanced_tab.set_endpoint(self.sqlite_databases_page.connection_id, self.database_edit.text())
+
+    def _sqlite_advanced_changed(self):
+        self._sqlite_profile_changed()
+        # Newly entered attachment passwords must bind to the same global
+        # cipher/page settings as the eventual connection snapshot. A global
+        # edit also drops old carriers immediately, including after a revert.
+        draft = self.sqlite_databases_page.snapshot()
+        try:
+            updated = self.sqlite_advanced_tab.apply_to(draft)
+        except ValueError:
+            return  # Editable text may temporarily be incomplete.
+        if (updated.sqlite_cipher_name, updated.sqlite_cipher_page_size) != (draft.sqlite_cipher_name, draft.sqlite_cipher_page_size):
+            self.sqlite_databases_page._replace_draft(updated)
+
+    def _update_sqlite_test_state(self):
+        create = self.driver_combo.currentData() == "sqlite" and self.sqlite_mode_combo.currentData() == "create"
+        self.test_button.setEnabled(not self._testing and not create)
+        self.test_button.setToolTip("新建 SQLite 数据库通过好按钮创建；新建模式不执行测试连接。" if create else "")
 
     def _set_sqlite_profile_header(self, local):
         button = self.new_profile_button
@@ -1150,6 +1223,8 @@ class ConnectionDialog(QDialog):
                 raise ValueError("请选择数据库文件，不能选择文件夹。")
             if self.read_only_check.isChecked() and not path.is_file():
                 raise ValueError("只读连接不能创建新的数据库文件。")
+        if driver == "sqlite" and (self.user_edit.text() or self.password_edit.text()):
+            raise ValueError("SQLite 用户名/密码验证尚未实现，请明确移除这两项；数据库加密密码在高级页设置。")
         ssl_mode = self.ssl_combo.currentData() if self.ssl_enabled_check.isChecked() else "disable"
         if driver == "redis" and ssl_mode not in {"disable", "require", "verify-ca", "verify-full"}:
             raise ValueError("Redis 不支持此 SSL 模式；请选择 require、verify-ca 或 verify-full。")
@@ -1205,7 +1280,10 @@ class ConnectionDialog(QDialog):
             sqlite_open_mode=self.sqlite_mode_combo.currentData() if driver == "sqlite" else "legacy",
             **mongo_fields,
         )
-        return self.sqlite_databases_page.apply_to(config) if driver == "sqlite" else config
+        if driver == "sqlite":
+            config = self.sqlite_advanced_tab.apply_to(config)
+            config = self.sqlite_databases_page.apply_to(config)
+        return config
 
     @staticmethod
     def _readable_file(value, label):
@@ -1223,17 +1301,66 @@ class ConnectionDialog(QDialog):
         if self._testing:
             return
         try:
-            self._config = self._collect_config()
+            config = self._collect_config()
         except ValueError as exc:
             QMessageBox.warning(self, "连接设置", str(exc))
             return
+        if config.driver == "sqlite" and config.sqlite_open_mode == "create":
+            if not self.receivers(SIGNAL("create_requested(PyObject,PyObject)")):
+                QMessageBox.warning(self, "新建 SQLite 数据库", "此窗口尚未连接后台创建队列，数据库没有创建或保存。")
+                return
+            try:
+                config = self._sqlite_password_snapshot(config)
+            except ValueError as exc:
+                QMessageBox.warning(self, "新建 SQLite 数据库", str(exc))
+                return
+            if config is None:
+                return
+            from opennavicat.sqlite_database_config import copy_connection_config
+            token = object()
+            self._pending_sqlite_creation = (token, copy_connection_config(config))
+            self._creating = self._testing = True
+            self._config = None
+            self.content.setEnabled(False)
+            self.buttons.setEnabled(False)
+            self.test_button.setEnabled(False)
+            self.test_status.show()
+            self.test_status.setText("正在创建…")
+            self.test_status.setToolTip("数据库正在后台创建；完成后窗口会恢复。")
+            self.create_requested.emit(token, copy_connection_config(config))
+            return
+        self._config = config
+        super().accept()
+
+    def finish_sqlite_creation(self, token, *, error=None):
+        """Window queue completion, called on the GUI thread exactly once."""
+        pending = self._pending_sqlite_creation
+        if not self._creating or pending is None or pending[0] is not token:
+            return
+        self._pending_sqlite_creation = None
+        self._creating = self._testing = False
+        self.content.setEnabled(True)
+        self.buttons.setEnabled(True)
+        self._update_sqlite_test_state()
+        if error is not None:
+            self._config = None
+            message = self._sqlite_error_message(error, self._sqlite_secrets(pending[1]))
+            self.test_status.setText("创建失败")
+            self.test_status.setToolTip(message)
+            QMessageBox.warning(self, "新建 SQLite 数据库", message)
+            return
+        from opennavicat.sqlite_database_config import copy_connection_config
+        config = copy_connection_config(pending[1])
+        config.sqlite_open_mode = "existing"
+        self._config = copy_connection_config(config)
+        self.sqlite_mode_combo.setCurrentIndex(self.sqlite_mode_combo.findData("existing"))
         super().accept()
 
     def get_config(self) -> ConnectionConfig | None:
         return self._config
 
     def test_connection(self):
-        if self._testing:
+        if self._testing or (self.driver_combo.currentData() == "sqlite" and self.sqlite_mode_combo.currentData() == "create"):
             return
         self._sqlite_profile_changed()
         try:
@@ -1241,10 +1368,34 @@ class ConnectionDialog(QDialog):
         except ValueError as exc:
             QMessageBox.warning(self, "测试连接", str(exc))
             return
+        try:
+            config = self._sqlite_password_snapshot(config)
+        except ValueError as exc:
+            QMessageBox.warning(self, "测试连接", str(exc))
+            return
+        if config is None:
+            return
         self._start_connection_test(config)
 
+    def _sqlite_password_snapshot(self, config):
+        if config.driver == "sqlite" and config.sqlite_encryption_enabled:
+            from opennavicat.sqlite_encryption_config import (
+                bound_sqlite_encryption_password, with_sqlite_encryption_password,
+            )
+            if not self.remember_sqlite_encryption_password or not bound_sqlite_encryption_password(config):
+                revision = self._sqlite_revision
+                password, accepted = QInputDialog.getText(self, "连接密码 - " + config.name,
+                    "数据库加密密码:", QLineEdit.EchoMode.Password)
+                if not accepted:
+                    return None
+                config = with_sqlite_encryption_password(config, password)
+                if revision == self._sqlite_revision:
+                    self.sqlite_advanced_tab.set_password(password)
+        return config
+
     def _reset_sqlite_test_diagram(self):
-        for diagram in (self.diagram, getattr(self, "sqlite_database_diagram", None)):
+        for diagram in (self.diagram, getattr(self, "sqlite_database_diagram", None),
+                        getattr(self, "sqlite_advanced_diagram", None)):
             if diagram is not None:
                 diagram.sqlite_connection_succeeded = False
                 diagram.update()
@@ -1252,12 +1403,14 @@ class ConnectionDialog(QDialog):
     def _sqlite_profile_changed(self, *_):
         if self.driver_combo.currentData() != 'sqlite':
             return
+        self._sqlite_revision += 1
         self._reset_sqlite_test_diagram()
         self.sqlite_test_banner.clear_result()
         self.test_status.clear()
         self.test_status.setToolTip('')
         self.test_status.show()
         self.footer.layout().setStretch(self._test_footer_gap_index, 0)
+        self._update_sqlite_test_state()
 
     @staticmethod
     def _probe_session(session, config):
@@ -1283,6 +1436,7 @@ class ConnectionDialog(QDialog):
             self.test_status.show()
             self.footer.layout().setStretch(self._test_footer_gap_index, 0)
         self._tested_driver = config.driver
+        self._test_sqlite_secrets = self._sqlite_secrets(config) if config.driver == "sqlite" else ()
         self._test_server_version = ''
         self._testing = True
         self.content.setEnabled(False)
@@ -1321,7 +1475,8 @@ class ConnectionDialog(QDialog):
             self._test_server_version = ''
 
     def _display_test_result(self, success, message):
-        for diagram in (self.diagram, getattr(self, "sqlite_database_diagram", None)):
+        for diagram in (self.diagram, getattr(self, "sqlite_database_diagram", None),
+                        getattr(self, "sqlite_advanced_diagram", None)):
             if diagram is not None:
                 diagram.sqlite_connection_succeeded = bool(success and self._tested_driver == 'sqlite'
                     and self.driver_combo.currentData() == 'sqlite')
@@ -1341,7 +1496,24 @@ class ConnectionDialog(QDialog):
             self.footer.layout().setStretch(self._test_footer_gap_index, 0)
 
     def _test_failed(self, error):
-        self._test_error = error
+        self._test_error = (RuntimeError(self._sqlite_error_message(error, self._test_sqlite_secrets))
+                            if self._tested_driver == "sqlite" else error)
+
+    @staticmethod
+    def _sqlite_secrets(config):
+        from opennavicat.sqlite_encryption_config import bound_sqlite_encryption_password
+        return tuple(secret for secret in (bound_sqlite_encryption_password(config),
+                     *config.sqlite_database_passwords.values()) if secret)
+
+    @staticmethod
+    def _sqlite_error_message(error, secrets):
+        message = str(error)
+        spellings = {spelling for secret in secrets for spelling in (
+            secret, repr(secret)[1:-1], json.dumps(secret, ensure_ascii=True)[1:-1],
+            json.dumps(secret, ensure_ascii=False)[1:-1]) if spelling}
+        for secret in sorted(spellings, key=len, reverse=True):
+            message = message.replace(secret, "[已隐藏密码]")
+        return message
 
     def _test_complete(self):
         # Host-key approval happens only after the worker's finished signal.
@@ -1350,6 +1522,7 @@ class ConnectionDialog(QDialog):
         from opennavicat.transport import SSHHostKeyError
         error = self._test_error
         self._test_error = None
+        self._test_sqlite_secrets = ()
         approved = isinstance(error, SSHHostKeyError) and confirm_ssh_host_key(self, error)
         if approved:
             self._ssh_host_key = error.pin
@@ -1359,7 +1532,7 @@ class ConnectionDialog(QDialog):
         self._test_task = None
         self.content.setEnabled(True)
         self.buttons.setEnabled(True)
-        self.test_button.setEnabled(True)
+        self._update_sqlite_test_state()
         if approved:
             self.test_connection()
         elif error is not None:

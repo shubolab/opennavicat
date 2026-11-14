@@ -2,23 +2,29 @@
 """Zero-skip SQLite database-page qualification on the host's actual Qt QPA."""
 from __future__ import annotations
 
+import os
+from pathlib import Path
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+# Reuse the source package's explicit Windows SDK bootstrap before hashlib or
+# pytest can select a different CPython OpenSSL DLL with the same basename.
+import opennavicat
+
 import argparse
 from collections import Counter
 import hashlib
 import importlib.util
 import json
-import os
-from pathlib import Path
 import platform
 import signal
 import subprocess
-import sys
 import tempfile
 import time
 import uuid
 import xml.etree.ElementTree as ET
 
-ROOT = Path(__file__).resolve().parents[1]
 SCOPES = (
     "tests/test_sqlite_connection_databases_ui.py",
     "tests/test_sqlite_connection_databases_font_ui.py",
@@ -78,7 +84,7 @@ def strict_junit(path, collected, executed):
 def child_environment(qpa, owned):
     owned = Path(owned)
     env = {key: value for key, value in os.environ.items()
-           if not key.startswith(("OPENNAVICAT_", "PYTEST_"))}
+           if key == "OPENNAVICAT_LIBPQ_DIR" or not key.startswith(("OPENNAVICAT_", "PYTEST_"))}
     for key in ("PYTHONHOME", "PYTHONSTARTUP", "QT_PLUGIN_PATH", "QT_QPA_PLATFORM_PLUGIN_PATH",
                 "QT_SCALE_FACTOR", "QT_SCREEN_SCALE_FACTORS"):
         env.pop(key, None)
@@ -193,6 +199,9 @@ def git_snapshot(revision, paths):
 
 
 def child_main(phase, out, owned, qpa, run_id):
+    # The source initializer/sitecustomize has already consumed this SDK path.
+    # It is not a database opt-in and must not survive into the owned test scope.
+    os.environ.pop("OPENNAVICAT_LIBPQ_DIR", None)
     os.environ.pop("PYTEST_ADDOPTS", None)
     import pytest
     from PySide6.QtCore import QPoint

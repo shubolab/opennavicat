@@ -161,3 +161,80 @@ def test_workflow_keeps_six_targets_and_adds_native_gate_in_same_validation_arti
     assert "name: validation-${{ matrix.id }}" in text
     assert "needs: [desktop, database-security, oracle-native]" in text
     assert "python scripts/package-installer.py" in text
+
+
+@pytest.mark.parametrize("delivery", ["direct", "owned-child", "bootstrap-error"])
+def test_fresh_runner_bootstraps_before_hashlib_and_pytest_without_loading_qt(tmp_path, monkeypatch, delivery):
+    """Observe real imports; the controlled bootstrap does not load Windows DLLs."""
+    native = tmp_path / "owned-sdk"
+    native.mkdir()
+    monkeypatch.setenv("OPENNAVICAT_LIBPQ_DIR", str(native))
+    monkeypatch.setenv("OPENNAVICAT_TEST_POSTGRES_PORT", "must-not-survive")
+    if delivery == "owned-child":
+        env = runner.child_environment("offscreen", tmp_path)
+        assert "OPENNAVICAT_TEST_POSTGRES_PORT" not in env
+    else:
+        env = dict(os.environ, PYTHONWARNINGS="error")
+    program = r'''
+import builtins, importlib.util, json, os, sys, types
+from pathlib import Path
+script, native, delivery = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+events = []
+assert not any(name in sys.modules for name in ("hashlib", "_hashlib", "ssl", "_ssl", "pytest"))
+assert os.environ["PYTHONWARNINGS"] == "error"
+class OwnedBootstrapFailure(RuntimeError): pass
+class BeforePytest(BaseException): pass
+bootstrap = types.ModuleType("opennavicat._native_runtime")
+def prepare(directory):
+    assert directory == native
+    assert not any(name in sys.modules for name in ("hashlib", "_hashlib", "ssl", "_ssl", "pytest"))
+    events.append("bootstrap")
+    if delivery == "bootstrap-error":
+        raise OwnedBootstrapFailure("owned bootstrap rejected")
+bootstrap.prepare_native_openssl = prepare
+sys.modules[bootstrap.__name__] = bootstrap
+original_import = builtins.__import__
+def observe(name, globals=None, locals=None, fromlist=(), level=0):
+    if name == "opennavicat" and level == 0:
+        # Execute the actual source package initializer's Windows bootstrap
+        # branch, replacing only the DLL loader with the bounded marker above.
+        previous = sys.platform
+        try:
+            sys.platform = "win32"
+            value = original_import(name, globals, locals, fromlist, level)
+        finally:
+            sys.platform = previous
+        assert Path(value.__file__).resolve() == script.parents[1] / "opennavicat/__init__.py"
+        return value
+    if name in ("hashlib", "pytest") and level == 0:
+        assert "bootstrap" in events, name + " imported before native bootstrap"
+        if name not in events:
+            events.append(name)
+        if name == "pytest":
+            assert "OPENNAVICAT_LIBPQ_DIR" not in os.environ
+            raise BeforePytest()
+    return original_import(name, globals, locals, fromlist, level)
+builtins.__import__ = observe
+spec = importlib.util.spec_from_file_location("owned_sqlite_bootstrap_probe", script)
+value = importlib.util.module_from_spec(spec)
+try:
+    spec.loader.exec_module(value)
+    assert delivery != "bootstrap-error", "bootstrap error was swallowed"
+    value.child_main("collect", "unused-output", "unused-store", "offscreen", "owned-import-order")
+except BeforePytest:
+    assert events == ["bootstrap", "hashlib", "pytest"]
+except OwnedBootstrapFailure:
+    assert delivery == "bootstrap-error" and events == ["bootstrap"]
+else:
+    raise AssertionError("probe did not stop at its owned boundary")
+assert not any(name == "PySide6" or name.startswith("PySide6.") for name in sys.modules)
+print(json.dumps({"events": events, "runner_file": str(script), "qt_imported": False}))
+'''
+    script = ROOT / "scripts/test-sqlite-window.py"
+    assert Path(runner.__file__).resolve() == script
+    result = subprocess.run([sys.executable, "-S", "-c", program, str(script), str(native), delivery],
+                            cwd=tmp_path, env=env, capture_output=True, text=True, timeout=15)
+    assert result.returncode == 0, result.stdout + result.stderr
+    observed = json.loads(result.stdout)
+    assert observed["runner_file"] == str(script) and observed["qt_imported"] is False
+    assert observed["events"] == (["bootstrap"] if delivery == "bootstrap-error" else ["bootstrap", "hashlib", "pytest"])

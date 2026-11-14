@@ -67,6 +67,8 @@ jobs:
           key: windows-arm64-libpq-${{ steps.vcpkg.outputs.revision }}-${{ hashFiles('scripts/build-libpq-windows.ps1') }}
       - name: Install development dependencies
         run: python -m pip install -e ".[dev]"
+      - name: Execute pinned encrypted SQLite native provider without skips
+        run: python -m opennavicat.sqlite_cipher_probe --output artifacts/sqlite-cipher-source.json
       - name: Build pinned native MongoDB JavaScript helper for source verification
         run: python scripts/build-quickjs.py --allow-unqualified-platform
       - name: Qualify actual native JS VM and typed IPC without skipped cases
@@ -124,6 +126,7 @@ jobs:
             artifacts/pytest-results.xml
             artifacts/default-suite/
             artifacts/packaged-smoke.json
+            artifacts/sqlite-cipher-source.json
             artifacts/packaged-workbench.png
             artifacts/openssl-providers*.json
             artifacts/js-engine/build-receipt.json

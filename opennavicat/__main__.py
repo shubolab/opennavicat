@@ -119,6 +119,8 @@ def main():
         runtime.update(probe_native_javascript())
         from .oracle_probe import probe_oracle_runtime
         runtime.update(probe_oracle_runtime())
+        from .sqlite_cipher_probe import probe_sqlite_cipher_runtime
+        runtime.update(probe_sqlite_cipher_runtime())
     app = QApplication(sys.argv[:1])
     if runtime is not None:
         runtime["qt_platform_name"] = app.platformName()

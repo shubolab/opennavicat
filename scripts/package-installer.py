@@ -23,6 +23,7 @@ import tomllib
 
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 RESOURCES = ROOT / "packaging"
 CPU_TYPES = {0x8664: "amd64", 0xAA64: "arm64", 0x014C: "x86",
              62: "amd64", 183: "arm64", 3: "x86", 40: "arm",
@@ -338,6 +339,12 @@ def validate_smoke_report(path: Path, version: str, architecture: str, operating
                 "oracle_adapter_constructed", "oracle_native_extensions_loaded",
                 "oracle_parameters_ready", "oracle_thin_mode_ready")):
             raise PackagingError("Installed Oracle driver, native extensions or local parameter probes did not pass")
+    if tuple(map(int, version.split("."))) >= (0, 14, 0):
+        from opennavicat.sqlite_cipher_probe import validate_sqlite_cipher_runtime
+        try:
+            validate_sqlite_cipher_runtime(runtime)
+        except ValueError as error:
+            raise PackagingError(str(error)) from None
     if (operating_system == "windows" and tuple(map(int, version.split("."))) >= (0, 7, 0)
             and runtime.get("navicat_windows_api_ready") is not True):
         raise PackagingError("Installed Windows registry metadata APIs did not initialize")

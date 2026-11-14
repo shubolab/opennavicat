@@ -1,0 +1,62 @@
+{
+  "status": "local-development-packaging-qualified",
+  "application_version_in_actual_local_binary": "0.13.3",
+  "planned_milestone": "0.14",
+  "local_target": "macos-arm64",
+  "python": "3.13.11",
+  "qt_platform": "offscreen",
+  "provider_version": "3.54.0.0",
+  "mc_version": "SQLite3 Multiple Ciphers 2.6.1",
+  "provider_source_sha256": "c73cd6f4510978f9287aa624a16bc7de8b0e8524ca480bd29072d5de0fef5ca0",
+  "source_flags_verified": true,
+  "installed_python_wheel_flags_verified": true,
+  "missing_provider_is_failure_not_skip": true,
+  "packaged_application_flags_verified": true,
+  "actual_dmg_install_launch_uninstall_verified": true,
+  "installed_cipher_flags_independently_validated": true,
+  "owned_install_directory_and_mount_absent": true,
+  "focused_packaging_tests": {
+    "passed": 249,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "native_payload_image_count": 63,
+  "local_build_tools_only": {
+    "cmake": "4.1.2",
+    "ninja": "1.13.0"
+  },
+  "source_file_sha256": {
+    "pyproject.toml": "0f21c6fe8351d9873ad6add1606d56a98dffe6f7d7ad5d7716226a170215f3c1",
+    "uv.lock": "276bd99e81610f19341d4e7464c046e46b202db0631b5a38640134ae18d868d5",
+    "OpenNavicat.spec": "30bdc3a8975fa37c4f36c96d3f7646465a32c17e1954f55673032b70975f75d1",
+    "opennavicat/sqlite_cipher_provider.py": "c73cd6f4510978f9287aa624a16bc7de8b0e8524ca480bd29072d5de0fef5ca0",
+    "opennavicat/sqlite_cipher_probe.py": "78b29bc1f706b0a5a47c9132c9276be6805b742fed35b0cfd964c4b57f55ce19",
+    "opennavicat/__main__.py": "5920b339e3b176dd3fd9b913bc666e17a5243b947320dc65c6f0014a56484232",
+    "scripts/smoke-built.py": "41cb98407ab65cb083821886dd0c612dba38b6e3478cf780e23bed5fe07410d4",
+    "scripts/package-installer.py": "4f2110c97a41aa4e25c9ed03eb355da86b52d0e3d685ea47f1fb20b1b669bd40",
+    "scripts/publish-release.py": "83d22ba2bc4018da51aee82ecf93f7b3d404c18485a6371e0b0aa4b2879cee9a",
+    ".github/workflows/build.yml": "8c24903c18626b643b9835bbb45493f70591753dccdf82d64048b1eae14bbb44",
+    "tests/test_sqlite_cipher_native_probe.py": "0b310e36d507e1a20c4fdada11b7aea9c34d4b179e1bd23ad61b221c96e02e50",
+    "tests/test_installer_contract.py": "cb6c84e3f6b84236171081642b3848e1cb22307bca748ee9e57c1c95ae4f3dac",
+    "tests/test_release_gate.py": "7b2d2182c2346aafd743ece485e1cefa57807512186a7ddf4e85c7009b09b104",
+    "THIRD_PARTY_NOTICES.md": "346cc8959750345a335ea5e19a338017983ede4219dbde98d04ae5c44de09764"
+  },
+  "private_receipt_sha256": {
+    "source-probe.json": "27bf2dc55dccd2fb30e2c782c72767fd8ab81d0ac3de94e853bdff92cca0b583",
+    "installed-wheel-probe.json": "27bf2dc55dccd2fb30e2c782c72767fd8ab81d0ac3de94e853bdff92cca0b583",
+    "installed-wheel-summary.json": "3c987c991525d87bbc18859133b49728ca009a85ac36dcc939f56b0aff165841",
+    "focused-packaging.xml": "5af50bf5e7a96c445fc4e2a23e0505b05a064451e82eca799d8cdb8385b66699",
+    "packaged/packaged-smoke.json": "60c3874a2147dc1547f09dd5b4d7c97eccb4ae1b54acbbe135fdaf38b84dcde3",
+    "installers/OpenNavicat-0.13.3-macos-arm64.dmg": "2b723a0b7496ff5f5ea4f026fc0cd610340a43207791058c67bac15995ae210b",
+    "installers/OpenNavicat-0.13.3-macos-arm64.manifest.json": "c3ec4cee7806c54cf4e3840df6b89932b0091af5aa26e66963ea7766cc8e52bd",
+    "installers/OpenNavicat-0.13.3-macos-arm64.installed-smoke.json": "bea39da883032d8a7ea36eb887d0604d86f1808f2959514713fd7b5dd7bf4dbf"
+  },
+  "remaining": [
+    "The actual local binary retains 0.13.3; >=0.14 version-gate branches were tested with synthetic contract receipts, not a relabelled native binary.",
+    "No new Windows, Linux, macOS amd64 or six-target CI/installer acceptance is claimed.",
+    "SQLite cipher backend/UI/Store integration and full reference parity are separate work.",
+    "Wheel/source smoke is not an application installer or native QPA/reference acceptance.",
+    "Local build failures for absent cmake/ninja and the install-completion race are retained; no root environment or project lock build-tool change."
+  ]
+}

@@ -1,0 +1,77 @@
+{
+  "distribution": "apsw-sqlite3mc",
+  "version": "3.54.0.0",
+  "mc_version": "2.6.1",
+  "sdist": {
+    "url": "https://pypi.org/project/apsw-sqlite3mc/3.54.0.0/#files",
+    "sha256": "60a021cd9f6c8f3e2aa6cb54e197cb344379d5eb9a688b7647a136fc24956db4"
+  },
+  "sqlite3_c_sha256": "3153b2f567aceacd1f80a845e77f7b3c632e9af130af07343ee4bbcdcff31c60",
+  "files": {
+    "APSW-SQLite3MC-3.54.0.0.txt": {
+      "source": "apsw_sqlite3mc-3.54.0.0/LICENSE",
+      "url": "https://github.com/utelle/apsw-sqlite3mc",
+      "license": "original permissive APSW notice, with any-OSI alternative",
+      "sha256": "b85a7dc6463f286c14a638070a14f4888564ac7245dc99a17950ec24cf1a7b9d",
+      "bytes": 1166
+    },
+    "SQLite3MC-2.6.1.txt": {
+      "url": "https://raw.githubusercontent.com/utelle/SQLite3MultipleCiphers/v2.6.1/LICENSE",
+      "license": "MIT",
+      "sha256": "39205ec18e0f25f56c62d3bda9768e7509b63a74ba58beb7442903dfc81c247a",
+      "bytes": 1074
+    },
+    "Argon2-and-Blake2.txt": {
+      "url": "https://raw.githubusercontent.com/P-H-C/phc-winner-argon2/92cd2e19b50b9a58d177e61e1d8ce925315d3d91/LICENSE",
+      "license": "CC0-1.0 OR Apache-2.0; original complete file retains both texts",
+      "revision": "92cd2e19b50b9a58d177e61e1d8ce925315d3d91",
+      "sha256": "ac36638bcfcedb75441a5daeeaf4ef75b565911712583c272830e9fa7fddb590",
+      "bytes": 17881
+    },
+    "Apache-2.0.txt": {
+      "url": "https://www.apache.org/licenses/LICENSE-2.0",
+      "license": "Apache-2.0",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "bytes": 11358
+    },
+    "SQLite3MC-third-party.txt": {
+      "source": "apsw_sqlite3mc-3.54.0.0/sqlite3/sqlite3.c",
+      "original_notice_lines": [
+        286198,
+        286277,
+        287207,
+        287696,
+        288010,
+        288130,
+        288131,
+        288370,
+        290034,
+        295343,
+        295359,
+        296339,
+        296845,
+        296858,
+        296918,
+        297132,
+        299507,
+        299587,
+        338027,
+        340729,
+        341510,
+        341521,
+        342098,
+        343716,
+        343748,
+        343773,
+        344880,
+        345312,
+        360005,
+        360618,
+        362961
+      ],
+      "scope": "MC MIT; SHA2 BSD-3-Clause; Argon2/Blake2 CC0-or-Apache2; fastpbkdf2/encoding CC0; AEGIS MIT; AES/Ascon and hash public-domain declarations; miniz MIT/Unlicense notices",
+      "sha256": "de41ae8638bfab8f3b49c0db8c8e577bd973c6c61c7289a161b7a20a6a11dd01",
+      "bytes": 22293
+    }
+  }
+}

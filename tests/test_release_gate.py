@@ -7,23 +7,23 @@ import subprocess
 import pytest
 
 from opennavicat import __version__ as VERSION
+from opennavicat.sqlite_cipher_probe import SQLITE_CIPHER_RUNTIME_FLAGS
 
 spec = importlib.util.spec_from_file_location("release_gate", Path(__file__).resolve().parents[1] / "scripts/publish-release.py")
 gate = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(gate)
 
 
-@pytest.fixture
-def assets(tmp_path):
+def make_assets(tmp_path, version=VERSION):
     for system, arch in gate.TARGETS:
-        installer = tmp_path / gate.asset_name(VERSION, system, arch)
+        installer = tmp_path / gate.asset_name(version, system, arch)
         installer.write_bytes(f"contract fixture for {system}/{arch}".encode())
         binary_format = {"macos": "Mach-O", "windows": "PE", "linux": "ELF"}[system]
         verification = {"status": "passed", "installed": True, "launched": True,
             "uninstalled": True, "runtime": {"smoke": "passed", "rows": 6,
                 "columns": ["customer", "city", "orders", "revenue"], "runtime": {
                     "os": {"macos": "Darwin", "windows": "Windows", "linux": "Linux"}[system],
-                    "version": VERSION, "machine": arch, "libpq": 180006,
+                    "version": version, "machine": arch, "libpq": 180006,
                     "qt": "fixture", "psycopg": "fixture", "pymysql": "fixture",
                     "paramiko": "fixture", "cryptography": "fixture", "crypto_legacy_probe": True,
                     "python_tds": "1.17.1", "redis": "8.1.0", "pyopenssl": "26.4.0",
@@ -34,9 +34,12 @@ def assets(tmp_path):
                     "oracledb": "26.1.0", "oracle_adapter_constructed": True,
                     "oracle_native_extensions_loaded": True, "oracle_parameters_ready": True,
                     "oracle_thin_mode_ready": True,
+                    "sqlite_cipher_provider": "3.54.0.0", "sqlite_cipher_mc_version": "SQLite3 Multiple Ciphers 2.6.1",
+                    "sqlite_cipher_sqlite_version": "3.54.0", "sqlite_cipher_extension_sha256": "a"*64,
+                    **dict.fromkeys(SQLITE_CIPHER_RUNTIME_FLAGS, True),
                     "navicat_windows_api_ready": True if system == "windows" else None,
                     **dict.fromkeys(('native_js_helper_ready','native_js_bigint_bson_probe','native_js_cancel_probe','native_js_child_reaped','native_js_no_console','native_js_bundled'),True)}}}
-        manifest = {"name": "OpenNavicat", "version": VERSION, "os": system,
+        manifest = {"name": "OpenNavicat", "version": version, "os": system,
             "architecture": arch, "native_host_architecture": arch,
             "installer": installer.name, "bytes": installer.stat().st_size,
             "sha256": gate.digest(installer), "payload": {
@@ -46,6 +49,25 @@ def assets(tmp_path):
         installer.with_suffix(".manifest.json").write_text(json.dumps(manifest), "utf-8")
         installer.with_suffix(".installed-smoke.json").write_text(json.dumps(verification), "utf-8")
     return tmp_path
+
+
+@pytest.fixture
+def assets(tmp_path):
+    return make_assets(tmp_path)
+
+
+@pytest.mark.parametrize("flag", SQLITE_CIPHER_RUNTIME_FLAGS)
+def test_014_release_rejects_missing_actual_cipher_or_license_proof_on_any_target(tmp_path, flag):
+    assets014 = make_assets(tmp_path, "0.14.0")
+    assert len(gate.validate_assets(assets014, "0.14.0")) == 6
+    installer = assets014 / gate.asset_name("0.14.0", "windows", "arm64")
+    path = installer.with_suffix(".manifest.json")
+    manifest = json.loads(path.read_text())
+    manifest["verification"]["runtime"]["runtime"].pop(flag)
+    path.write_text(json.dumps(manifest))
+    installer.with_suffix(".installed-smoke.json").write_text(json.dumps(manifest["verification"]))
+    with pytest.raises(ValueError, match="Encrypted SQLite"):
+        gate.validate_assets(assets014, "0.14.0")
 
 
 def first_manifest(assets):

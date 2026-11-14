@@ -30,6 +30,10 @@ metadata = copy_metadata("keyring") + copy_metadata("psycopg") + binary_metadata
 metadata += copy_metadata("python-tds") + copy_metadata("redis") + copy_metadata("pyOpenSSL") + copy_metadata("certifi")
 metadata += copy_metadata("pymongo") + copy_metadata("dnspython")
 metadata += copy_metadata("oracledb")
+from opennavicat.sqlite_cipher_provider import _provider as require_sqlite_cipher_provider
+require_sqlite_cipher_provider()  # Fail before bundling an absent or overlapping APSW distribution.
+metadata += copy_metadata("apsw-sqlite3mc")
+hiddenimports += ["apsw", "apsw.ext", "opennavicat.sqlite_cipher_provider", "opennavicat.sqlite_cipher_probe"]
 hiddenimports += ["opennavicat.sqlserver_session", "opennavicat.redis_session", "pytds", "redis", "OpenSSL", "certifi"]
 hiddenimports += ["opennavicat.mongodb_session", "pymongo", "pymongo._cmessage", "bson", "bson._cbson"]
 hiddenimports += ["opennavicat.oracle_session", "opennavicat.oracle_probe", "oracledb",
@@ -59,6 +63,8 @@ provider_report = json.loads(provider_report_path.read_text("utf-8"))
 psycopg_binaries += [(entry["source"], entry["destination"]) for entry in provider_report["providers"]]
 psycopg_binaries = list(dict.fromkeys(psycopg_binaries))
 license_files = [(str(path), "licenses") for path in (project / "licenses").glob("*.txt")]
+from opennavicat.sqlite_cipher_probe import _verify_license_files
+_verify_license_files()
 if not binary_metadata:
     for notice in (libpq_directory.parent / "share").glob("*/copyright"):
         license_files.append((str(notice), f"licenses/third-party/vcpkg/{notice.parent.name}"))

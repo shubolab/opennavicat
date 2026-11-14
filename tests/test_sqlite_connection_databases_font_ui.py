@@ -125,15 +125,15 @@ def test_sheet_inherits_pure_parent_qfont_at_creation_and_keeps_real_controls(qt
     assert not sheet.testAttribute(Qt.WidgetAttribute.WA_SetFont)
     assert sheet.width() >= 600 and sheet.height() >= 215
     ok, cancel = assert_editor_and_buttons_fit(sheet)
-    if pixels in (12, 20):
-        assert ok.width() == cancel.width() == 80
-    else:
-        assert ok.width() >= 80 and cancel.width() >= 80
-        if qapp.platformName() == "cocoa":
+    assert ok.width() >= 80 and cancel.width() >= 80
+    if qapp.platformName() == "cocoa":
+        if pixels in (12, 20):
+            assert ok.width() == cancel.width() == 80
+        else:
             # Observed QMacStyle/fallback metrics require growth at 36px.
-            # Other native styles may fit the same glyphs in the base width;
-            # assert_editor_and_buttons_fit checks their actual contents.
             assert cancel.width() > 80
+    # Other native styles/DPRs may round the natural base width up (81px on
+    # Windows ARM). The real contents, right edge and ordering stay exact.
     if pixels == 12:
         assert sheet.size().toTuple() == (600, 215)
     sheet.reject()

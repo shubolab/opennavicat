@@ -57,11 +57,11 @@ def test_native_sheet_editor_and_button_contents_fit_actual_font(qtbot, qapp, co
             # Windows/Linux reference pixels remain unobserved.
             assert password_left == 179
         assert sheet.password_edit.mapTo(sheet, QPoint(sheet.password_edit.width(), 0)).x() == 580
-    if pixels in (12, 20):
-        assert ok.width() == cancel.width() == 80
-    else:
-        assert ok.width() >= 80 and cancel.width() >= 80
-        if qapp.platformName() == "cocoa":
+    assert ok.width() >= 80 and cancel.width() >= 80
+    if qapp.platformName() == "cocoa":
+        if pixels in (12, 20):
+            assert ok.width() == cancel.width() == 80
+        else:
             # Only QMacStyle's observed 36px metrics imply a width over 80.
             assert cancel.width() > 80
     sheet.reject()
@@ -73,9 +73,12 @@ def test_native_buttons_grow_when_actual_caption_requires_more_content_width(qtb
     qtbot.addWidget(sheet); sheet.show(); settle(qapp)
     _ok, cancel = assert_real_contents_fit(sheet)
     original_text, baseline = cancel.text(), cancel.width()
-    assert baseline == 80
+    assert baseline >= 80
+    if qapp.platformName() == "cocoa":
+        assert baseline == 80
     # This is a controlled layout stress input, not a reference UI caption.
-    # It proves natural growth from actual glyph demand on every native style.
+    # It proves natural growth from actual glyph demand on every native style,
+    # then restoration to its actual baseline, including native DPR rounding.
     cancel.setText("W" * 16); settle(qapp)
     assert cancel.fontMetrics().horizontalAdvance(cancel.text()) > baseline
     assert cancel.width() > baseline

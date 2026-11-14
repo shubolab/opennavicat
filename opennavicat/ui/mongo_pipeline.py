@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
     QLineEdit, QMessageBox, QPlainTextEdit, QPushButton, QScrollArea, QSizePolicy,
     QGraphicsObject, QGraphicsPathItem, QGraphicsProxyWidget, QGraphicsScene,
     QGraphicsView, QSpinBox, QSplitter, QStackedWidget, QTabWidget, QTableWidget,
-    QTableWidgetItem, QToolBar, QVBoxLayout, QWidget,
+    QTableWidgetItem, QToolBar, QVBoxLayout, QWidget, QStyle, QStyleOptionButton, QStylePainter,
 )
 
 from bson import BSON
@@ -93,6 +93,25 @@ class _PipelineBusyOverlay(QWidget):
             self.spinner.timer.stop()
 
 
+class _PipelineSourceCard(QLabel):
+    """Fit the source name inside the observed circle without changing it."""
+
+    def __init__(self, text, parent=None):
+        super().__init__(text, parent)
+        self.setTextFormat(Qt.TextFormat.PlainText)
+        self.setToolTip(text)
+        self.setAccessibleName(text)
+
+    def paintEvent(self, event):
+        # Qt already paints this QLabel's stylesheet background and border.
+        painter = QPainter(self)
+        rect = self.contentsRect().adjusted(self.margin(), self.margin(), -self.margin(), -self.margin())
+        text = "\n".join(self.fontMetrics().elidedText(line, Qt.TextElideMode.ElideRight,
+            max(0, rect.width())) for line in self.text().split("\n"))
+        self.style().drawItemText(painter, rect, self.alignment(), self.palette(),
+            self.isEnabled(), text, self.foregroundRole())
+
+
 class _PipelineStageCard(QPushButton):
     dropRequested = Signal(int, int)
 
@@ -102,6 +121,17 @@ class _PipelineStageCard(QPushButton):
         self.index = index
         self._drag_start = None
         self.setAcceptDrops(True)
+        self.setToolTip(text)
+        self.setAccessibleName(text)
+
+    def paintEvent(self, event):
+        option = QStyleOptionButton()
+        self.initStyleOption(option)
+        rect = self.style().subElementRect(QStyle.SubElement.SE_PushButtonContents, option, self)
+        option.text = "\n".join(self.fontMetrics().elidedText(line,
+            Qt.TextElideMode.ElideRight, max(0, rect.width())) for line in self.text().split("\n"))
+        painter = QStylePainter(self)
+        painter.drawControl(QStyle.ControlElement.CE_PushButton, option)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -1706,7 +1736,7 @@ class MongoPipelinePage(QWidget):
             if widget is not None:
                 widget.setParent(None)
                 widget.deleteLater()
-        source = QLabel("源\n" + (self.definition.source or "选择集合"))
+        source = _PipelineSourceCard("源\n" + (self.definition.source or "选择集合"))
         source.setAlignment(Qt.AlignmentFlag.AlignCenter)
         source.setObjectName("mongoPipelineSourceCard")
         source.setFixedSize(105, 105)

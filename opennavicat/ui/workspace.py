@@ -574,9 +574,13 @@ class Inspector(QWidget):
         kind = info.get("kind", "query")
         self.symbol.setPixmap(icon(object_symbol(kind), 48).pixmap(48, 48))
         self.title.setText(info.get("name", info.get("table", "无标题")))
+        self.title.setToolTip(self.title.text())
+        self.title.setAccessibleName(self.title.text())
         self.kind.setText(OBJECT_LABELS.get(kind, kind))
         self.connection.setText(config.name if config else "")
+        self.connection.setToolTip(self.connection.text())
         self.schema.setText(info.get("schema", ""))
+        self.schema.setToolTip(self.schema.text())
         details = []
         if "rootpage" in info:
             details.extend(["根页面", str(info["rootpage"]), "", "有索引", "是" if info.get("indexed") else "否", "", "有触发器", "是" if info.get("triggers") else "否"])

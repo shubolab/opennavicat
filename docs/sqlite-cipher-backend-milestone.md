@@ -35,3 +35,14 @@ factory 返回、固定 user_version 写入前和关闭后再核对 lstat inode�
 两种测试都在 factory wrapper 中换成已有 user_version73/两行数据文件，再实际打开，
 确认观察到替换即关闭/失败，外来文件哈希、数据及 user_version 不变且不删除。
 这缩小了已观察路径替换窗口，不宣称消灭外部恶意并发的全部 TOCTOU。
+
+原子导入取消补充后的组合为 **154 项通过、零跳过/失败/error**。provider 增加只接受
+固定 ROLLBACK 或 quoted generated-savepoint 清理的接口；清理期间临时停 progress，
+完成后恢复原 callback，避免取消标记把回滚本身拦住。SQLite 原子写入期间标记 active，
+独立取消 worker 可发 native interrupt；异常清理按已消费 generation 退休取消标记。
+
+实际 between-row Python 取消分别验证无外层事务时全 batch 回滚、有外层事务时只回滚
+batch/savepoint 并保留先前 outer 行。另一个真实 native DML/trigger 中断由此引擎回滚
+了整个 outer transaction：会话 in_transaction 变 false，同连接与独立只读连接均只有
+原先两条已提交数据、无 batch/outer 新行；错误明确报告 entire transaction 回滚。
+不会重放/猜补外层写入，不把 between-row 结果推广为所有 in-flight 取消都保留外层。

@@ -995,19 +995,35 @@ class DatabaseSession:
         self.connect()
         existing = self.in_transaction
         savepoint = "onv_" + uuid.uuid4().hex
-        if existing:
-            self._query(f"SAVEPOINT {savepoint}")
-        else:
-            self._query("BEGIN IMMEDIATE" if self.config.driver == "sqlite" else "BEGIN")
+        sqlite_operation, previous_active = self.config.driver == "sqlite", self._active
+        if sqlite_operation:
+            self._active = True
         try:
+            if existing:
+                self._query(f"SAVEPOINT {savepoint}")
+            else:
+                self._query("BEGIN IMMEDIATE" if sqlite_operation else "BEGIN")
             yield
             self._query(f"RELEASE SAVEPOINT {savepoint}" if existing else "COMMIT")
-        except BaseException:
+        except BaseException as error:
+            lost_outer = sqlite_operation and existing and not self.in_transaction
+            with self._cancel_lock:
+                generation = self._cancel_generation
             with contextlib.suppress(Exception):
-                self._query(f"ROLLBACK TO SAVEPOINT {savepoint}" if existing else "ROLLBACK")
-                if existing:
-                    self._query(f"RELEASE SAVEPOINT {savepoint}")
+                if sqlite_operation and hasattr(self.connection, "configure_attachment"):
+                    self.connection.rollback(savepoint=savepoint if existing else None)
+                else:
+                    self._query(f"ROLLBACK TO SAVEPOINT {savepoint}" if existing else "ROLLBACK")
+                    if existing:
+                        self._query(f"RELEASE SAVEPOINT {savepoint}")
+            if sqlite_operation:
+                self._retire_sqlite_cancellation(generation)
+            if lost_outer:
+                raise DatabaseError("SQLite rolled back the entire transaction; earlier uncommitted changes were rolled back") from error
             raise
+        finally:
+            if sqlite_operation:
+                self._active = previous_active
 
     def _validate_names(self, schema: str, table: str, values: dict) -> list[dict]:
         columns = self.columns(schema, table)

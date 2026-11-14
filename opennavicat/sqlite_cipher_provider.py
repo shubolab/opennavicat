@@ -356,6 +356,7 @@ class CipherConnection:
         self._cursors = weakref.WeakSet()
         self._preflight_cancel = threading.Event()
         self._progress_handler = None
+        self._progress_n = 1000
         self._raw.set_progress_handler(self._native_progress, 1000)
 
     def _check(self):
@@ -399,6 +400,7 @@ class CipherConnection:
             raise sqlite3.ProgrammingError("Invalid encrypted SQLite progress handler")
         result = _call(self._module, lambda: self._raw.set_progress_handler(self._native_progress, n if handler is not None else 1000))
         self._progress_handler = handler
+        self._progress_n = n if handler is not None else 1000
         return result
 
     def _native_progress(self):
@@ -436,9 +438,28 @@ class CipherConnection:
         if self.in_transaction:
             self.execute("COMMIT").close()
 
-    def rollback(self):
-        if self.in_transaction:
-            self.execute("ROLLBACK").close()
+    def rollback(self, *, savepoint=None):
+        """Run fixed cleanup controls even after a cancellation was requested.
+
+        No user SQL or key is accepted. A still-existing outer transaction can
+        be retained using its generated savepoint; an engine-rolled-back outer
+        transaction is never recreated or replayed.
+        """
+        self._check()
+        if savepoint is not None and (type(savepoint) is not str or not savepoint or "\0" in savepoint or len(savepoint) > 128):
+            raise sqlite3.ProgrammingError("Invalid SQLite cleanup savepoint")
+        if not self.in_transaction:
+            return
+        quoted = '"' + savepoint.replace('"', '""') + '"' if savepoint is not None else None
+        statements = (f"ROLLBACK TO SAVEPOINT {quoted}", f"RELEASE SAVEPOINT {quoted}") if quoted else ("ROLLBACK",)
+        def cleanup():
+            self._raw.set_progress_handler(None)
+            try:
+                for statement in statements:
+                    self._raw.execute(statement, can_cache=False).close()
+            finally:
+                self._raw.set_progress_handler(self._native_progress, self._progress_n)
+        return _call(self._module, cleanup)
 
     def backup(self, target, *, pages=-1, progress=None, name="main", sleep=.250):
         self._check()

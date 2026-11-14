@@ -324,6 +324,36 @@ def test_transaction_and_executemany_constraint_failure_can_roll_back_atomically
     assert not db.in_transaction and db.execute("SELECT COUNT(*) FROM generated_facts").fetchone() == (2,)
 
 
+def test_fixed_rollback_cleanup_works_while_progress_cancellation_remains_requested(connection):
+    connection.execute("CREATE TABLE generated_facts(id INTEGER PRIMARY KEY)").close()
+    connection.execute("BEGIN").close()
+    connection.execute("INSERT INTO generated_facts VALUES (1)").close()
+    connection.set_progress_handler(lambda: True, 1000)
+    connection.interrupt()
+    connection.rollback()
+    assert not connection.in_transaction
+    # Cleanup restores, rather than silently discards, the caller's callback.
+    with pytest.raises(sqlite3.OperationalError):
+        connection.execute("SELECT 1")
+    connection.set_progress_handler(None)
+    assert connection.execute("SELECT * FROM generated_facts").fetchall() == []
+
+
+def test_fixed_savepoint_cleanup_retains_real_outer_changes_after_cancellation(connection):
+    connection.execute("CREATE TABLE generated_facts(id INTEGER PRIMARY KEY)").close()
+    connection.execute("BEGIN").close()
+    connection.execute("INSERT INTO generated_facts VALUES (1)").close()
+    connection.execute("SAVEPOINT generated_batch").close()
+    connection.execute("INSERT INTO generated_facts VALUES (2)").close()
+    connection.set_progress_handler(lambda: True, 1000)
+    connection.rollback(savepoint="generated_batch")
+    assert connection.in_transaction
+    connection.set_progress_handler(None)
+    assert connection.execute("SELECT * FROM generated_facts").fetchall() == [(1,)]
+    connection.rollback()
+    assert not connection.in_transaction
+
+
 def test_executemany_rejects_returning_before_the_first_row_is_written(connection):
     connection.execute("CREATE TABLE generated_facts(id INTEGER PRIMARY KEY)").close()
     with pytest.raises(sqlite3.NotSupportedError):

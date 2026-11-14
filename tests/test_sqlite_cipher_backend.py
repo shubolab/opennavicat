@@ -384,3 +384,74 @@ def test_cancel_during_native_query_reuses_published_cipher_session(tmp_path, mo
             session.cancel()
             worker.join(3)
         session.close()
+
+
+@pytest.mark.parametrize("outer", [False, True])
+def test_between_row_import_cancel_rolls_back_batch_and_keeps_only_existing_outer_changes(tmp_path, monkeypatch, outer):
+    path = make_file(tmp_path / "generated-atomic-cancel.sqlite")
+    session = DatabaseSession(config(path))
+    if outer:
+        session.execute("BEGIN; INSERT INTO items VALUES (99,'generated outer change')")
+    original = provider.CipherCursor._execute
+    def execute(cursor, sql, parameters, *, require_dml):
+        result = original(cursor, sql, parameters, require_dml=require_dml)
+        if require_dml and parameters[0] == 3:
+            session.cancel()
+        return result
+    monkeypatch.setattr(provider.CipherCursor, "_execute", execute)
+    try:
+        with pytest.raises(DatabaseError):
+            session.import_rows("main", "items", ["id", "label"], [[3, "generated batch one"], [4, "generated batch two"]])
+        assert session.in_transaction is outer
+        assert session.fetch_table("main", "items").rows == ([[1, "generated one"], [2, "generated two"], [99, "generated outer change"]]
+                                                           if outer else [[1, "generated one"], [2, "generated two"]])
+        assert not session._active and not session._cancel_requested.is_set()
+        if outer:
+            session.execute("ROLLBACK")
+        assert session.execute("SELECT 7")[0].rows == [[7]]
+    finally:
+        session.close()
+
+
+def test_inflight_native_dml_interrupt_reports_actual_outer_rollback_without_replay(tmp_path):
+    path = make_file(tmp_path / "generated-native-dml-cancel.sqlite")
+    session = DatabaseSession(config(path))
+    session.execute("CREATE TABLE generated_audit(total INTEGER)")
+    session.execute("CREATE TRIGGER generated_slow AFTER INSERT ON items WHEN new.id=3 BEGIN "
+        "INSERT INTO generated_audit SELECT sum(x) FROM (WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL "
+        "SELECT x+1 FROM n WHERE x<1000000000) SELECT x FROM n); END;")
+    session.execute("BEGIN; INSERT INTO items VALUES (99,'generated outer change')")
+    connection = session.connection
+    entered, errors = threading.Event(), []
+    def native_progress():
+        entered.set()
+        return connection._native_progress()
+    connection._raw.set_progress_handler(native_progress, 1000)
+    def mutate():
+        try:
+            session.import_rows("main", "items", ["id", "label"], [[3, "generated slow batch"]])
+        except Exception as error:
+            errors.append(error)
+    worker = threading.Thread(target=mutate)
+    worker.start()
+    try:
+        assert entered.wait(3)
+        assert session._active
+        session.cancel()
+        worker.join(3)
+        assert not worker.is_alive() and len(errors) == 1
+        assert isinstance(errors[0], DatabaseError) and "entire transaction" in str(errors[0])
+        assert not session.in_transaction and not session._active and not session._cancel_requested.is_set()
+        assert session.fetch_table("main", "items").rows == [[1, "generated one"], [2, "generated two"]]
+        assert session.execute("SELECT * FROM generated_audit")[0].rows == []
+        independent = provider.connect(path, key="generated-backend-key", read_only=True, **options())
+        try:
+            assert independent.execute("SELECT * FROM items ORDER BY id").fetchall() == [(1, "generated one"), (2, "generated two")]
+            assert independent.execute("SELECT * FROM generated_audit").fetchall() == []
+        finally:
+            independent.close()
+    finally:
+        if worker.is_alive():
+            session.cancel()
+            worker.join(3)
+        session.close()

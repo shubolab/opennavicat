@@ -8,8 +8,8 @@ from __future__ import annotations
 from PySide6.QtCore import QEvent, QRect, QSize, Qt, Signal
 from PySide6.QtGui import QIntValidator
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QFormLayout, QFrame, QHBoxLayout, QLabel,
-    QSizePolicy, QStyle, QStyleOptionComboBox, QVBoxLayout, QWidget,
+    QApplication, QCheckBox, QComboBox, QFormLayout, QFrame, QHBoxLayout,
+    QSizePolicy, QStyle, QStyleFactory, QStyleOptionComboBox, QVBoxLayout, QWidget,
 )
 
 from opennavicat.database import ConnectionConfig
@@ -25,26 +25,67 @@ class _CipherCombo(QComboBox):
     """Keep editable values intact and reserve the native editor's height."""
 
     def __init__(self, parent=None):
+        self._changing_style = True
+        self._font_style = None
         super().__init__(parent)
         self.setEditable(True)
         self.setLineEdit(_FontLineEdit())
         self.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self._changing_style = False
+        self._fit_native_font()
+
+    def _fit_native_font(self):
+        if getattr(self, "_changing_style", True):
+            return
+        application = QApplication.instance()
+        if application.platformName() != "cocoa":
+            return
+        option = QStyleOptionComboBox()
+        self.initStyleOption(option)
+        option.rect = QRect(0, 0, 300, max(32, self.fontMetrics().height() + 12))
+        # QMacStyle locks editable combos to the native control's small text
+        # field. Query the application style without this widget's local style.
+        native = application.style().subControlRect(QStyle.ComplexControl.CC_ComboBox, option,
+            QStyle.SubControl.SC_ComboBoxEditField, None)
+        clipped = native.height() < self.fontMetrics().height()
+        self._changing_style = True
+        try:
+            if clipped:
+                if self._font_style is None:
+                    self._font_style = QStyleFactory.create("Fusion")
+                    self._font_style.setParent(self)
+                if self.style() is not self._font_style:
+                    self.setStyle(self._font_style)
+            elif self._font_style is not None:
+                self.setStyle(None)
+        finally:
+            self._changing_style = False
 
     def _content_hint(self, hint):
         hint = QSize(hint)
         edit = self.lineEdit()
-        required = edit.minimumSizeHint().height()
+        if edit is None:
+            return hint
+        margins = edit.textMargins()
+        required = edit.fontMetrics().height() + margins.top() + margins.bottom()
+        # QComboBox's AdjustToContentsOnFirstShow can cache the small-font
+        # width. The finite reference labels must still fit after live font
+        # changes; arbitrary editable text instead keeps normal scrolling.
+        text_width = max(self.fontMetrics().horizontalAdvance(name) for name in SQLITE_CIPHER_NAMES)
+        text_width += margins.left() + margins.right() + self.fontMetrics().horizontalAdvance(" ")
         option = QStyleOptionComboBox()
         self.initStyleOption(option)
         for _ in range(8):
             option.rect = QRect(0, 0, hint.width(), hint.height())
             content = self.style().subControlRect(QStyle.ComplexControl.CC_ComboBox, option,
                 QStyle.SubControl.SC_ComboBoxEditField, self)
-            deficit = required - content.height()
-            if deficit <= 0:
+            height_deficit = required - content.height()
+            width_deficit = text_width - content.width()
+            if height_deficit <= 0 and width_deficit <= 0:
                 break
-            hint.setHeight(hint.height() + deficit)
+            hint.setHeight(hint.height() + max(0, height_deficit))
+            hint.setWidth(hint.width() + max(0, width_deficit))
         return hint
 
     def sizeHint(self):
@@ -57,6 +98,7 @@ class _CipherCombo(QComboBox):
         handled = super().event(event)
         if event.type() in (QEvent.Type.FontChange, QEvent.Type.StyleChange,
                             QEvent.Type.ApplicationFontChange, QEvent.Type.DevicePixelRatioChange):
+            self._fit_native_font()
             self.updateGeometry()
         return handled
 
@@ -101,6 +143,7 @@ class SQLiteAdvancedSettings(QWidget):
         self.form.addRow("", self.encrypted_check)
         self.password_edit = _FontLineEdit()
         self.password_edit.setObjectName("sqliteEncryptionPassword")
+        self.password_edit.setMaxLength(65536)
         self.password_edit.setEchoMode(_FontLineEdit.EchoMode.Password)
         self.password_edit.setAccessibleName("数据库加密密码")
         secret = bound_sqlite_encryption_password(config)
@@ -119,7 +162,7 @@ class SQLiteAdvancedSettings(QWidget):
         self.cipher_combo.setObjectName("sqliteCipherName")
         self.cipher_combo.setAccessibleName("密码名称")
         self.cipher_combo.addItems(SQLITE_CIPHER_NAMES)
-        self.cipher_combo.setCurrentIndex(-1)
+        self.cipher_combo.setCurrentIndex(self.cipher_combo.findText(config.sqlite_cipher_name))
         self.cipher_combo.setEditText(config.sqlite_cipher_name)
         self.form.addRow("密码名称:", self.cipher_combo)
         self.page_size_edit = _FontLineEdit(str(config.sqlite_cipher_page_size))

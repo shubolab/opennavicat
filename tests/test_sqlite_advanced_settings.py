@@ -111,6 +111,35 @@ def test_native_editor_contents_fit_live_fonts_without_fixed_geometry(qtbot, qap
         content = combo.style().subControlRect(QStyle.ComplexControl.CC_ComboBox, option,
             QStyle.SubControl.SC_ComboBoxEditField, combo)
         assert content.height() >= combo.fontMetrics().height()
+        assert content.width() >= max(combo.fontMetrics().horizontalAdvance(name) for name in SQLITE_CIPHER_NAMES)
         assert combo.currentText() == "sqlcipher legacy v4"
+    finally:
+        qapp.setStyleSheet(old)
+
+
+def test_combo_font_fallback_roundtrip_keeps_application_style_and_password_value(qtbot, qapp):
+    old = qapp.styleSheet()
+    qapp.setStyleSheet("")
+    try:
+        application_style = qapp.style()
+        widget, config = page(qtbot)
+        widget.encrypted_check.setChecked(True)
+        widget.set_password("generated complete value")
+        widget.cipher_combo.setEditText("sqlcipher legacy v4")
+        for pixels in (12, 36, 20, 12):
+            font = QFont(widget.font()); font.setPixelSize(pixels); widget.setFont(font)
+            widget.resize(widget.size().expandedTo(widget.minimumSizeHint()))
+            for _ in range(3): qapp.processEvents()
+            combo = widget.cipher_combo
+            assert qapp.style() is application_style
+            assert combo.font().pixelSize() == pixels
+            assert combo.currentText() == "sqlcipher legacy v4"
+            if qapp.platformName() == "cocoa":
+                assert combo.style().objectName().lower() == ("fusion" if pixels > 12 else "macos")
+            assert combo.lineEdit().height() >= combo.lineEdit().fontMetrics().height()
+        # Cipher edits intentionally clear a previous password; the font/style
+        # changes themselves must not clear explicit new input afterwards.
+        widget.set_password("generated complete value")
+        assert bound_sqlite_encryption_password(widget.apply_to(config)) == "generated complete value"
     finally:
         qapp.setStyleSheet(old)

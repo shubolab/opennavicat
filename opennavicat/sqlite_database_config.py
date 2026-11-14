@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 
 MAX_SQLITE_DATABASES = 1024
-CONNECTION_SECRET_FIELDS = ("password", "ssh_password", "ssh_key_passphrase", "ssl_key_password")
+CONNECTION_SECRET_FIELDS = ("password", "ssh_password", "ssh_key_passphrase", "ssl_key_password", "sqlite_encryption_password")
 _ENTRY_FIELDS = frozenset({"id", "name", "database", "encrypted"})
 
 
@@ -144,7 +144,9 @@ def connection_metadata(config: ConnectionConfig) -> dict:
         raise ValueError("Invalid connection metadata")
     value = {}
     for item in fields(ConnectionConfig):
-        if item.name in CONNECTION_SECRET_FIELDS:
+        if item.name in {"sqlite_encryption_password", "sqlite_encryption_password_binding"}:
+            continue
+        elif item.name in CONNECTION_SECRET_FIELDS:
             value[item.name] = ""
         elif item.name in {"sqlite_database_passwords", "sqlite_database_password_bindings"}:
             value[item.name] = {}
@@ -164,7 +166,7 @@ def connection_from_metadata(value) -> ConnectionConfig:
         raise ValueError("Invalid connection metadata fields")
     metadata = {key: deepcopy(item) for key, item in value.items()
                 if key not in CONNECTION_SECRET_FIELDS
-                and key not in {"sqlite_database_passwords", "sqlite_database_password_bindings"}}
+                and key not in {"sqlite_database_passwords", "sqlite_database_password_bindings", "sqlite_encryption_password_binding"}}
     if metadata.get("driver", "sqlite") == "sqlite" and "sqlite_open_mode" not in metadata:
         # A legacy persistent path is not permission to create a replacement
         # when its file disappears. Direct new Config callers retain legacy.
@@ -180,6 +182,8 @@ def connection_from_metadata(value) -> ConnectionConfig:
 def copy_connection_config(config: ConnectionConfig) -> ConnectionConfig:
     """An independent runtime snapshot, including memory-only credentials."""
     from .database import ConnectionConfig
+    from .sqlite_encryption_config import normalize_sqlite_encryption_password
 
-    return ConnectionConfig(**{item.name: deepcopy(getattr(config, item.name))
-                               for item in fields(ConnectionConfig)})
+    value = {item.name: deepcopy(getattr(config, item.name)) for item in fields(ConnectionConfig)}
+    value["sqlite_encryption_password"], value["sqlite_encryption_password_binding"] = normalize_sqlite_encryption_password(config)
+    return ConnectionConfig(**value)

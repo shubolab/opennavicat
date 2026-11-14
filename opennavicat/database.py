@@ -25,6 +25,7 @@ import sqlparse
 from .sqlite_database_config import (
     SQLiteDatabaseEntry, bound_sqlite_database_passwords, copy_connection_config, decode_sqlite_databases,
 )
+from .sqlite_encryption_config import decode_sqlite_encryption_fields, normalize_sqlite_encryption_password
 
 
 SUPPORTED_DRIVERS = frozenset({"sqlite", "postgresql", "mysql", "mariadb", "sqlserver", "redis", "mongodb", "oracle"})
@@ -97,6 +98,11 @@ class ConnectionConfig:
     sqlite_databases: tuple[SQLiteDatabaseEntry, ...] = field(default_factory=tuple, repr=False)
     sqlite_database_passwords: dict[str, str] = field(default_factory=dict, repr=False)
     sqlite_database_password_bindings: dict[str, tuple[str, str, bool]] | None = field(default=None, repr=False)
+    sqlite_encryption_enabled: bool = False
+    sqlite_cipher_name: str = ""
+    sqlite_cipher_page_size: int = 0
+    sqlite_encryption_password: str = field(default="", repr=False)
+    sqlite_encryption_password_binding: tuple[str, str, bool, str, int] | None = field(default=None, repr=False)
 
     def __post_init__(self):
         if type(self.sqlite_open_mode) is not str or self.sqlite_open_mode not in {"legacy", "existing", "create"}:
@@ -104,6 +110,8 @@ class ConnectionConfig:
         self.sqlite_databases = decode_sqlite_databases(self.sqlite_databases)
         self.sqlite_database_passwords, self.sqlite_database_password_bindings = bound_sqlite_database_passwords(
             self.id, self.sqlite_databases, self.sqlite_database_passwords, self.sqlite_database_password_bindings)
+        decode_sqlite_encryption_fields(self.sqlite_encryption_enabled, self.sqlite_cipher_name, self.sqlite_cipher_page_size)
+        self.sqlite_encryption_password, self.sqlite_encryption_password_binding = normalize_sqlite_encryption_password(self, initial=True)
 
 
 @dataclass

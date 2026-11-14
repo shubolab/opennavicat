@@ -127,8 +127,13 @@ jobs:
             artifacts/packaged-workbench.png
             artifacts/openssl-providers*.json
             artifacts/js-engine/build-receipt.json
+            artifacts/js-engine/opennavicat-js
+            artifacts/js-engine/opennavicat-js.exe
             artifacts/js-engine/processed-payload/build-receipt.json
             artifacts/js-engine/processed-payload/payload-manifest.json
+            artifacts/js-engine/processed-payload/opennavicat-js
+            artifacts/js-engine/processed-payload/opennavicat-js.exe
+            artifacts/js-engine/processed-payload/LICENSE.quickjs-ng
             artifacts/js-engine/LICENSE.quickjs-ng
             artifacts/js-engine/qualification/
             artifacts/js-engine/qt/

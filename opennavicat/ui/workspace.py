@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
 )
 
 from .icons import icon, tool_icon
+from .connection_test_banner import _ElidingPlainText
 from ..query_language import LEGACY
 
 OBJECT_LABELS = {"table": "表", "view": "视图", "index": "索引", "trigger": "触发器",
@@ -533,8 +534,7 @@ class Inspector(QWidget):
         self.symbol.setFixedSize(48, 48)
         heading.addWidget(self.symbol)
         labels = QVBoxLayout()
-        self.title = QLabel()
-        self.title.setWordWrap(True)
+        self.title = _ElidingPlainText(180)
         self.title.setStyleSheet("font-weight:600;font-size:14px;")
         labels.addWidget(self.title)
         self.kind = QLabel()

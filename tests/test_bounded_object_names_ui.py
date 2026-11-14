@@ -100,3 +100,32 @@ def test_inspector_exposes_full_names_even_when_narrow(qtbot, qapp):
     assert inspector.title.toolTip() == inspector.title.accessibleName() == "next"
     assert inspector.connection.toolTip() == ""
     assert inspector.schema.toolTip() == "main"
+
+
+@pytest.mark.parametrize("theme", [None, "dark", "light"])
+def test_inspector_title_uses_visible_ellipsis_and_preserves_plain_full_text(qtbot, qapp, theme):
+    if theme:
+        apply_theme(qapp, theme)
+    inspector = Inspector()
+    qtbot.addWidget(inspector)
+    name = "Generated SQLite multi with a long display name <b>plain</b>"
+    inspector.show_object({"name": name, "kind": "table"})
+    inspector.resize(200, 600)
+    inspector.show(); settle(qapp)
+    title = inspector.title
+    assert inspector.width() == 200
+    assert title.textFormat() == Qt.TextFormat.PlainText
+    assert title.text() == title.toolTip() == title.accessibleName() == name
+    assert title.parentWidget().rect().contains(title.geometry())
+    shown = title.fontMetrics().elidedText(name, Qt.TextElideMode.ElideRight, title.contentsRect().width())
+    assert shown != name and shown.endswith("…")
+    expected = QLabel(shown, title.parentWidget())
+    qtbot.addWidget(expected)
+    expected.setTextFormat(Qt.TextFormat.PlainText)
+    expected.setFont(title.font())
+    expected.setPalette(title.palette())
+    expected.setStyleSheet(title.styleSheet())
+    expected.setAlignment(title.alignment())
+    expected.resize(title.size())
+    expected.show(); settle(qapp)
+    assert title.grab().toImage() == expected.grab().toImage()

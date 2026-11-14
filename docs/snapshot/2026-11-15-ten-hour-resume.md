@@ -29,3 +29,25 @@
 
 本文件是恢复中的工作记录，最终截止 snapshot 将补充提交、测试、CI、发布和剩余项；
 不能将正在推进的项目当作通过证据。
+
+## 首个整合节点（仍在继续）
+
+Oracle 有限日志阶段分类已整合；本机全新 pinned 原生 ARM server 的 14 项通过，客户端是
+macOS，未复现 CI 的退出 24，不能当作 Linux CI 根因已修复。新 Windows 完整测试 owner
+通过创建时 JOB_LIST 绑定、挂起后验证再恢复线程，给出 Job 后代清理和句柄回收记录；
+本机仅能验证非 Windows 合同，11 项 Windows 实测留给新主线 CI。
+
+Pipeline 卡片保留原尺寸和原文，改为明确右省略并保留完整提示与可访问文本。参考又实际
+观察到信息栏长连接名右省略且 AX 保留全文，因此信息栏标题也复用既有纯文本省略控件。
+本机相关 48 项通过；后续含 Windows owner 合同的一组为 22 通过、11 条件跳过，未冒称
+Windows API 已本地执行。完整 U15、三平台参考和全部状态仍开放。
+
+新默认 suite runner 的首次完整运行在冻结 `be2d2c9` 下得到 3,802 项：3,137 通过、
+662 跳过、3 失败；完整 collect/run collection 和源码前后相同。三个失败均为新 runner
+禁用插件自动加载后，既有隔离子测试没有继承命令行 `-p`，找不到 `qtbot`。已用显式
+`PYTEST_PLUGINS=pytestqt.plugin` 传给后代，真实隔离 pytest 回归和三个受影响用例通过；
+原失败 JUnit/log 留在 `artifacts/release-0133/resume-10h/default-collection`，不回填。
+
+默认输入枚举现含 JS、native C、JSON fixture 和打包资源，并拒绝未跟踪相关输入；
+raw/processed JS helper 共七份现有输入单独校验来源和前后哈希。CI 必须具备 raw helper。
+collect/run runtime 另记录该 host 的 Qt style 清单；这不替代 actual QPA 或参考验收。

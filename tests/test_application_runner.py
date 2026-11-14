@@ -1,6 +1,9 @@
 """Complete-default collection cannot be filtered or substituted by a receipt."""
 import importlib.util
+import os
 from pathlib import Path
+import subprocess
+import sys
 import types
 import xml.etree.ElementTree as ET
 
@@ -56,6 +59,32 @@ def test_default_environment_clears_selection_and_real_database_optins_without_l
     assert env["OPENNAVICAT_LIBPQ_DIR"] == "generated-sdk"
     assert env["OPENNAVICAT_DATA_DIR"] == str(tmp_path / "store")
     assert env["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] == "1"
+    assert env["PYTEST_PLUGINS"] == "pytestqt.plugin"
+
+
+def test_default_snapshot_includes_fixture_json_and_javascript_and_rejects_untracked_tests(tmp_path, monkeypatch):
+    paths = ["tests/oracle_images.json", "opennavicat/js_engine/bootstrap.js", "native/quickjs/runner.c"]
+    for path in paths:
+        target = tmp_path / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("generated-owned")
+    monkeypatch.setattr(runner, "ROOT", tmp_path)
+    monkeypatch.setattr(runner.subprocess, "check_output", lambda args, **kw:
+        b"" if "--others" in args else "\0".join(paths).encode())
+    assert set(runner.source_snapshot()) == set(paths)
+    monkeypatch.setattr(runner.subprocess, "check_output", lambda args, **kw: b"tests/test_untracked.py\0")
+    with pytest.raises(RuntimeError, match="Untracked"):
+        runner.source_snapshot()
+
+
+def test_explicit_qt_plugin_is_available_to_an_inherited_isolated_pytest_process(tmp_path):
+    target = tmp_path / "test_generated_plugin.py"
+    target.write_text("def test_generated(qtbot):\n    assert qtbot is not None\n", encoding="utf-8")
+    env = runner.child_environment(tmp_path)
+    env["QT_QPA_PLATFORM"] = "offscreen"
+    result = subprocess.run([sys.executable, "-m", "pytest", "-q", str(target)], cwd=ROOT,
+        env=env, capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, (result.stdout + result.stderr)[-4000:]
 
 
 @pytest.mark.parametrize("phase", ["collect", "run"])

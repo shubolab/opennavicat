@@ -340,6 +340,10 @@ class DatabaseSession:
         database, uri, attachments = DatabaseSession._sqlite_open_plan(snapshot)
         destination = Path(snapshot.database).expanduser().resolve()
         candidate, owned = None, None
+        def ensure_owned():
+            current = destination.lstat()
+            if (current.st_dev, current.st_ino) != owned:
+                raise DatabaseError("The new SQLite database file changed during creation")
         try:
             if any(os.path.lexists(str(destination) + suffix) for suffix in ("-journal", "-wal", "-shm")):
                 raise DatabaseError("Creating a SQLite file requires no existing database sidecar files")
@@ -348,20 +352,27 @@ class DatabaseSession:
                 owned = stat.st_dev, stat.st_ino
             if cancelled():
                 raise DatabaseError("Database creation cancelled")
-            current = destination.stat()
-            if (current.st_dev, current.st_ino) != owned:
-                raise DatabaseError("The new SQLite database file changed during creation")
-            candidate = DatabaseSession._sqlite_new_connection(snapshot, database, uri)
+            ensure_owned()
+            # The reserved empty file is now existing-only. In particular the
+            # provider must not materialize a header before we can observe a
+            # factory-time path replacement and reject its returned handle.
+            opening = copy_connection_config(snapshot)
+            opening.sqlite_open_mode = "existing"
+            database, uri, attachments = DatabaseSession._sqlite_open_plan(opening)
+            candidate = DatabaseSession._sqlite_new_connection(opening, database, uri)
+            ensure_owned()
             session = DatabaseSession(snapshot)
             session._sqlite_initialize_candidate(candidate, snapshot, attachments, cancelled)
             # Merely opening a standard SQLite file can leave zero bytes. This
             # fixed statement materializes the requested database header.
+            ensure_owned()
             with contextlib.closing(candidate.execute("PRAGMA user_version = 0")):
                 pass
             if cancelled():
                 raise DatabaseError("Database creation cancelled")
             candidate.close()
             candidate = None
+            ensure_owned()
             if cancelled():
                 raise DatabaseError("Database creation cancelled")
         except BaseException:
@@ -370,7 +381,7 @@ class DatabaseSession:
                     candidate.close()
             if owned is not None:
                 with contextlib.suppress(OSError):
-                    current = destination.stat()
+                    current = destination.lstat()
                     if (current.st_dev, current.st_ino) == owned:
                         destination.unlink()
             raise

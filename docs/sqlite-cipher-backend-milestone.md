@@ -28,3 +28,10 @@ API。仅接受 writable/create/物理文件，先验证完整配置，独占新
 附件备份、完整 rekey/格式转换、参考非零页大小行为、WAL/恢复、平台完整工具行为与
 六目标 native 安装器/整包 smoke 仍保持开放。provider 的独立专项和冻结证明见各自记录，
 不据此宣称本后端已在其余 OS/架构运行。
+
+创建归属复核增加两个真实回归后，组合为 **151 项通过、零跳过/失败/error**。独占预留后
+改用 existing-only/rw factory，阻止 factory 在外部路径替换尚未被观察前先物化 header；
+factory 返回、固定 user_version 写入前和关闭后再核对 lstat inode。plain 与 encrypted
+两种测试都在 factory wrapper 中换成已有 user_version73/两行数据文件，再实际打开，
+确认观察到替换即关闭/失败，外来文件哈希、数据及 user_version 不变且不删除。
+这缩小了已观察路径替换窗口，不宣称消灭外部恶意并发的全部 TOCTOU。

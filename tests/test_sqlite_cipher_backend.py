@@ -293,6 +293,38 @@ def test_create_cancel_checks_callable_and_preserves_external_replacement(tmp_pa
     assert path.read_bytes() == b"generated external replacement"
 
 
+@pytest.mark.parametrize("encrypted", [False, True])
+def test_create_factory_time_replacement_is_opened_without_create_and_never_written_or_deleted(tmp_path, monkeypatch, encrypted):
+    path, replacement = tmp_path / "generated-reserved.sqlite", tmp_path / "generated-external.sqlite"
+    make_file(replacement, encrypted=encrypted)
+    external = (provider.connect(replacement, key="generated-backend-key", **options()) if encrypted
+                else sqlite3.connect(replacement, isolation_level=None))
+    external.execute("PRAGMA user_version=73").close()
+    external.close()
+    before = fingerprint(replacement)
+    original, returned = DatabaseSession._sqlite_new_connection, []
+    def open_replacement(snapshot, database, uri):
+        assert snapshot.sqlite_open_mode == "existing" and database.endswith("?mode=rw")
+        replacement.replace(path)
+        candidate = original(snapshot, database, uri)
+        returned.append(candidate)
+        assert fingerprint(path) == before
+        return candidate
+    monkeypatch.setattr(DatabaseSession, "_sqlite_new_connection", staticmethod(open_replacement))
+    with pytest.raises(DatabaseError, match="changed during creation"):
+        DatabaseSession.create_sqlite_database(config(path, sqlite_encryption_enabled=encrypted, sqlite_open_mode="create"))
+    assert fingerprint(path) == before and len(returned) == 1
+    if encrypted:
+        assert returned[0]._closed
+    opened = (provider.connect(path, key="generated-backend-key", read_only=True, **options()) if encrypted
+              else sqlite3.connect(path.as_uri() + "?mode=ro", uri=True))
+    try:
+        assert opened.execute("PRAGMA user_version").fetchone() == (73,)
+        assert opened.execute("SELECT * FROM items ORDER BY id").fetchall() == [(1, "generated one"), (2, "generated two")]
+    finally:
+        opened.close()
+
+
 def test_create_refuses_preexisting_sidecars_without_touching_them(tmp_path):
     path = tmp_path / "generated-sidecar.sqlite"
     sidecar = Path(str(path) + "-journal")

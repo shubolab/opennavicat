@@ -56,6 +56,8 @@ DEMO_DRIVER_COLORS = {
     "oracle": "#ff0033", "sqlite": "#61dbd2", "mariadb": "#c3986d",
     "mongodb": "#ba5101", "redis": "#fe7d7b", "snowflake": "#29b5e8",
 }
+# Keep semantic status colors separate from driver identities in receipts.
+DEMO_STATUS_COLORS = {"test_success": "#70d35d"}
 SQLITE_PHASES = ("objects", "table_data", "query_editor", "query_results", "table_designer", "designer_sql_preview")
 MONGO_PHASES = ("mongodb_collection_grid", "mongodb_typed_tree", "mongodb_gridfs_preview",
     "mongodb_javascript_editor", "mongodb_javascript_results", "mongodb_collection_inline_index",
@@ -1144,7 +1146,8 @@ def reserve_demo_driver_colors(path):
     transparent = [index for index, color in enumerate(original) if color.alpha() == 0]
     if len(transparent) != 1 or any(color.alpha() not in (0, 255) for color in original):
         raise RuntimeError("GIF palette transparency differs from its reserved single slot.")
-    targets = {kind: QColor(value) for kind, value in DEMO_DRIVER_COLORS.items()}
+    targets = {kind: QColor(value) for kind, value in
+               {**DEMO_DRIVER_COLORS, **DEMO_STATUS_COLORS}.items()}
     assignments = {}
     used = set(transparent)
     counts = Counter(color.rgba() for color in original)
@@ -1154,7 +1157,7 @@ def reserve_demo_driver_colors(path):
         index = next((index for index, color in enumerate(original) if color == protected), None)
         if index is not None:
             used.add(index)
-    # Keep every already-exact brand entry before assigning missing colors.
+    # Keep every already-exact artwork entry before assigning missing colors.
     for kind, target in targets.items():
         exact = next((index for index, color in enumerate(original)
                       if index not in used and color == target), None)
@@ -1166,7 +1169,7 @@ def reserve_demo_driver_colors(path):
             continue
         choices = [index for index in range(256) if index not in used]
         if not choices:
-            raise RuntimeError("GIF palette has no safe distinct entry for driver colors.")
+            raise RuntimeError("GIF palette has no safe distinct entry for artwork colors.")
         index = min(choices, key=lambda item: (counts[original[item].rgba()] <= 1,
                     sum((component - wanted) ** 2 for component, wanted in
                         zip(original[item].getRgb()[:3], target.getRgb()[:3]))))
@@ -1183,8 +1186,9 @@ def reserve_demo_driver_colors(path):
             or any(saved.pixelColor(index % 16, index // 16) != color
                    for index, color in enumerate(expected))):
         raise RuntimeError("The saved GIF palette did not preserve its exact colors and transparency.")
-    return {"strategy": "global_full_with_reserved_driver_colors",
+    return {"strategy": "global_full_with_reserved_driver_and_status_colors",
             "reserved_driver_colors": dict(DEMO_DRIVER_COLORS),
+            "reserved_status_colors": dict(DEMO_STATUS_COLORS),
             "reserved_color_count": len(assignments),
             "transparency_slot_preserved": True}
 

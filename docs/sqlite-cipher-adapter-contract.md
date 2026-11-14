@@ -1,0 +1,89 @@
+# SQLite3MC 独立适配层合同
+
+2026-11-14，macOS arm64。此叶新增 `opennavicat/sqlite_cipher_provider.py` 和真实 provider
+专项测试，尚未接入标准 SQLite backend、连接 UI、产品依赖或六目标安装器。
+[供应物实验](sqlite-cipher-provider-feasibility.md)与本页的适配验收分别记录。
+
+## 当前实现
+
+仅接受精确的 `apsw-sqlite3mc==3.54.0.0`、APSW 3.54.0.0、SQLite3MC 2.6.1 组合，并拒绝
+同时安装普通 `apsw` 的环境。模块导入时不加载可选原生 provider；实际 factory 在打开
+文件前核对依赖。缺失、重叠或版本不同均明确失败，备份也不回退到标准库明文连接。
+
+- `connect` 必须显式提供非空密钥；`connect_plain_main` 是普通主库加密附件场景的独立
+  factory，不把空密钥解释为降级选择。默认只打开现有文件，只有显式 `create=True` 才创建。
+- cipher、legacy、密钥按正式 provider API 的顺序配置，密钥不进 URI、SQL 拼接或 statement
+  cache。新加密文件必须真正填充并读取 catalog，不能把 key pragma 返回 ok 当解密证明。
+- 实现项目需要的 cursor execute、description、fetchone/fetchmany/fetchall、rowcount、
+  executemany、close，以及连接事务、getlimit、progress handler、interrupt 和 close。
+  description 在原生 exec trace 的首步前缓存，空 SELECT 完成后仍保留七字段 DBAPI 形状。
+- 一个 execute 只接受一个真实语句。SQLite 自身的 complete-statement tokenizer 判断
+  候选分号边界，scratch 内存数据库以全拒绝 authorizer 检查尾部；真实连接的 trace 再检查
+  一次。字符串、注释和 trigger body 中的分号不由正则猜测。这样也能在准备期 PRAGMA
+  改状态之前拒绝真实多语句尾部。
+- executemany 限于不返回行的 DML；RETURNING 在首行写入前拒绝。它遵循调用者事务，
+  不是自动原子批量接口；导入、网格和比较的调用方仍须显式事务及冲突检查。
+- 文件、记录值和 ATTACH KEY 使用绑定参数。普通主库配加密附件的实际查询已覆盖，
+  configure_attachment 只管理下一次附件的临时算法参数，不代表附件完整工具已验收。
+- 对外错误保留标准 sqlite3 类别及可用的 SQLite 代码/名称，消息不带原 SQL、绑定值、
+  provider 注释或原始异常链。此安全错误呈现尚未做 Navicat UI 文案对照。
+
+`read_only` factory 限制主文件的原生打开模式；完整会话只读还需 backend 保留已有的
+`PRAGMA query_only=ON` 与每个附件 URI 的 `mode=ro`。此叶尚未接入这些会话初始化合同。
+所有数据库调用仍须由窗口的串行后台队列调度，取消另走独立 worker；适配层没有 Qt 访问。
+fetchmany 是增量取行接口，不承诺限制 SQLite 的总执行工作、文件 I/O 或内部内存。
+
+## 加密备份的明确边界
+
+备份只接受两个不同的已加密 provider 连接、`main` schema、相同的有效 cipher/legacy
+和相同的实际 page_size。没有可信算法元数据的附件、普通主库、跨算法或跨页大小目标，
+均在写目标之前返回 NotSupported。目标 key 仍由调用方显式提供，只存在进程内存。
+
+本轮原生跨算法探针发现：AES256 source 备份到部分不同算法目标时，复制 API 可正常
+返回，但目标关闭后重开报 CORRUPT；旧 SQLCipher legacy 页大小不同的路径会直接报错。
+原始探针结果完整保留，不能用 API 返回成功替代关闭重开、quick_check 和独立密钥验证。
+上游也说明不同算法有不同的保留字节与页大小要求，参见
+[C 接口说明](https://utelle.github.io/SQLite3MultipleCiphers/docs/configuration/config_capi/)。
+
+为保持已记录的 main 算法元数据有效，公共 execute 在 SQLite authorizer 处拒绝 key、
+rekey、cipher、legacy、算法参数 pragma 及 sqlite3mc_config 调用；专用 factory 与附件
+配置 API 管理这些参数。完整查询工具的手动 rekey/格式转换能力仍开放，未以此限制缩小
+最终功能范围。底层私有 `_raw` 对象不属于调用方可修改的接口。
+
+## 实际验证
+
+物理 Python 3.13.11 venv、实际 macOS arm64 原生 extension 的专项集合为 **89 项通过，
+零跳过/失败/error**。其中包括：
+
+- 14 个支持配置的真实创建、关闭重开、错误密钥、只读、标准 SQLite 拒读和文件哈希。
+- 全部 14 个支持配置的同配置加密备份，各自用目标密钥重开、quick_check、精确两行、
+  源密钥拒读、标准 SQLite 拒读，并保持错误/只读操作后的文件哈希。
+- 13 个不同目标配置和实际 4KiB/8KiB 页大小差异，在目标原内容变化前拒绝备份。
+- 真实 native query 被独立线程 interrupt 后可复用；progress 取消、事务回滚、空 SELECT、
+  trigger 分号、绑定文本、先前 authorizer 恢复与敏感错误信息隔离。
+
+恢复后的同字节回归在原实现暴露两项真实副作用：RETURNING 被拒绝时首行已写入，
+以及公共 rekey 可把 keyed 目标变成明文而保留旧标记；修正后这两项通过。另一个回归
+证明准备期 foreign_keys pragma 原先会在多语句错误前改变状态，加入 native tokenizer
+预检后通过。原红色 JUnit/log 与跨算法失败探针均保留在私有 artifacts，不回填。
+
+一个独立 PyInstaller adapter probe 已实际构建和运行，包含本适配模块、APSW extension
+与发行包 metadata；检查真实两行、空 SELECT 元数据、加密备份、错误 key 和标准库拒读，
+自有临时目录已清理。打包需显式 hidden-import `apsw`、`apsw.ext` 并 copy-metadata
+`apsw-sqlite3mc`。这不是 OpenNavicat 整包、安装器或其余五平台的运行证据。
+
+参考应用本轮实际写出的一个 AES256 文件也已由本适配层只读重开：quick_check 为 ok，
+精确两行符合预期，错 key 报 SQLite 26，标准 SQLite 拒读；原件和只读副本 SHA256
+都未变，副本无 sidecar 且已精确清理。该反向记录只覆盖 aes256cbc，不推广为全部标签
+的参考写出格式；参考 UI 的其他互读与 Ascon legacy 观察由专门记录分别承担。
+
+路径无关的摘要与源码/测试/收据哈希见
+[适配 evidence](evidence/sqlite-cipher-adapter-3.54.0.0.json)。本 worktree 的私有原始证据
+位于 `artifacts/sqlite-cipher-provider-10h/`；14 份 provider 原件仍由原 manifest 管理，
+本叶没有删除、修改或覆盖供参考互读使用的文件。
+
+## 后续接入门禁
+
+UI 配置与密码保存/提示、稳定 secret binding、原子附件初始化与取消代次、只读会话、
+附件算法追踪与备份、完整 rekey/转换、WAL/恢复、许可证通知，以及六目标原生构建、
+整包 smoke 和完整产品验收均保留开放。此叶不是完整 DBAPI 替换或 SQLite 加密工具验收。

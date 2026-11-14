@@ -579,3 +579,43 @@ def test_engine_probe_rejects_arbitrary_server_errors_and_version_strings(tmp_pa
     assert secret not in body
     assert fixture.receipt["engine_probe"] == {"Architecture": None, "OSType": "linux",
         "ServerVersion": None, "ServerErrors": ["reported"]}
+
+
+@pytest.mark.skipif(os.name != "posix" or not hasattr(os, "fork"), reason="POSIX owned process group contract")
+@pytest.mark.parametrize("pipe_mode", ["inherited", "closed"])
+def test_real_log_capture_removes_grandchild_even_after_leader_exits(tmp_path, monkeypatch, pipe_mode):
+    # Every descendant self-expires quickly if a regression prevents cleanup.
+    # Tests never signal a nonwaitable descendant by PID.
+    code = """import os,time
+child=os.fork()
+if child==0:
+ grand=os.fork()
+ if grand==0:
+  if MODE=='closed':
+   os.close(1);os.close(2)
+  time.sleep(.8)
+  os._exit(0)
+ os.write(1,(str(grand)+'\\n').encode())
+ os._exit(0)
+os._exit(0)
+""".replace("MODE", repr(pipe_mode))
+    original = subprocess.Popen
+    leaders = []
+    sessions = []
+    def spawn(*args, **kwargs):
+        sessions.append(kwargs.get("start_new_session"))
+        leader = original(*args, **kwargs)
+        leaders.append(leader)
+        return leader
+    monkeypatch.setattr(support.subprocess, "Popen", spawn)
+    before = list(tmp_path.iterdir())
+    raw, status = support._bounded_command_output([sys.executable, "-c", code], timeout=.1)
+    descendant = int(raw.strip())
+    assert status == ("deadline" if pipe_mode == "inherited" else "captured")
+    assert len(leaders) == 1 and leaders[0].returncode == 0 and leaders[0].stdout.closed
+    with pytest.raises(ProcessLookupError):
+        os.kill(descendant, 0)
+    assert sessions == [True]
+    with pytest.raises(ProcessLookupError):
+        os.killpg(leaders[0].pid, 0)
+    assert list(tmp_path.iterdir()) == before

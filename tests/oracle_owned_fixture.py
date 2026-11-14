@@ -13,6 +13,7 @@ from pathlib import Path
 import re
 import secrets
 import selectors
+import signal
 import subprocess
 import time
 import uuid
@@ -26,7 +27,7 @@ SECRET_FILE = SECRET_DIR + "/password"
 READINESS_SECONDS = 360
 LOG_BYTES = 65536
 LOG_LINES = 200
-LOG_SECONDS = 10
+LOG_SECONDS = 5
 LOG_CODES = 32
 DOCKER_OPERATIONS = frozenset({"info", "pull", "image", "create", "inspect", "start", "exec", "stop", "rm", "logs"})
 STARTUP_PHASES = frozenset({"engine_probe", "image_pull", "image_inspect", "container_create",
@@ -42,23 +43,36 @@ def _driver_code(error):
 
 def _bounded_command_output(command, *, timeout=LOG_SECONDS, limit=LOG_BYTES):
     """POSIX fixture CLI output stays in bounded memory, never a temporary file."""
-    if os.name != "posix":
+    if os.name != "posix" or not all(hasattr(os, name) for name in ("waitid", "WNOWAIT", "WEXITED", "P_PID")):
         raise RuntimeError("Owned Oracle log capture requires POSIX")
     output = bytearray()
     selector = selectors.DefaultSelector()
     process = None
     status = "captured"
+    def leader_done():
+        # Keep our waitable child's PID reserved until its entire owned group
+        # has been signalled. poll()/wait() here could enable PGID reuse.
+        return os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOHANG | os.WNOWAIT) is not None
     try:
-        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                   start_new_session=True)
         os.set_blocking(process.stdout.fileno(), False)
         selector.register(process.stdout, selectors.EVENT_READ)
-        deadline = time.monotonic() + timeout
-        while selector.get_map():
-            remaining = deadline - time.monotonic()
+        deadline, drain_deadline = time.monotonic() + timeout, None
+        while True:
+            done = leader_done()
+            if done and not selector.get_map():
+                break
+            now = time.monotonic()
+            if done and drain_deadline is None:
+                drain_deadline = min(deadline, now + .25)
+            remaining = min(deadline, drain_deadline if drain_deadline is not None else deadline) - now
             if remaining <= 0:
                 status = "deadline"
                 break
-            for key, _ in selector.select(min(.05, remaining)):
+            if not selector.get_map():
+                time.sleep(min(.01, remaining))
+            for key, _ in selector.select(min(.05, remaining)) if selector.get_map() else ():
                 chunk = os.read(key.fd, min(4096, limit + 1 - len(output)))
                 if not chunk:
                     selector.unregister(key.fileobj)
@@ -70,18 +84,41 @@ def _bounded_command_output(command, *, timeout=LOG_SECONDS, limit=LOG_BYTES):
                     break
             if status == "output_limit":
                 break
-        if status == "captured":
-            try:
-                process.wait(timeout=max(.001, deadline - time.monotonic()))
-            except subprocess.TimeoutExpired:
-                status = "deadline"
     finally:
         selector.close()
         if process is not None:
             try:
-                if process.poll() is None:
-                    process.kill()
-                process.wait(timeout=5)
+                # Always clean the reserved group, including descendants that
+                # close stdout and outlive an already-exited Docker CLI.
+                done = leader_done()
+                if not done:
+                    try:
+                        if os.getpgid(process.pid) != process.pid:
+                            raise RuntimeError("Owned Oracle log process group identity changed")
+                    except ProcessLookupError:
+                        if not leader_done():
+                            raise
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                except PermissionError:
+                    # Darwin can report EPERM for an all-zombie group. This
+                    # is pending, not proof of absence; check after reaping.
+                    if not done:
+                        raise
+                process.wait(timeout=1)
+                cleanup_deadline = time.monotonic() + 1
+                while True:
+                    try:
+                        os.killpg(process.pid, 0)
+                    except ProcessLookupError:
+                        break
+                    except PermissionError:
+                        pass  # Pending zombie group; never treat EPERM as absence.
+                    if time.monotonic() >= cleanup_deadline:
+                        raise RuntimeError("Owned Oracle log process group absence was not verified")
+                    time.sleep(.01)
             finally:
                 process.stdout.close()
     if status == "captured" and process.returncode:

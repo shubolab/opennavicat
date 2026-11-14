@@ -1,0 +1,533 @@
+{
+  "scope": "0.13.3 unpublished main candidate; not 0.14 installers",
+  "source_commit": "4f5a9149b2bda2143a1d715c9d7bb82c6b1bc698",
+  "ci_run": 43615785473,
+  "ci_url": "https://github.com/shubolab/opennavicat/actions/runs/43615785473",
+  "required_jobs_passed": 9,
+  "artifact_zips_api_size_digest_crc_and_extracted_tree_verified": 15,
+  "six_installers_native_build_install_smoke_verified": true,
+  "native_sqlite_ui_each": 67,
+  "default_complete_collection_audited": true,
+  "oracle_counts_separate": {
+    "amd64": {
+      "backend": 14,
+      "window": 3
+    },
+    "arm64": {
+      "backend": 14,
+      "window": 3
+    }
+  },
+  "formal_tag_created": false,
+  "published": false,
+  "private_receipts": {
+    "verification.json": "63986794e945b7e705b2e4aea22ad527687954c61a1769524a0ff62b2bc15f64",
+    "adapter-verification.json": "1bd71dc9d69934442febff3d9be8432834af826326fe665fcd1efcdd0e97ede3"
+  },
+  "targets": {
+    "linux-amd64": {
+      "installer": "OpenNavicat-0.13.3-linux-amd64.deb",
+      "bytes": 78729910,
+      "sha256": "9e5a6fcff5fe9f9196d80c7df557cdb6462c2c0d597adf6875f21ab5479e46f5",
+      "native_images": 249,
+      "source_junit": {
+        "tests": 3821,
+        "passed": 3139,
+        "skipped": 682,
+        "failed": 0,
+        "errors": 0,
+        "evidence": "downloaded/validation-linux-amd64/artifacts/pytest-results.xml",
+        "sha256": "51dafab131852d96a00c584f011833eb5ada3ae08de7051e88f6321240815c18"
+      },
+      "vm_junit": {
+        "tests": 103,
+        "passed": 103,
+        "skipped": 0,
+        "failed": 0,
+        "errors": 0,
+        "evidence": "downloaded/validation-linux-amd64/artifacts/js-engine/qualification/pytest-results.xml",
+        "sha256": "f3855ea5b4e1c6e49dfcebb660b3d16138188b3af1f9666d8d23217975e05e14"
+      },
+      "qt_junit": {
+        "tests": 4,
+        "passed": 4,
+        "skipped": 0,
+        "failed": 0,
+        "errors": 0,
+        "evidence": "downloaded/validation-linux-amd64/artifacts/js-engine/qt/pytest-results.xml",
+        "sha256": "777528a07011b33736f6bc31d09793ee646cbf2d295a0c4714e80bd82026bb02"
+      },
+      "installer_verified": true,
+      "source_helper_sha256": "2d0ff5e459c63e6edad6a17958914d534d34be379e8862b2f070cced79065ef0",
+      "processed_frozen_installed_helper_sha256": "2d0ff5e459c63e6edad6a17958914d534d34be379e8862b2f070cced79065ef0",
+      "source_revision": "d7215b0ad3fc2c562e8317fd9bca058fd4863804",
+      "bootstrap_sha256": "7315831d3d23e8ebf0af5dad5772bb034bc162d4ac93e531331fd9425ae35890",
+      "runner_source_sha256": "b0148eb3310ce0a302f7d5672846beca950c8b228f9943b12ca868097246ae71",
+      "source_text_materialization": "exact raw Git blobs with LF line endings on every target (.gitattributes)",
+      "direct_installer_helper": {
+        "helper_sha256": "2d0ff5e459c63e6edad6a17958914d534d34be379e8862b2f070cced79065ef0",
+        "native_image": {
+          "format": "ELF",
+          "architectures": [
+            "amd64"
+          ]
+        },
+        "never_executed": true
+      },
+      "oracle_probe_receipts": {
+        "frozen": {
+          "oracledb": "26.1.0",
+          "flags": {
+            "oracle_adapter_constructed": true,
+            "oracle_native_extensions_loaded": true,
+            "oracle_parameters_ready": true,
+            "oracle_thin_mode_ready": true
+          },
+          "actual_qpa": {
+            "target": "linux-amd64",
+            "stage": "frozen",
+            "requested": "xcb",
+            "actual": "xcb",
+            "matched": true,
+            "evidence": "actual QApplication.platformName() runtime receipt"
+          }
+        },
+        "installed": {
+          "oracledb": "26.1.0",
+          "flags": {
+            "oracle_adapter_constructed": true,
+            "oracle_native_extensions_loaded": true,
+            "oracle_parameters_ready": true,
+            "oracle_thin_mode_ready": true
+          },
+          "actual_qpa": {
+            "target": "linux-amd64",
+            "stage": "installed",
+            "requested": "xcb",
+            "actual": "xcb",
+            "matched": true,
+            "evidence": "actual QApplication.platformName() runtime receipt"
+          }
+        }
+      },
+      "evidence": "downloaded/installer-linux-amd64/OpenNavicat-0.13.3-linux-amd64.manifest.json"
+    },
+    "linux-arm64": {
+      "installer": "OpenNavicat-0.13.3-linux-arm64.deb",
+      "bytes": 77216150,
+      "sha256": "dc52c9234d6cf7423fde80dfadc4b4c069dd751224638af4603f79e9fdc12298",
+      "native_images": 245,
+      "source_junit": {
+        "tests": 3821,
+        "passed": 3139,
+        "skipped": 682,
+        "failed": 0,
+        "errors": 0,
+        "evidence": "downloaded/validation-linux-arm64/artifacts/pytest-results.xml",
+        "sha256": "4031b9d0e777d51ed29d6adb961b2d7edd95dde28c05f77217f1ba83d828d1d8"
+      },
+      "vm_junit": {
+        "tests": 103,
+        "passed": 103,
+        "skipped": 0,
+        "failed": 0,
+        "errors": 0,
+        "evidence": "downloaded/validation-linux-arm64/artifacts/js-engine/qualification/pytest-results.xml",
+        "sha256": "9448ee190aa2d88fec59e6f77ecd5b0b3beb476fa1db75270f726a2fe6da888b"
+      },
+      "qt_junit": {
+        "tests": 4,
+        "passed": 4,
+        "skipped": 0,
+        "failed": 0,
+        "errors": 0,
+        "evidence": "downloaded/validation-linux-arm64/artifacts/js-engine/qt/pytest-results.xml",
+        "sha256": "2595e7e59f860d77da71779cc5093e075e1ef4e329038def26c0a3b0eb6de5ac"
+      },
+      "installer_verified": true,
+      "source_helper_sha256": "307ee65a9d1c5bba97b5f4b7fdb0bfbc52c5d9e5f4264cfa73147b231150df57",
+      "processed_frozen_installed_helper_sha256": "307ee65a9d1c5bba97b5f4b7fdb0bfbc52c5d9e5f4264cfa73147b231150df57",
+      "source_revision": "d7215b0ad3fc2c562e8317fd9bca058fd4863804",
+      "bootstrap_sha256": "7315831d3d23e8ebf0af5dad5772bb034bc162d4ac93e531331fd9425ae35890",
+      "runner_source_sha256": "b0148eb3310ce0a302f7d5672846beca950c8b228f9943b12ca868097246ae71",
+      "source_text_materialization": "exact raw Git blobs with LF line endings on every target (.gitattributes)",
+      "direct_installer_helper": {
+        "helper_sha256": "307ee65a9d1c5bba97b5f4b7fdb0bfbc52c5d9e5f4264cfa73147b231150df57",
+        "native_image": {
+          "format": "ELF",
+          "architectures": [
+            "arm64"
+          ]
+        },
+        "never_executed": true
+      },
+      "oracle_probe_receipts": {
+        "frozen": {
+          "oracledb": "26.1.0",
+          "flags": {
+            "oracle_adapter_constructed": true,
+            "oracle_native_extensions_loaded": true,
+            "oracle_parameters_ready": true,
+            "oracle_thin_mode_ready": true
+          },
+          "actual_qpa": {
+            "target": "linux-arm64",
+            "stage": "frozen",
+            "requested": "xcb",
+            "actual": "xcb",
+            "matched": true,
+            "evidence": "actual QApplication.platformName() runtime receipt"
+          }
+        },
+        "installed": {
+          "oracledb": "26.1.0",
+          "flags": {
+            "oracle_adapter_constructed": true,
+            "oracle_native_extensions_loaded": true,
+            "oracle_parameters_ready": true,
+            "oracle_thin_mode_ready": true
+          },
+          "actual_qpa": {
+            "target": "linux-arm64",
+            "stage": "installed",
+            "requested": "xcb",
+            "actual": "xcb",
+            "matched": true,
+            "evidence": "actual QApplication.platformName() runtime receipt"
+          }
+        }
+      },
+      "evidence": "downloaded/installer-linux-arm64/OpenNavicat-0.13.3-linux-arm64.manifest.json"
+    },
+    "macos-amd64": {
+      "installer": "OpenNavicat-0.13.3-macos-amd64.dmg",
+      "bytes": 53741078,
+      "sha256": "f594a8b3578b8710e9117e29ebb28f209d3b8c4e18b3dd75223ecf97a53ae740",
+      "native_images": 118,
+      "source_junit": {
+        "tests": 3839,
+        "passed": 3157,
+        "skipped": 682,
+        "failed": 0,
+        "errors": 0,
+        "evidence": "downloaded/validation-macos-amd64/artifacts/pytest-results.xml",
+        "sha256": "e7ed5e1f516292edf45d8bc8d26ef0e66b50cb487286f40b5f6b0bb5a27a155d"
+      },
+      "vm_junit": {
+        "tests": 103,
+        "passed": 103,
+        "skipped": 0,
+        "failed": 0,
+        "errors": 0,
+        "evidence": "downloaded/validation-macos-amd64/artifacts/js-engine/qualification/pytest-results.xml",
+        "sha256": "3c508f3189a4e48533f17519f105134f416c9a566f1b517eb731756137538aea"
+      },
+      "qt_junit": {
+        "tests": 4,
+        "passed": 4,
+        "skipped": 0,
+        "failed": 0,
+        "errors": 0,
+        "evidence": "downloaded/validation-macos-amd64/artifacts/js-engine/qt/pytest-results.xml",
+        "sha256": "7f6154e6422206193bae8c6fbd2c2143f3c374d7f4421eae92d6f5d7ec93940a"
+      },
+      "installer_verified": true,
+      "source_helper_sha256": "0f5fdcb2c28c3c9148d83ad665f5c9393ad030ea3a863e65f45660de12bb8b2d",
+      "processed_frozen_installed_helper_sha256": "ea905d8c7cd8bfdcab33a86db27828fb1c91d1796da3dcc28658944f2ab9c26e",
+      "source_revision": "d7215b0ad3fc2c562e8317fd9bca058fd4863804",
+      "bootstrap_sha256": "7315831d3d23e8ebf0af5dad5772bb034bc162d4ac93e531331fd9425ae35890",
+      "runner_source_sha256": "b0148eb3310ce0a302f7d5672846beca950c8b228f9943b12ca868097246ae71",
+      "source_text_materialization": "exact raw Git blobs with LF line endings on every target (.gitattributes)",
+      "direct_installer_helper": {
+        "helper_sha256": "ea905d8c7cd8bfdcab33a86db27828fb1c91d1796da3dcc28658944f2ab9c26e",
+        "native_image": {
+          "format": "Mach-O",
+          "architectures": [
+            "amd64"
+          ]
+        },
+        "never_executed": true
+      },
+      "oracle_probe_receipts": {
+        "frozen": {
+          "oracledb": "26.1.0",
+          "flags": {
+            "oracle_adapter_constructed": true,
+            "oracle_native_extensions_loaded": true,
+            "oracle_parameters_ready": true,
+            "oracle_thin_mode_ready": true
+          },
+          "actual_qpa": {
+            "target": "macos-amd64",
+            "stage": "frozen",
+            "requested": "cocoa",
+            "actual": "cocoa",
+            "matched": true,
+            "evidence": "actual QApplication.platformName() runtime receipt"
+          }
+        },
+        "installed": {
+          "oracledb": "26.1.0",
+          "flags": {
+            "oracle_adapter_constructed": true,
+            "oracle_native_extensions_loaded": true,
+            "oracle_parameters_ready": true,
+            "oracle_thin_mode_ready": true
+          },
+          "actual_qpa": {
+            "target": "macos-amd64",
+            "stage": "installed",
+            "requested": "cocoa",
+            "actual": "cocoa",
+            "matched": true,
+            "evidence": "actual QApplication.platformName() runtime receipt"
+          }
+        }
+      },
+      "evidence": "downloaded/installer-macos-amd64/OpenNavicat-0.13.3-macos-amd64.manifest.json"
+    },
+    "macos-arm64": {
+      "installer": "OpenNavicat-0.13.3-macos-arm64.dmg",
+      "bytes": 52826641,
+      "sha256": "4b66d0a5becff23db571e922a8c790e1894b583cbec07e04e41b2f1c3e7bda01",
+      "native_images": 117,
+      "source_junit": {
+        "tests": 3839,
+        "passed": 3157,
+        "skipped": 682,
+        "failed": 0,
+        "errors": 0,
+        "evidence": "downloaded/validation-macos-arm64/artifacts/pytest-results.xml",
+        "sha256": "70fd4d0f2d77208835fb9c620a0dd0a24c9488f95c20a0030f2fa9d69cbcb707"
+      },
+      "vm_junit": {
+        "tests": 103,
+        "passed": 103,
+        "skipped": 0,
+        "failed": 0,
+        "errors": 0,
+        "evidence": "downloaded/validation-macos-arm64/artifacts/js-engine/qualification/pytest-results.xml",
+        "sha256": "956aa755db24667638e5d0cc1e01708879c30c77d6a481e09cfadc2cfd4b0941"
+      },
+      "qt_junit": {
+        "tests": 4,
+        "passed": 4,
+        "skipped": 0,
+        "failed": 0,
+        "errors": 0,
+        "evidence": "downloaded/validation-macos-arm64/artifacts/js-engine/qt/pytest-results.xml",
+        "sha256": "2ad460fd74e4a5b8ad5db1ac0c175343a04a9377931ff8fffbc9a59e933238db"
+      },
+      "installer_verified": true,
+      "source_helper_sha256": "b9f54ddbbdb8db82d0d0f8092abb0d7fdb836e5f4195b7e98ba2d91282dfad54",
+      "processed_frozen_installed_helper_sha256": "8cdcf3329870291bf812a617696602651894fc2446f26262ef2f05996e4b6752",
+      "source_revision": "d7215b0ad3fc2c562e8317fd9bca058fd4863804",
+      "bootstrap_sha256": "7315831d3d23e8ebf0af5dad5772bb034bc162d4ac93e531331fd9425ae35890",
+      "runner_source_sha256": "b0148eb3310ce0a302f7d5672846beca950c8b228f9943b12ca868097246ae71",
+      "source_text_materialization": "exact raw Git blobs with LF line endings on every target (.gitattributes)",
+      "direct_installer_helper": {
+        "helper_sha256": "8cdcf3329870291bf812a617696602651894fc2446f26262ef2f05996e4b6752",
+        "native_image": {
+          "format": "Mach-O",
+          "architectures": [
+            "arm64"
+          ]
+        },
+        "never_executed": true
+      },
+      "oracle_probe_receipts": {
+        "frozen": {
+          "oracledb": "26.1.0",
+          "flags": {
+            "oracle_adapter_constructed": true,
+            "oracle_native_extensions_loaded": true,
+            "oracle_parameters_ready": true,
+            "oracle_thin_mode_ready": true
+          },
+          "actual_qpa": {
+            "target": "macos-arm64",
+            "stage": "frozen",
+            "requested": "cocoa",
+            "actual": "cocoa",
+            "matched": true,
+            "evidence": "actual QApplication.platformName() runtime receipt"
+          }
+        },
+        "installed": {
+          "oracledb": "26.1.0",
+          "flags": {
+            "oracle_adapter_constructed": true,
+            "oracle_native_extensions_loaded": true,
+            "oracle_parameters_ready": true,
+            "oracle_thin_mode_ready": true
+          },
+          "actual_qpa": {
+            "target": "macos-arm64",
+            "stage": "installed",
+            "requested": "cocoa",
+            "actual": "cocoa",
+            "matched": true,
+            "evidence": "actual QApplication.platformName() runtime receipt"
+          }
+        }
+      },
+      "evidence": "downloaded/installer-macos-arm64/OpenNavicat-0.13.3-macos-arm64.manifest.json"
+    },
+    "windows-amd64": {
+      "installer": "OpenNavicat-0.13.3-windows-amd64-setup.exe",
+      "bytes": 45466730,
+      "sha256": "07a27058e8ef4f5325d448678ce80e3e66061c7607e322eace0fdf81aec2ce89",
+      "native_images": 130,
+      "source_junit": {
+        "tests": 3857,
+        "passed": 3046,
+        "skipped": 811,
+        "failed": 0,
+        "errors": 0,
+        "evidence": "downloaded/validation-windows-amd64/artifacts/pytest-results.xml",
+        "sha256": "e6124df8ddd38a560051c4c844465c081578c5bdeed6797677ae036e8e31e53d"
+      },
+      "vm_junit": {
+        "tests": 103,
+        "passed": 103,
+        "skipped": 0,
+        "failed": 0,
+        "errors": 0,
+        "evidence": "downloaded/validation-windows-amd64/artifacts/js-engine/qualification/pytest-results.xml",
+        "sha256": "0172e2249e203ad4b156100d5b3e498ddc116968b6dc64cb33376a9d2d326b0a"
+      },
+      "qt_junit": {
+        "tests": 4,
+        "passed": 4,
+        "skipped": 0,
+        "failed": 0,
+        "errors": 0,
+        "evidence": "downloaded/validation-windows-amd64/artifacts/js-engine/qt/pytest-results.xml",
+        "sha256": "423921ed7d7b98c13391de1bf7908ce4a5f945f690e8f79d30f825beb90df96a"
+      },
+      "installer_verified": true,
+      "source_helper_sha256": "f3ea06133078b76c30ad74338521a3493ea725b079828a91ce767f4d327fbb2c",
+      "processed_frozen_installed_helper_sha256": "f3ea06133078b76c30ad74338521a3493ea725b079828a91ce767f4d327fbb2c",
+      "source_revision": "d7215b0ad3fc2c562e8317fd9bca058fd4863804",
+      "bootstrap_sha256": "7315831d3d23e8ebf0af5dad5772bb034bc162d4ac93e531331fd9425ae35890",
+      "runner_source_sha256": "b0148eb3310ce0a302f7d5672846beca950c8b228f9943b12ca868097246ae71",
+      "source_text_materialization": "exact raw Git blobs with LF line endings on every target (.gitattributes)",
+      "direct_installer_helper": null,
+      "oracle_probe_receipts": {
+        "frozen": {
+          "oracledb": "26.1.0",
+          "flags": {
+            "oracle_adapter_constructed": true,
+            "oracle_native_extensions_loaded": true,
+            "oracle_parameters_ready": true,
+            "oracle_thin_mode_ready": true
+          },
+          "actual_qpa": {
+            "target": "windows-amd64",
+            "stage": "frozen",
+            "requested": "windows",
+            "actual": "windows",
+            "matched": true,
+            "evidence": "actual QApplication.platformName() runtime receipt"
+          }
+        },
+        "installed": {
+          "oracledb": "26.1.0",
+          "flags": {
+            "oracle_adapter_constructed": true,
+            "oracle_native_extensions_loaded": true,
+            "oracle_parameters_ready": true,
+            "oracle_thin_mode_ready": true
+          },
+          "actual_qpa": {
+            "target": "windows-amd64",
+            "stage": "installed",
+            "requested": "windows",
+            "actual": "windows",
+            "matched": true,
+            "evidence": "actual QApplication.platformName() runtime receipt"
+          }
+        }
+      },
+      "evidence": "downloaded/installer-windows-amd64/OpenNavicat-0.13.3-windows-amd64-setup.manifest.json"
+    },
+    "windows-arm64": {
+      "installer": "OpenNavicat-0.13.3-windows-arm64-setup.exe",
+      "bytes": 36102872,
+      "sha256": "0d754451166da87b6aad733563b87841b4e4dfc4f40726a34e932d6cbbbcfcd6",
+      "native_images": 128,
+      "source_junit": {
+        "tests": 3857,
+        "passed": 3046,
+        "skipped": 811,
+        "failed": 0,
+        "errors": 0,
+        "evidence": "downloaded/validation-windows-arm64/artifacts/pytest-results.xml",
+        "sha256": "c35078de39f7ec69936d5d7f065c13227b67bc7a89ae2f503cde4036d120c1ee"
+      },
+      "vm_junit": {
+        "tests": 103,
+        "passed": 103,
+        "skipped": 0,
+        "failed": 0,
+        "errors": 0,
+        "evidence": "downloaded/validation-windows-arm64/artifacts/js-engine/qualification/pytest-results.xml",
+        "sha256": "155ae502cb50da28c5885b2c3b551f9716533d78b05dd87ae4df6e4197112e30"
+      },
+      "qt_junit": {
+        "tests": 4,
+        "passed": 4,
+        "skipped": 0,
+        "failed": 0,
+        "errors": 0,
+        "evidence": "downloaded/validation-windows-arm64/artifacts/js-engine/qt/pytest-results.xml",
+        "sha256": "5f7f5bae68aa1fe4ecc89ead25a9881988b35c87116b61fe247df894fc89333a"
+      },
+      "installer_verified": true,
+      "source_helper_sha256": "b02e420e4a92c2bde498b855a45aa3887e9cb36f59be8e56175b08d0db079566",
+      "processed_frozen_installed_helper_sha256": "b02e420e4a92c2bde498b855a45aa3887e9cb36f59be8e56175b08d0db079566",
+      "source_revision": "d7215b0ad3fc2c562e8317fd9bca058fd4863804",
+      "bootstrap_sha256": "7315831d3d23e8ebf0af5dad5772bb034bc162d4ac93e531331fd9425ae35890",
+      "runner_source_sha256": "b0148eb3310ce0a302f7d5672846beca950c8b228f9943b12ca868097246ae71",
+      "source_text_materialization": "exact raw Git blobs with LF line endings on every target (.gitattributes)",
+      "direct_installer_helper": null,
+      "oracle_probe_receipts": {
+        "frozen": {
+          "oracledb": "26.1.0",
+          "flags": {
+            "oracle_adapter_constructed": true,
+            "oracle_native_extensions_loaded": true,
+            "oracle_parameters_ready": true,
+            "oracle_thin_mode_ready": true
+          },
+          "actual_qpa": {
+            "target": "windows-arm64",
+            "stage": "frozen",
+            "requested": "windows",
+            "actual": "windows",
+            "matched": true,
+            "evidence": "actual QApplication.platformName() runtime receipt"
+          }
+        },
+        "installed": {
+          "oracledb": "26.1.0",
+          "flags": {
+            "oracle_adapter_constructed": true,
+            "oracle_native_extensions_loaded": true,
+            "oracle_parameters_ready": true,
+            "oracle_thin_mode_ready": true
+          },
+          "actual_qpa": {
+            "target": "windows-arm64",
+            "stage": "installed",
+            "requested": "windows",
+            "actual": "windows",
+            "matched": true,
+            "evidence": "actual QApplication.platformName() runtime receipt"
+          }
+        }
+      },
+      "evidence": "downloaded/installer-windows-arm64/OpenNavicat-0.13.3-windows-arm64-setup.manifest.json"
+    }
+  }
+}

@@ -253,3 +253,6 @@ runner 现增加只写一次的 `helper-inputs/` 实际字节快照与映射；�
 后续打包重新编译不再覆盖测试使用的字节证据；独立审查必须按新源码能力读取快照，
 历史 e942 不回填。新增真实文件篡改/路径/覆盖控制，runner 23 项通过。下一冻结候选
 仍需重新执行完整本地与六目标 CI，以及全部安装器字节审查。
+
+
+冻结4f5a914的main CI43615785473九个必需任务全部成功；九validation及六installer ZIP的API身份/size/digest/CRC/解包树、六原生安装器/安装smoke、67项实际QPA scope和完整default集合均经独立审查通过。Windows测试实际helper快照与末尾重编译产物已分开核对。[公开有界收据](evidence/0133-main-4f5a914-installer-audit.json)记录六安装器哈希；尚未打正式tag/发布，不能把这些0.13.3包借为0.14资格。用户将余下预算改为半小时，最终交接转入0.14开发候选snapshot。

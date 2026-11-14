@@ -1,9 +1,9 @@
 # OpenNavicat 交接快照
 
-当前恢复入口：**[2026-11-15：10 小时恢复与截止交接](2026-11-15-ten-hour-resume.md)**。
+当前恢复入口：**[2026-11-15：恢复与半小时收尾交接](2026-11-15-ten-hour-resume.md)**。
 
 恢复当前 goal 时先读这份快照，再核对其中的分支、提交和 CI 当前状态。
-本轮原定硬截止为 2026-11-15 08:43:06（Asia/Shanghai）；新记录进行中，截止时必须收尾。
+用户已将原十小时预算改为半小时，最新硬截止为 2026-11-15 01:16:42（Asia/Shanghai）；本轮按请求收尾停止，完整目标仍未完成。
 机器可读的本轮检查点见 [2026-11-15-ten-hour-state.json](2026-11-15-ten-hour-state.json)。
 此前 [小控件快照](2026-11-14-small-controls.md)和
 [2026-11-14-small-controls-state.json](2026-11-14-small-controls-state.json)保留历史，不把旧 CI pending 当作当前状态。

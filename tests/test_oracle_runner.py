@@ -1,7 +1,11 @@
 """Tamper/failure contracts for the owned Oracle runner, without Docker I/O."""
 import importlib.util
 import json
+import os
 from pathlib import Path
+import subprocess
+import sys
+import time
 from types import SimpleNamespace
 import xml.etree.ElementTree as ET
 
@@ -63,6 +67,8 @@ def test_readiness_failure_persists_safe_phase_and_owned_state_without_extending
             full_code=code, message=fixture.admin_password + fixture.denied_password))
     monkeypatch.setattr(fixture, "docker", docker)
     monkeypatch.setattr(fixture, "connect", unavailable)
+    monkeypatch.setattr(support, "_bounded_command_output", lambda *args, **kwargs:
+                        (b"ORA-01034: generated detail\nSP2-0640: generated detail", "captured"))
     with monkeypatch.context() as patch:
         patch.setattr(support.time, "monotonic", lambda: clock.now)
         patch.setattr(support.time, "sleep", lambda *_: pytest.fail("No wait or retry after deadline"))
@@ -84,6 +90,8 @@ def test_readiness_failure_persists_safe_phase_and_owned_state_without_extending
     else:
         assert diagnostic["container_state"] == {
             "status": "exited", "running": False, "oom_killed": True, "exit_code": 137}
+        assert diagnostic["server_log"]["codes"] == [
+            {"code": "ORA-01034", "count": 1}, {"code": "SP2-0640", "count": 1}]
     assert support.startup_diagnostic(fixture.receipt) == diagnostic
     assert not any(call[0] in {"logs", "ps", "stop", "rm"} for call in calls)
 
@@ -285,18 +293,20 @@ def test_atomic_receipt_retains_prior_exact_ledger_if_replace_is_interrupted(tmp
     assert (fixture.out / "fixture.json").read_bytes() == before
 
 
-def test_failed_docker_diagnostic_is_bounded_and_scrubs_all_generated_credentials(tmp_path, monkeypatch):
+def test_failed_docker_diagnostic_retains_no_arbitrary_stderr_or_endpoint(tmp_path, monkeypatch):
     fixture = support.OwnedOracle(tmp_path / "new-fixture")
-    text = "x" * 9000 + " ".join([fixture.admin_password, fixture.app_password, fixture.denied_password])
+    text = "x" * 9000 + " ".join([fixture.admin_password, fixture.app_password, fixture.denied_password,
+        "postgresql://synthetic-user:foreign-secret@private-endpoint.invalid:5432/private-db"])
     monkeypatch.setattr(support.subprocess, "run", lambda *args, **kwargs:
         SimpleNamespace(returncode=1, stderr=text))
-    with pytest.raises(RuntimeError, match="Docker operation failed"):
+    with pytest.raises(RuntimeError, match="Docker operation failed") as caught:
         fixture.docker("info")
     body = (fixture.out / "fixture.json").read_text()
     assert all(secret not in body for secret in (fixture.admin_password, fixture.app_password, fixture.denied_password))
     failure = json.loads(body)["docker_failure"]
-    assert failure["operation"] == "info" and failure["exit_code"] == 1
-    assert len(failure["stderr"]) <= 8192 and failure["stderr"].count("[REDACTED]") == 3
+    assert failure == {"operation": "info", "exit_code": 1}
+    assert all(value not in body + str(caught.value) for value in
+               ("private-endpoint.invalid", "foreign-secret", "synthetic-user", "private-db"))
 
 
 @pytest.mark.parametrize("value", [[], None, "terminal output", ["tests/other.py::test_unknown"],
@@ -324,3 +334,248 @@ def test_exact_junit_accepts_nested_class_and_parameter_nodeids(tmp_path):
     ET.ElementTree(suite).write(path)
     expected = ["tests/test_oracle_integration.py::Group::test_b", "tests/test_oracle_integration.py::test_a[param::value]"]
     assert runner.strict_junit(path, expected)["passed"] == 2
+
+
+def owned_startup_docker(fixture, calls, *, state, tamper=None):
+    """A full create/start/endpoint path, with adversarial inspect/log data."""
+    cid = "2" * 64
+    pin = support.PINS["arm64"]
+    def docker(*args, **kwargs):
+        calls.append((args, kwargs))
+        if args[0] == "info":
+            value = {"Architecture": "aarch64", "OSType": "linux", "ServerVersion": "29.0.1",
+                     "ServerErrors": None}
+        elif args[:2] == ("image", "inspect"):
+            value = [{"Id": pin["config"], "Architecture": "arm64", "Os": "linux", "Config": {}}]
+        elif args[0] == "create":
+            return SimpleNamespace(stdout=cid)
+        elif args[0] == "inspect":
+            assert args[1] == cid
+            data = {"Id": cid, "Name": "/" + fixture.name, "Image": pin["config"],
+                "Config": {"Labels": dict(fixture.labels)},
+                "HostConfig": {"Binds": None, "VolumesFrom": None, "Tmpfs": {support.SECRET_DIR: "rw"},
+                    "Memory": 4 * 1024**3, "NanoCpus": 2_000_000_000, "ShmSize": 1024**3},
+                "Mounts": [{"Type": "tmpfs", "Destination": support.SECRET_DIR}],
+                "NetworkSettings": {"Ports": {"1521/tcp": [{"HostIp": "127.0.0.1", "HostPort": "31415"}]}},
+                "State": {**state, "Error": "foreign-secret private-endpoint.invalid",
+                          "Health": {"Log": [{"Output": fixture.admin_password + " private-endpoint.invalid"}]}}}
+            if fixture.receipt["startup"]["phase"] == "readiness" and tamper:
+                if tamper == "owner": data["Config"]["Labels"]["run"] = "unowned"
+                if tamper == "image": data["Image"] = "sha256:" + "3" * 64
+                if tamper == "id": data["Id"] = "3" * 64
+                if tamper == "bind": data["HostConfig"]["Binds"] = ["/private-existing:/data"]
+                if tamper == "mount": data["Mounts"] = [{"Type": "volume", "Destination": "/data"}]
+            value = [data]
+        else:
+            assert args[0] in {"start", "exec", "stop", "rm"}
+            return SimpleNamespace(stdout="", returncode=0)
+        return SimpleNamespace(stdout=json.dumps(value))
+    return docker
+
+
+@pytest.mark.parametrize("state", [
+    {"Status": "exited", "Running": False, "ExitCode": 24, "OOMKilled": False},
+    {"Status": "dead", "Running": False, "ExitCode": 137, "OOMKilled": True}], ids=["exit24", "dead137"])
+def test_exited_exact_owned_container_fails_before_readiness_budget_and_exports_only_codes(tmp_path, monkeypatch, state):
+    fixture = support.OwnedOracle(tmp_path / "new-fixture")
+    calls, logs = [], []
+    monkeypatch.setattr(fixture, "docker", owned_startup_docker(fixture, calls, state=state))
+    private = "postgresql://synthetic-user:foreign-secret@private-endpoint.invalid:5432/private-db"
+    raw = ("ORA-01034: " + private + " " + fixture.admin_password + "\n"
+           "SP2-0640: " + fixture.app_password + "\nORA-01034: " + fixture.denied_password + "\n"
+           "password ORA-123456 invalid XORA-12345 ORA-12345suffix\n").encode()
+    def bounded(command):
+        assert calls[-1][0] == ("inspect", fixture.cid)
+        assert command[-4:] == ["logs", "--tail", "200", fixture.cid]
+        logs.append(command)
+        return raw, "captured"
+    monkeypatch.setattr(support, "_bounded_command_output", bounded, raising=False)
+    def unavailable(*args, **kwargs):
+        raise support.oracledb.OperationalError(SimpleNamespace(full_code="DPY-6005", message=private))
+    monkeypatch.setattr(fixture, "connect", unavailable)
+    monkeypatch.setattr(support.time, "sleep", lambda *_: pytest.fail("Exited container must not retry/sleep"))
+    with pytest.raises(RuntimeError, match="container exited before readiness") as caught:
+        fixture.start()
+    diagnostic = support.startup_diagnostic(fixture.receipt)
+    assert diagnostic["reason"] == "container_exited" and diagnostic["readiness_attempts"] == 1
+    assert diagnostic["elapsed_ms"] < 360000 and diagnostic["readiness_budget_seconds"] == 360
+    assert diagnostic["server_log"] == {"status": "captured", "bytes_read": len(raw),
+        "codes": [{"code": "ORA-01034", "count": 2}, {"code": "SP2-0640", "count": 1}]}
+    assert len(logs) == 1 and not any(args[0] in {"stop", "rm"} for args, _ in calls)
+    assert diagnostic["container_state"]["exit_code"] == state["ExitCode"]
+    persisted = "".join(p.read_text() for p in fixture.out.rglob("*") if p.is_file()) + str(caught.value)
+    for value in [private, "private-endpoint.invalid", "foreign-secret", "synthetic-user", "private-db",
+                  fixture.admin_password, fixture.app_password, fixture.denied_password]:
+        assert value not in persisted
+
+
+@pytest.mark.parametrize("tamper", ["owner", "image", "id", "bind", "mount"])
+def test_readiness_rejects_owner_image_or_mount_changes_before_log_access(tmp_path, monkeypatch, tamper):
+    fixture = support.OwnedOracle(tmp_path / "new-fixture")
+    calls = []
+    monkeypatch.setattr(fixture, "docker", owned_startup_docker(fixture, calls,
+        state={"Status": "exited", "Running": False, "ExitCode": 24}, tamper=tamper))
+    monkeypatch.setattr(support, "_bounded_command_output", lambda *args, **kwargs: pytest.fail("No unverified logs"))
+    monkeypatch.setattr(fixture, "connect", lambda *args, **kwargs:
+        (_ for _ in ()).throw(support.oracledb.OperationalError("synthetic untrusted error")))
+    monkeypatch.setattr(support.time, "sleep", lambda *_: pytest.fail("Contract change must fail immediately"))
+    with pytest.raises(AssertionError):
+        fixture.start()
+    diagnostic = support.startup_diagnostic(fixture.receipt)
+    assert diagnostic["reason"] == "fixture_contract" and diagnostic["container_state_unavailable"] is True
+    assert "server_log" not in diagnostic
+    assert not any(args[0] in {"stop", "rm"} for args, _ in calls)
+
+
+@pytest.mark.parametrize("failure", ["timeout", "oserror"])
+def test_docker_exception_does_not_export_command_environment_or_output(tmp_path, monkeypatch, failure):
+    fixture = support.OwnedOracle(tmp_path / "new-fixture", docker_host="unix:///private-endpoint.invalid/socket")
+    secret = fixture.admin_password + " foreign-secret private-endpoint.invalid"
+    def run(*args, **kwargs):
+        if failure == "timeout": raise subprocess.TimeoutExpired([secret], 10, output=secret, stderr=secret)
+        raise OSError(secret)
+    monkeypatch.setattr(support.subprocess, "run", run)
+    with pytest.raises((RuntimeError, subprocess.TimeoutExpired)) as caught:
+        fixture.docker("info", timeout=10)
+    assert all(value not in str(caught.value) for value in [fixture.admin_password, "foreign-secret", "private-endpoint.invalid"])
+    assert not isinstance(caught.value, subprocess.TimeoutExpired) or caught.value.output is None
+    assert all(secret not in p.read_text() for p in fixture.out.rglob("*") if p.is_file())
+
+
+@pytest.mark.parametrize("status", ["deadline", "output_limit", "command_failed"])
+def test_log_capture_non_success_preserves_only_finite_status_and_codes(tmp_path, monkeypatch, status):
+    fixture = support.OwnedOracle(tmp_path / "new-fixture")
+    fixture.cid = "4" * 64
+    raw = b"SP2-0640: foreign-secret at private-endpoint.invalid\n"
+    monkeypatch.setattr(support, "_bounded_command_output", lambda command: (raw, status))
+    assert fixture._server_log_summary() == {"status": status, "bytes_read": len(raw),
+        "codes": [{"code": "SP2-0640", "count": 1}]}
+
+
+def test_log_summary_has_finite_codes_and_rejects_forged_metadata(tmp_path, monkeypatch):
+    fixture = support.OwnedOracle(tmp_path / "new-fixture")
+    fixture.cid = "4" * 64
+    raw = " ".join("ORA-" + str(i).zfill(5) for i in range(100)).encode()
+    monkeypatch.setattr(support, "_bounded_command_output", lambda command: (raw, "captured"))
+    result = fixture._server_log_summary()
+    assert len(result["codes"]) == support.LOG_CODES and result["code_limit_reached"] is True
+    assert support.startup_diagnostic({"startup": {"server_log": {"status": ["secret"],
+        "bytes_read": True, "codes": [{"code": "ORA-00001 secret", "count": 1},
+        {"code": "SP2-0640", "count": 2, "raw": "private-endpoint.invalid"}], "raw": "secret"}}}) == {
+            "server_log": {"codes": [{"code": "SP2-0640", "count": 2}]}}
+    def poisoned(command):
+        raise RuntimeError("foreign-secret private-endpoint.invalid")
+    monkeypatch.setattr(support, "_bounded_command_output", poisoned)
+    assert fixture._server_log_summary() == {"status": "unavailable"}
+
+
+@pytest.mark.skipif(os.name != "posix", reason="Owned Oracle Docker fixture log collector requires POSIX")
+@pytest.mark.parametrize("mode", ["success", "overflow", "timeout", "closed-pipe", "nonzero"])
+def test_real_bounded_log_command_reaps_child_and_never_writes_raw_output(tmp_path, monkeypatch, mode):
+    code = ("import os,sys,time;os.write(1,b'ORA-01034 foreign-secret private-endpoint.invalid\\n');" +
+        {"success": "", "overflow": "os.write(1,b'x'*1000000);time.sleep(30)",
+         "timeout": "time.sleep(30)", "closed-pipe": "os.close(1);os.close(2);time.sleep(30)",
+         "nonzero": "sys.exit(7)"}[mode])
+    before = list(tmp_path.iterdir())
+    children = []
+    original = subprocess.Popen
+    def spawn(*args, **kwargs):
+        child = original(*args, **kwargs)
+        children.append(child)
+        return child
+    monkeypatch.setattr(support.subprocess, "Popen", spawn)
+    started = time.monotonic()
+    raw, status = support._bounded_command_output([sys.executable, "-c", code], timeout=.3, limit=128)
+    assert status == {"success": "captured", "overflow": "output_limit", "timeout": "deadline", "closed-pipe": "deadline", "nonzero": "command_failed"}[mode]
+    assert len(raw) <= 128 and b"ORA-01034" in raw and time.monotonic() - started < 5
+    assert list(tmp_path.iterdir()) == before
+    assert len(children) == 1 and children[0].poll() is not None and children[0].stdout.closed
+
+
+@pytest.mark.parametrize("mode", ["near-deadline", "late-success"])
+def test_readiness_deadline_never_starts_an_extra_connection_or_seed(tmp_path, monkeypatch, mode):
+    fixture = support.OwnedOracle(tmp_path / "new-fixture")
+    calls, attempts, sleeps = [], [], []
+    clock = SimpleNamespace(now=0.0)
+    monkeypatch.setattr(fixture, "docker", owned_startup_docker(fixture, calls,
+        state={"Status": "running", "Running": True, "ExitCode": 0}))
+    monkeypatch.setattr(support, "_bounded_command_output", lambda command: (b"", "captured"))
+    monkeypatch.setattr(fixture, "_seed", lambda: pytest.fail("Expired readiness must not seed"))
+    def connect(*args, **kwargs):
+        attempts.append(args)
+        if mode == "late-success":
+            clock.now = 361
+            return SimpleNamespace(version="23.26.3")
+        clock.now = 359.75
+        raise support.oracledb.OperationalError("synthetic unavailable")
+    def sleep(seconds):
+        sleeps.append(seconds)
+        clock.now += seconds
+    monkeypatch.setattr(fixture, "connect", connect)
+    monkeypatch.setattr(support.time, "monotonic", lambda: clock.now)
+    monkeypatch.setattr(support.time, "sleep", sleep)
+    with pytest.raises(RuntimeError, match="readiness deadline"):
+        fixture.start()
+    assert len(attempts) == 1 and sleeps == ([.25] if mode == "near-deadline" else [])
+    assert fixture.receipt["startup"]["readiness_budget_seconds"] == 360
+    assert fixture.receipt["startup"]["reason"] == "readiness_deadline"
+    readiness_timeouts = [kwargs["timeout"] for args, kwargs in calls if args[0] == "inspect" and kwargs["timeout"] < 1]
+    assert readiness_timeouts == ([.25] if mode == "near-deadline" else [])
+
+
+def test_running_then_exited_container_stops_after_one_retry_with_exact_revalidation(tmp_path, monkeypatch):
+    fixture = support.OwnedOracle(tmp_path / "new-fixture")
+    calls, attempts, sleeps = [], [], []
+    state = {"Status": "running", "Running": True, "ExitCode": 0, "OOMKilled": False}
+    monkeypatch.setattr(fixture, "docker", owned_startup_docker(fixture, calls, state=state))
+    monkeypatch.setattr(support, "_bounded_command_output", lambda command: (b"ORA-01034 safe", "captured"))
+    def connect(*args, **kwargs):
+        attempts.append(args)
+        if len(attempts) == 2:
+            state.update(Status="exited", Running=False, ExitCode=24)
+        raise support.oracledb.OperationalError("unavailable")
+    monkeypatch.setattr(fixture, "connect", connect)
+    monkeypatch.setattr(support.time, "sleep", lambda seconds: sleeps.append(seconds))
+    with pytest.raises(RuntimeError, match="container exited"):
+        fixture.start()
+    assert len(attempts) == 2 and sleeps == [1]
+    assert fixture.receipt["startup"]["readiness_attempts"] == 2
+    assert len([args for args, _ in calls if args[0] == "inspect"]) == 5
+
+
+def test_successful_start_and_keyboard_interrupt_never_capture_server_logs(tmp_path, monkeypatch):
+    fixture = support.OwnedOracle(tmp_path / "success")
+    calls = []
+    docker = owned_startup_docker(fixture, calls, state={"Status": "running", "Running": True})
+    def successful_docker(*args, **kwargs):
+        if args[0] == "exec" and args[-2:] == ("uname", "-m"):
+            calls.append((args, kwargs))
+            return SimpleNamespace(stdout="aarch64")
+        return docker(*args, **kwargs)
+    monkeypatch.setattr(fixture, "docker", successful_docker)
+    monkeypatch.setattr(fixture, "connect", lambda *args, **kwargs: SimpleNamespace(version="23.26.3"))
+    monkeypatch.setattr(fixture, "_seed", lambda: None)
+    monkeypatch.setattr(support, "_bounded_command_output", lambda *args, **kwargs: pytest.fail("No logs on success/interrupt"))
+    fixture.start()
+    assert fixture.receipt["startup"]["status"] == "ready" and fixture.receipt["startup"]["phase"] == "complete"
+    assert "server_log" not in fixture.receipt["startup"]
+    interrupted = support.OwnedOracle(tmp_path / "interrupted")
+    interrupted.cid = "5" * 64
+    monkeypatch.setattr(interrupted, "inspect", lambda **kwargs: pytest.fail("Interrupt must not start diagnosis"))
+    monkeypatch.setattr(interrupted, "_start", lambda **kwargs: (_ for _ in ()).throw(KeyboardInterrupt()))
+    with pytest.raises(KeyboardInterrupt):
+        interrupted.start()
+    assert interrupted.receipt["startup"]["reason"] == "interrupted"
+
+
+def test_engine_probe_rejects_arbitrary_server_errors_and_version_strings(tmp_path, monkeypatch):
+    fixture = support.OwnedOracle(tmp_path / "new-fixture")
+    secret = "foreign-secret private-endpoint.invalid /private/path"
+    monkeypatch.setattr(fixture, "docker", lambda *args, **kwargs: SimpleNamespace(stdout=json.dumps({
+        "Architecture": "riscv64", "OSType": "linux", "ServerVersion": secret, "ServerErrors": [secret]})))
+    with pytest.raises(RuntimeError, match="native"):
+        fixture.start()
+    body = (fixture.out / "fixture.json").read_text()
+    assert secret not in body
+    assert fixture.receipt["engine_probe"] == {"Architecture": None, "OSType": "linux",
+        "ServerVersion": None, "ServerErrors": ["reported"]}

@@ -8,9 +8,11 @@ from __future__ import annotations
 import contextlib
 from decimal import Decimal
 import json
+import os
 from pathlib import Path
 import re
 import secrets
+import selectors
 import subprocess
 import time
 import uuid
@@ -22,6 +24,11 @@ PINS = IMAGE_MANIFEST["platforms"]
 SECRET_DIR = "/run/opennavicat-owned-oracle"
 SECRET_FILE = SECRET_DIR + "/password"
 READINESS_SECONDS = 360
+LOG_BYTES = 65536
+LOG_LINES = 200
+LOG_SECONDS = 10
+LOG_CODES = 32
+DOCKER_OPERATIONS = frozenset({"info", "pull", "image", "create", "inspect", "start", "exec", "stop", "rm", "logs"})
 STARTUP_PHASES = frozenset({"engine_probe", "image_pull", "image_inspect", "container_create",
     "ownership_check", "container_start", "password_delivery", "endpoint_check", "readiness",
     "password_removal", "architecture_check", "seed", "complete"})
@@ -33,6 +40,80 @@ def _driver_code(error):
     return code if type(code) is str and re.fullmatch(r"(?:ORA|DPY|DPI)-[0-9]{4,5}", code) else None
 
 
+def _bounded_command_output(command, *, timeout=LOG_SECONDS, limit=LOG_BYTES):
+    """POSIX fixture CLI output stays in bounded memory, never a temporary file."""
+    if os.name != "posix":
+        raise RuntimeError("Owned Oracle log capture requires POSIX")
+    output = bytearray()
+    selector = selectors.DefaultSelector()
+    process = None
+    status = "captured"
+    try:
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        os.set_blocking(process.stdout.fileno(), False)
+        selector.register(process.stdout, selectors.EVENT_READ)
+        deadline = time.monotonic() + timeout
+        while selector.get_map():
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                status = "deadline"
+                break
+            for key, _ in selector.select(min(.05, remaining)):
+                chunk = os.read(key.fd, min(4096, limit + 1 - len(output)))
+                if not chunk:
+                    selector.unregister(key.fileobj)
+                    continue
+                room = limit - len(output)
+                output.extend(chunk[:room])
+                if len(chunk) > room:
+                    status = "output_limit"
+                    break
+            if status == "output_limit":
+                break
+        if status == "captured":
+            try:
+                process.wait(timeout=max(.001, deadline - time.monotonic()))
+            except subprocess.TimeoutExpired:
+                status = "deadline"
+    finally:
+        selector.close()
+        if process is not None:
+            try:
+                if process.poll() is None:
+                    process.kill()
+                process.wait(timeout=5)
+            finally:
+                process.stdout.close()
+    if status == "captured" and process.returncode:
+        status = "command_failed"
+    return bytes(output), status
+
+
+def _safe_log_summary(value):
+    if type(value) is not dict:
+        return {}
+    result = {}
+    if type(value.get("status")) is str and value["status"] in {"captured", "deadline", "output_limit", "command_failed", "unavailable"}:
+        result["status"] = value["status"]
+    if type(value.get("bytes_read")) is int and 0 <= value["bytes_read"] <= LOG_BYTES:
+        result["bytes_read"] = value["bytes_read"]
+    codes = value.get("codes")
+    if type(codes) is list and len(codes) <= LOG_CODES:
+        safe = []
+        seen = set()
+        for entry in codes:
+            if (type(entry) is dict and type(entry.get("code")) is str
+                    and re.fullmatch(r"ORA-[0-9]{5}|SP2-[0-9]{4}", entry["code"])
+                    and entry["code"] not in seen and type(entry.get("count")) is int
+                    and 1 <= entry["count"] <= LOG_BYTES):
+                safe.append({"code": entry["code"], "count": entry["count"]})
+                seen.add(entry["code"])
+        result["codes"] = safe
+    if value.get("code_limit_reached") is True:
+        result["code_limit_reached"] = True
+    return result
+
+
 def startup_diagnostic(receipt):
     """Only finite classifications, bounded numbers and owned-state facts leave startup."""
     value = receipt.get("startup", {})
@@ -40,7 +121,7 @@ def startup_diagnostic(receipt):
     result = {}
     enums = {"phase": STARTUP_PHASES, "status": {"running", "failed", "ready"},
         "reason": {"readiness_deadline", "docker_operation", "docker_deadline", "fixture_contract",
-                   "driver_error", "interrupted", "startup_failure"},
+                   "driver_error", "interrupted", "startup_failure", "container_exited"},
         "error_class": {"RuntimeError", "AssertionError", "TimeoutExpired", "DatabaseError",
                         "OperationalError", "InterfaceError", "KeyboardInterrupt", "OSError"}}
     for key, choices in enums.items():
@@ -63,6 +144,8 @@ def startup_diagnostic(receipt):
             safe_state["exit_code"] = state["exit_code"]
     if safe_state: result["container_state"] = safe_state
     if value.get("container_state_unavailable") is True: result["container_state_unavailable"] = True
+    logs = _safe_log_summary(value.get("server_log"))
+    if logs: result["server_log"] = logs
     return result
 
 
@@ -101,18 +184,40 @@ class OwnedOracle:
 
     def docker(self, *args, input=None, timeout=60, check=True):
         cmd = ["docker"] + (["--host", self.docker_host] if self.docker_host else [])
-        result = subprocess.run(cmd + ["--config", str(self.anonymous), *args], input=input,
-                                text=True, capture_output=True, timeout=timeout)
+        operation = args[0] if args and args[0] in DOCKER_OPERATIONS else "other"
+        try:
+            result = subprocess.run(cmd + ["--config", str(self.anonymous), *args], input=input,
+                                    text=True, capture_output=True, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            raise subprocess.TimeoutExpired(["docker", operation], timeout) from None
+        except OSError:
+            raise RuntimeError("Owned Oracle Docker operation unavailable: " + operation) from None
         if check and result.returncode:
-            detail = result.stderr
-            for secret in (self.admin_password, self.app_password, self.denied_password):
-                detail = detail.replace(secret, "[REDACTED]")
-            detail = detail[-8192:]
-            self.receipt["docker_failure"] = {"operation": args[0], "exit_code": result.returncode,
-                                               "stderr": detail}
+            self.receipt["docker_failure"] = {"operation": operation, "exit_code": result.returncode}
             self.save()
-            raise RuntimeError("Owned Oracle Docker operation failed: " + args[0])
+            raise RuntimeError("Owned Oracle Docker operation failed: " + operation)
         return result
+
+    def _server_log_summary(self):
+        # The caller must first validate exact ID, image, owner and mounts.
+        # Raw text and raw CLI exceptions never enter a receipt or exception.
+        command = ["docker"] + (["--host", self.docker_host] if self.docker_host else [])
+        command += ["--config", str(self.anonymous), "logs", "--tail", str(LOG_LINES), self.cid]
+        try:
+            raw, status = _bounded_command_output(command)
+            counts = {}
+            limited = False
+            for match in re.finditer(rb"(?<![A-Za-z0-9_])(?:ORA-[0-9]{5}|SP2-[0-9]{4})(?![A-Za-z0-9_])", raw):
+                code = match.group().decode("ascii")
+                if code not in counts and len(counts) == LOG_CODES:
+                    limited = True
+                    continue
+                counts[code] = counts.get(code, 0) + 1
+            return _safe_log_summary({"status": status, "bytes_read": len(raw),
+                "codes": [{"code": code, "count": count} for code, count in sorted(counts.items())],
+                "code_limit_reached": limited})
+        except Exception:
+            return {"status": "unavailable"}
 
     def save(self):
         # A signal between Docker create and the next receipt must leave the
@@ -166,6 +271,7 @@ class OwnedOracle:
                 if type(state) is dict:
                     startup["container_state"] = {key: state.get(source) for key, source in (
                         ("status", "Status"), ("running", "Running"), ("exit_code", "ExitCode"), ("oom_killed", "OOMKilled"))}
+                startup["server_log"] = self._server_log_summary()
             except Exception:
                 startup["container_state_unavailable"] = True
         self.receipt["startup"] = startup_diagnostic(self.receipt)
@@ -187,7 +293,12 @@ class OwnedOracle:
 
     def _start(self, *, pull=False):
         engine = json.loads(self.docker("info", "--format", "{{json .}}", timeout=15).stdout)
-        self.receipt["engine_probe"] = {k: engine.get(k) for k in ("Architecture", "OSType", "ServerVersion", "ServerErrors")}
+        version = engine.get("ServerVersion")
+        self.receipt["engine_probe"] = {
+            "Architecture": engine.get("Architecture") if engine.get("Architecture") in {"amd64", "x86_64", "arm64", "aarch64"} else None,
+            "OSType": engine.get("OSType") if engine.get("OSType") in {"linux", "windows"} else None,
+            "ServerVersion": version if type(version) is str and re.fullmatch(r"[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}", version) else None,
+            "ServerErrors": None if engine.get("ServerErrors") is None else [] if engine.get("ServerErrors") == [] else ["reported"]}
         self.save()
         self.architecture = native_architecture(engine)
         pin = PINS[self.architecture]
@@ -238,9 +349,15 @@ class OwnedOracle:
         self._startup_phase("readiness")
         deadline = time.monotonic() + READINESS_SECONDS
         while True:
+            if time.monotonic() >= deadline:
+                self._startup_reason = "readiness_deadline"
+                raise RuntimeError("Owned Oracle readiness deadline") from None
             self.receipt["startup"]["readiness_attempts"] += 1
             try:
                 self.admin = self.connect("system", self.admin_password)
+                if time.monotonic() >= deadline:
+                    self._startup_reason = "readiness_deadline"
+                    raise RuntimeError("Owned Oracle readiness deadline") from None
                 break
             except oracledb.Error as error:
                 code = _driver_code(error)
@@ -249,7 +366,16 @@ class OwnedOracle:
                 if time.monotonic() >= deadline:
                     self._startup_reason = "readiness_deadline"
                     raise RuntimeError("Owned Oracle readiness deadline") from None
-                time.sleep(1)
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    self._startup_reason = "readiness_deadline"
+                    raise RuntimeError("Owned Oracle readiness deadline") from None
+                state = self.inspect(timeout=min(5, remaining)).get("State", {})
+                if (type(state) is dict and state.get("Status") in {"exited", "dead"}
+                        and state.get("Running") is False):
+                    self._startup_reason = "container_exited"
+                    raise RuntimeError("Owned Oracle container exited before readiness") from None
+                time.sleep(min(1, max(0, deadline - time.monotonic())))
         self._startup_phase("password_removal")
         self.docker("exec", self.cid, "rm", "--", SECRET_FILE)
         self._startup_phase("architecture_check")

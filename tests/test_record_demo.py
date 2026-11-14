@@ -6,6 +6,7 @@ import json
 import hashlib
 import os
 from pathlib import Path
+import sqlite3
 import socket
 import subprocess
 import threading
@@ -13,6 +14,7 @@ import time
 import traceback
 import uuid
 from copy import deepcopy
+from contextlib import closing
 
 import pytest
 from PySide6.QtWidgets import QPushButton, QToolButton, QVBoxLayout, QWidget
@@ -27,6 +29,229 @@ def recorder():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def test_sqlite_test_opt_in_adds_one_phase_before_forms_without_replacing_old_35(recorder):
+    previous = recorder.required_demo_phases(mongodb=True, stream=True,
+        oracle_form=True, connection_chooser=True)
+    extended = recorder.required_demo_phases(mongodb=True, stream=True,
+        oracle_form=True, connection_chooser=True, sqlite_test=True)
+    assert len(previous) == 35 and len(extended) == len(set(extended)) == 36
+    assert extended[:31] == previous[:31]
+    assert extended[31] == 'sqlite_connection_test' and extended[32:] == previous[31:]
+    assert recorder.required_demo_phases(sqlite_test=True) == recorder.SQLITE_PHASES + recorder.SQLITE_TEST_PHASES
+
+
+def test_sqlite_test_capture_requires_explicit_output(recorder, monkeypatch):
+    monkeypatch.setattr(recorder.sys, 'argv', ['record-demo.py', '--include-sqlite-test'])
+    monkeypatch.setattr(recorder, 'dependencies', lambda *_: ('unused-encoder', 'unused-version'))
+    monkeypatch.setattr(recorder, 'record', lambda *_: pytest.fail('No default README overwrite for extended capture'))
+    with pytest.raises(SystemExit) as caught:
+        recorder.main()
+    assert caught.value.code == 2
+
+
+@pytest.mark.parametrize('failure', ['', 'capture', 'encode'])
+def test_sqlite_owned_cwd_main_restores_after_draining_jobs_and_keeps_output_absolute(recorder, failure):
+    # Exercise main's real directory/executor lifetime in a separate process.
+    # The capture and encoder are deliberate stubs: this tests neither a GIF
+    # nor a simulated connection-success screen.
+    source = '''
+import importlib.util,json,os,shutil,sys,tempfile,time
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+path=Path(sys.argv[1]);failure=sys.argv[2]
+spec=importlib.util.spec_from_file_location('record_demo_cwd_child',path)
+module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+seen={}
+class Pool(ThreadPoolExecutor):
+ def submit(self,*args,**kwargs):
+  if 'first_submit_owned' not in seen:
+   seen['first_submit_owned']=Path.cwd()==seen['temporary']
+  return super().submit(*args,**kwargs)
+def fake_record(args,temporary,pool,*unused):
+ seen['temporary']=temporary
+ seen['absolute_output']=args.output.is_absolute() and args.output==expected
+ seen['relative_path_tool_preserved']=Path(shutil.which(tool_name))==tool
+ def pending():
+  time.sleep(.04)
+  seen['pending_owned']=Path.cwd()==temporary and temporary.is_dir()
+  Path('owned-pending.txt').write_text('generated pending job')
+ pool.submit(pending)
+ if failure=='capture':raise RuntimeError('controlled capture failure')
+ return temporary,{'frames':2,'sqlite_connection_test':{}}
+def fake_encode(_encoder,_frames,_fps,destination):
+ if failure=='encode':raise RuntimeError('controlled encode failure')
+ destination.write_bytes(b'GIF-test')
+ return {'fixture':'not an actual GIF qualification'}
+module.ThreadPoolExecutor=Pool
+module.dependencies=lambda *_:('generated-encoder','generated-version')
+module.record=fake_record;module.encode=fake_encode;module.verify_gif=lambda *_:None
+with tempfile.TemporaryDirectory(prefix='opennavicat-main-lifecycle-test-') as directory:
+ original=Path.cwd();owned=Path(directory).resolve()
+ try:
+  os.chdir(owned);(owned/'keep.txt').write_text('unchanged')
+  tools=owned/'owned-tools';tools.mkdir();tool_name='generated-tool.exe' if os.name=='nt' else 'generated-tool';tool=tools/tool_name
+  tool.write_text('generated lookup-only fixture');tool.chmod(0o755)
+  prior_path=os.environ.get('PATH','');os.environ['PATH']='owned-tools'+os.pathsep+prior_path
+  before_path=os.environ['PATH']
+  expected=owned/'output'/'generated.gif'
+  sys.argv=['record-demo.py','--include-sqlite-test','--output','output/generated.gif','--platform','offscreen']
+  try:module.main()
+  except RuntimeError as error:
+   assert failure and str(error)=='controlled '+failure+' failure',str(error)
+  else:assert not failure
+  assert Path.cwd()==owned and seen['first_submit_owned'] and seen['absolute_output']
+  assert seen['relative_path_tool_preserved'] and os.environ['PATH']==before_path
+  assert seen['pending_owned'] and not seen['temporary'].exists()
+  assert not (owned/'owned-pending.txt').exists() and (owned/'keep.txt').read_text()=='unchanged'
+  if not failure:
+   assert expected.read_bytes()==b'GIF-test'
+   receipt=json.loads(expected.with_suffix('.json').read_text())
+   assert receipt['sqlite_connection_test']['working_directory_restored']
+   assert receipt['sqlite_connection_test']['temporary_fixture_removed']
+  else:assert not expected.exists()
+ finally:os.chdir(original)
+print(json.dumps({'passed':True,'failure':failure,'parent_cwd_unchanged':True}))
+'''
+    env = os.environ.copy(); env['QT_QPA_PLATFORM'] = 'offscreen'
+    original = Path.cwd()
+    result = subprocess.run([recorder.sys.executable, '-c', source, recorder.__file__, failure],
+        env=env, capture_output=True, text=True, timeout=20)
+    assert Path.cwd() == original
+    assert result.returncode == 0, (result.stdout + result.stderr)[-12000:]
+    assert json.loads(result.stdout.splitlines()[-1])['passed']
+
+
+def _complete_generated_sqlite_test(qtbot, recorder, dialog, fixture, pool):
+    from PySide6.QtCore import Qt
+    dialog.show()
+    qtbot.waitExposed(dialog)
+    with qtbot.waitSignal(dialog.test_finished, timeout=5000) as completed:
+        qtbot.mouseClick(dialog.test_button, Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda: recorder.sqlite_test_idle(dialog))
+    assert completed.args == [True, '连接成功']
+    dialog._demo_sqlite_test_ledger['fixture_verified'] = pool.submit(recorder.verify_sqlite_test_fixture, fixture).result(timeout=5)
+    return recorder.verify_sqlite_connection_test_demo(dialog, fixture)
+
+
+def test_sqlite_demo_uses_real_owned_file_worker_version_close_and_no_profile_or_keyring(qtbot, recorder, tmp_path, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from types import ModuleType
+    from PySide6.QtCore import QCoreApplication, QEvent
+    from shiboken6 import isValid
+    from opennavicat.database import DatabaseSession
+    from opennavicat.storage import Store
+
+    def forbidden(*_args, **_kwargs):
+        pytest.fail('The generated connection Test cannot use a workspace or credential vault')
+
+    monkeypatch.setattr(Store, '__init__', forbidden)
+    denied = ModuleType('keyring')
+    for name in ('get_password', 'set_password', 'delete_password', 'get_keyring'):
+        setattr(denied, name, forbidden)
+    monkeypatch.setitem(recorder.sys.modules, 'keyring', denied)
+    closed = []
+    original_close = DatabaseSession.close
+
+    def close(session):
+        original_close(session)
+        closed.append((threading.get_ident(), session.connection is None))
+
+    monkeypatch.setattr(DatabaseSession, 'close', close)
+    before = Path.cwd()
+    with recorder.owned_recording_cwd(tmp_path, enabled=True), ThreadPoolExecutor(max_workers=1) as pool:
+        fixture = pool.submit(recorder.prepare_sqlite_test_fixture, tmp_path).result(timeout=5)
+        with recorder.sqlite_connection_test_demo(fixture) as dialog:
+            facts = _complete_generated_sqlite_test(qtbot, recorder, dialog, fixture, pool)
+            recorder.assert_visible_privacy(dialog, tmp_path)
+            assert dialog.database_edit.text() == recorder.SQLITE_TEST_FILENAME
+            assert facts['server_version'] == sqlite3.sqlite_version
+            assert facts['fixture_unchanged'] and facts['rows'] == 2
+            assert not facts['profile_saved'] and facts['new_unsaved_profile']
+            assert facts['actual_probe_completed'] and facts['test_session_closed_in_worker']
+            assert closed == [(dialog._demo_sqlite_test_ledger['probe_threads'][0], True)]
+            assert closed[0][0] != threading.get_ident()
+            assert pool.submit(lambda: hashlib.sha256(fixture['path'].read_bytes()).hexdigest()).result(timeout=5) == fixture['sha256']
+            assert not dialog.grab().isNull()
+        ledger = dialog._demo_sqlite_test_ledger
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        assert not isValid(dialog) and ledger['closed']
+    assert Path.cwd() == before and not (before / recorder.SQLITE_TEST_FILENAME).exists()
+
+
+@pytest.mark.parametrize('tamper', ['path', 'password', 'hidden_tls_password', 'status', 'profile_save'])
+def test_sqlite_demo_rejects_changed_real_privacy_or_result_state(qtbot, recorder, tmp_path, tamper):
+    from concurrent.futures import ThreadPoolExecutor
+
+    with recorder.owned_recording_cwd(tmp_path, enabled=True), ThreadPoolExecutor(max_workers=1) as pool:
+        fixture = pool.submit(recorder.prepare_sqlite_test_fixture, tmp_path).result(timeout=5)
+        with recorder.sqlite_connection_test_demo(fixture) as dialog:
+            _complete_generated_sqlite_test(qtbot, recorder, dialog, fixture, pool)
+            if tamper == 'path': dialog.database_edit.setText(str(fixture['path']))
+            elif tamper == 'password': dialog.password_edit.setText('generated-private-password')
+            elif tamper == 'hidden_tls_password': dialog.ssl_key_password_edit.setText('generated-private-key')
+            elif tamper == 'status': dialog.sqlite_test_banner.detail_label.setText('not the actual tested server')
+            else: dialog.accept()
+            with pytest.raises(RuntimeError, match='actual completed, unsaved fixture state'):
+                recorder.verify_sqlite_connection_test_demo(dialog, fixture)
+            if tamper == 'path':
+                with pytest.raises(RuntimeError, match='filesystem path'):
+                    recorder.assert_visible_privacy(dialog, tmp_path)
+
+
+def test_sqlite_demo_error_waits_real_active_test_before_deleting_its_signals(qtbot, recorder, tmp_path, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from PySide6.QtCore import QCoreApplication, QEvent, QTimer
+    from shiboken6 import isValid
+    from opennavicat.database import DatabaseSession
+
+    entered, release = threading.Event(), threading.Event()
+    original_execute = DatabaseSession.execute
+
+    def gated_execute(session, sql, *args, **kwargs):
+        if sql == 'SELECT 1':
+            entered.set()
+            assert release.wait(5)
+        return original_execute(session, sql, *args, **kwargs)
+
+    monkeypatch.setattr(DatabaseSession, 'execute', gated_execute)
+    with recorder.owned_recording_cwd(tmp_path, enabled=True), ThreadPoolExecutor(max_workers=1) as pool:
+        fixture = pool.submit(recorder.prepare_sqlite_test_fixture, tmp_path).result(timeout=5)
+        try:
+            with pytest.raises(RuntimeError, match='controlled capture failure'):
+                with recorder.sqlite_connection_test_demo(fixture) as dialog:
+                    dialog.show(); qtbot.waitExposed(dialog)
+                    dialog.test_button.click()
+                    qtbot.waitUntil(entered.is_set)
+                    signal_object = dialog._test_task.signals
+                    assert dialog._testing and not recorder.sqlite_test_idle(dialog)
+                    QTimer.singleShot(25, release.set)
+                    raise RuntimeError('controlled capture failure')
+        finally:
+            release.set()
+        ledger = dialog._demo_sqlite_test_ledger
+        assert ledger['results'] == [(True, '连接成功')] and ledger['close_threads'] == ledger['probe_threads']
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        assert not isValid(dialog) and not isValid(signal_object) and ledger['closed']
+
+
+def test_sqlite_fixture_and_widget_verifiers_reject_wrong_owners(qtbot, recorder, tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+
+    with pytest.raises(RuntimeError, match='I/O owner'):
+        recorder.prepare_sqlite_test_fixture(tmp_path)
+    with recorder.owned_recording_cwd(tmp_path, enabled=True), ThreadPoolExecutor(max_workers=1) as pool:
+        fixture = pool.submit(recorder.prepare_sqlite_test_fixture, tmp_path).result(timeout=5)
+        with recorder.sqlite_connection_test_demo(fixture) as dialog:
+            with pytest.raises(RuntimeError, match='GUI owner'):
+                pool.submit(recorder.verify_sqlite_connection_test_demo, dialog, fixture).result(timeout=5)
+        def mutate_owned_fixture():
+            with closing(sqlite3.connect(fixture['path'])) as database, database:
+                database.execute("UPDATE generated_connection SET label=? WHERE id=?", ('generated changed row', 1))
+        pool.submit(mutate_owned_fixture).result(timeout=5)
+        with pytest.raises(RuntimeError, match='changed its owned fixture'):
+            pool.submit(recorder.verify_sqlite_test_fixture, fixture).result(timeout=5)
 
 
 def test_connection_chooser_uses_actual_unbound_grid_and_deletes_after_capture(qtbot, recorder, tmp_path, monkeypatch):

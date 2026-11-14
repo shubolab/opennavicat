@@ -46,6 +46,9 @@ MONGO_STREAM_COLLECTION = "generated_stream_events"
 ORACLE_FORM_NAME = "Oracle · 连接设置演示"
 ORACLE_FORM_PHASES = ("oracle_connection_general", "oracle_connection_advanced", "oracle_connection_databases")
 CONNECTION_CHOOSER_PHASES = ("connection_chooser",)
+SQLITE_TEST_PHASES = ("sqlite_connection_test",)
+SQLITE_TEST_FILENAME = "generated-connection-test.sqlite"
+SQLITE_TEST_NAME = "SQLite · 生成连接测试"
 # Match the independent application artwork's sRGB driver fills. These colors
 # only reserve GIF palette entries; no pixels or controls are added to captures.
 DEMO_DRIVER_COLORS = {
@@ -92,10 +95,11 @@ def mongo_storage_options():
     }
 
 
-def required_demo_phases(*, mongodb=False, stream=False, oracle_form=False, connection_chooser=False):
+def required_demo_phases(*, mongodb=False, stream=False, oracle_form=False, connection_chooser=False, sqlite_test=False):
     if stream and not mongodb:
         raise ValueError("A finite-stream demo requires its MongoDB workflows.")
     return (SQLITE_PHASES + (MONGO_PHASES if mongodb else ()) + (STREAM_PHASES if stream else ())
+            + (SQLITE_TEST_PHASES if sqlite_test else ())
             + (ORACLE_FORM_PHASES if oracle_form else ())
             + (CONNECTION_CHOOSER_PHASES if connection_chooser else ()))
 
@@ -789,6 +793,198 @@ def fit_capture_image(source, width, height, *, save_sheet=False):
 
 
 @contextmanager
+def owned_recording_cwd(temporary, *, enabled=False):
+    """Resolve one real relative fixture without exposing a personal path.
+
+    Only the standalone recorder process changes directory, before its lazy
+    executor receives its first job. The caller drains that serial owner before
+    leaving this context, which restores the original directory before the
+    TemporaryDirectory can be removed. No frame text is masked or replaced.
+    """
+    facts = {"enabled": bool(enabled), "restored": not enabled}
+    if not enabled:
+        yield facts
+        return
+    if threading.current_thread() is not threading.main_thread():
+        raise RuntimeError("The recorder's temporary working directory needs its main owner.")
+    directory = Path(temporary).resolve()
+    if not directory.is_dir() or directory == ROOT:
+        raise RuntimeError("The relative fixture needs a separate owned temporary directory.")
+    original = Path.cwd()
+    original_path = os.environ.get('PATH')
+    descriptor = os.open('.', os.O_RDONLY) if hasattr(os, 'fchdir') else None
+    try:
+        # Keep Docker, ffprobe and helpers selected through relative/empty PATH
+        # entries bound to the same locations as before the process chdir.
+        if original_path is not None:
+            os.environ['PATH'] = os.pathsep.join(
+                entry if Path(entry).is_absolute() else str((original / entry).resolve())
+                for entry in original_path.split(os.pathsep))
+        os.chdir(directory)
+        yield facts
+    finally:
+        try:
+            if descriptor is None:
+                os.chdir(original)
+            else:
+                os.fchdir(descriptor)
+            facts["restored"] = Path.cwd() == original
+            if not facts["restored"]:
+                raise RuntimeError("The recorder did not restore its original working directory.")
+        finally:
+            if original_path is None:
+                os.environ.pop('PATH', None)
+            else:
+                os.environ['PATH'] = original_path
+            if descriptor is not None:
+                os.close(descriptor)
+
+
+def prepare_sqlite_test_fixture(directory):
+    """Create only this new two-row SQLite file on the recorder's I/O owner."""
+    if threading.current_thread() is threading.main_thread():
+        raise RuntimeError("The generated SQLite test fixture needs its I/O owner.")
+    directory = Path(directory).resolve()
+    if Path.cwd() != directory or directory == ROOT:
+        raise RuntimeError("The generated SQLite test fixture is outside its owned working directory.")
+    path = directory / SQLITE_TEST_FILENAME
+    path.touch(exist_ok=False)
+    with closing(sqlite3.connect(path)) as database, database:
+        database.execute("CREATE TABLE generated_connection (id INTEGER PRIMARY KEY, label TEXT NOT NULL)")
+        database.executemany("INSERT INTO generated_connection VALUES (?, ?)",
+                            [(1, '生成连接样例 A'), (2, '生成连接样例 B')])
+        version = database.execute("SELECT sqlite_version()").fetchone()[0]
+    if not re.fullmatch(r"[0-9]+(?:\.[0-9]+){1,3}", version):
+        raise RuntimeError("The generated SQLite test version is not a bounded numeric version.")
+    return {"path": path, "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            "server_version": version, "rows": 2}
+
+
+def verify_sqlite_test_fixture(fixture):
+    """Independent read-only content and byte check after the real Test closed."""
+    if threading.current_thread() is threading.main_thread():
+        raise RuntimeError("The generated SQLite test verification needs its I/O owner.")
+    path = fixture["path"]
+    if Path.cwd() != path.parent or path.is_symlink() or not path.is_file():
+        raise RuntimeError("The generated SQLite test fixture identity changed.")
+    with closing(sqlite3.connect(path.as_uri() + '?mode=ro', uri=True)) as database:
+        rows = database.execute("SELECT id, label FROM generated_connection ORDER BY id").fetchall()
+        version = database.execute("SELECT sqlite_version()").fetchone()[0]
+    if (rows != [(1, '生成连接样例 A'), (2, '生成连接样例 B')]
+            or version != fixture["server_version"]
+            or hashlib.sha256(path.read_bytes()).hexdigest() != fixture["sha256"]):
+        raise RuntimeError("The generated SQLite Test changed its owned fixture.")
+    return {"fixture_unchanged": True, "rows": 2, "fixture_sha256": fixture["sha256"]}
+
+
+def sqlite_test_idle(dialog):
+    return not dialog._testing and dialog._test_task is None and not dialog._test_pool.activeThreadCount()
+
+
+@contextmanager
+def sqlite_connection_test_demo(fixture, parent=None):
+    """New unsaved real form and real probe, with per-session ownership checks."""
+    from PySide6.QtCore import QEventLoop, Qt
+    from PySide6.QtWidgets import QApplication
+    from opennavicat.ui.dialogs import ConnectionDialog
+
+    if threading.current_thread() is not threading.main_thread() or Path.cwd() != fixture["path"].parent:
+        raise RuntimeError("The SQLite test form needs its GUI owner and owned working directory.")
+    dialog = ConnectionDialog(parent)
+    dialog.setWindowModality(Qt.WindowModality.WindowModal)
+    dialog.name_edit.setText(SQLITE_TEST_NAME)
+    dialog.database_edit.setText(SQLITE_TEST_FILENAME)
+    dialog.host_edit.clear()
+    ledger = {"probe_threads": [], "close_threads": [], "results": [], "accepted": 0,
+              "fixture_verified": None, "closed": False, "gui_thread": threading.get_ident()}
+    dialog._demo_sqlite_test_ledger = ledger
+    dialog.accepted.connect(lambda: ledger.update(accepted=ledger["accepted"] + 1))
+    dialog.test_finished.connect(lambda success, message: ledger["results"].append((success, message)))
+    real_probe = dialog._probe_session
+
+    def owned_probe(session, config):
+        worker = threading.get_ident()
+        if (worker == ledger["gui_thread"] or config.driver != 'sqlite'
+                or Path(config.database).resolve() != fixture["path"]
+                or config.username or config.password or config.ssh_enabled):
+            raise RuntimeError("The SQLite test tried to leave its generated fixture owner.")
+        ledger["probe_threads"].append(worker)
+        original_close = session.close
+
+        def close_owned_session():
+            try:
+                original_close()
+            finally:
+                del session.close
+            if threading.get_ident() != worker or session.connection is not None:
+                raise RuntimeError("The generated SQLite test session did not close on its worker.")
+            ledger["close_threads"].append(threading.get_ident())
+
+        session.close = close_owned_session
+        # This wrapper observes the actual native application probe. It never
+        # fabricates its result or emits its completion signal.
+        return real_probe(session, config)
+
+    dialog._probe_session = owned_probe
+    try:
+        yield dialog
+    finally:
+        # A failed capture must still deliver the real worker's GUI completion
+        # before deleting the widget that owns its task signals and pool.
+        deadline = time.monotonic() + 30
+        while not sqlite_test_idle(dialog) and time.monotonic() < deadline:
+            QApplication.processEvents(QEventLoop.ProcessEventsFlag.ExcludeUserInputEvents, 20)
+            time.sleep(.002)
+        if not sqlite_test_idle(dialog):
+            raise RuntimeError("The generated SQLite test is still active; its widget is retained.")
+        dialog.reject()
+        ledger["closed"] = True
+        dialog.deleteLater()
+
+
+def verify_sqlite_connection_test_demo(dialog, fixture):
+    """Read real completed widgets on the GUI owner before each saved frame."""
+    from PySide6.QtCore import QThread
+    from PySide6.QtWidgets import QApplication
+    from opennavicat.ui.dialogs import ConnectionDialog
+
+    app = QApplication.instance()
+    if app is None or QThread.currentThread() is not app.thread():
+        raise RuntimeError("The SQLite test widgets need their GUI owner.")
+    ledger = getattr(dialog, '_demo_sqlite_test_ledger', {})
+    version = fixture["server_version"]
+    if (type(dialog) is not ConnectionDialog or dialog.driver_combo.currentData() != 'sqlite'
+            or dialog.name_edit.text() != SQLITE_TEST_NAME or dialog.database_edit.text() != SQLITE_TEST_FILENAME
+            or dialog.tabs.currentWidget() is not dialog.general_tab
+            or not dialog.sqlite_existing_radio.isChecked() or dialog.get_config() is not None
+            or dialog._original is not None or not sqlite_test_idle(dialog) or ledger.get("accepted")
+            or ledger.get("results") != [(True, '连接成功')]
+            or len(ledger.get("probe_threads", [])) != 1
+            or ledger.get("close_threads") != ledger.get("probe_threads")
+            or ledger["probe_threads"][0] == ledger["gui_thread"]
+            or not ledger.get("fixture_verified")
+            or getattr(dialog, '_test_server_version', None) != version
+            or getattr(dialog, '_tested_driver', None) != 'sqlite'
+            or not dialog.diagram.sqlite_connection_succeeded
+            or not dialog.sqlite_test_banner.isVisible()
+            or dialog.sqlite_test_banner.status_label.text() != '连接成功'
+            or dialog.sqlite_test_banner.detail_label.text() != '服务器版本: ' + version
+            or not dialog.sqlite_test_banner.status_icon.isVisible()
+            or dialog.sqlite_test_banner.copy_text != '连接成功  服务器版本: ' + version
+            or any(widget.text() for widget in (dialog.host_edit, dialog.user_edit, dialog.password_edit,
+                    dialog.ssl_key_password_edit, dialog.ssl_ca_edit, dialog.ssl_cert_edit,
+                    dialog.ssl_key_edit, dialog.ssl_crl_edit, dialog.ssh_host_edit, dialog.ssh_user_edit,
+                    dialog.ssh_key_edit, dialog.ssh_password_edit, dialog.ssh_key_passphrase_edit))):
+        raise RuntimeError("The SQLite test form did not preserve its actual completed, unsaved fixture state.")
+    return {"driver": "sqlite", "database_file": SQLITE_TEST_FILENAME, "relative_file_used_by_real_test": True,
+            "server_version": version, "actual_probe_completed": True, "public_signal": [True, '连接成功'],
+            "success_diagram_line": True,
+            "probe_calls": 1, "worker_off_gui_thread": True, "test_session_closed_in_worker": True,
+            "pool_idle_before_capture": True, "new_unsaved_profile": True, "profile_saved": False,
+            "credentials_empty": True, "clipboard_action_executed": False, **ledger["fixture_verified"]}
+
+
+@contextmanager
 def connection_chooser_demo(parent=None):
     """Unbound actual chooser: no workspace, credential or settings handoff."""
     from PySide6.QtCore import Qt
@@ -1048,6 +1244,7 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
     from opennavicat.ui.window import MainWindow, TablePage
 
     include_stream = bool(getattr(args, "include_stream", False))
+    include_sqlite_test = bool(getattr(args, "include_sqlite_test", False))
     include_oracle_form = bool(getattr(args, "include_oracle_form", False))
     include_connection_chooser = bool(getattr(args, "include_connection_chooser", False))
     if include_stream and (mongo is None or not mongo.replica_set):
@@ -1132,10 +1329,13 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
              "mongo_stream_page": None, "mongo_stream_verification": None,
              "oracle_form": None, "oracle_form_guard": None, "oracle_form_verification": None,
              "connection_chooser": None, "connection_chooser_guard": None, "connection_chooser_verification": None,
+             "sqlite_test_dialog": None, "sqlite_test_guard": None, "sqlite_test_fixture": None,
+             "sqlite_test_verification": None,
              "stream_abort": threading.Event(), "stream_release": threading.Event(),
              "capture_target": window}
     deadline = (time.monotonic() + (150 if include_stream else 120)
-                + (12 if include_oracle_form else 0) + (6 if include_connection_chooser else 0))
+                + (12 if include_oracle_form else 0) + (6 if include_connection_chooser else 0)
+                + (8 if include_sqlite_test else 0))
     capture_timer = QTimer(app)
     capture_timer.setInterval(round(1000 / args.fps))
 
@@ -1167,6 +1367,8 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
                 verify_oracle_form_demo(target)
             if target is state["connection_chooser"]:
                 verify_connection_chooser_demo(target)
+            if target is state["sqlite_test_dialog"]:
+                verify_sqlite_connection_test_demo(target, state["sqlite_test_fixture"])
             if target is not window:
                 # A real app sheet is grabbed directly, never composited into a
                 # synthetic main-window image or sampled from the desktop.
@@ -1195,7 +1397,8 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
         state["phases"].append({"name": name, "first_frame": state["count"],
             "surface": ("main_window" if target is window else "oracle_connection_dialog"
                         if target is state["oracle_form"] else "connection_manager_dialog"
-                        if target is state["connection_chooser"] else "save_sheet"),
+                        if target is state["connection_chooser"] else "sqlite_connection_test_dialog"
+                        if target is state["sqlite_test_dialog"] else "save_sheet"),
             "source_size_logical": [target.width(), target.height()],
             "fit": "existing_main_window_scale" if target is window else "keep_aspect_centered_neutral_letterbox"})
 
@@ -1982,8 +2185,52 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
         hold(2.4, finish_workflows)
 
     def finish_workflows():
+        if not include_sqlite_test:
+            show_oracle_forms()
+            return
+        capture_timer.stop()
+        fixture = background_io(prepare_sqlite_test_fixture, temporary).result()
+        state["sqlite_test_fixture"] = fixture
+        guard = sqlite_connection_test_demo(fixture, window)
+        dialog = guard.__enter__()
+        state["sqlite_test_guard"] = guard
+        state["sqlite_test_dialog"] = dialog
+        dialog.show()
+        # This is the actual button and native application's asynchronous test,
+        # not a fabricated banner or test_finished signal.
+        dialog.test_button.click()
+        wait_for(lambda: sqlite_test_idle(dialog), verify_sqlite_test_ready,
+                 "testing the generated SQLite connection on its actual worker")
+
+    def verify_sqlite_test_ready():
+        dialog = state["sqlite_test_dialog"]
+        if dialog._demo_sqlite_test_ledger["results"] != [(True, '连接成功')]:
+            raise RuntimeError("The generated SQLite connection Test did not actually succeed.")
+        future = background_io(verify_sqlite_test_fixture, state["sqlite_test_fixture"])
+
+        def verified():
+            dialog._demo_sqlite_test_ledger["fixture_verified"] = future.result()
+            state["sqlite_test_verification"] = verify_sqlite_connection_test_demo(dialog, state["sqlite_test_fixture"])
+            state["capture_target"] = dialog
+            phase(SQLITE_TEST_PHASES[0])
+            capture(); capture_timer.start()
+            hold(3.0, close_sqlite_test)
+
+        wait_for(future.done, verified, "independently checking the generated SQLite Test fixture")
+
+    def close_sqlite_test():
+        capture(); capture_timer.stop()
+        state["sqlite_test_verification"] = verify_sqlite_connection_test_demo(
+            state["sqlite_test_dialog"], state["sqlite_test_fixture"])
+        state["sqlite_test_guard"].__exit__(None, None, None)
+        state["sqlite_test_guard"] = None
+        state["sqlite_test_verification"]["form_closed_after_worker_idle"] = True
+        state["capture_target"] = window
+        show_oracle_forms(capture_last=False)
+
+    def show_oracle_forms(*, capture_last=True):
         if not include_oracle_form:
-            show_connection_chooser()
+            show_connection_chooser(capture_last=capture_last)
             return
         capture_timer.stop()
         guard = oracle_form_demo(window)
@@ -2066,6 +2313,8 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
                 raise RuntimeError("The actual Oracle connection form was not verified.")
             if include_connection_chooser and not state["connection_chooser_verification"]:
                 raise RuntimeError("The actual connection chooser was not verified.")
+            if include_sqlite_test and not state["sqlite_test_verification"]:
+                raise RuntimeError("The actual generated SQLite connection Test was not verified.")
         window.submit(verify_preview, lambda _result: shutdown(), label="验证生成的演示数据")
 
     def shutdown():
@@ -2090,6 +2339,16 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
         def poll():
             nonlocal discarded, forced_cleanup
             try:
+                if state["sqlite_test_guard"] is not None:
+                    # Its task/pool belong to this dialog, not window.pool.
+                    # Keep Qt alive and the parent open until its real finished
+                    # signal and worker cleanup have both completed.
+                    if not sqlite_test_idle(state["sqlite_test_dialog"]):
+                        QTimer.singleShot(40, poll)
+                        return
+                    state["sqlite_test_guard"].__exit__(None, None, None)
+                    state["sqlite_test_guard"] = None
+                    state["capture_target"] = window
                 if not idle():
                     query = state.get("mongo_query")
                     if state["error"] and query is not None and query.running:
@@ -2183,7 +2442,8 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
     if not window._closed or not idle():
         raise RuntimeError("The demo exited before its native sessions and window had closed.")
     expected_phases = required_demo_phases(mongodb=mongo is not None, stream=include_stream,
-        oracle_form=include_oracle_form, connection_chooser=include_connection_chooser)
+        oracle_form=include_oracle_form, connection_chooser=include_connection_chooser,
+        sqlite_test=include_sqlite_test)
     if state["count"] < 2 or tuple(item["name"] for item in state["phases"]) != expected_phases:
         raise RuntimeError("The demo did not capture all required workflows.")
     for index, item in enumerate(state["phases"]):
@@ -2232,6 +2492,7 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
         "mongodb_finite_stream": state["mongo_stream_verification"],
         "oracle_connection_form": state["oracle_form_verification"],
         "connection_chooser": state["connection_chooser_verification"],
+        "sqlite_connection_test": state["sqlite_test_verification"],
         "visible_text_privacy_guard": "labels, editors, titles, actions, combos, tree/table display fields; paths/endpoints/credentials rejected before frame save",
         "sqlite_closed_in_worker": state["sqlite_closed_in_worker"],
         "native_window_closed_before_quit": bool(window._closed),
@@ -2255,6 +2516,8 @@ def main():
         help="Add three actual Oracle connection-form pages with empty host/user/password; no database connection or saved profile")
     parser.add_argument("--include-connection-chooser", action="store_true",
         help="Add the actual unselected connection chooser grid; no settings handoff, saved profile or database connection")
+    parser.add_argument("--include-sqlite-test", action="store_true",
+        help="Add one actual unsaved SQLite connection Test using a generated relative file in the recorder's owned temporary working directory")
     parser.add_argument("--check-dependencies", action="store_true")
     args = parser.parse_args()
     if args.include_stream and not args.include_mongodb:
@@ -2264,14 +2527,17 @@ def main():
         print(json.dumps({"ffmpeg": version, "palette_filters": True, "Pillow_required": False,
             "mongodb_requested":args.include_mongodb,"oracle_form_requested":args.include_oracle_form,
             "connection_chooser_requested":args.include_connection_chooser,
+            "sqlite_test_requested":args.include_sqlite_test,
             "docker_available":shutil.which("docker") is not None}))
         return 0
     if args.width < 950 or args.height < 620:
         parser.error("The application needs at least 950 by 620 logical pixels.")
     if args.output.suffix.lower() != ".gif":
         parser.error("The demo output must be a .gif file.")
-    if (args.include_mongodb or args.include_oracle_form or args.include_connection_chooser) and not any(value == "--output" or value.startswith("--output=") for value in sys.argv[1:]):
+    if (args.include_mongodb or args.include_oracle_form or args.include_connection_chooser or args.include_sqlite_test) and not any(value == "--output" or value.startswith("--output=") for value in sys.argv[1:]):
         parser.error("An extended demo capture requires an explicit --output; use an ignored development artifact before publishing.")
+    args.output = args.output.resolve()
+    ffmpeg = str(Path(ffmpeg).resolve())
     os.environ["QT_QPA_PLATFORM"] = args.platform
     sys.path.insert(0, str(ROOT))
     # Qt's first application/thread identity belongs to the main thread, before
@@ -2281,28 +2547,37 @@ def main():
     mongo = OwnedMongoDemo(replica_set=args.include_stream) if args.include_mongodb else None
     with ThreadPoolExecutor(max_workers=1,thread_name_prefix="demo-io") as io_pool:
         with tempfile.TemporaryDirectory(prefix="opennavicat-readme-demo-") as directory:
-            temporary = Path(directory)
-            try:
-                mongo_config = io_pool.submit(mongo.start).result() if mongo is not None else None
-                frames, receipt = record(args, temporary, io_pool, mongo, mongo_config)
-                generated = temporary / "demo.gif"
-                receipt["gif_palette"] = io_pool.submit(encode,ffmpeg,frames,args.fps,generated).result()
-                io_pool.submit(verify_gif,generated,receipt).result()
-                if mongo is not None:
-                    io_pool.submit(mongo.cleanup).result()
-                    receipt["mongodb_service"] = mongo.receipt()
-                def publish_generated():
-                    args.output.parent.mkdir(parents=True,exist_ok=True)
-                    shutil.copyfile(generated,args.output)
-                    receipt["encoder"] = version
-                    receipt["gif_bytes"] = args.output.stat().st_size
-                    receipt["gif_sha256"] = hashlib.sha256(args.output.read_bytes()).hexdigest()
-                io_pool.submit(publish_generated).result()
-            finally:
-                if mongo is not None:
-                    io_pool.submit(mongo.cleanup).result()
+            temporary = Path(directory).resolve()
+            with owned_recording_cwd(temporary, enabled=args.include_sqlite_test) as cwd_facts:
+                try:
+                    mongo_config = io_pool.submit(mongo.start).result() if mongo is not None else None
+                    frames, receipt = record(args, temporary, io_pool, mongo, mongo_config)
+                    generated = temporary / "demo.gif"
+                    receipt["gif_palette"] = io_pool.submit(encode,ffmpeg,frames,args.fps,generated).result()
+                    io_pool.submit(verify_gif,generated,receipt).result()
+                    if mongo is not None:
+                        io_pool.submit(mongo.cleanup).result()
+                        receipt["mongodb_service"] = mongo.receipt()
+                    def publish_generated():
+                        args.output.parent.mkdir(parents=True,exist_ok=True)
+                        shutil.copyfile(generated,args.output)
+                        receipt["encoder"] = version
+                        receipt["gif_bytes"] = args.output.stat().st_size
+                        receipt["gif_sha256"] = hashlib.sha256(args.output.read_bytes()).hexdigest()
+                    io_pool.submit(publish_generated).result()
+                finally:
+                    try:
+                        if mongo is not None:
+                            io_pool.submit(mongo.cleanup).result()
+                    finally:
+                        # Drain every prior I/O job before restoring the
+                        # process CWD or removing this TemporaryDirectory.
+                        io_pool.submit(lambda: None).result()
         receipt["temporary_workspace_removed"] = not temporary.exists()
         receipt["temporary_frame_files_removed"] = not temporary.exists()
+        if args.include_sqlite_test:
+            receipt["sqlite_connection_test"]["working_directory_restored"] = cwd_facts["restored"]
+            receipt["sqlite_connection_test"]["temporary_fixture_removed"] = not temporary.exists()
         text = json.dumps(receipt,ensure_ascii=False,indent=2)+"\n"
         forbidden = [str(ROOT),directory,str(Path.home())]
         if mongo is not None:

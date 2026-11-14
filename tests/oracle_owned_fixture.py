@@ -29,6 +29,13 @@ LOG_BYTES = 65536
 LOG_LINES = 200
 LOG_SECONDS = 5
 LOG_CODES = 32
+LOG_MILESTONES = {
+    "database_start": b"CONTAINER: starting up Oracle Database...",
+    "password_reset": b"CONTAINER: Resetting SYS and SYSTEM passwords.",
+    "custom_scripts": b"CONTAINER: Executing user-defined scripts...",
+    "database_ready": b"DATABASE IS READY TO USE!",
+    "startup_failed": b"DATABASE STARTUP FAILED!",
+}
 DOCKER_OPERATIONS = frozenset({"info", "pull", "image", "create", "inspect", "start", "exec", "stop", "rm", "logs"})
 STARTUP_PHASES = frozenset({"engine_probe", "image_pull", "image_inspect", "container_create",
     "ownership_check", "container_start", "password_delivery", "endpoint_check", "readiness",
@@ -148,6 +155,13 @@ def _safe_log_summary(value):
         result["codes"] = safe
     if value.get("code_limit_reached") is True:
         result["code_limit_reached"] = True
+    milestones = value.get("milestones")
+    if (type(milestones) is list and len(milestones) <= len(LOG_MILESTONES)
+            and all(type(item) is str and item in LOG_MILESTONES for item in milestones)
+            and len(set(milestones)) == len(milestones)):
+        result["milestones"] = milestones
+    if type(value.get("echoed_password_statement")) is str and value["echoed_password_statement"] in {"sys", "system"}:
+        result["echoed_password_statement"] = value["echoed_password_statement"]
     return result
 
 
@@ -250,9 +264,18 @@ class OwnedOracle:
                     limited = True
                     continue
                 counts[code] = counts.get(code, 0) + 1
-            return _safe_log_summary({"status": status, "bytes_read": len(raw),
+            summary = {"status": status, "bytes_read": len(raw),
                 "codes": [{"code": code, "count": count} for code, count in sorted(counts.items())],
-                "code_limit_reached": limited})
+                "code_limit_reached": limited}
+            milestones = [name for name, marker in LOG_MILESTONES.items() if marker in raw]
+            if milestones:
+                summary["milestones"] = milestones
+            # SQL*Plus echoes a rejected statement; retain only its finite
+            # identifier, never the password or arbitrary statement text.
+            statement = re.search(rb"(?m)^[ \t]*ALTER USER (SYS|SYSTEM) IDENTIFIED BY[ \t]", raw)
+            if statement:
+                summary["echoed_password_statement"] = statement.group(1).decode("ascii").lower()
+            return _safe_log_summary(summary)
         except Exception:
             return {"status": "unavailable"}
 

@@ -452,6 +452,27 @@ def test_log_capture_non_success_preserves_only_finite_status_and_codes(tmp_path
         "codes": [{"code": "SP2-0640", "count": 1}]}
 
 
+def test_log_summary_classifies_password_reset_without_exporting_statement_or_password(tmp_path, monkeypatch):
+    fixture = support.OwnedOracle(tmp_path / "finite-log-markers")
+    fixture.cid = "4" * 64
+    raw = ("CONTAINER: starting up Oracle Database...\n"
+           "CONTAINER: Resetting SYS and SYSTEM passwords.\n"
+           'ALTER USER SYSTEM IDENTIFIED BY "' + fixture.admin_password + '"\n'
+           "ORA-65048: generated-private-pdb\nORA-04021: generated-private-lock\n").encode()
+    monkeypatch.setattr(support, "_bounded_command_output", lambda command: (raw, "captured"))
+    summary = fixture._server_log_summary()
+    assert summary == {"status": "captured", "bytes_read": len(raw),
+        "codes": [{"code": "ORA-04021", "count": 1}, {"code": "ORA-65048", "count": 1}],
+        "milestones": ["database_start", "password_reset"], "echoed_password_statement": "system"}
+    assert support.startup_diagnostic({"startup": {"server_log": summary}}) == {"server_log": summary}
+    assert all(private not in json.dumps(summary) for private in
+               (fixture.admin_password, "generated-private-pdb", "generated-private-lock", "ALTER USER"))
+    forged = {**summary, "milestones": ["generated-private-stage"],
+              "echoed_password_statement": fixture.admin_password}
+    assert support.startup_diagnostic({"startup": {"server_log": forged}}) == {"server_log": {
+        "status": "captured", "bytes_read": len(raw), "codes": summary["codes"]}}
+
+
 def test_log_summary_has_finite_codes_and_rejects_forged_metadata(tmp_path, monkeypatch):
     fixture = support.OwnedOracle(tmp_path / "new-fixture")
     fixture.cid = "4" * 64

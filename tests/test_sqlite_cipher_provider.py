@@ -64,6 +64,79 @@ VARIANTS = (
     ("rc4", None), ("ascon128", None), ("aes128cbc", 1), ("aes256cbc", 1),
     ("chacha20", 1), ("rc4", 1), ("sqlcipher", 1), ("sqlcipher", 2), ("sqlcipher", 3), ("sqlcipher", 4),
 )
+LEGACY_VARIANTS = tuple((cipher, legacy) for cipher, legacy in VARIANTS if legacy is not None)
+
+
+@pytest.mark.parametrize("cipher,legacy", LEGACY_VARIANTS)
+def test_explicit_legacy_page_size_applies_to_bound_encrypted_attachment(tmp_path, native, cipher, legacy):
+    path = tmp_path / "generated-legacy-attachment.sqlite"
+    options = dict(cipher=cipher, legacy=legacy, page_size=8192)
+    keyed = provider.connect(path, key="generated-page-attachment-key", create=True, **options)
+    keyed.execute("CREATE TABLE generated_facts(id INTEGER PRIMARY KEY)").close()
+    keyed.execute("INSERT INTO generated_facts VALUES (?)", (7,)).close()
+    keyed.close()
+    before = sha(path)
+    plain = provider.connect_plain_main(":memory:")
+    try:
+        plain.configure_attachment(**options)
+        plain.execute("ATTACH DATABASE ? AS generated_aux KEY ?", (str(path), "generated-page-attachment-key")).close()
+        assert plain.execute("PRAGMA generated_aux.page_size").fetchone() == (8192,)
+        assert plain.execute("SELECT * FROM generated_aux.generated_facts").fetchall() == [(7,)]
+    finally:
+        plain.close()
+    assert sha(path) == before
+
+
+@pytest.mark.parametrize("cipher,legacy,page_size", [
+    (cipher, legacy, size) for cipher, legacy in LEGACY_VARIANTS
+    for size in (512, 1024, 2048, 4096, 8192, 16384, 32768, 65536)
+    if not (cipher == "sqlcipher" and legacy in (2, 3, 4) and size == 512)])
+def test_explicit_legacy_page_size_create_reopen_backup_and_wrong_key(tmp_path, native, cipher, legacy, page_size):
+    source, target = tmp_path / "generated-page-source.sqlite", tmp_path / "generated-page-target.sqlite"
+    options = dict(cipher=cipher, legacy=legacy, page_size=page_size)
+    key, backup_key = "generated-page-source-key", "generated-page-backup-key"
+    db = provider.connect(source, key=key, create=True, **options)
+    try:
+        assert db.execute("PRAGMA page_size").fetchone() == (page_size,)
+        db.execute("CREATE TABLE generated_facts(id INTEGER PRIMARY KEY,label TEXT)").close()
+        db.executemany("INSERT INTO generated_facts VALUES (?,?)", [(1, "generated one"), (2, "generated two")]).close()
+        copied = provider.connect(target, key=backup_key, create=True, **options)
+        try:
+            db.backup(copied)
+        finally:
+            copied.close()
+    finally:
+        db.close()
+    for path, correct in ((source, key), (target, backup_key)):
+        before = sha(path)
+        opened = provider.connect(path, key=correct, read_only=True, **options)
+        try:
+            assert opened.execute("PRAGMA page_size").fetchone() == (page_size,)
+            assert opened.execute("PRAGMA quick_check").fetchone() == ("ok",)
+            assert opened.execute("SELECT * FROM generated_facts ORDER BY id").fetchall() == [(1, "generated one"), (2, "generated two")]
+        finally:
+            opened.close()
+        with pytest.raises(sqlite3.DatabaseError):
+            provider.connect(path, key=correct + "-wrong", read_only=True, **options)
+        ordinary = sqlite3.connect(path.as_uri() + "?mode=ro", uri=True)
+        try:
+            with pytest.raises(sqlite3.DatabaseError):
+                ordinary.execute("SELECT * FROM sqlite_schema").fetchall()
+        finally:
+            ordinary.close()
+        assert sha(path) == before
+
+
+@pytest.mark.parametrize("options", [dict(cipher="ascon128", legacy=1, page_size=8192),
+                                     dict(cipher="aes128cbc", page_size=8192),
+                                     dict(cipher="sqlcipher", legacy=4, page_size=True),
+                                     dict(cipher="sqlcipher", legacy=4, page_size=513),
+                                     *(dict(cipher="sqlcipher", legacy=version, page_size=512) for version in (2, 3, 4))])
+def test_invalid_explicit_page_configuration_never_opens_target(tmp_path, options):
+    path = tmp_path / "generated-invalid-page.sqlite"
+    with pytest.raises(sqlite3.NotSupportedError):
+        provider.connect(path, key="generated-page-key", create=True, **options)
+    assert not path.exists()
 
 
 @pytest.mark.parametrize("cipher,legacy", VARIANTS)

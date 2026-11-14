@@ -107,3 +107,18 @@ Python 扫描每约 1024 字符及每个候选检查取消事件与已注册 pro
 leading-noop 输入的单次前缀扫描、所有 quote 形式与真实尾部、trigger 预算耗尽前不写、
 Python 预检期间独立线程取消、进度回调在 prepare 前取消及取消后复用。
 原 d4b9103 的独立失败/性能探针仍保留，不用新结果覆盖历史证据。
+
+`connect` 与 `configure_attachment` 现在显式接受 `page_size=0`，非零仅传给已选
+legacy cipher 的 `legacy_page_size`。参数按上游
+[PRAGMA 合同](https://utelle.github.io/SQLite3MultipleCiphers/docs/configuration/config_sql_pragmas/)
+配置后，还检查真实 main page_size，不能以参数回显当应用成功。本机 61 个受支持的
+legacy/非零页大小组合均真实创建、关闭重开、同配置备份后 quick_check/两行、错误密钥
+及标准库拒读；8 个 legacy 模式另实际绑定 ATTACH 8192 字节页文件。
+
+探针发现 SQLCipher legacy v2/v3/v4 请求 512 时参数回显 512，实际文件却为 1024。
+这 3 个组合现于打开任何文件前明确拒绝，原 3 项红色 JUnit/log 保留。其余结构非法值
+也在打开前拒绝。含此扩展的专项集合为 **178 项通过、零跳过/失败/error**。
+这些非零参数尚未在参考 UI 执行验收，不能据此关闭参考行为门禁。
+
+原 [89 项收据](evidence/sqlite-cipher-adapter-3.54.0.0.json) 的源码、冻结包和测试哈希
+对应独立适配层 d4b9103 快照；其冻结验证不覆盖后续预检或页大小修正。

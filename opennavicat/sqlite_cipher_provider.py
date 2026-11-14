@@ -57,11 +57,15 @@ def _provider():
     return module
 
 
-def _configuration(cipher, legacy):
+def _configuration(cipher, legacy, page_size=0):
     if not isinstance(cipher, str) or cipher not in _LEGACY:
         raise sqlite3.NotSupportedError("This SQLite cipher is not supported by the tested provider")
     if legacy is not None and (type(legacy) is not int or legacy not in _LEGACY[cipher]):
         raise sqlite3.NotSupportedError("This SQLite cipher legacy configuration is not supported")
+    if (type(page_size) is not int or page_size not in (0, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536)
+            or page_size and legacy not in (1, 2, 3, 4)
+            or cipher == "sqlcipher" and legacy in (2, 3, 4) and page_size == 512):
+        raise sqlite3.NotSupportedError("This SQLite cipher page size is not supported")
 
 
 def _bindings(values):
@@ -411,19 +415,21 @@ class CipherConnection:
         self._preflight_cancel.set()
         return _call(self._module, self._raw.interrupt)
 
-    def configure_attachment(self, *, cipher, legacy=None):
+    def configure_attachment(self, *, cipher, legacy=None, page_size=0):
         """Select transient cipher options for the next bound ATTACH KEY.
 
         Filename and key remain execute() bindings, never URI/SQL fragments.
         This configuration does not itself open, encrypt or validate a file.
         """
         self._check()
-        _configuration(cipher, legacy)
+        _configuration(cipher, legacy, page_size)
         def configure():
             if self._raw.pragma("cipher", cipher, schema="temp") != cipher:
                 raise sqlite3.NotSupportedError("The provider rejected the attachment cipher")
             if legacy is not None and self._raw.pragma("legacy", legacy, schema="temp") != str(legacy):
                 raise sqlite3.NotSupportedError("The provider rejected the attachment cipher configuration")
+            if page_size and self._raw.pragma("legacy_page_size", page_size, schema="temp") != str(page_size):
+                raise sqlite3.NotSupportedError("The provider rejected the attachment page size")
         return _call(self._module, configure)
 
     def commit(self):
@@ -473,17 +479,17 @@ class CipherConnection:
             self._closed = True
 
 
-def connect(database, *, key, cipher="chacha20", legacy=None, read_only=False, create=False, timeout=5.0, uri=False):
+def connect(database, *, key, cipher="chacha20", legacy=None, page_size=0, read_only=False, create=False, timeout=5.0, uri=False):
     """Open only an explicitly keyed candidate; no backend selection occurs.
 
     Existing-file mode is the default. Newly created files are populated so an
     accepted key is not mistaken for proof that a zero-byte file is encrypted.
     Key application and the first real catalog read precede publication.
     """
-    _configuration(cipher, legacy)
+    _configuration(cipher, legacy, page_size)
     if not isinstance(key, str) or not key or "\0" in key:
         raise sqlite3.ProgrammingError("Encrypted SQLite requires a nonempty NUL-free key")
-    return _open_connection(database, key=key, cipher=cipher, legacy=legacy, read_only=read_only,
+    return _open_connection(database, key=key, cipher=cipher, legacy=legacy, page_size=page_size, read_only=read_only,
                             create=create, timeout=timeout, uri=uri)
 
 
@@ -493,11 +499,11 @@ def connect_plain_main(database, *, read_only=False, create=False, timeout=5.0, 
     Provider absence still fails. This is never an encrypted backup target and
     never a fallback from an invalid or empty encrypted-main key.
     """
-    return _open_connection(database, key=None, cipher=None, legacy=None, read_only=read_only,
+    return _open_connection(database, key=None, cipher=None, legacy=None, page_size=0, read_only=read_only,
                             create=create, timeout=timeout, uri=uri)
 
 
-def _open_connection(database, *, key, cipher, legacy, read_only, create, timeout, uri):
+def _open_connection(database, *, key, cipher, legacy, page_size, read_only, create, timeout, uri):
     if (any(type(flag) is not bool for flag in (read_only, create, uri)) or read_only and create
             or type(timeout) not in (int, float) or not 0 <= timeout <= 2147483):
         raise sqlite3.ProgrammingError("Invalid encrypted SQLite open options")
@@ -527,6 +533,8 @@ def _open_connection(database, *, key, cipher, legacy, read_only, create, timeou
                 raise sqlite3.NotSupportedError("The SQLite provider rejected the requested cipher")
             if legacy is not None and raw.pragma("legacy", legacy) != str(legacy):
                 raise sqlite3.NotSupportedError("The SQLite provider rejected the requested cipher configuration")
+            if page_size and raw.pragma("legacy_page_size", page_size) != str(page_size):
+                raise sqlite3.NotSupportedError("The SQLite provider rejected the requested page size")
             effective_legacy = raw.pragma("legacy")
             if effective_legacy is not None:
                 effective_legacy = int(effective_legacy)
@@ -536,6 +544,8 @@ def _open_connection(database, *, key, cipher, legacy, read_only, create, timeou
         if raw.readonly("main") != bool(read_only):
             raise sqlite3.OperationalError("The SQLite provider opened an unexpected access mode")
         raw.execute("SELECT 1 FROM main.sqlite_schema LIMIT 1", can_cache=False).fetchall()
+        if page_size and raw.pragma("page_size") != page_size:
+            raise sqlite3.NotSupportedError("The SQLite provider did not apply the requested page size")
         if create and raw.pragma("page_count") == 0:
             raw.pragma("user_version", raw.pragma("user_version"))
         return CipherConnection(module, raw, main_keyed=key is not None, codec=codec)

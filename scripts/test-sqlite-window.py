@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Zero-skip SQLite database-page qualification on the host's actual Qt QPA."""
+"""Zero-skip SQLite UI and bounded-object-name supplement on the host's native Qt QPA."""
 from __future__ import annotations
 
 import os
@@ -31,6 +31,7 @@ SCOPES = (
     "tests/test_sqlite_connection_databases_native_contents.py",
     "tests/test_sqlite_small_visuals.py",
     "tests/test_sqlite_browse_native_layout.py",
+    "tests/test_bounded_object_names_ui.py",
 )
 NATIVE = {"Windows": "windows", "Darwin": "cocoa", "Linux": "xcb"}
 LIMIT = 4 * 1024 * 1024
@@ -62,7 +63,7 @@ def manifest(nodes):
     if len(set(nodes)) != len(nodes) or len(set(keys)) != len(keys):
         raise ValueError("Duplicate qualification case")
     if {node.split("::", 1)[0] for node in nodes} != set(SCOPES):
-        raise ValueError("Every declared SQLite module must be collected")
+        raise ValueError("Every declared SQLite or supplemental UI module must be collected")
     return nodes
 
 

@@ -25,6 +25,8 @@ from ..navicat_profiles import discover_navicat_profiles
 from .. import __version__
 from ..compare import compare_tables
 from ..storage import Store, create_sample
+from ..sqlite_database_config import connection_metadata, copy_connection_config, with_sqlite_database_password
+from ..sqlite_encryption_config import with_sqlite_encryption_password
 from ..query_language import LEGACY, MONGO_JS, query_language as resolve_query_language
 from ..tasks import Task
 from ..transfer import export_result, import_data
@@ -95,7 +97,7 @@ class _ConnectionEdit:
     # Serialized only in process memory: an immutable accepted snapshot, with
     # credentials excluded from repr and never read back from a closed dialog.
     configuration: str = field(repr=False)
-    remember: tuple[bool, bool, bool, bool]
+    remember: tuple[bool, bool, bool, bool, bool]
 
     def config(self):
         return ConnectionConfig(**json.loads(self.configuration))
@@ -609,6 +611,8 @@ class MainWindow(QMainWindow):
         self.active_schema = "main"
         self.query_number = 0
         self._connecting = set()
+        self._sqlite_password_prompts = set()
+        self._sqlite_creation_cancellations = {}
         self._closing_mongo = False
         self._closing_connections = set()
         self._connection_edit_tokens = {}
@@ -3244,12 +3248,16 @@ class MainWindow(QMainWindow):
             dialog = ConnectionDialog(self, config)
         if driver:
             dialog.driver_combo.setCurrentIndex(max(0, dialog.driver_combo.findData(driver)))
+        if hasattr(dialog, "create_requested"):
+            dialog.create_requested.connect(lambda token, candidate: self._create_sqlite_connection(dialog, token, candidate))
         if config and (selected_driver != "oracle" or not is_new):
             dialog.remember_check.setChecked(config.id in self.store.state["remembered_passwords"])
             remembered = self.store.state.get("remembered_secrets", {}).get(config.id, [])
             dialog.ssh_remember_check.setChecked("ssh_password" in remembered)
             dialog.ssh_key_remember_check.setChecked("ssh_key_passphrase" in remembered)
             dialog.ssl_remember_check.setChecked("ssl_key_password" in remembered)
+            if selected_driver == "sqlite" and hasattr(dialog, "set_remember_sqlite_encryption"):
+                dialog.set_remember_sqlite_encryption("sqlite_encryption_password" in remembered)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             if selected_driver == "oracle" and is_new and getattr(dialog, "back_requested", False):
                 self.new_connection()
@@ -3259,12 +3267,42 @@ class MainWindow(QMainWindow):
             return
         payload = _ConnectionEdit(json.dumps(asdict(result), ensure_ascii=True, allow_nan=False),
             (bool(dialog.remember_password), bool(dialog.remember_ssh_password),
-             bool(dialog.remember_ssh_key_passphrase), bool(dialog.remember_ssl_password)))
+             bool(dialog.remember_ssh_key_passphrase), bool(dialog.remember_ssl_password),
+             bool(getattr(dialog, "remember_sqlite_encryption_password", False))))
         token = object()
         self._connection_edit_tokens[result.id] = token
         expected = self.sessions.get(result.id)
         existing = result.id in self.configs
         self._continue_connection_edit(result.id, token, payload, expected, existing)
+
+    def _create_sqlite_connection(self, dialog, token, config):
+        """Capture on the GUI thread; the serial worker alone creates the file."""
+        if self._closed or not isValid(self) or not isValid(dialog):
+            return
+        if token in self._sqlite_creation_cancellations:
+            return
+        if self.tasks or self._closing_mongo:
+            dialog.finish_sqlite_creation(token, error="请等待当前操作完成后再创建数据库。")
+            return
+        try:
+            snapshot = copy_connection_config(config)
+            if snapshot.driver != "sqlite" or snapshot.sqlite_open_mode != "create":
+                raise ValueError("无效的 SQLite 创建请求。")
+        except (ValueError, TypeError):
+            dialog.finish_sqlite_creation(token, error="无效的 SQLite 创建请求。")
+            return
+        cancelled = threading.Event()
+        self._sqlite_creation_cancellations[token] = cancelled
+        def work():
+            DatabaseSession.create_sqlite_database(snapshot, cancellation_requested=cancelled.is_set)
+        def completed(_result):
+            if isValid(dialog):
+                dialog.finish_sqlite_creation(token)
+        def failed(error):
+            if isValid(dialog):
+                dialog.finish_sqlite_creation(token, error=error)
+        self.submit(work, completed, failed, label="创建 SQLite 数据库",
+                    finished=lambda: self._sqlite_creation_cancellations.pop(token, None))
 
     def _cancel_connection_edit(self, connection_id, token):
         if self._connection_edit_tokens.get(connection_id) is token:
@@ -3350,15 +3388,21 @@ class MainWindow(QMainWindow):
     def _store_connection_edit(self, payload):
         result = payload.config()
         new_sqlite = result.driver == "sqlite" and result.id not in self.configs
-        remember, remember_ssh, remember_ssh_key, remember_ssl = payload.remember
+        remember, remember_ssh, remember_ssh_key, remember_ssl, remember_cipher = payload.remember
         if result.driver == "oracle" and not remember:
             result = replace(result, password="")
         try:
-            self.store.save_connection(result, remember,
-                remember_ssh=remember_ssh, remember_ssh_key=remember_ssh_key, remember_ssl=remember_ssl)
+            flags = dict(remember_ssh=remember_ssh, remember_ssh_key=remember_ssh_key, remember_ssl=remember_ssl)
+            if result.driver == "sqlite":
+                flags["remember_sqlite_encryption"] = remember_cipher
+            self.store.save_connection(result, remember, **flags)
         except Exception as exc:
             self.error(f"The operating system keychain could not save the password. The connection was not saved.\n\n{exc}")
             return
+        if result.driver == "sqlite":
+            result = copy_connection_config(result)
+            result.sqlite_encryption_password = ""
+            result.sqlite_encryption_password_binding = None
         self.configs[result.id] = result
         self.active_id = result.id
         self.populate_connections()
@@ -3393,7 +3437,8 @@ class MainWindow(QMainWindow):
             if after:
                 after()
             return
-        if connection_id in self._connecting or connection_id not in self.configs:
+        if (connection_id in self._connecting or connection_id in self._sqlite_password_prompts
+                or connection_id not in self.configs):
             return
         original = self.configs[connection_id]
         imported = self.store.state.get("navicat_imports", {}).get(connection_id, {})
@@ -3406,6 +3451,10 @@ class MainWindow(QMainWindow):
         # Empty passwords can be intentional (certificate, local authentication,
         # or an account with an empty password). Try the configured method first.
         config = self.store.hydrate(self.configs[connection_id])
+        if config.driver == "sqlite":
+            config = self._prepare_sqlite_connection(original, config)
+            if config is None:
+                return
         oracle = config.driver == "oracle"
         if oracle:
             try:
@@ -3429,6 +3478,11 @@ class MainWindow(QMainWindow):
                     return
                 config = replace(config, password=password)
             self.configs[connection_id] = replace(config, password="")
+        elif config.driver == "sqlite" and config.sqlite_encryption_enabled:
+            public = copy_connection_config(config)
+            public.sqlite_encryption_password = ""
+            public.sqlite_encryption_password_binding = None
+            self.configs[connection_id] = public
         else:
             self.configs[connection_id] = config
         try:
@@ -3480,7 +3534,8 @@ class MainWindow(QMainWindow):
                     self.when_idle(lambda: self._request_transport_secret(config, field, after))
                 else:
                     self.error(error)
-            elif getattr(error, "authentication_required", False) and not config.password:
+            elif (config.driver != "sqlite" and getattr(error, "authentication_required", False)
+                  and not config.password):
                 self.when_idle(lambda: self._request_connection_password(config, after))
             else:
                 self.error(error)
@@ -3490,6 +3545,50 @@ class MainWindow(QMainWindow):
         else:
             self.submit(work, done, failed, label=f"连接 {config.name}",
                         finished=lambda: self._connecting.discard(connection_id))
+
+    def _prepare_sqlite_connection(self, original, config):
+        """Explicit open prompts only on the GUI thread, before any file access."""
+        connection_id = config.id
+        expected = connection_metadata(original)
+        def current():
+            return (isValid(self) and not self._closed and not self._closing_mongo
+                    and connection_id not in self._closing_connections
+                    and connection_id not in self._connecting
+                    and self.configs.get(connection_id) is original
+                    and connection_metadata(original) == expected)
+        if not current():
+            return None
+        self._sqlite_password_prompts.add(connection_id)
+        try:
+            remembered = self.store.state.get("remembered_secrets", {}).get(connection_id, [])
+            if config.sqlite_encryption_enabled:
+                if "sqlite_encryption_password" not in remembered:
+                    config = with_sqlite_encryption_password(config, "")
+                if not config.sqlite_encryption_password:
+                    password, ok = QInputDialog.getText(self, "SQLite 加密密码",
+                        "请输入此 SQLite 数据库的加密密码：", QLineEdit.EchoMode.Password)
+                    if not ok or not current():
+                        return None
+                    if not password:
+                        self.error("请输入数据库加密密码。")
+                        return None
+                    config = with_sqlite_encryption_password(config, password)
+            for row in config.sqlite_databases:
+                if row.encrypted and not config.sqlite_database_passwords.get(row.id):
+                    password, ok = QInputDialog.getText(self, "附加 SQLite 数据库密码",
+                        f"请输入附加数据库 {row.name} 的加密密码：", QLineEdit.EchoMode.Password)
+                    if not ok or not current():
+                        return None
+                    if not password:
+                        self.error("请输入附加数据库加密密码。")
+                        return None
+                    config = with_sqlite_database_password(config, row.id, password)
+            return config if current() else None
+        except (ValueError, TypeError):
+            self.error("SQLite 连接设置或加密密码无效，请检查后重试。")
+            return None
+        finally:
+            self._sqlite_password_prompts.discard(connection_id)
 
     def _confirm_connection_host_key(self, config, error, after=None):
         # A queued response must never approve a different profile/endpoint.
@@ -3950,6 +4049,8 @@ class MainWindow(QMainWindow):
 
     def stop(self):
         self.batch_job_controller.cancel()
+        for cancelled in tuple(self._sqlite_creation_cancellations.values()):
+            cancelled.set()
         for token in tuple(self._oracle_jobs):
             self._cancel_oracle_job(token)
         for token, (_session, cancelled, _started) in tuple(self._mongo_pipeline_jobs.items()):
@@ -4167,6 +4268,13 @@ class MainWindow(QMainWindow):
         if self.active_id:
             self.disconnect(self.active_id)
 
+    @staticmethod
+    def _requires_background_close(session):
+        config = session.config
+        return (config.driver in {"mongodb", "oracle"}
+                or config.driver == "sqlite" and (getattr(config, "sqlite_encryption_enabled", False)
+                    or any(row.encrypted for row in getattr(config, "sqlite_databases", ()))))
+
     def disconnect(self, connection_id, *, after=None, retry=None):
         if self._closed or not isValid(self):
             return False
@@ -4200,7 +4308,7 @@ class MainWindow(QMainWindow):
         if session and session.in_transaction:
             if QMessageBox.question(self, "事务尚未结束", "回滚尚未提交的事务并关闭连接？", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel) != QMessageBox.StandardButton.Yes:
                 return False
-        if session and session.config.driver in {"mongodb", "oracle"}:
+        if session and self._requires_background_close(session):
             # MongoClient.close can drain cursors and send commands. Keep that
             # work on the same serial owner as reads/writes, then change widgets.
             self._closing_connections.add(connection_id)
@@ -4216,7 +4324,7 @@ class MainWindow(QMainWindow):
                 cancelled = getattr(retry, "cancelled", None)
                 if callable(cancelled):
                     cancelled()
-            self.submit(session.close, completed, failed, label="关闭 Oracle 连接" if session.config.driver == "oracle" else "关闭 MongoDB 连接")
+            self.submit(session.close, completed, failed, label="关闭数据库连接")
             return True
         if session:
             session.close()
@@ -4725,8 +4833,12 @@ class MainWindow(QMainWindow):
         for dialog in tuple(self._mongo_maintenance_dialogs):
             dialog.reject()
         mongo_sessions = [(identifier, session) for identifier, session in self.sessions.items()
-                          if session.config.driver in {"mongodb", "oracle"}]
+                          if self._requires_background_close(session)]
         if mongo_sessions:
+            if any(session.in_transaction for _, session in mongo_sessions):
+                if QMessageBox.question(self, "事务尚未结束", "回滚尚未提交的事务并退出？", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel) != QMessageBox.StandardButton.Yes:
+                    event.ignore()
+                    return
             self._closing_mongo = True
             mongo_pages = [self.tabs.widget(index) for index in range(self.tabs.count())
                            if isinstance(self.tabs.widget(index), MONGO_PAGES)]

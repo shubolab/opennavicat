@@ -411,8 +411,9 @@ def test_busy_after_settings_acceptance_uses_one_immutable_payload_and_no_delete
     idle(qtbot, w)
     assert len(dialogs) == len(calls) == 1
     assert calls[0][0].database == str(host.files[1]) and calls[0][0].read_only
-    # SQLite deliberately has no applicable password-persistence switches.
-    assert calls[0][1] is False and calls[0][2] == {'remember_ssh':False,'remember_ssh_key':False,'remember_ssl':False}
+    # The plain SQLite draft never enables any password-persistence switch.
+    assert calls[0][1] is False and calls[0][2] == {
+        'remember_ssh':False,'remember_ssh_key':False,'remember_ssl':False,'remember_sqlite_encryption':False}
     assert identifier not in w._connection_edit_tokens and not host.errors
 
 

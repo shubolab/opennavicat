@@ -47,7 +47,9 @@ def test_native_connection_tabs_profiles_and_config(qtbot):
     # inset. Compare the aligned form items, not the widgets' painting bounds.
     assert form.itemAt(form.indexOf(dialog.remember_check)).geometry().x() == form.itemAt(form.indexOf(dialog.password_edit)).geometry().x()
     assert [dialog.tabs.tabText(i) for i in range(dialog.tabs.count())] == ["常规", "高级", "数据库", "HTTP"]
-    assert not dialog.user_edit.isEnabled()
+    assert dialog.user_edit.isEnabled()
+    assert dialog.password_edit.isEnabled() and dialog.remember_check.isChecked()
+    assert "验证尚未实现" in dialog.user_edit.toolTip()
     dialog.driver_combo.setCurrentIndex(dialog.driver_combo.findData("postgresql"))
     qtbot.waitUntil(lambda: (dialog.frameGeometry().width(), dialog.frameGeometry().height()) == (574, 668))
     assert not dialog.profile_pane.isVisible()
@@ -68,7 +70,7 @@ def test_native_connection_tabs_profiles_and_config(qtbot):
     assert config.password == "unsaved-only"
 
 
-def test_sqlite_existing_or_new_is_explicit_and_save_does_not_connect(qtbot, tmp_path, monkeypatch):
+def test_sqlite_existing_or_new_is_explicit_and_create_requires_the_window_queue(qtbot, tmp_path, monkeypatch):
     errors = []
     monkeypatch.setattr(QMessageBox, "warning", lambda *args: errors.append(args[2]))
     dialog = ConnectionDialog()
@@ -85,8 +87,8 @@ def test_sqlite_existing_or_new_is_explicit_and_save_does_not_connect(qtbot, tmp
                      pos=QPoint(8, dialog.sqlite_create_radio.height() // 2))
     assert dialog.sqlite_mode_combo.currentData() == "create"
     dialog.accept()
-    assert dialog.result() == QDialog.DialogCode.Accepted
-    assert dialog.get_config().database == str(database)
+    assert dialog.result() != QDialog.DialogCode.Accepted
+    assert dialog.get_config() is None and "后台创建队列" in errors[-1]
     assert not database.exists()
     assert not dialog._test_pool.activeThreadCount()
 

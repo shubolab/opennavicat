@@ -23,6 +23,10 @@ from .sqlite_database_config import (
     bound_sqlite_database_passwords, copy_connection_config, sqlite_database_binding,
     sqlite_database_password_binding,
 )
+from .sqlite_encryption_config import (
+    bound_sqlite_encryption_password, sqlite_encryption_password_binding,
+    with_sqlite_encryption_password,
+)
 
 
 _NAVICAT_NAMESPACE = uuid.UUID("9e8f2378-d17a-56f5-a6e1-2cb52b166378")
@@ -31,7 +35,13 @@ _METADATA_FIELD = re.compile(r"[A-Za-z_][A-Za-z_0-9.-]{0,119}\Z")
 
 @dataclass(frozen=True)
 class _SQLiteDatabasePassword:
-    binding: tuple[str, bool]
+    binding: tuple[str, bool] | tuple[str, bool, str, int]
+    value: str = field(repr=False)
+
+
+@dataclass(frozen=True)
+class _SQLiteEncryptionPassword:
+    binding: tuple[str, str, bool, str, int]
     value: str = field(repr=False)
 
 
@@ -112,7 +122,8 @@ class Store:
         self.directory.mkdir(parents=True, exist_ok=True)
         self.path = self.directory / "workspace.json"
         self.state = {"connections": [], "favorites": [], "drafts": [], "remembered_passwords": [],
-                      "remembered_secrets": {}, "navicat_imports": {}, "mongo_pipelines": [], "batch_jobs": []}
+                      "remembered_secrets": {}, "remembered_sqlite_encryption_bindings": {},
+                      "navicat_imports": {}, "mongo_pipelines": [], "batch_jobs": []}
         if self.path.exists():
             try:
                 self.state.update(json.loads(self.path.read_text("utf-8")))
@@ -122,6 +133,7 @@ class Store:
         self.passwords: dict[str, str] = {}
         self.secrets: dict[tuple[str, str], str] = {}
         self._sqlite_database_passwords: dict[tuple[str, str], _SQLiteDatabasePassword] = {}
+        self._sqlite_encryption_passwords: dict[str, _SQLiteEncryptionPassword] = {}
         self.history_path = self.directory / "history.sqlite3"
         with closing(sqlite3.connect(self.history_path)) as db, db:
             db.execute("CREATE TABLE IF NOT EXISTS history (id INTEGER PRIMARY KEY, created TEXT, connection_id TEXT, connection_name TEXT, sql TEXT, elapsed REAL, status TEXT)")
@@ -143,6 +155,12 @@ class Store:
         candidate = {key: deepcopy(value) for key, value in self.state.items() if key != "connections"}
         candidate["connections"] = self._connection_rows(self.state["connections"])
         passwords = self._bound_sqlite_database_passwords(candidate["connections"])
+        cipher_bindings = {}
+        for row in candidate["connections"]:
+            config = connection_from_metadata(row)
+            if self._remembered_sqlite_encryption(config, candidate):
+                cipher_bindings[config.id] = list(sqlite_encryption_password_binding(config))
+        candidate["remembered_sqlite_encryption_bindings"] = cipher_bindings
         temporary = self.path.with_suffix(".tmp")
         with temporary.open("w", encoding="utf-8") as handle:
             json.dump(candidate, handle, ensure_ascii=False, indent=2)
@@ -152,7 +170,11 @@ class Store:
             pass
         temporary.replace(self.path)
         self.state["connections"] = candidate["connections"]
+        self.state["remembered_sqlite_encryption_bindings"] = cipher_bindings
         self._sqlite_database_passwords = passwords
+        self._sqlite_encryption_passwords = {
+            key: secret for key, secret in self._sqlite_encryption_passwords.items()
+            if self._same_sqlite_encryption_binding(cipher_bindings.get(key), secret.binding)}
 
     @staticmethod
     def _connection_rows(rows):
@@ -172,7 +194,10 @@ class Store:
             if entries and (type(profile["id"]) is not str or not profile["id"]):
                 raise ValueError("Invalid SQLite database profile identity")
             for row in entries:
-                bindings[profile["id"], row["id"]] = row["database"], row["encrypted"]
+                binding = row["database"], row["encrypted"]
+                if row["encrypted"]:
+                    binding += (profile.get("sqlite_cipher_name", ""), profile.get("sqlite_cipher_page_size", 0))
+                bindings[profile["id"], row["id"]] = binding
         return {key: secret for key, secret in self._sqlite_database_passwords.items()
                 if bindings.get(key) == secret.binding}
 
@@ -181,10 +206,12 @@ class Store:
 
     def _sqlite_password_candidate(self, config):
         supplied, _bindings = bound_sqlite_database_passwords(
-            config.id, config.sqlite_databases, config.sqlite_database_passwords, config.sqlite_database_password_bindings)
+            config.id, config.sqlite_databases, config.sqlite_database_passwords, config.sqlite_database_password_bindings,
+            cipher_name=config.sqlite_cipher_name, page_size=config.sqlite_cipher_page_size)
         candidate = {key: secret for key, secret in self._sqlite_database_passwords.items() if key[0] != config.id}
         for row in config.sqlite_databases:
-            key, binding = (config.id, row.id), sqlite_database_binding(row)
+            key = config.id, row.id
+            binding = self._sqlite_row_binding(config, row)
             previous = self._sqlite_database_passwords.get(key)
             if row.id in supplied:
                 if supplied[row.id]:
@@ -192,6 +219,13 @@ class Store:
             elif previous is not None and previous.binding == binding:
                 candidate[key] = previous
         return candidate
+
+    @staticmethod
+    def _sqlite_row_binding(config, row):
+        binding = sqlite_database_binding(row)
+        if row.encrypted:
+            binding += (config.sqlite_cipher_name, config.sqlite_cipher_page_size)
+        return binding
 
     def _uses_sqlite_database_state(self, connection_id, config=None):
         if config is not None and (config.sqlite_databases or config.sqlite_database_passwords):
@@ -201,19 +235,17 @@ class Store:
         return any(row["id"] == connection_id and row.get("sqlite_databases") for row in self.state["connections"])
 
     @contextmanager
-    def _sqlite_database_commit(self, connection_id, config=None):
-        """Candidate memory rollback; scalar keyring writes remain separate."""
-        if not self._uses_sqlite_database_state(connection_id, config):
-            yield
-            return
-        previous = self.state, self.passwords, self.secrets, self._sqlite_database_passwords
+    def _connection_commit(self, connection_id, config=None):
+        """Publish profile and process credentials only after workspace replacement."""
+        previous = self.state, self.passwords, self.secrets, self._sqlite_database_passwords, self._sqlite_encryption_passwords
         self.state = deepcopy(self.state)
         self.passwords, self.secrets = self.passwords.copy(), self.secrets.copy()
         self._sqlite_database_passwords = self._sqlite_database_passwords.copy()
+        self._sqlite_encryption_passwords = self._sqlite_encryption_passwords.copy()
         try:
             yield
         except BaseException:
-            self.state, self.passwords, self.secrets, self._sqlite_database_passwords = previous
+            self.state, self.passwords, self.secrets, self._sqlite_database_passwords, self._sqlite_encryption_passwords = previous
             raise
 
     @staticmethod
@@ -223,6 +255,8 @@ class Store:
     def secret(self, config: ConnectionConfig, field: str = "password") -> str:
         if field not in self.SECRET_FIELDS:
             raise ValueError("Unknown connection secret field")
+        if field == "sqlite_encryption_password":
+            return self._sqlite_encryption_secret(config)
         supplied = getattr(config, field)
         if supplied:
             return supplied
@@ -242,104 +276,161 @@ class Store:
                 return ""
         return ""
 
+    @staticmethod
+    def _same_sqlite_encryption_binding(value, expected):
+        return (type(value) in (list, tuple) and len(value) == len(expected)
+                and all(type(left) is type(right) and left == right
+                        for left, right in zip(value, expected)))
+
+    def _remembered_sqlite_encryption(self, config, state=None):
+        state = self.state if state is None else state
+        bindings = state.get("remembered_sqlite_encryption_bindings", {})
+        return (config.driver == "sqlite" and config.sqlite_encryption_enabled
+                and "sqlite_encryption_password" in state.get("remembered_secrets", {}).get(config.id, [])
+                and type(bindings) is dict
+                and self._same_sqlite_encryption_binding(bindings.get(config.id),
+                                                        sqlite_encryption_password_binding(config)))
+
+    def _sqlite_encryption_secret(self, config):
+        # An explicit empty entry is a clear operation, not a request to refill.
+        snapshot = copy_connection_config(config)
+        if config.sqlite_encryption_password_binding is not None:
+            return bound_sqlite_encryption_password(snapshot)
+        if not self._remembered_sqlite_encryption(snapshot):
+            return ""
+        binding = sqlite_encryption_password_binding(snapshot)
+        cached = self._sqlite_encryption_passwords.get(snapshot.id)
+        if cached is not None and cached.binding == binding:
+            return cached.value
+        try:
+            import keyring
+            value = keyring.get_password("OpenNavicat", self._secret_key(snapshot.id, "sqlite_encryption_password")) or ""
+        except Exception:
+            return ""
+        if value:
+            self._sqlite_encryption_passwords[snapshot.id] = _SQLiteEncryptionPassword(binding, value)
+        return value
+
     def hydrate(self, config: ConnectionConfig) -> ConnectionConfig:
         """Return a copy with supplied/process/keychain secrets, never write them."""
         hydrated = copy_connection_config(config)
         for name in self.SECRET_FIELDS:
-            setattr(hydrated, name, self.secret(config, name))
+            if name != "sqlite_encryption_password":
+                setattr(hydrated, name, self.secret(config, name))
+        cipher_password = self.secret(config, "sqlite_encryption_password")
+        if cipher_password:
+            hydrated = with_sqlite_encryption_password(hydrated, cipher_password)
         for row in hydrated.sqlite_databases:
             if row.id in hydrated.sqlite_database_passwords:
                 continue
             secret = self._sqlite_database_passwords.get((hydrated.id, row.id))
-            if secret is not None and secret.binding == sqlite_database_binding(row):
+            if secret is not None and secret.binding == self._sqlite_row_binding(hydrated, row):
                 hydrated.sqlite_database_passwords[row.id] = secret.value
-                hydrated.sqlite_database_password_bindings[row.id] = sqlite_database_password_binding(hydrated.id, row)
+                hydrated.sqlite_database_password_bindings[row.id] = sqlite_database_password_binding(
+                    hydrated.id, row, cipher_name=hydrated.sqlite_cipher_name, page_size=hydrated.sqlite_cipher_page_size)
         return hydrated
 
     def save_connection(self, config: ConnectionConfig, remember: bool = False,
                         remember_ssh: bool = False, remember_ssl: bool = False,
-                        remember_ssh_key: bool = False):
+                        remember_ssh_key: bool = False, remember_sqlite_encryption: bool = False):
         snapshot = copy_connection_config(config)
+        if not snapshot.id:
+            snapshot.id = str(uuid.uuid4())
+            snapshot.sqlite_database_password_bindings = {
+                row.id: sqlite_database_password_binding(snapshot.id, row,
+                    cipher_name=snapshot.sqlite_cipher_name, page_size=snapshot.sqlite_cipher_page_size)
+                for row in snapshot.sqlite_databases if row.id in snapshot.sqlite_database_passwords}
+            if snapshot.sqlite_encryption_password_binding is not None:
+                snapshot.sqlite_encryption_password_binding = sqlite_encryption_password_binding(snapshot)
         if self._uses_sqlite_database_state(config.id, snapshot):
-            generated_id = not snapshot.id
-            if generated_id:
-                snapshot.id = str(uuid.uuid4())
-                # Only this successful-save allocation may migrate an empty
-                # draft owner; arbitrary profile edits must keep old provenance.
-                snapshot.sqlite_database_password_bindings = {
-                    row.id: sqlite_database_password_binding(snapshot.id, row)
-                    for row in snapshot.sqlite_databases if row.id in snapshot.sqlite_database_passwords}
             passwords = self._sqlite_password_candidate(snapshot)
-            with self._sqlite_database_commit(config.id, snapshot):
-                self._save_connection(snapshot, remember, remember_ssh, remember_ssl, remember_ssh_key)
+            with self._connection_commit(config.id, snapshot):
+                self._save_connection(snapshot, remember, remember_ssh, remember_ssl, remember_ssh_key, remember_sqlite_encryption)
                 self._sqlite_database_passwords = passwords
                 self._prune_sqlite_database_passwords()
         else:
-            self._save_connection(snapshot, remember, remember_ssh, remember_ssl, remember_ssh_key)
+            with self._connection_commit(config.id, snapshot):
+                self._save_connection(snapshot, remember, remember_ssh, remember_ssl, remember_ssh_key, remember_sqlite_encryption)
         config.id = snapshot.id
         # Publish the accepted carrier back only after commit. Otherwise the
         # caller could restore a removed row and resurrect its stale sidecar.
         config.sqlite_database_passwords = snapshot.sqlite_database_passwords.copy()
         config.sqlite_database_password_bindings = deepcopy(snapshot.sqlite_database_password_bindings)
+        config.sqlite_encryption_password = snapshot.sqlite_encryption_password
+        config.sqlite_encryption_password_binding = snapshot.sqlite_encryption_password_binding
         return copy_connection_config(snapshot)
 
-    def _save_connection(self, config, remember, remember_ssh, remember_ssl, remember_ssh_key):
+    def _save_connection(self, config, remember, remember_ssh, remember_ssl, remember_ssh_key, remember_sqlite_encryption):
         if not config.id:
             config.id = str(uuid.uuid4())
         flags = {"password": remember, "ssh_password": remember_ssh,
-                 "ssh_key_passphrase": remember_ssh_key, "ssl_key_password": remember_ssl}
-        # Complete requested keychain writes before changing durable profile state.
-        # Backend failures remain errors; credentials never fall back to JSON.
-        written = []
+                 "ssh_key_passphrase": remember_ssh_key, "ssl_key_password": remember_ssl,
+                 "sqlite_encryption_password": remember_sqlite_encryption}
+        # Keychain and workspace replacement cannot form one OS transaction.
+        # Read before writing so a failed workspace replacement can compensate
+        # requested writes. Defer removals until the new profile is durable.
+        written, removals = [], []
         try:
             for field in self.SECRET_FIELDS:
                 value = getattr(config, field)
+                key = self._secret_key(config.id, field)
                 if flags[field] and value:
                     import keyring
-                    key = self._secret_key(config.id, field)
-                    try:
-                        previous = keyring.get_password("OpenNavicat", key)
-                    except Exception:
-                        previous = None
-                    keyring.set_password("OpenNavicat", key, value)
+                    previous = keyring.get_password("OpenNavicat", key)
                     written.append((key, previous))
-        except Exception:
+                    keyring.set_password("OpenNavicat", key, value)
+                else:
+                    removals.append(key)
+                if field == "sqlite_encryption_password":
+                    if flags[field] and value:
+                        self._sqlite_encryption_passwords[config.id] = _SQLiteEncryptionPassword(
+                            sqlite_encryption_password_binding(config), value)
+                    else:
+                        self._sqlite_encryption_passwords.pop(config.id, None)
+                else:
+                    cache = self.passwords if field == "password" else self.secrets
+                    cache_key = config.id if field == "password" else (config.id, field)
+                    cache[cache_key] = value
+            self.state["remembered_passwords"] = [identifier for identifier in self.state["remembered_passwords"] if identifier != config.id]
+            if remember and config.password:
+                self.state["remembered_passwords"].append(config.id)
+            remembered = [field for field in self.SECRET_FIELDS if field != "password" and flags[field] and getattr(config, field)]
+            if remembered:
+                self.state["remembered_secrets"][config.id] = remembered
+            else:
+                self.state["remembered_secrets"].pop(config.id, None)
+            bindings = self.state.setdefault("remembered_sqlite_encryption_bindings", {})
+            if flags["sqlite_encryption_password"] and config.sqlite_encryption_password:
+                bindings[config.id] = list(sqlite_encryption_password_binding(config))
+            else:
+                bindings.pop(config.id, None)
+            value = connection_metadata(config)
+            self.state["connections"] = [c for c in self.state["connections"] if c["id"] != config.id] + [value]
+            imported = self.state.setdefault("navicat_imports", {}).get(config.id)
+            if imported is not None:
+                imported.update(locally_edited=True, blocked=config.driver not in SUPPORTED_DRIVERS,
+                                unsupported_fields=[] if config.driver in SUPPORTED_DRIVERS else ["driver"],
+                                requires_secrets=[], reviewed_at=datetime.now(timezone.utc).isoformat(timespec="microseconds"))
+            self.flush()
+        except BaseException:
             for key, previous in reversed(written):
                 try:
+                    import keyring
                     if previous is None:
                         keyring.delete_password("OpenNavicat", key)
                     else:
                         keyring.set_password("OpenNavicat", key, previous)
                 except Exception:
+                    # A failed keychain compensation is not permission to
+                    # persist credentials in a local fallback file.
                     pass
             raise
-        for field in self.SECRET_FIELDS:
-            value = getattr(config, field)
-            cache = self.passwords if field == "password" else self.secrets
-            key = config.id if field == "password" else (config.id, field)
-            cache[key] = value
-            if not (flags[field] and value):
-                try:
-                    import keyring
-                    keyring.delete_password("OpenNavicat", self._secret_key(config.id, field))
-                except Exception:
-                    pass
-        self.state["remembered_passwords"] = [identifier for identifier in self.state["remembered_passwords"] if identifier != config.id]
-        if remember and config.password:
-            self.state["remembered_passwords"].append(config.id)
-        remembered = [field for field in self.SECRET_FIELDS if field != "password" and flags[field] and getattr(config, field)]
-        if remembered:
-            self.state["remembered_secrets"][config.id] = remembered
-        else:
-            self.state["remembered_secrets"].pop(config.id, None)
-        value = connection_metadata(config)
-        self.state["connections"] = [c for c in self.state["connections"] if c["id"] != config.id] + [value]
-        imported = self.state.setdefault("navicat_imports", {}).get(config.id)
-        if imported is not None:
-            imported.update(locally_edited=True, blocked=config.driver not in SUPPORTED_DRIVERS,
-                            unsupported_fields=[] if config.driver in SUPPORTED_DRIVERS else ["driver"],
-                            requires_secrets=[], reviewed_at=datetime.now(timezone.utc).isoformat(timespec="microseconds"))
-        self.flush()
+        for key in removals:
+            try:
+                import keyring
+                keyring.delete_password("OpenNavicat", key)
+            except Exception:
+                pass
 
     def sync_navicat_profiles(self, report) -> dict[str, int]:
         """Add/update redacted discovery metadata without credentials or connections.
@@ -391,7 +482,8 @@ class Store:
             value = connection_metadata(profile.config)
             value["id"] = identifier
             for field in self.SECRET_FIELDS:
-                value[field] = ""
+                if field in value:
+                    value[field] = ""
             # Imported metadata cannot approve a new SSH host key. Preserve a
             # previously approved public pin only for the same SSH endpoint.
             value["ssh_host_key"] = ""
@@ -486,22 +578,25 @@ class Store:
         return counts
 
     def delete_connection(self, connection_id: str):
-        with self._sqlite_database_commit(connection_id):
+        with self._connection_commit(connection_id):
             self._delete_connection(connection_id)
 
     def _delete_connection(self, connection_id):
+        for field in self.SECRET_FIELDS:
+            self.secrets.pop((connection_id, field), None)
+        self.passwords.pop(connection_id, None)
+        self._sqlite_encryption_passwords.pop(connection_id, None)
+        self.state["remembered_passwords"] = [identifier for identifier in self.state["remembered_passwords"] if identifier != connection_id]
+        self.state["remembered_secrets"].pop(connection_id, None)
+        self.state["remembered_sqlite_encryption_bindings"].pop(connection_id, None)
+        self.state["connections"] = [c for c in self.state["connections"] if c["id"] != connection_id]
+        self.flush()
         for field in self.SECRET_FIELDS:
             try:
                 import keyring
                 keyring.delete_password("OpenNavicat", self._secret_key(connection_id, field))
             except Exception:
                 pass
-            self.secrets.pop((connection_id, field), None)
-        self.passwords.pop(connection_id, None)
-        self.state["remembered_passwords"] = [identifier for identifier in self.state["remembered_passwords"] if identifier != connection_id]
-        self.state["remembered_secrets"].pop(connection_id, None)
-        self.state["connections"] = [c for c in self.state["connections"] if c["id"] != connection_id]
-        self.flush()
 
     def record(self, config, sql, elapsed, status, *, query_language=LEGACY):
         if not isinstance(query_language, str) or query_language not in LANGUAGES: raise ValueError('Unknown query language')

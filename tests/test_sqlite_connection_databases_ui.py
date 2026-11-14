@@ -228,7 +228,8 @@ def test_true_password_input_binds_after_absolute_path_capture_and_plain_prefill
         assert result.sqlite_database_passwords == {}
     else:
         assert result.sqlite_database_passwords == {"aux-row": "" if fresh == "empty" else secret}
-        assert result.sqlite_database_password_bindings == {"aux-row": (source.id, str(alternate), True)}
+        assert result.sqlite_database_password_bindings == {
+            "aux-row": (source.id, str(alternate), True, source.sqlite_cipher_name, source.sqlite_cipher_page_size)}
     assert source.sqlite_databases[0].database == str(aux) and source.sqlite_database_passwords["aux-row"] == secret
 
 

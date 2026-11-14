@@ -1,0 +1,92 @@
+{
+  "schema": 1,
+  "scope": "optional independent adapter leaf; not product backend or six-platform acceptance",
+  "host": "Darwin",
+  "machine": "arm64",
+  "python": "3.13.11",
+  "provider": "apsw-sqlite3mc==3.54.0.0",
+  "mc_version": "SQLite3 Multiple Ciphers 2.6.1",
+  "source_sha256": {
+    "opennavicat/sqlite_cipher_provider.py": "ed3135c92dafc8b6c96ef9bd3b08ffb6ff7c349aa669f64c7c906c0bf03464b6",
+    "tests/test_sqlite_cipher_provider.py": "d7f882572fb41b2c6c72e2e71a035395ec0ef7b6db9c1fc1aa244d2a6e4082e3"
+  },
+  "source_before_after_equal": true,
+  "counts": {
+    "total": 89,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 0,
+    "passed": 89
+  },
+  "backups": {
+    "mode": "known matching keyed main codec and page_size only",
+    "same_configuration_variants": 14,
+    "cross_configuration_rejection_variants": 13,
+    "non_main_and_plain_source_rejected": true
+  },
+  "original_failed_recovered_regressions": {
+    "returning_and_key_downgrade": 2,
+    "prepare_time_pragma": 1
+  },
+  "frozen_adapter_probe": {
+    "passed": true,
+    "host": "Darwin arm64",
+    "embedded_adapter_matches_current_source_code": true,
+    "executable_sha256": "9ca191b5a4a2b7dd47241604e5e3e912b115cc788ff9e9440786ee7bdc2bb5f6",
+    "runtime": {
+      "passed": true,
+      "frozen": true,
+      "host": "Darwin",
+      "machine": "arm64",
+      "wrong_key_rejected": true,
+      "standard_sqlite_rejected": true,
+      "provider": "3.54.0.0",
+      "mc_version": "SQLite3 Multiple Ciphers 2.6.1",
+      "actual_rows": 2,
+      "encrypted_headers": true,
+      "files_unchanged": true,
+      "owned_directory_removed": true
+    }
+  },
+  "reverse_reference_aes256cbc": {
+    "passed": true,
+    "cipher": "aes256cbc",
+    "source_bytes": 8192,
+    "source_sha256": "90cc026172037e5eae4f11a5fe89c617b65d524f7dbcc906a32f6df8dca17d68",
+    "original_is_regular": true,
+    "scope": "one generated Navicat-written file; macOS arm64 provider read only",
+    "quick_check": true,
+    "exact_generated_rows": true,
+    "actual_rows": 2,
+    "wrong_key_rejected": true,
+    "wrong_key_code": 26,
+    "standard_sqlite_rejected": true,
+    "copy_unchanged": true,
+    "original_unchanged": true,
+    "copy_no_sidecars": true,
+    "owned_copy_directory_removed": true
+  },
+  "provider_original_fixture_hashes_unchanged": 14,
+  "evidence_sha256": {
+    "adapter-verified.xml": "1435c53db25632d9a53863ee436d3b9153aa3dea0a2136ed6f96afdd1c311c6d",
+    "adapter-verified.log": "79465248d235a84059f46d298faa2827630b7ec75aeec010383e703fa5390c3d",
+    "adapter-recovered-old.xml": "d78d79052a38cbc6f76d766cb60d81d35571dbba1b76401f14dd1d322659b8ae",
+    "adapter-recovered-old.log": "6389a5ddb688b0fd1634608b081dc8b396590af02c216baf6b03aba03dcb2ece",
+    "adapter-pragma-old.xml": "c0bdf41a6d232bc9aa25d56277c6c97abfbc6ca04fae819dc5d8f85083911847",
+    "adapter-pragma-old.log": "e3f9b010093d849d5df6eab74db4b2961ee7dc6120f6f0481f083192797cda54",
+    "backup-cross-cipher-probe.json": "d757dbf3efab1e963308670cc7782e5df83677eed4d15847fc20a33757ac72c0",
+    "backup-same-cipher-probe.json": "005167ba734b115881d179529db5d289c863f1ddd4cb90b91a5149eb2172bb7b",
+    "freeze-adapter-verified-runtime.json": "9ebd0ac4d2eb416d189d1a94af891e0ee5fcea3179af13facfd9be6d968fac28",
+    "reference-aes256-reverse-read.json": "2778778f0c2ee4d1de0b611eaa94e1a7383a414495410ec573cbfac1fd7b4e61"
+  },
+  "remaining_gates": [
+    "backend and UI integration",
+    "key prompts, secret bindings and persistence",
+    "attachment codec metadata and backup",
+    "rekey and format conversion",
+    "WAL and recovery",
+    "complete distribution notices",
+    "six native installer and packaged runtime targets",
+    "full reference tool parity"
+  ]
+}

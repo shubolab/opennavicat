@@ -8,6 +8,7 @@ from __future__ import annotations
 import contextlib
 import json
 import math
+import os
 import re
 import sqlite3
 import ssl
@@ -24,6 +25,10 @@ import sqlparse
 
 from .sqlite_database_config import (
     SQLiteDatabaseEntry, bound_sqlite_database_passwords, copy_connection_config, decode_sqlite_databases,
+)
+from .sqlite_encryption_config import (
+    bound_sqlite_encryption_password, decode_sqlite_encryption_fields, normalize_sqlite_encryption_password,
+    resolve_sqlite_cipher, sqlite_encryption_password_binding,
 )
 
 
@@ -96,14 +101,22 @@ class ConnectionConfig:
     sqlite_open_mode: Literal["legacy", "existing", "create"] = "legacy"
     sqlite_databases: tuple[SQLiteDatabaseEntry, ...] = field(default_factory=tuple, repr=False)
     sqlite_database_passwords: dict[str, str] = field(default_factory=dict, repr=False)
-    sqlite_database_password_bindings: dict[str, tuple[str, str, bool]] | None = field(default=None, repr=False)
+    sqlite_database_password_bindings: dict[str, tuple] | None = field(default=None, repr=False)
+    sqlite_encryption_enabled: bool = False
+    sqlite_cipher_name: str = ""
+    sqlite_cipher_page_size: int = 0
+    sqlite_encryption_password: str = field(default="", repr=False)
+    sqlite_encryption_password_binding: tuple[str, str, bool, str, int] | None = field(default=None, repr=False)
 
     def __post_init__(self):
         if type(self.sqlite_open_mode) is not str or self.sqlite_open_mode not in {"legacy", "existing", "create"}:
             raise ValueError("Invalid SQLite database open mode")
         self.sqlite_databases = decode_sqlite_databases(self.sqlite_databases)
         self.sqlite_database_passwords, self.sqlite_database_password_bindings = bound_sqlite_database_passwords(
-            self.id, self.sqlite_databases, self.sqlite_database_passwords, self.sqlite_database_password_bindings)
+            self.id, self.sqlite_databases, self.sqlite_database_passwords, self.sqlite_database_password_bindings,
+            cipher_name=self.sqlite_cipher_name, page_size=self.sqlite_cipher_page_size)
+        decode_sqlite_encryption_fields(self.sqlite_encryption_enabled, self.sqlite_cipher_name, self.sqlite_cipher_page_size)
+        self.sqlite_encryption_password, self.sqlite_encryption_password_binding = normalize_sqlite_encryption_password(self, initial=True)
 
 
 @dataclass
@@ -223,6 +236,7 @@ class DatabaseSession:
         self._active = False
         self._selected_schema: str | None = None
         self._tunnel = None
+        self._sqlite_runtime_config = None
 
     @property
     def placeholder(self) -> str:
@@ -230,14 +244,22 @@ class DatabaseSession:
 
     @staticmethod
     def _sqlite_open_plan(config):
-        """Validate a plain candidate before any database file is opened.
+        """Validate all metadata, credentials and paths before opening a file.
 
         Existing-only attachments and alias validation are implementation
         boundaries; the reference's invalid-input rules remain unverified.
         """
         rows = decode_sqlite_databases(config.sqlite_databases)
-        if any(row.encrypted for row in rows):
-            raise ValueError("Encrypted SQLite databases require a compatible encryption provider, which is not available")
+        decode_sqlite_encryption_fields(config.sqlite_encryption_enabled, config.sqlite_cipher_name,
+                                        config.sqlite_cipher_page_size)
+        if config.sqlite_encryption_enabled or any(row.encrypted for row in rows):
+            from .sqlite_cipher_provider import _configuration
+            settings = resolve_sqlite_cipher(config.sqlite_cipher_name, config.sqlite_cipher_page_size)
+            _configuration(settings.cipher, settings.legacy, settings.page_size)
+            if config.sqlite_encryption_enabled and not bound_sqlite_encryption_password(config):
+                raise DatabaseError("An encryption password is required for the SQLite main database", authentication_required=True)
+            if any(row.encrypted and not config.sqlite_database_passwords.get(row.id) for row in rows):
+                raise DatabaseError("An encryption password is required for an attached SQLite database", authentication_required=True)
         if config.ssh_enabled:
             raise ValueError("SQLite uses local files and does not support SSH TCP forwarding")
         if (config.sqlite_open_mode != "legacy" or rows) and (config.username or config.password):
@@ -254,6 +276,8 @@ class DatabaseSession:
             aliases.add(alias)
             names.append('"' + row.name.replace('"', '""') + '"')
         database = config.database
+        if type(database) is not str or "\0" in database:
+            raise ValueError("A SQLite database filename must be a NUL-free string")
         if not database:
             if config.sqlite_open_mode != "legacy":
                 raise ValueError("A SQLite database filename is required")
@@ -281,6 +305,87 @@ class DatabaseSession:
             attachments.append((name, path.as_uri() + ("?mode=ro" if config.read_only else "?mode=rw")))
         return target, uri, tuple(attachments)
 
+    @staticmethod
+    def _sqlite_new_connection(config, database, uri):
+        encrypted = config.sqlite_encryption_enabled or any(row.encrypted for row in config.sqlite_databases)
+        if not encrypted:
+            return sqlite3.connect(database, uri=uri, isolation_level=None,
+                                   check_same_thread=False, timeout=config.connect_timeout)
+        from . import sqlite_cipher_provider
+        options = dict(uri=uri, read_only=config.read_only,
+                       create=not config.read_only and config.sqlite_open_mode != "existing",
+                       timeout=config.connect_timeout)
+        if not config.sqlite_encryption_enabled:
+            return sqlite_cipher_provider.connect_plain_main(database, **options)
+        settings = resolve_sqlite_cipher(config.sqlite_cipher_name, config.sqlite_cipher_page_size)
+        return sqlite_cipher_provider.connect(database, key=bound_sqlite_encryption_password(config),
+            cipher=settings.cipher, legacy=settings.legacy, page_size=settings.page_size, **options)
+
+    @staticmethod
+    def create_sqlite_database(config, cancellation_requested=None) -> None:
+        """Create one owned new file in a worker, returning only after close.
+
+        A failed/cancelled attempt removes only the inode reserved by this call.
+        Existing files and external replacements are never removed.
+        """
+        snapshot = copy_connection_config(config)
+        if (snapshot.driver != "sqlite" or snapshot.sqlite_open_mode != "create" or snapshot.read_only
+                or not snapshot.database or snapshot.database == ":memory:"):
+            raise DatabaseError("Creating a SQLite file requires a writable new-file configuration")
+        if type(snapshot.connect_timeout) is not int or not 1 <= snapshot.connect_timeout <= 31536000:
+            raise DatabaseError("Connection timeout must be a positive number of seconds")
+        cancelled = cancellation_requested or (lambda: False)
+        if cancelled():
+            raise DatabaseError("Database creation cancelled")
+        database, uri, attachments = DatabaseSession._sqlite_open_plan(snapshot)
+        destination = Path(snapshot.database).expanduser().resolve()
+        candidate, owned = None, None
+        def ensure_owned():
+            current = destination.lstat()
+            if (current.st_dev, current.st_ino) != owned:
+                raise DatabaseError("The new SQLite database file changed during creation")
+        try:
+            if any(os.path.lexists(str(destination) + suffix) for suffix in ("-journal", "-wal", "-shm")):
+                raise DatabaseError("Creating a SQLite file requires no existing database sidecar files")
+            with destination.open("xb") as reserved:
+                stat = os.fstat(reserved.fileno())
+                owned = stat.st_dev, stat.st_ino
+            if cancelled():
+                raise DatabaseError("Database creation cancelled")
+            ensure_owned()
+            # The reserved empty file is now existing-only. In particular the
+            # provider must not materialize a header before we can observe a
+            # factory-time path replacement and reject its returned handle.
+            opening = copy_connection_config(snapshot)
+            opening.sqlite_open_mode = "existing"
+            database, uri, attachments = DatabaseSession._sqlite_open_plan(opening)
+            candidate = DatabaseSession._sqlite_new_connection(opening, database, uri)
+            ensure_owned()
+            session = DatabaseSession(snapshot)
+            session._sqlite_initialize_candidate(candidate, snapshot, attachments, cancelled)
+            # Merely opening a standard SQLite file can leave zero bytes. This
+            # fixed statement materializes the requested database header.
+            ensure_owned()
+            with contextlib.closing(candidate.execute("PRAGMA user_version = 0")):
+                pass
+            if cancelled():
+                raise DatabaseError("Database creation cancelled")
+            candidate.close()
+            candidate = None
+            ensure_owned()
+            if cancelled():
+                raise DatabaseError("Database creation cancelled")
+        except BaseException:
+            if candidate is not None:
+                with contextlib.suppress(Exception):
+                    candidate.close()
+            if owned is not None:
+                with contextlib.suppress(OSError):
+                    current = destination.lstat()
+                    if (current.st_dev, current.st_ino) == owned:
+                        destination.unlink()
+            raise
+
     def _sqlite_initialize_candidate(self, connection, config, attachments, cancellation_requested):
         # Enforce the actual native connection's limit, not a guessed default.
         if len(attachments) > connection.getlimit(sqlite3.SQLITE_LIMIT_ATTACHED):
@@ -299,12 +404,24 @@ class DatabaseSession:
             with contextlib.closing(connection.execute(f"SELECT 1 FROM {name}.sqlite_schema LIMIT 1")) as cursor:
                 cursor.fetchone()
         check_catalog('"main"')
-        for name, filename in attachments:
+        settings = (resolve_sqlite_cipher(config.sqlite_cipher_name, config.sqlite_cipher_page_size)
+                    if any(row.encrypted for row in config.sqlite_databases) else None)
+        for row, (name, filename) in zip(config.sqlite_databases, attachments):
             if cancellation_requested():
                 raise DatabaseError("Connection cancelled")
-            with contextlib.closing(connection.execute(f"ATTACH DATABASE ? AS {name}", (filename,))):
+            if hasattr(connection, "configure_attachment"):
+                if row.encrypted:
+                    connection.configure_attachment(cipher=settings.cipher, legacy=settings.legacy, page_size=settings.page_size)
+                sql, values = f"ATTACH DATABASE ? AS {name} KEY ?", (filename, config.sqlite_database_passwords[row.id] if row.encrypted else "")
+            else:
+                sql, values = f"ATTACH DATABASE ? AS {name}", (filename,)
+            with contextlib.closing(connection.execute(sql, values)):
                 pass
             check_catalog(name)
+            if row.encrypted and settings.page_size:
+                with contextlib.closing(connection.execute(f"PRAGMA {name}.page_size")) as cursor:
+                    if cursor.fetchone() != (settings.page_size,):
+                        raise DatabaseError("The SQLite provider did not apply the attached database page size")
         if cancellation_requested():
             raise DatabaseError("Connection cancelled")
 
@@ -334,8 +451,7 @@ class DatabaseSession:
                 if cancellation_requested():
                     raise DatabaseError("Connection cancelled")
                 database, uri, attachments = self._sqlite_open_plan(c)
-                connection = sqlite3.connect(database, uri=uri, isolation_level=None,
-                                             check_same_thread=False, timeout=c.connect_timeout)
+                connection = self._sqlite_new_connection(c, database, uri)
                 self._sqlite_initialize_candidate(connection, c, attachments, cancellation_requested)
                 # Linearize cancellation against publishing a fully initialized
                 # candidate. The helper's last checkpoint precedes this lock.
@@ -345,6 +461,7 @@ class DatabaseSession:
                         raise DatabaseError("Connection cancelled")
                     self.connection = connection
                     self._selected_schema = "main"
+                    self._sqlite_runtime_config = c
             else:
                 # Validate TLS files/key passwords before opening SSH or DB sockets.
                 _tls_context(c)
@@ -375,6 +492,7 @@ class DatabaseSession:
                     connection.close()
             self.connection = None
             self._selected_schema = None
+            self._sqlite_runtime_config = None
             if c.driver == "sqlite" and observed_cancellation[0] is not None:
                 self._retire_sqlite_cancellation(observed_cancellation[0])
             if self._tunnel is not None:
@@ -382,7 +500,11 @@ class DatabaseSession:
                 self._tunnel = None
             if isinstance(exc, (SSHHostKeyError, SSHAuthenticationError, TLSKeyPasswordError)):
                 raise
-            raise DatabaseError(str(exc), authentication_required=is_database_auth_error(exc)) from exc
+            code = getattr(exc, "sqlite_errorcode", None)
+            sqlite_key_error = (type(code) is int and code & 255 == sqlite3.SQLITE_NOTADB and c.driver == "sqlite"
+                                and (c.sqlite_encryption_enabled or any(row.encrypted for row in c.sqlite_databases)))
+            raise DatabaseError(str(exc), authentication_required=(getattr(exc, "authentication_required", False)
+                                or sqlite_key_error or is_database_auth_error(exc))) from exc
 
     def _connect_postgresql(self):
         import psycopg
@@ -451,6 +573,7 @@ class DatabaseSession:
         finally:
             self.connection = None
             self._selected_schema = None
+            self._sqlite_runtime_config = None
             if retired and self.config.driver == "sqlite":
                 # Only retire signals with a successfully closed published
                 # handle. An idle/unpublished initialization cancel stays pending.
@@ -872,19 +995,35 @@ class DatabaseSession:
         self.connect()
         existing = self.in_transaction
         savepoint = "onv_" + uuid.uuid4().hex
-        if existing:
-            self._query(f"SAVEPOINT {savepoint}")
-        else:
-            self._query("BEGIN IMMEDIATE" if self.config.driver == "sqlite" else "BEGIN")
+        sqlite_operation, previous_active = self.config.driver == "sqlite", self._active
+        if sqlite_operation:
+            self._active = True
         try:
+            if existing:
+                self._query(f"SAVEPOINT {savepoint}")
+            else:
+                self._query("BEGIN IMMEDIATE" if sqlite_operation else "BEGIN")
             yield
             self._query(f"RELEASE SAVEPOINT {savepoint}" if existing else "COMMIT")
-        except BaseException:
+        except BaseException as error:
+            lost_outer = sqlite_operation and existing and not self.in_transaction
+            with self._cancel_lock:
+                generation = self._cancel_generation
             with contextlib.suppress(Exception):
-                self._query(f"ROLLBACK TO SAVEPOINT {savepoint}" if existing else "ROLLBACK")
-                if existing:
-                    self._query(f"RELEASE SAVEPOINT {savepoint}")
+                if sqlite_operation and hasattr(self.connection, "configure_attachment"):
+                    self.connection.rollback(savepoint=savepoint if existing else None)
+                else:
+                    self._query(f"ROLLBACK TO SAVEPOINT {savepoint}" if existing else "ROLLBACK")
+                    if existing:
+                        self._query(f"RELEASE SAVEPOINT {savepoint}")
+            if sqlite_operation:
+                self._retire_sqlite_cancellation(generation)
+            if lost_outer:
+                raise DatabaseError("SQLite rolled back the entire transaction; earlier uncommitted changes were rolled back") from error
             raise
+        finally:
+            if sqlite_operation:
+                self._active = previous_active
 
     def _validate_names(self, schema: str, table: str, values: dict) -> list[dict]:
         columns = self.columns(schema, table)
@@ -1043,6 +1182,8 @@ class DatabaseSession:
             raise DatabaseError("Physical backup is currently available for SQLite only")
         if self.connection is None:
             raise DatabaseError("The backup connection changed. Select the database again")
+        if hasattr(self.connection, "configure_attachment"):
+            raise DatabaseError("Encrypted SQLite backup requires the verified main-cipher backup integration")
         if self.in_transaction:
             raise DatabaseError("Commit or roll back the open transaction before backing up")
         database = next((row[2] for row in self._query("PRAGMA database_list") if row[1] == schema), None)

@@ -8,6 +8,7 @@ import sys
 from types import SimpleNamespace
 
 import pytest
+from opennavicat.sqlite_cipher_probe import SQLITE_CIPHER_RUNTIME_FLAGS
 
 
 script = Path(__file__).resolve().parents[1] / "scripts/package-installer.py"
@@ -107,6 +108,21 @@ def report(architecture="arm64", version="0.3.0"):
             "oracle_native_extensions_loaded": True, "oracle_parameters_ready": True,
             "oracle_thin_mode_ready": True,
             **dict.fromkeys(('native_js_helper_ready','native_js_bigint_bson_probe','native_js_cancel_probe','native_js_child_reaped','native_js_no_console','native_js_bundled'),True)}}
+
+
+@pytest.mark.parametrize("flag", SQLITE_CIPHER_RUNTIME_FLAGS)
+def test_014_installed_cipher_probe_is_mandatory_without_weakening_old_driver_gates(tmp_path, flag):
+    value = report(version="0.14.0")
+    value["runtime"].update(sqlite_cipher_provider="3.54.0.0", sqlite_cipher_mc_version="SQLite3 Multiple Ciphers 2.6.1",
+        sqlite_cipher_sqlite_version="3.54.0", sqlite_cipher_extension_sha256="a"*64,
+        navicat_windows_api_ready=True, **dict.fromkeys(SQLITE_CIPHER_RUNTIME_FLAGS, True))
+    path = tmp_path / "report.json"
+    path.write_text(json.dumps(value))
+    assert installer.validate_smoke_report(path, "0.14.0", "arm64", "windows")["smoke"] == "passed"
+    value["runtime"][flag] = 1
+    path.write_text(json.dumps(value))
+    with pytest.raises(installer.PackagingError, match="Encrypted SQLite"):
+        installer.validate_smoke_report(path, "0.14.0", "arm64", "windows")
 
 
 def test_empty_windowed_process_stdout_is_not_an_installed_smoke(tmp_path):

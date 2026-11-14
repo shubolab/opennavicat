@@ -81,7 +81,7 @@ def test_connection_password_is_only_in_mock_keychain(tmp_path, monkeypatch):
 def test_keychain_failure_never_writes_plaintext(tmp_path, monkeypatch):
     def unavailable(*args):
         raise RuntimeError("No keychain service")
-    monkeypatch.setitem(sys.modules, "keyring", SimpleNamespace(set_password=unavailable))
+    monkeypatch.setitem(sys.modules, "keyring", SimpleNamespace(get_password=lambda *_: None, set_password=unavailable))
     store = Store(tmp_path)
     config = ConnectionConfig("profile-2", "Remote", "mysql", username="test", password="test-secret")
     with pytest.raises(RuntimeError, match="keychain"):

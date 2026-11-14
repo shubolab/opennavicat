@@ -7,9 +7,11 @@ import json
 from pathlib import Path
 import re
 import subprocess
+import sys
 import tomllib
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 REPOSITORY = "shubolab/opennavicat"
 TARGETS = [(system, architecture) for system in ("macos", "windows", "linux")
            for architecture in ("amd64", "arm64")]
@@ -73,6 +75,9 @@ def validate_assets(directory, version):
                 "oracle_adapter_constructed", "oracle_native_extensions_loaded",
                 "oracle_parameters_ready", "oracle_thin_mode_ready")),
                 f"Installed Oracle native driver probes did not pass: {installer.name}")
+        if tuple(map(int, version.split("."))) >= (0, 14, 0):
+            from opennavicat.sqlite_cipher_probe import validate_sqlite_cipher_runtime
+            validate_sqlite_cipher_runtime(runtime)
         if system == "windows" and tuple(map(int, version.split("."))) >= (0, 7, 0):
             require(runtime.get("navicat_windows_api_ready") is True,
                 f"Installed Windows registry metadata APIs did not initialize: {installer.name}")

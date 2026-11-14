@@ -377,7 +377,7 @@ class TableDesignerPage(QWidget):
         self.toolbar.addSeparator()
         self.pk_action = self._action("主键属性", "key", self.toggle_primary_key)
         self.toolbar.addSeparator()
-        self.ai_action = self._action("询问 AI", "query", None)
+        self.ai_action = self._action("询问 AI", "ai", None)
         self.ai_action.setEnabled(False)
         self.ai_action.setToolTip("此功能尚未实现。")
         spacer = QWidget()

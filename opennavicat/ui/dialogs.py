@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 from opennavicat.database import ConnectionConfig
 from .connection_test_banner import ConnectionTestBanner
 from .icons import tool_icon, toggle_icon
+from .sqlite_connection_databases import SQLiteConnectionDatabases
 
 
 def _hint(text: str) -> QLabel:
@@ -489,13 +490,15 @@ class ConnectionDialog(QDialog):
         self.mongo_remarks_edit.setEnabled(False)
         remarks.addWidget(self.mongo_remarks_edit)
         self._redis_database_validator = QRegularExpressionValidator(QRegularExpression("[0-9]*"), self)
-        self.sqlite_database_note = QLabel("数据库文件在“常规”页中设置。")
-        self.sqlite_database_note.setWordWrap(True)
-        databases.addWidget(self.sqlite_database_note)
+        self.sqlite_database_diagram = _ConnectionDiagram()
+        self.sqlite_databases_page = SQLiteConnectionDatabases(self.sqlite_database_diagram, config)
+        databases.addWidget(self.sqlite_databases_page, 1)
         self.network_database_note = QLabel("初始数据库在“常规”页中设置。可用数据库列表由连接后的服务器提供。")
         self.network_database_note.setWordWrap(True)
         databases.addWidget(self.network_database_note)
         databases.addStretch()
+        self._database_note_stretch = databases.count() - 1
+        self._database_note_spacing = databases.spacing()
 
         self.ssl_tab = QWidget()
         ssl_layout = QVBoxLayout(self.ssl_tab)
@@ -662,6 +665,9 @@ class ConnectionDialog(QDialog):
         if config:
             self.driver_combo.setCurrentIndex(max(0, self.driver_combo.findData(config.driver)))
             self.ssl_combo.setCurrentIndex(max(0, self.ssl_combo.findData(config.ssl_mode)))
+            if config.driver == "sqlite":
+                mode = "create" if config.sqlite_open_mode == "create" else "existing"
+                self.sqlite_mode_combo.setCurrentIndex(self.sqlite_mode_combo.findData(mode))
         self._driver_changed()
         self._ssl_state_changed()
         self._ssh_state_changed()
@@ -671,6 +677,7 @@ class ConnectionDialog(QDialog):
         self.sqlite_mode_combo.currentIndexChanged.connect(self._sqlite_profile_changed)
         self.read_only_check.toggled.connect(self._sqlite_profile_changed)
         self.timeout_spin.valueChanged.connect(self._sqlite_profile_changed)
+        self.sqlite_databases_page.changed.connect(self._sqlite_profile_changed)
 
     @staticmethod
     def _restore_mongo_choice(combo, value):
@@ -881,7 +888,11 @@ class ConnectionDialog(QDialog):
         self.remote_database_label.setText("数据库编号" if driver == "redis" else "初始数据库")
         self.remote_database_edit.setPlaceholderText("0" if driver == "redis" else "数据库名称")
         self.remote_database_edit.setValidator(self._redis_database_validator if driver == "redis" else None)
-        self.sqlite_database_note.setVisible(local)
+        self.sqlite_databases_page.setVisible(local)
+        database_layout = self.databases_tab.layout()
+        database_layout.setContentsMargins(*(0, 0, 0, 0) if local else (20, 28, 20, 20))
+        database_layout.setSpacing(0 if local else self._database_note_spacing)
+        database_layout.setStretch(self._database_note_stretch, 0 if local else 1)
         self.network_database_note.setVisible(not local)
         self.network_database_note.setText("数据库列表将在连接后由服务器提供。" if driver == "mongodb" else "初始数据库在“常规”页中设置。可用数据库列表由连接后的服务器提供。")
         self.foreign_keys_check.setVisible(local)
@@ -1138,8 +1149,8 @@ class ConnectionDialog(QDialog):
                 if not ssh_key:
                     raise ValueError("请选择 SSH 私钥文件。")
                 ssh_key = self._readable_file(ssh_key, "SSH 私钥")
-        return ConnectionConfig(
-            id=self._original.id if self._original else uuid.uuid4().hex,
+        config = ConnectionConfig(
+            id=self.sqlite_databases_page.connection_id if driver == "sqlite" else self._original.id if self._original else uuid.uuid4().hex,
             name=name or "测试连接", driver=driver, database=database, host=host or "localhost",
             port=self.port_spin.value() if driver != "sqlite" else 0,
             username=self.user_edit.text() if driver != "sqlite" and (driver != "mongodb" or mongo_fields["mongo_auth_mechanism"] != "NONE") else "",
@@ -1154,8 +1165,10 @@ class ConnectionDialog(QDialog):
             ssh_key_passphrase=self.ssh_key_passphrase_edit.text(),
             ssh_compression=self.ssh_compression_check.isChecked(),
             ssh_host_key=self._ssh_host_key,
+            sqlite_open_mode=self.sqlite_mode_combo.currentData() if driver == "sqlite" else "legacy",
             **mongo_fields,
         )
+        return self.sqlite_databases_page.apply_to(config) if driver == "sqlite" else config
 
     @staticmethod
     def _readable_file(value, label):
@@ -1194,8 +1207,10 @@ class ConnectionDialog(QDialog):
         self._start_connection_test(config)
 
     def _reset_sqlite_test_diagram(self):
-        self.diagram.sqlite_connection_succeeded = False
-        self.diagram.update()
+        for diagram in (self.diagram, getattr(self, "sqlite_database_diagram", None)):
+            if diagram is not None:
+                diagram.sqlite_connection_succeeded = False
+                diagram.update()
 
     def _sqlite_profile_changed(self, *_):
         if self.driver_combo.currentData() != 'sqlite':
@@ -1269,9 +1284,11 @@ class ConnectionDialog(QDialog):
             self._test_server_version = ''
 
     def _display_test_result(self, success, message):
-        self.diagram.sqlite_connection_succeeded = bool(success and self._tested_driver == 'sqlite'
-            and self.driver_combo.currentData() == 'sqlite')
-        self.diagram.update()
+        for diagram in (self.diagram, getattr(self, "sqlite_database_diagram", None)):
+            if diagram is not None:
+                diagram.sqlite_connection_succeeded = bool(success and self._tested_driver == 'sqlite'
+                    and self.driver_combo.currentData() == 'sqlite')
+                diagram.update()
         if self._tested_driver == 'sqlite' and self.driver_combo.currentData() == 'sqlite' and success:
             version = self._test_server_version[:512]
             detail = '服务器版本: ' + version

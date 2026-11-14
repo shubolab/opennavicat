@@ -2,7 +2,12 @@
 from contextlib import closing
 from dataclasses import asdict
 import hashlib
+import json
+import os
+from pathlib import Path
 import sqlite3
+import subprocess
+import sys
 import threading
 from types import SimpleNamespace
 
@@ -296,6 +301,7 @@ def profile_button_state(button):
                 policy.verticalStretch(), policy.controlType(), policy.retainSizeWhenHidden()),
         stylesheet=button.styleSheet(), flat=button.isFlat(), auto_default=button.autoDefault(),
         font=(font.family(), font.pixelSize(), font.pointSizeF(), font.weight(), font.resolveMask()),
+        explicit_font=button.testAttribute(Qt.WidgetAttribute.WA_SetFont),
         icon_size=button.iconSize().toTuple(), enabled=button.isEnabled())
 
 
@@ -388,3 +394,58 @@ def test_sqlite_header_circle_plus_fits_real_contents_at_display_density(qtbot, 
     assert not dialog.profile_pane.isVisible() and not dialog.profile_header.isVisible()
     qtbot.mouseClick(dialog.profile_toggle, Qt.MouseButton.LeftButton)
     assert dialog.profile_header.isVisible() and dialog.new_profile_button is button
+
+
+@pytest.mark.parametrize('explicit', [False, True], ids=['inherited', 'explicit'])
+def test_profile_button_restores_current_parent_font_ownership(explicit):
+    # A fresh offscreen app prevents earlier tests' global font stylesheets
+    # from masking inheritance. No desktop/application setting is changed.
+    source = '''
+import json, sys
+from PySide6.QtCore import QCoreApplication, QEvent, Qt
+from PySide6.QtGui import QFont
+from PySide6.QtWidgets import QApplication, QPushButton
+from opennavicat.database import ConnectionConfig
+import opennavicat.ui.dialogs as module
+app = QApplication([])
+assert app.styleSheet() == '' and app.platformName() == 'offscreen'
+explicit = sys.argv[1] == '1'
+if explicit:
+    def button_factory(*args, **kwargs):
+        button = QPushButton(*args, **kwargs)
+        if button.text() == '新建连接配置文件':
+            font = QFont(button.font()); font.setPixelSize(19); button.setFont(font)
+        return button
+    module.QPushButton = button_factory
+dialog = module.ConnectionDialog(config=ConnectionConfig('generated-font', 'Generated font', database=':memory:'))
+dialog.show()
+button = dialog.new_profile_button
+observed = []
+for pixels in (36, 12, 24):
+    dialog.driver_combo.setCurrentIndex(dialog.driver_combo.findData('sqlite'))
+    font = QFont(dialog.font()); font.setPixelSize(pixels); dialog.setFont(font)
+    app.processEvents()
+    dialog.driver_combo.setCurrentIndex(dialog.driver_combo.findData('postgresql'))
+    app.processEvents()
+    native = module.ConnectionDialog(config=ConnectionConfig('generated-native-font', 'Generated native font', driver='postgresql', database='generated'))
+    native.setFont(font); native.show(); app.processEvents()
+    expected = native.new_profile_button
+    assert button.font().pixelSize() == expected.font().pixelSize() == (19 if explicit else pixels), (pixels, button.font().pixelSize(), expected.font().pixelSize())
+    assert button.testAttribute(Qt.WidgetAttribute.WA_SetFont) is explicit
+    assert button.fontMetrics().horizontalAdvance(button.text()) == expected.fontMetrics().horizontalAdvance(expected.text())
+    assert button.fontMetrics().height() == expected.fontMetrics().height()
+    assert button.minimumSize() == expected.minimumSize() and button.maximumSize() == expected.maximumSize()
+    assert dialog.new_profile_button is button and not button.isEnabled()
+    assert not dialog._test_pool.activeThreadCount() and not native._test_pool.activeThreadCount()
+    observed.append({'parent_pixels': pixels, 'button_pixels': button.font().pixelSize(), 'text_advance': button.fontMetrics().horizontalAdvance(button.text())})
+    native.close(); native.deleteLater(); QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+dialog.close(); dialog.deleteLater(); QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+print(json.dumps({'passed': True, 'explicit': explicit, 'observed': observed, 'plugin': app.platformName()}))
+'''
+    result = subprocess.run([sys.executable, '-c', source, '1' if explicit else '0'],
+        cwd=Path(__file__).resolve().parents[1], env={**os.environ, 'QT_QPA_PLATFORM': 'offscreen',
+            'PYTHONWARNINGS': 'error'}, capture_output=True, text=True, timeout=20)
+    assert result.returncode == 0, result.stdout+result.stderr
+    report = json.loads(result.stdout)
+    assert report['passed'] and report['explicit'] is explicit and report['plugin'] == 'offscreen'
+    assert [r['parent_pixels'] for r in report['observed']] == [36, 12, 24]

@@ -273,6 +273,7 @@ class ConnectionDialog(QDialog):
             size_policy=QSizePolicy(self.new_profile_button.sizePolicy()),
             stylesheet=self.new_profile_button.styleSheet(), flat=self.new_profile_button.isFlat(),
             auto_default=self.new_profile_button.autoDefault(), font=QFont(self.new_profile_button.font()),
+            font_explicit=self.new_profile_button.testAttribute(Qt.WidgetAttribute.WA_SetFont),
         )
         self.profile_header = QWidget(self.profile_pane)
         self.profile_header.setObjectName('sqliteConnectionProfileHeader')
@@ -937,7 +938,9 @@ class ConnectionDialog(QDialog):
                 button.setSizePolicy(original['size_policy'])
                 button.setFlat(original['flat'])
                 button.setAutoDefault(original['auto_default'])
-                button.setFont(original['font'])
+                # font() includes resolved attributes inherited from the old
+                # parent. Reapplying that value would pin an inherited font.
+                button.setFont(original['font'] if original['font_explicit'] else QFont())
             button.show()
         self.profile_header.setVisible(local)
         # Only the built-in placeholder profile is localized. Do not rebuild

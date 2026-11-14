@@ -162,7 +162,7 @@ def process_passed(result):
 
 
 def verify_runtime(value, *, qpa, phase, run_id, owned, nodes):
-    if (value.get("phase") != phase or value.get("run_id") != run_id or value.get("actual_qpa") != qpa
+    if (value.get("phase") != phase or value.get("run_id") != run_id or value.get("exitstatus") != 0 or value.get("actual_qpa") != qpa
             or value.get("source_root") != str(ROOT) or value.get("data_directory") != str(Path(owned) / "store")
             or value.get("remaining_db_optins") or value.get("keyring_attempts") != 0
             or value.get("subprocess_attempts") != 0 or value.get("visible_windows_after_session") != 0

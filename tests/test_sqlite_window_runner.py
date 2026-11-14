@@ -59,14 +59,14 @@ def test_collection_and_run_scope_cannot_be_filtered_or_substituted(tmp_path, ch
 
 
 def runtime(owned):
-    return {"phase": "run", "run_id": "owned-run", "actual_qpa": "cocoa", "source_root": str(ROOT),
+    return {"phase": "run", "run_id": "owned-run", "exitstatus": 0, "actual_qpa": "cocoa", "source_root": str(ROOT),
         "data_directory": str(owned / "store"), "remaining_db_optins": [], "keyring_attempts": 0,
         "subprocess_attempts": 0, "visible_windows_after_session": 0, "python_process_spawns_blocked": True,
         "application_imports": {"opennavicat": str(ROOT / "opennavicat/__init__.py")},
         "calls": [{"nodeid": node, "qpa": "cocoa"} for node in nodes()]}
 
 
-@pytest.mark.parametrize("mutation", ["offscreen", "foreign-import", "wrong-store", "db-optin", "keyring", "spawn", "live-window", "missing-call", "stale-run"])
+@pytest.mark.parametrize("mutation", ["offscreen", "foreign-import", "wrong-store", "db-optin", "keyring", "spawn", "live-window", "missing-call", "stale-run", "nonzero-exit"])
 def test_runtime_requires_actual_native_qpa_owned_source_and_cleanup(tmp_path, mutation):
     value = runtime(tmp_path)
     runner.verify_runtime(value, qpa="cocoa", phase="run", run_id="owned-run", owned=tmp_path, nodes=nodes())
@@ -78,7 +78,8 @@ def test_runtime_requires_actual_native_qpa_owned_source_and_cleanup(tmp_path, m
     elif mutation == "spawn": value["subprocess_attempts"] = 1
     elif mutation == "live-window": value["visible_windows_after_session"] = 1
     elif mutation == "missing-call": value["calls"].pop()
-    else: value["run_id"] = "previous-run"
+    elif mutation == "stale-run": value["run_id"] = "previous-run"
+    else: value["exitstatus"] = 1
     with pytest.raises(ValueError):
         runner.verify_runtime(value, qpa="cocoa", phase="run", run_id="owned-run", owned=tmp_path, nodes=nodes())
 

@@ -228,6 +228,9 @@ class ConnectionDialog(QDialog):
 
     def __init__(self, parent=None, config: ConnectionConfig | None = None):
         super().__init__(parent)
+        self._sqlite_geometry_refresh = QTimer(self)
+        self._sqlite_geometry_refresh.setSingleShot(True)
+        self._sqlite_geometry_refresh.timeout.connect(self._grow_sqlite_form)
         self._original = config
         self._config = None
         self._testing = False
@@ -1044,6 +1047,25 @@ class ConnectionDialog(QDialog):
         target = target.expandedTo(self.layout().minimumSize())
         if target != client:
             self.resize(target)
+
+    def event(self, event):
+        handled = super().event(event)
+        if event.type() == QEvent.Type.FontChange:
+            timer = getattr(self, "_sqlite_geometry_refresh", None)
+            if timer is not None and getattr(self, "_active_driver", None) == "sqlite" and self.isVisible():
+                # Wait for child styles/layout hints to resolve the new font.
+                timer.start(0)
+        return handled
+
+    def _grow_sqlite_form(self):
+        if getattr(self, "_active_driver", None) != "sqlite" or not self.isVisible():
+            return
+        layout = self.layout()
+        if layout is not None:
+            current = self.size()
+            target = current.expandedTo(layout.minimumSize())
+            if target != current:
+                self.resize(target)
 
     def showEvent(self, event):
         super().showEvent(event)

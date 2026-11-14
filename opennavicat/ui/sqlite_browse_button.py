@@ -1,5 +1,5 @@
 """The compact, native three-dot file button shared by SQLite forms."""
-from PySide6.QtCore import QEvent, QRect
+from PySide6.QtCore import QEvent, QRect, Qt
 from PySide6.QtWidgets import QPushButton, QStyle, QStyleOptionButton
 
 
@@ -7,6 +7,9 @@ class SQLiteBrowseButton(QPushButton):
     def __init__(self, parent=None):
         super().__init__("...", parent)
         self.setObjectName("sqliteFileBrowseButton")
+        # Native button layout-item outsets must not let a short file row
+        # clamp the actual button below its content-aware minimum hint.
+        self.setAttribute(Qt.WidgetAttribute.WA_LayoutUsesWidgetRect, True)
         self.setAutoDefault(False)
         self.setAccessibleName("选择数据库文件")
         self.setToolTip("选择数据库文件")

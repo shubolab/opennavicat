@@ -816,12 +816,15 @@ def test_palette_reserves_distinct_driver_colors_and_keeps_transparency_in_worke
     if few_colors:
         assert after[2] == before[2]  # The sole source green is not sacrificed for a reserved brand.
     assert [after[index] for index in (20, 21, 22)] == [before[index] for index in (20, 21, 22)]
-    targets = [QColor(value) for value in recorder.DEMO_DRIVER_COLORS.values()]
-    assert len(set(color.rgba() for color in targets)) == 9
+    targets = [QColor(value) for value in
+               {**recorder.DEMO_DRIVER_COLORS, **recorder.DEMO_STATUS_COLORS}.values()]
+    assert len(set(color.rgba() for color in targets)) == 10
     assert all(color in after for color in targets)
     changed = [index for index in range(256) if after[index] != before[index]]
-    assert len(changed) == 6 and all(after[index] in targets for index in changed)
-    assert facts['reserved_color_count'] == 9 and facts['transparency_slot_preserved']
+    assert len(changed) == 7 and all(after[index] in targets for index in changed)
+    assert facts['reserved_driver_colors'] == recorder.DEMO_DRIVER_COLORS
+    assert facts['reserved_status_colors'] == recorder.DEMO_STATUS_COLORS
+    assert facts['reserved_color_count'] == 10 and facts['transparency_slot_preserved']
 
 
 @pytest.mark.parametrize('invalid', ['unreadable', 'geometry', 'opaque', 'two-transparent', 'partial-alpha'])

@@ -42,6 +42,7 @@
 | AP18-13 | [images OFF/ON实际对照](ui-reference-18-mongodb-pipeline.md#ap18-13-collection-images-offon-and-required-image-errors) | 新read profile、自有RS六次实际Run：whenAvailable OFF/ON返回1/2，required-pre/post ON各2；两个OFF-required真实getMore47均显示0/0哨兵，不是真实脚本位置。三个成功ON的Output经截图确认空白、原因未定，首WA_OFF仍script+OK，不据此重写旧观察。初始调用基数unknown/overallinconclusive；正常Quit后4idle/0active，清理exactCID/两卷，不复制遗留游标。独立typed observer不代表原版私有BSON；后续未发布b53f60e已增加六种实际工具栏回归及两种typed诊断哨兵，backend74/0、Window25/0、默认2243/645；[源码集成](validation-mongodb-image-modes.md)单独绑定，未解ON Output空白；保留期、其它event/权限/拓扑、Stop/Preview和三平台门禁开放。 |
 | OR18-01 | [Oracle设置与owned对象实际观察](ui-reference-18-oracle.md) | macOS18.0.5五页、Basic/TNS、service/SID、三角色、OS-auth切换、247字符集、三SSH方法、Oracle工具栏/15种Other和28/13对象列已枚举；新Basic/Default密码profile实际Test成功、保存重开、On列30schemas，own表/视图各1条合成数据实际读取。一次ORA12545来源unknown，不改server掩盖。只新profile断开Off/0后Quitfalse，3个研究/参考CID逐ID清理、零数据卷。另行Thin/API/六目标wheel字节研究不是OpenNav适配器或原生包资格；完整Oracle工具/认证/安全/事务/类型和三平台门禁仍开放。 |
 | AU18-01–AU18-06 | [18自动运行实际观察](ui-reference-18-automation.md) / [当前Batch片段](batch-jobs.md) | 全局列表/四页Batch、16类别、Version1.4文件与Jobs空对象、已保存Pipeline引用/重复/改名失效、None认证断开后的独立执行、错误继续/跳过、历史重开和copy/sort均有自有样例观察；未创建OS计划或发邮件。Batch取消、其余类别执行与三平台仍开放。永久删除确认已取消，残留合成任务被清空；两容器/四匿名卷逐ID核验已清理。 |
+| SDB18 | [SQLite数据库页实际观察](sqlite-connection-databases.md) | 九个草稿检查点涵盖三列/裸加减/600×215新增编辑sheet/取消删除；后续五检查点实际plain Test、Save Off、主/附加库四行及同进程保存重开。密码/加密/进程重启/invalid规则/三平台仍开放，不属于v0.13.2数据库页实现。 |
 | S-W | [window.py](../opennavicat/ui/window.py)、[workspace.py](../opennavicat/ui/workspace.py)、[query.py](../opennavicat/ui/query.py)、[theme.py](../opennavicat/ui/theme.py) | 0.2 按实际参考重建的部分工作台、对象/信息区、表和查询页；尚未完成完整对照。 |
 | S-D | [dialogs.py](../opennavicat/ui/dialogs.py)、[editor.py](../opennavicat/ui/editor.py)、[grid.py](../opennavicat/ui/grid.py) | 现有连接/新表/记录对话框、SQL 和网格组件。 |
 | S-E | [database.py](../opennavicat/database.py) | SQLite/PostgreSQL/MySQL/MariaDB四驱动、基础metadata/SQL/行修改；其余五个数据库族和完整对象管理仍有缺口。 |
@@ -81,7 +82,7 @@
 | U12 | 导入/导出/传输/同步/生成向导 | ✗ | E8–E11/R16；现有选文件/比较页不同 | 所有步骤、默认值、返回/下一步、映射、预览、执行、日志和配置保存页对齐。 |
 | U13 | 备份/还原、自动运行、监控、DB权限窗口 | ◐ | AU18已实测全局自动运行五列列表、四页Batch、16种可用工作类别、名称Sheet、高级默认、执行日志/历史、重复引用与错误策略；本轮新增参考形Qt四页和本地Batch基础，主窗口入口和真实批任务已整合，owned Window验证断开主连接后重复执行、最新保存内容、错误继续/跳过、历史持久化和独立Stop；完整参考验收仍开放。其它备份/还原、监控和DB权限窗口仍缺，不因这一个片段变为已实现；完整列表copy/group、计划/SMTP及三平台仍开放，见[批任务记录](batch-jobs.md) | 每项工具列表、设置、详情、执行/日志、错误交互逐页对照；Batch全部类别、排列/选择状态、计划/邮件/历史及各平台行为分别验收。 |
 | U14 | 模型/BI多资产工作区及设计器 | ✗ | R18-H/F；L18-01确认BI入口，尚非完整工作区执行；只读关系图不足 | 模型/图/字典/命名标准/词汇表及BI数据源/图/仪表盘/参数的列表/缩略图、内部标签、属性/依赖、画布、保存输出完整对照。 |
-| U15 | 字体、颜色、图标、间距、边框、选中/禁用/焦点/悬浮 | ◐ | [18图标专项](validation-icons-navicat18.md)：保留Git211历史资格；bb4有限修正Oracle纯端口/profile、祖先横向裁剪、Atlas/Redis Enterprise直接别名及整个按钮刷新空白。bb4本机Cocoa334过/3条件跳过、默认2725过/662条件跳过；真实Oracle28phase/15unique全尺寸已看，新35phase GIF已按阶段审查。fixture DeferredDelete红绿单列；正式v0.13.1十项成功、15产物/六安装器及八公开下载字节审查通过，安装器不代表全部视觉通过。三条新观察中的成功/复制/关闭、Oracle裸加减/刷新及SQLite profile头已分片接入0.13.2开发源；7ab默认2840过/662条件跳过、Cocoa460过/3条件跳过，但整轮CI失败且未发布。SQLite数据库页等仍未完成；U03、全部小元素、大字/滚动、主题和Windows/Linux参考逐状态仍开放，见[0.13.2开发验证](validation-0.13.2.md) | 统一条件下覆盖主窗口、菜单、表单、网格、设计器的全部视觉状态，消除差异。 |
+| U15 | 字体、颜色、图标、间距、边框、选中/禁用/焦点/悬浮 | ◐ | [18图标专项](validation-icons-navicat18.md)：保留Git211历史资格；bb4有限修正Oracle纯端口/profile、祖先横向裁剪、Atlas/Redis Enterprise直接别名及整个按钮刷新空白。bb4本机Cocoa334过/3条件跳过、默认2725过/662条件跳过；真实Oracle28phase/15unique全尺寸已看，新35phase GIF已按阶段审查。fixture DeferredDelete红绿单列；正式v0.13.1十项成功、15产物/六安装器及八公开下载字节审查通过，安装器不代表全部视觉通过。三条新观察中的成功/复制/关闭、Oracle裸加减/刷新及SQLite profile头已分片接入0.13.2；7ab的失败CI保留，6af默认2874过/662条件跳过、Cocoa494过/3条件跳过；正式12be十任务/15产物/六安装器及匿名八公开资产核验通过，公开ARM整包实际Cocoa、80模块/入口与6×4/17探针/精确清理另行通过。SQLite数据库页等仍未完成；U03、全部小元素、大字/滚动、主题和Windows/Linux参考逐状态仍开放，见[0.13.2开发验证](validation-0.13.2.md) | 统一条件下覆盖主窗口、菜单、表单、网格、设计器的全部视觉状态，消除差异。 |
 | U16 | 空数据、忙碌、进度、错误、取消、断线 | ◐ | 现有自定义提示未对齐 | 主动触发各状态并留图，核对按钮、文字、重试/取消及恢复路径。 |
 | U17 | 多窗口/标签、未保存文档、布局和设置持久化 | ◐ | 有草稿/几何，不等价参考布局行为 | 多对象/查询、改布局并重启，恢复顺序/焦点/关闭确认/设置作用域与参考一致。 |
 | U18 | 三平台 UI、DPI、输入法、键盘及无障碍 | ◐ | V 不构成 UI 对齐 | 获取各 OS 参考基线，验证原生菜单/文件窗、缩放、中文输入、焦点、读屏；不以 OS 差异保留无关布局。 |
@@ -95,7 +96,7 @@
 
 | ID | 必需能力 | 当前 | 依据/差距 | 关闭门禁所需验收 |
 | --- | --- | --- | --- | --- |
-| C01 | SQLite完整连接 | ◐ | E4/S-E/S-D 新/已有/:memory:/只读 | 枚举版本/格式、密码/加密、附加库等实际选项；连接、失败、重开和独立文件校验。 |
+| C01 | SQLite完整连接 | ◐ | E4/S-E/S-D 新/已有/:memory:/只读；SDB18已观察草稿sheet及单个plain ATTACH、同进程保存重开；完整加密/进程重启/附加工具与平台仍未验收 | 枚举版本/格式、密码/加密、Cipher Name算法及附加库等实际选项；官方18文档只声明入口，算法/codec需实看与加密fixture；连接、失败、重开和独立文件校验。 |
 | C02 | MySQL完整连接 | ◐ | E3/S-E/V有真实服务测试 | 全部认证、编码、兼容、高级/安全设置及适用版本；读写/元数据/取消/重连。 |
 | C03 | PostgreSQL完整连接 | ◐ | S-E/R03已有实际TLS/SSH核心验证；18全部选项/认证适用性仍未验收 | 全部认证/选项/schema行为、证书/主机验证及失败恢复和18参考等价。 |
 | C04 | MariaDB完整连接 | ◐ | S-E/V有真实11.4测试 | 原生选项和版本差异单独验收，不能只当改名MySQL；所有适用连接/认证case。 |

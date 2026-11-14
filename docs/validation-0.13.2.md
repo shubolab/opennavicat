@@ -1,9 +1,9 @@
-# 0.13.2 小控件续作（开发中，未发布）
+# 0.13.2 小控件与真实连接结果条
 
-2026-11-14，Asia/Shanghai。当前公开里程碑仍是 [v0.13.1](https://github.com/shubolab/opennavicat/releases/tag/v0.13.1)，
-固定源码 `b9261016de530dda0311683223a1862efdb05d26`。本页记录后续开发，不能借用其六安装器、
-正式 CI 或公开下载资格。完整 goal 保持 active，所有未完成 UI、工具和平台门禁继续由
-[完整矩阵](parity-matrix.md)追踪。
+2026-11-14，Asia/Shanghai。**[v0.13.2 预发布](https://github.com/shubolab/opennavicat/releases/tag/v0.13.2)**
+已公开，固定源码 `12be93d83116956beab1982c9a02bc3dedb19e77`。本页分别记录本机整合、
+main 预检、正式 tag、公开下载和公开应用运行，不借用 v0.13.1 的安装器或验证。
+完整 goal 保持 active，所有未完成 UI、工具和平台门禁由[完整矩阵](parity-matrix.md)追踪。
 
 ## 参考与实现边界
 
@@ -146,16 +146,62 @@ ORA/SP2 代码计数和有限状态。CLI 任意 stderr、环境和端点不写�
 后端 14 项通过但未复现旧 CI 退出 24，不解释其原因，也不冒充最终版本的 Linux CI 资格。
 最终整合源及新整轮 CI 仍需取得各自证据，不能回填到旧 CI。
 
-新 main [43555639933](https://github.com/shubolab/opennavicat/actions/runs/43555639933)
-绑定 `12be93d83116956beab1982c9a02bc3dedb19e77`，本次记录时八项必需任务通过，Windows
-ARM64 尚在执行。Windows amd64 原三项 PATH 用例实际 JUnit 均通过；Oracle 两架构各
-后端 14 项及窗口 3 项无跳过通过，源码和 owned 清理回执分别核对。新整轮、15 产物与
-六安装器字节尚未完成审查，不能把部分通过升为整轮资格。
+main [43555639933](https://github.com/shubolab/opennavicat/actions/runs/43555639933)
+现已终态成功：九个必需任务通过，publisher 按 main 条件跳过。Windows 两架构的旧三项
+PATH 生命周期用例均在实际 JUnit 通过；Oracle 两架构各后端 14 项及窗口 3 项无跳过通过。
+独立下载并核对 15 份 ZIP 的 API 身份、大小、digest、CRC 和解出文件树，六安装器实际
+字节、sidecar、两处 manifest、原生架构、安装/启动/卸载回执全部通过。
 
-目前没有 v0.13.2 tag 或 release，公开版本继续是 v0.13.1。正式发布仍需六原生目标的实际
-安装器、校验和、各目标验证以及匿名公开下载证据；完成前不替换当前公开版本链接。
+随后在已审 exact 12be 新建不可移动的 `v0.13.2` tag；正式
+[43558286471](https://github.com/shubolab/opennavicat/actions/runs/43558286471)
+十项任务全部成功，包含 publisher。正式 15 份 ZIP 全部来自该 run，六安装器重新下载与
+核验，未复用 main 字节。每份正式安装器的摘要均与 main 不同；以下是正式/公开字节。
+
+| 目标 | 文件字节 | SHA256 |
+| --- | ---: | --- |
+| linux-amd64 | 78636826 | `be9c920dd0e67d8f8db2897e2438f2d2de5a27c26c15e3f719aac89551fc505d` |
+| linux-arm64 | 77212558 | `aea0bb1d4cc7ed06d0a028bd0e3cbc607f8af637ac089cf210380c4374bd6f95` |
+| macos-amd64 | 53711191 | `cd3d7f741a708aabbee37f4502ec4b6ba725d3da3f730df670b03cbfd43a9e88` |
+| macos-arm64 | 52777995 | `eb362973cd89adef9b3ca41fb44aff9df6733c2d7129d9d8ea8195474a4c849e` |
+| windows-amd64 | 45435203 | `9c0e998fa0addd7b701fe8ed49534277c2457be1f9bad97207f6acb9d673356a` |
+| windows-arm64 | 36068311 | `5922569591728c1d43d36a1772f37cbbdc32c6f1120c39ef0c06924acb9d9c13` |
+
+六个目标的 frozen 与 installed 共 12 份实际 QPA 自报均与各步骤请求匹配：Linux 为 xcb、
+macOS 为 cocoa、Windows 为 windows。两次 DMG 仅为只读提取 helper，按精确设备正常
+卸载，之后独立核对 image/device 不存在。没有在审查机器上启动这些目标的应用或数据库。
+正式 Oracle 两架构仍分别后端 14 与窗口 3 项零跳过，四份可选 startup 均为 ready 且符合
+有界诊断 schema；ready 没有 server_log 合法，不伪造其内容或要求任意日志落盘。
+
+CI 上传的默认 JUnit 每个 Linux 架构为 2847 通过/671 条件跳过（3518），每个 macOS 架构
+为 2865/671（3536），每个 Windows 架构为 2745/809（3554），均零失败/错误。完整 CI
+默认测试 collect manifest 没有上传；另按冻结源码检查了七模块共 310 项函数/参数数量和
+JUnit membership，这只是局部静态核对，不能冒称已独立证明全 CI collect/run/JUnit 精确集合。
+本机 6af 的完整集合控制另见上表，不把其数量强加到不同平台的 CI。
+
+## 匿名公开下载与公开应用
+
+2026-11-14 **04:59:53 UTC** 发布为预发布，draft=false、prerelease=true，release ID
+445027340。匿名 curl 禁用配置、不带 Authorization、不使用认证 fallback；八项实际公开
+资产均 HTTP 200。六安装器、SHA256SUMS 和 build-manifests.json 的大小/digest 与 GitHub、
+正式 CI 字节及完整 target manifest 逐项相同，公开 tag 指向 exact 12be。正式文件摘要没有
+借用 main 的结果。公开 macOS ARM64 DMG 的完整应用已另行隔离运行 `--smoke-test`，不是 helper-only。
+实际自报 Cocoa/arm64/0.13.2，返回 6 行×4 列，Oracle 26.1.0 四项及其它十三项本地探针
+均 true；这些 Oracle flags 不代表数据库连接。80 自有模块及入口匹配正式 12be，ditto
+完整 404 文件/103 符号链接清单相同。root 已查看全尺寸截图，看到生成数据与主要图标；
+选项文字截断、浅色空白页签条等仍属开放视觉门禁，不用此截图关闭完整 UI。
+
+应用正常退出，精确 disk4 只读挂载已卸载、临时副本与目录消失；独立核对 owned image /
+mount 和所录十个 PID/PGID 均不存在。该运行绑定匿名公开 ARM 字节
+`eb362973cd89adef9b3ca41fb44aff9df6733c2d7129d9d8ea8195474a4c849e`，52,777,995 字节，
+没有借用本机 7ab 包或历史 v0.13.1 公开包。
+
+参考 SQLite 数据库页另取得九条新增运行观察与 sheet/取消/编辑/删除行为，记录在
+[后续数据库页合同](sqlite-connection-databases.md)，发生在本版本冻结之后，**不属于
+v0.13.2 的数据库页实现**。后续又取得有效普通 ATTACH 的真实 Test、Save 后 Off、显式打开、同进程关闭/重开和四行
+独立主/附加库数据观察；这些仍是参考取证，不是 v0.13.2 已实现数据库页或全部加密通过。
+
 SQLite 整体表单尺寸、配置栏其它模式、数据库页，Oracle 整体布局，以及全部菜单/向导、
 主题、焦点/悬浮/失活和 Windows/Linux 实际参考仍开放。参考复制按钮未点击、参考亮色
 成功底带未观察，完整 UI 与全部数据库工具功能在 Windows、Linux、macOS 的验收继续由
-[完整矩阵](parity-matrix.md)追踪；本轮小控件与局部通过不能关闭 U08、U15、C18 或完整
-工具门禁，完整 goal 保持 active。
+[完整矩阵](parity-matrix.md)追踪；本轮小控件、安装器和演示不能关闭 U08、U15、C01、C18
+或完整工具门禁，完整 goal 保持 active。

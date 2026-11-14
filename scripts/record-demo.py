@@ -1277,6 +1277,7 @@ def record(args, temporary, io_pool, mongo=None, mongo_config=None):
             # immutable snapshot on our serial I/O owner and wait before exit.
             proxy = object.__new__(Store)
             proxy.path, proxy.state = self.path, deepcopy(self.state)
+            proxy._sqlite_database_passwords = deepcopy(self._sqlite_database_passwords)
             background_io(Store.flush, proxy)
 
         def record_batch_job_run(self, job_id, result):

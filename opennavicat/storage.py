@@ -1,7 +1,7 @@
 """Local profiles, OS-keychain secrets, and query history."""
 from __future__ import annotations
 
-from contextlib import closing
+from contextlib import closing, contextmanager
 from copy import deepcopy
 
 import json
@@ -10,7 +10,7 @@ import os
 import re
 import sqlite3
 import uuid
-from dataclasses import asdict, replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -18,10 +18,20 @@ from PySide6.QtCore import QStandardPaths
 
 from .database import ConnectionConfig, SUPPORTED_DRIVERS
 from .query_language import LEGACY, LANGUAGES
+from .sqlite_database_config import (
+    CONNECTION_SECRET_FIELDS, connection_from_metadata, connection_metadata,
+    copy_connection_config, copy_sqlite_database_passwords, sqlite_database_binding,
+)
 
 
 _NAVICAT_NAMESPACE = uuid.UUID("9e8f2378-d17a-56f5-a6e1-2cb52b166378")
 _METADATA_FIELD = re.compile(r"[A-Za-z_][A-Za-z_0-9.-]{0,119}\Z")
+
+
+@dataclass(frozen=True)
+class _SQLiteDatabasePassword:
+    binding: tuple[str, bool]
+    value: str = field(repr=False)
 
 
 def _registry_alias_profiles(profiles, imports, platform):
@@ -105,10 +115,12 @@ class Store:
         if self.path.exists():
             try:
                 self.state.update(json.loads(self.path.read_text("utf-8")))
+                self.state["connections"] = self._connection_rows(self.state["connections"])
             except (ValueError, OSError) as exc:
                 raise RuntimeError(f"Could not read workspace {self.path}: {exc}") from exc
         self.passwords: dict[str, str] = {}
         self.secrets: dict[tuple[str, str], str] = {}
+        self._sqlite_database_passwords: dict[tuple[str, str], _SQLiteDatabasePassword] = {}
         self.history_path = self.directory / "history.sqlite3"
         with closing(sqlite3.connect(self.history_path)) as db, db:
             db.execute("CREATE TABLE IF NOT EXISTS history (id INTEGER PRIMARY KEY, created TEXT, connection_id TEXT, connection_name TEXT, sql TEXT, elapsed REAL, status TEXT)")
@@ -125,19 +137,82 @@ class Store:
             pass
 
     def flush(self):
+        # Redact connection records before opening the temporary file. SQL
+        # drafts/history and the other workspace collections remain verbatim.
+        candidate = {key: deepcopy(value) for key, value in self.state.items() if key != "connections"}
+        candidate["connections"] = self._connection_rows(self.state["connections"])
+        passwords = self._bound_sqlite_database_passwords(candidate["connections"])
         temporary = self.path.with_suffix(".tmp")
         with temporary.open("w", encoding="utf-8") as handle:
-            json.dump(self.state, handle, ensure_ascii=False, indent=2)
+            json.dump(candidate, handle, ensure_ascii=False, indent=2)
         try:
             temporary.chmod(0o600)
         except OSError:
             pass
         temporary.replace(self.path)
+        self.state["connections"] = candidate["connections"]
+        self._sqlite_database_passwords = passwords
+
+    @staticmethod
+    def _connection_rows(rows):
+        if type(rows) is not list:
+            raise ValueError("Invalid connection metadata list")
+        return [connection_metadata(connection_from_metadata(row)) for row in rows]
 
     def connections(self) -> list[ConnectionConfig]:
-        return [ConnectionConfig(**item) for item in self.state["connections"]]
+        return [connection_from_metadata(item) for item in self.state["connections"]]
 
-    SECRET_FIELDS = ("password", "ssh_password", "ssh_key_passphrase", "ssl_key_password")
+    SECRET_FIELDS = CONNECTION_SECRET_FIELDS
+
+    def _bound_sqlite_database_passwords(self, rows):
+        bindings = {}
+        for profile in rows:
+            entries = profile.get("sqlite_databases", [])
+            if entries and (type(profile["id"]) is not str or not profile["id"]):
+                raise ValueError("Invalid SQLite database profile identity")
+            for row in entries:
+                bindings[profile["id"], row["id"]] = row["database"], row["encrypted"]
+        return {key: secret for key, secret in self._sqlite_database_passwords.items()
+                if bindings.get(key) == secret.binding}
+
+    def _prune_sqlite_database_passwords(self):
+        self._sqlite_database_passwords = self._bound_sqlite_database_passwords(self.state["connections"])
+
+    def _sqlite_password_candidate(self, config):
+        supplied = copy_sqlite_database_passwords(config.sqlite_database_passwords, config.sqlite_databases)
+        candidate = {key: secret for key, secret in self._sqlite_database_passwords.items() if key[0] != config.id}
+        for row in config.sqlite_databases:
+            key, binding = (config.id, row.id), sqlite_database_binding(row)
+            previous = self._sqlite_database_passwords.get(key)
+            if row.id in supplied:
+                if supplied[row.id]:
+                    candidate[key] = _SQLiteDatabasePassword(binding, supplied[row.id])
+            elif previous is not None and previous.binding == binding:
+                candidate[key] = previous
+        return candidate
+
+    def _uses_sqlite_database_state(self, connection_id, config=None):
+        if config is not None and (config.sqlite_databases or config.sqlite_database_passwords):
+            return True
+        if any(key[0] == connection_id for key in self._sqlite_database_passwords):
+            return True
+        return any(row["id"] == connection_id and row.get("sqlite_databases") for row in self.state["connections"])
+
+    @contextmanager
+    def _sqlite_database_commit(self, connection_id, config=None):
+        """Candidate memory rollback; scalar keyring writes remain separate."""
+        if not self._uses_sqlite_database_state(connection_id, config):
+            yield
+            return
+        previous = self.state, self.passwords, self.secrets, self._sqlite_database_passwords
+        self.state = deepcopy(self.state)
+        self.passwords, self.secrets = self.passwords.copy(), self.secrets.copy()
+        self._sqlite_database_passwords = self._sqlite_database_passwords.copy()
+        try:
+            yield
+        except BaseException:
+            self.state, self.passwords, self.secrets, self._sqlite_database_passwords = previous
+            raise
 
     @staticmethod
     def _secret_key(connection_id, field):
@@ -167,11 +242,36 @@ class Store:
 
     def hydrate(self, config: ConnectionConfig) -> ConnectionConfig:
         """Return a copy with supplied/process/keychain secrets, never write them."""
-        return replace(config, **{field: self.secret(config, field) for field in self.SECRET_FIELDS})
+        hydrated = copy_connection_config(config)
+        for name in self.SECRET_FIELDS:
+            setattr(hydrated, name, self.secret(config, name))
+        for row in hydrated.sqlite_databases:
+            if row.id in hydrated.sqlite_database_passwords:
+                continue
+            secret = self._sqlite_database_passwords.get((hydrated.id, row.id))
+            if secret is not None and secret.binding == sqlite_database_binding(row):
+                hydrated.sqlite_database_passwords[row.id] = secret.value
+        return hydrated
 
     def save_connection(self, config: ConnectionConfig, remember: bool = False,
                         remember_ssh: bool = False, remember_ssl: bool = False,
                         remember_ssh_key: bool = False):
+        snapshot = copy_connection_config(config)
+        if self._uses_sqlite_database_state(config.id, snapshot):
+            if not snapshot.id:
+                snapshot.id = str(uuid.uuid4())
+            passwords = self._sqlite_password_candidate(snapshot)
+            with self._sqlite_database_commit(config.id, snapshot):
+                self._save_connection(snapshot, remember, remember_ssh, remember_ssl, remember_ssh_key)
+                self._sqlite_database_passwords = passwords
+                self._prune_sqlite_database_passwords()
+            config.id = snapshot.id
+            return copy_connection_config(snapshot)
+        self._save_connection(snapshot, remember, remember_ssh, remember_ssl, remember_ssh_key)
+        config.id = snapshot.id
+        return copy_connection_config(snapshot)
+
+    def _save_connection(self, config, remember, remember_ssh, remember_ssl, remember_ssh_key):
         if not config.id:
             config.id = str(uuid.uuid4())
         flags = {"password": remember, "ssh_password": remember_ssh,
@@ -220,9 +320,7 @@ class Store:
             self.state["remembered_secrets"][config.id] = remembered
         else:
             self.state["remembered_secrets"].pop(config.id, None)
-        value = asdict(config)
-        for field in self.SECRET_FIELDS:
-            value[field] = ""
+        value = connection_metadata(config)
         self.state["connections"] = [c for c in self.state["connections"] if c["id"] != config.id] + [value]
         imported = self.state.setdefault("navicat_imports", {}).get(config.id)
         if imported is not None:
@@ -278,7 +376,7 @@ class Store:
                     suffix += 1
                     identifier = str(uuid.uuid5(_NAVICAT_NAMESPACE, source_id + "\0collision\0" + str(suffix)))
             seen_ids.add(identifier)
-            value = asdict(profile.config)
+            value = connection_metadata(profile.config)
             value["id"] = identifier
             for field in self.SECRET_FIELDS:
                 value[field] = ""
@@ -376,6 +474,10 @@ class Store:
         return counts
 
     def delete_connection(self, connection_id: str):
+        with self._sqlite_database_commit(connection_id):
+            self._delete_connection(connection_id)
+
+    def _delete_connection(self, connection_id):
         for field in self.SECRET_FIELDS:
             try:
                 import keyring

@@ -22,6 +22,10 @@ from typing import Any, Iterator, TypedDict, Literal
 
 import sqlparse
 
+from .sqlite_database_config import (
+    SQLiteDatabaseEntry, copy_sqlite_database_passwords, decode_sqlite_databases,
+)
+
 
 SUPPORTED_DRIVERS = frozenset({"sqlite", "postgresql", "mysql", "mariadb", "sqlserver", "redis", "mongodb", "oracle"})
 
@@ -89,6 +93,13 @@ class ConnectionConfig:
     oracle_custom_database_list_enabled: bool = False
     oracle_custom_database_list: list[OracleDatabaseListEntry] = field(default_factory=list)
     oracle_notes: str = ""
+    sqlite_databases: tuple[SQLiteDatabaseEntry, ...] = field(default_factory=tuple, repr=False)
+    sqlite_database_passwords: dict[str, str] = field(default_factory=dict, repr=False)
+
+    def __post_init__(self):
+        self.sqlite_databases = decode_sqlite_databases(self.sqlite_databases)
+        self.sqlite_database_passwords = copy_sqlite_database_passwords(
+            self.sqlite_database_passwords, self.sqlite_databases)
 
 
 @dataclass

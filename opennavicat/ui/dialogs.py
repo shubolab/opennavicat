@@ -8,6 +8,7 @@ import hashlib
 import math
 import re
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QEvent, QRect, QThreadPool, QTimer, QSize, Signal, QRegularExpression
@@ -20,6 +21,7 @@ from PySide6.QtWidgets import (
 )
 
 from opennavicat.database import ConnectionConfig
+from .connection_test_banner import ConnectionTestBanner
 from .icons import tool_icon, toggle_icon
 
 
@@ -185,6 +187,12 @@ class _ConnectionDiagram(QWidget):
             painter.drawText(QRectF(center - 65, 104, 130, 24), Qt.AlignmentFlag.AlignCenter, "SSH Server")
 
 
+@dataclass(frozen=True)
+class _ConnectionProbeResult:
+    message: str
+    server_version: str = ''
+
+
 class ConnectionDialog(QDialog):
     """Native connection profile editor with an explicit asynchronous test action.
 
@@ -199,6 +207,8 @@ class ConnectionDialog(QDialog):
         self._original = config
         self._config = None
         self._testing = False
+        self._tested_driver = None
+        self._test_server_version = ''
         self._test_task = None
         self._test_pool = QThreadPool(self)
         self._test_pool.setMaxThreadCount(1)
@@ -210,6 +220,7 @@ class ConnectionDialog(QDialog):
         font.setPixelSize(12)
         self.setFont(font)
         outer = QVBoxLayout(self)
+        self._outer_layout = outer
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
         self.content = QWidget()
@@ -251,11 +262,13 @@ class ConnectionDialog(QDialog):
         self.settings_pane = right
         right.setObjectName("connectionSettingsPane")
         right_layout = QVBoxLayout(right)
+        self._settings_layout = right_layout
         right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setSpacing(0)
         self.tabs = QTabWidget()
         self.tabs.setObjectName("connectionTabs")
         self.tabs.setDocumentMode(False)
-        right_layout.addWidget(self.tabs)
+        right_layout.addWidget(self.tabs, 1)
         content.addWidget(right, 1)
 
         self.general_tab = QWidget()
@@ -572,6 +585,13 @@ class ConnectionDialog(QDialog):
         self.ssh_port_spin.valueChanged.connect(self._ssh_endpoint_changed)
         self.http_tab = self._unavailable_tab("使用 HTTP 通道", "HTTP 隧道尚未实现；此选项当前不可用。")
 
+        # In the observed SQLite form the result strip and footer belong to
+        # the settings column; the profile rail continues to the bottom.
+        self.sqlite_test_banner = ConnectionTestBanner(right)
+        self.sqlite_test_banner.status_label.setObjectName('sqliteConnectionTestStatus')
+        right_layout.addWidget(self.sqlite_test_banner)
+        self.test_finished.connect(self._display_test_result)
+
         footer = QFrame()
         self.footer = footer
         footer.setObjectName("connectionDialogFooter")
@@ -596,7 +616,12 @@ class ConnectionDialog(QDialog):
         footer_layout.addWidget(self.test_button)
         self.test_status = QLabel()
         self.test_status.setObjectName("connectionTestStatus")
+        self.test_status.setTextFormat(Qt.TextFormat.PlainText)
         footer_layout.addWidget(self.test_status, 1)
+        # When SQLite success moves into its strip, keep the trailing actions
+        # at the far edge even though the former expanding label is hidden.
+        footer_layout.addStretch(0)
+        self._test_footer_gap_index = footer_layout.count()-1
         self.buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
         self.buttons.button(QDialogButtonBox.StandardButton.Save).setText("保存")
         self.buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("取消")
@@ -766,6 +791,22 @@ class ConnectionDialog(QDialog):
         driver = self.driver_combo.currentData()
         previous_driver = getattr(self, "_active_driver", None)
         local = driver == "sqlite"
+        if driver != previous_driver:
+            self.sqlite_test_banner.clear_result()
+            self.test_status.clear()
+            self.test_status.setToolTip('')
+            self.test_status.show()
+            self.footer.layout().setStretch(self._test_footer_gap_index, 0)
+        self.footer.setFixedHeight(44 if local else 60)
+        self.footer.layout().setContentsMargins(18, 7 if local else 12, 20, 7 if local else 14)
+        if local != (self.footer.parentWidget() is self.settings_pane):
+            # Preserve the existing footer hierarchy for unobserved generic
+            # drivers while matching SQLite's observed right-column footer.
+            source = self._outer_layout if local else self._settings_layout
+            target = self._settings_layout if local else self._outer_layout
+            source.removeWidget(self.footer)
+            target.addWidget(self.footer)
+            self.footer.show()
         label = self.driver_combo.currentText()
         self.setWindowTitle(f"{label} - {'编辑连接' if self._original else '新建连接'}")
         self.diagram.driver = label
@@ -1075,10 +1116,22 @@ class ConnectionDialog(QDialog):
         # MongoSession.connect performs its authenticated ping directly.
         if config.driver == "sqlite":
             session.objects("main")
+            # Read the actual tested endpoint in its worker. No Qt object or
+            # live session crosses back into the GUI result presentation.
+            version = session.execute("SELECT sqlite_version()", limit=1)[0].rows[0][0]
+            return _ConnectionProbeResult("连接成功", str(version)[:512])
         return "连接成功"
 
     def _start_connection_test(self, config):
         """Run an already captured profile using the dialog's serial owner."""
+        # Oracle has its own initializer and result strip. Its override already
+        # resets that strip before delegating to this shared worker owner.
+        if hasattr(self, 'sqlite_test_banner'):
+            self.sqlite_test_banner.clear_result()
+            self.test_status.show()
+            self.footer.layout().setStretch(self._test_footer_gap_index, 0)
+        self._tested_driver = config.driver
+        self._test_server_version = ''
         self._testing = True
         self.content.setEnabled(False)
         self.buttons.setEnabled(False)
@@ -1108,7 +1161,27 @@ class ConnectionDialog(QDialog):
         self._test_pool.start(task)
 
     def _test_succeeded(self, message):
-        self._test_success_message = message
+        if isinstance(message, _ConnectionProbeResult):
+            self._test_success_message = message.message
+            self._test_server_version = message.server_version
+        else:
+            self._test_success_message = message
+            self._test_server_version = ''
+
+    def _display_test_result(self, success, message):
+        if self._tested_driver == 'sqlite' and self.driver_combo.currentData() == 'sqlite' and success:
+            version = self._test_server_version[:512]
+            detail = '服务器版本: ' + version
+            self.sqlite_test_banner.set_result(True, '连接成功', detail_text=detail,
+                copy_text='连接成功  ' + detail, tooltip=version)
+            self.test_status.hide()
+            self.footer.layout().setStretch(self._test_footer_gap_index, 1)
+        else:
+            # Failed SQLite tests and other drivers retain their prior footer
+            # text/tooltip. Their reference result surfaces are not observed.
+            self.sqlite_test_banner.clear_result()
+            self.test_status.show()
+            self.footer.layout().setStretch(self._test_footer_gap_index, 0)
 
     def _test_failed(self, error):
         self._test_error = error

@@ -27,7 +27,8 @@ def test_native_connection_tabs_profiles_and_config(qtbot):
     assert dialog.profile_pane.mapTo(dialog, QPoint()) == QPoint(20, 20)
     assert dialog.profile_pane.width() == 200
     assert dialog.settings_pane.mapTo(dialog, QPoint()) == QPoint(240, 20)
-    assert dialog.footer.height() == 60
+    assert dialog.footer.height() == 44  # Live 18.0.5 SQLite footer, below its result strip.
+    assert dialog.footer.parentWidget() is dialog.settings_pane
     assert dialog.driver_combo.isHidden()
     assert dialog.sqlite_mode_combo.isHidden()
     assert dialog.sqlite_existing_radio.isChecked()

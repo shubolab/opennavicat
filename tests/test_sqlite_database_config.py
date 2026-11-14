@@ -11,7 +11,7 @@ import pytest
 from opennavicat.database import ConnectionConfig
 from opennavicat.sqlite_database_config import (
     MAX_SQLITE_DATABASES, SQLiteDatabaseEntry, connection_from_metadata,
-    connection_metadata, decode_sqlite_databases, encode_sqlite_databases,
+    connection_metadata, decode_sqlite_databases, encode_sqlite_databases, with_sqlite_database_password,
 )
 from opennavicat.storage import Store
 
@@ -168,7 +168,7 @@ def test_changed_binding_or_removed_row_cannot_resurrect_old_cached_password(tmp
     elif changed == "removed":
         current.sqlite_databases = ()
     else:
-        current.sqlite_database_passwords = {"aux-id": ""}
+        current = with_sqlite_database_password(current, "aux-id", "")
     if changed != "explicit-empty":
         assert store.hydrate(current).sqlite_database_passwords == {}
     store.save_connection(current)
@@ -286,3 +286,33 @@ def test_delete_commits_cache_pruning_only_with_profile_commit(tmp_path, monkeyp
     else:
         store.delete_connection("owned-profile")
         assert not store.connections() and not store._sqlite_database_passwords
+
+
+@pytest.mark.parametrize("bindings", [
+    [], {"aux-id": "private-binding-payload"}, {"aux-id": ["owner"]},
+    {"aux-id": ["owner", "file", "private-binding-payload"]},
+])
+def test_malformed_runtime_bindings_fail_without_echoing_values(bindings):
+    with pytest.raises(ValueError) as captured:
+        ConnectionConfig("owner", "Owned", sqlite_databases=(entry(),),
+                         sqlite_database_passwords={"aux-id": "private-runtime-password"},
+                         sqlite_database_password_bindings=bindings)
+    assert "private-binding-payload" not in repr(captured.value)
+    assert "private-runtime-password" not in repr(captured.value)
+
+
+def test_missing_runtime_provenance_is_not_new_input():
+    value = ConnectionConfig("owner", "Owned", sqlite_databases=(entry(),),
+        sqlite_database_passwords={"aux-id": "private-runtime-password"}, sqlite_database_password_bindings={})
+    assert value.sqlite_database_passwords == value.sqlite_database_password_bindings == {}
+
+
+def test_failed_first_save_does_not_publish_generated_owner_or_move_the_carrier(tmp_path, monkeypatch):
+    store = Store(tmp_path)
+    value = config(entry(), passwords={"aux-id": "unsaved-memory-secret"}, identifier="")
+    bindings, state = deepcopy(value.sqlite_database_password_bindings), deepcopy(store.state)
+    monkeypatch.setattr(store, "flush", lambda: (_ for _ in ()).throw(OSError("controlled first save failure")))
+    with pytest.raises(OSError, match="controlled"):
+        store.save_connection(value)
+    assert value.id == "" and value.sqlite_database_password_bindings == bindings
+    assert not store.path.exists() and store.state == state and not store._sqlite_database_passwords

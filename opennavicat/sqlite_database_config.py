@@ -87,6 +87,55 @@ def sqlite_database_binding(entry: SQLiteDatabaseEntry) -> tuple[str, bool]:
     return row.database, row.encrypted
 
 
+def sqlite_database_password_binding(connection_id: str, entry: SQLiteDatabaseEntry) -> tuple[str, str, bool]:
+    """Provenance for a runtime carrier, including its original profile owner."""
+    _text(connection_id, 4096)
+    database, encrypted = sqlite_database_binding(entry)
+    return connection_id, database, encrypted
+
+
+def bound_sqlite_database_passwords(connection_id, entries, passwords, bindings):
+    """Keep provenance through copies; only an initial carrier binds itself."""
+    entries = decode_sqlite_databases(entries)
+    passwords = copy_sqlite_database_passwords(passwords, entries)
+    expected = {row.id: sqlite_database_password_binding(connection_id, row)
+                for row in entries if row.id in passwords}
+    if bindings is None:
+        # None is only the constructor's initial provided-credential state.
+        # Once normalized, even an empty carrier has an explicit sidecar.
+        return passwords, expected
+    if type(bindings) is not dict or len(bindings) > MAX_SQLITE_DATABASES:
+        raise ValueError("Invalid SQLite database password bindings")
+    original = {}
+    for key, value in bindings.items():
+        _text(key, 128, identifier=True)
+        if type(value) not in (list, tuple) or len(value) != 3:
+            raise ValueError("Invalid SQLite database password binding")
+        _text(value[0], 4096)
+        _text(value[1], 32768)
+        if type(value[2]) is not bool:
+            raise ValueError("Invalid SQLite database password binding")
+        original[key] = tuple(value)
+    accepted = {key: secret for key, secret in passwords.items() if original.get(key) == expected[key]}
+    return accepted, {key: expected[key] for key in accepted}
+
+
+def with_sqlite_database_password(config: ConnectionConfig, row_id: str, password: str) -> ConnectionConfig:
+    """Return a draft copy with explicitly new input bound to its current row.
+
+    This also supports re-entering an identical password after a file/flag
+    change, and explicit empty input to clear a prior credential.
+    """
+    snapshot = copy_connection_config(config)
+    row = next((entry for entry in snapshot.sqlite_databases if entry.id == row_id), None)
+    if row is None:
+        raise ValueError("Unknown SQLite database password identity")
+    supplied = copy_sqlite_database_passwords({row_id: password}, snapshot.sqlite_databases)
+    snapshot.sqlite_database_passwords[row_id] = supplied[row_id]
+    snapshot.sqlite_database_password_bindings[row_id] = sqlite_database_password_binding(snapshot.id, row)
+    return snapshot
+
+
 def connection_metadata(config: ConnectionConfig) -> dict:
     """Encode a profile with all runtime credential carriers explicitly empty."""
     from .database import ConnectionConfig
@@ -97,7 +146,7 @@ def connection_metadata(config: ConnectionConfig) -> dict:
     for item in fields(ConnectionConfig):
         if item.name in CONNECTION_SECRET_FIELDS:
             value[item.name] = ""
-        elif item.name == "sqlite_database_passwords":
+        elif item.name in {"sqlite_database_passwords", "sqlite_database_password_bindings"}:
             value[item.name] = {}
         elif item.name == "sqlite_databases":
             value[item.name] = encode_sqlite_databases(config.sqlite_databases)
@@ -114,7 +163,8 @@ def connection_from_metadata(value) -> ConnectionConfig:
     if type(value) is not dict or set(value) - known:
         raise ValueError("Invalid connection metadata fields")
     metadata = {key: deepcopy(item) for key, item in value.items()
-                if key not in CONNECTION_SECRET_FIELDS and key != "sqlite_database_passwords"}
+                if key not in CONNECTION_SECRET_FIELDS
+                and key not in {"sqlite_database_passwords", "sqlite_database_password_bindings"}}
     for key in CONNECTION_SECRET_FIELDS:
         metadata[key] = ""
     try:

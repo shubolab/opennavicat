@@ -20,7 +20,8 @@ from .database import ConnectionConfig, SUPPORTED_DRIVERS
 from .query_language import LEGACY, LANGUAGES
 from .sqlite_database_config import (
     CONNECTION_SECRET_FIELDS, connection_from_metadata, connection_metadata,
-    copy_connection_config, copy_sqlite_database_passwords, sqlite_database_binding,
+    bound_sqlite_database_passwords, copy_connection_config, sqlite_database_binding,
+    sqlite_database_password_binding,
 )
 
 
@@ -179,7 +180,8 @@ class Store:
         self._sqlite_database_passwords = self._bound_sqlite_database_passwords(self.state["connections"])
 
     def _sqlite_password_candidate(self, config):
-        supplied = copy_sqlite_database_passwords(config.sqlite_database_passwords, config.sqlite_databases)
+        supplied, _bindings = bound_sqlite_database_passwords(
+            config.id, config.sqlite_databases, config.sqlite_database_passwords, config.sqlite_database_password_bindings)
         candidate = {key: secret for key, secret in self._sqlite_database_passwords.items() if key[0] != config.id}
         for row in config.sqlite_databases:
             key, binding = (config.id, row.id), sqlite_database_binding(row)
@@ -251,6 +253,7 @@ class Store:
             secret = self._sqlite_database_passwords.get((hydrated.id, row.id))
             if secret is not None and secret.binding == sqlite_database_binding(row):
                 hydrated.sqlite_database_passwords[row.id] = secret.value
+                hydrated.sqlite_database_password_bindings[row.id] = sqlite_database_password_binding(hydrated.id, row)
         return hydrated
 
     def save_connection(self, config: ConnectionConfig, remember: bool = False,
@@ -258,17 +261,26 @@ class Store:
                         remember_ssh_key: bool = False):
         snapshot = copy_connection_config(config)
         if self._uses_sqlite_database_state(config.id, snapshot):
-            if not snapshot.id:
+            generated_id = not snapshot.id
+            if generated_id:
                 snapshot.id = str(uuid.uuid4())
+                # Only this successful-save allocation may migrate an empty
+                # draft owner; arbitrary profile edits must keep old provenance.
+                snapshot.sqlite_database_password_bindings = {
+                    row.id: sqlite_database_password_binding(snapshot.id, row)
+                    for row in snapshot.sqlite_databases if row.id in snapshot.sqlite_database_passwords}
             passwords = self._sqlite_password_candidate(snapshot)
             with self._sqlite_database_commit(config.id, snapshot):
                 self._save_connection(snapshot, remember, remember_ssh, remember_ssl, remember_ssh_key)
                 self._sqlite_database_passwords = passwords
                 self._prune_sqlite_database_passwords()
-            config.id = snapshot.id
-            return copy_connection_config(snapshot)
-        self._save_connection(snapshot, remember, remember_ssh, remember_ssl, remember_ssh_key)
+        else:
+            self._save_connection(snapshot, remember, remember_ssh, remember_ssl, remember_ssh_key)
         config.id = snapshot.id
+        # Publish the accepted carrier back only after commit. Otherwise the
+        # caller could restore a removed row and resurrect its stale sidecar.
+        config.sqlite_database_passwords = snapshot.sqlite_database_passwords.copy()
+        config.sqlite_database_password_bindings = deepcopy(snapshot.sqlite_database_password_bindings)
         return copy_connection_config(snapshot)
 
     def _save_connection(self, config, remember, remember_ssh, remember_ssl, remember_ssh_key):

@@ -23,7 +23,7 @@ from typing import Any, Iterator, TypedDict, Literal
 import sqlparse
 
 from .sqlite_database_config import (
-    SQLiteDatabaseEntry, copy_sqlite_database_passwords, decode_sqlite_databases,
+    SQLiteDatabaseEntry, bound_sqlite_database_passwords, decode_sqlite_databases,
 )
 
 
@@ -95,11 +95,12 @@ class ConnectionConfig:
     oracle_notes: str = ""
     sqlite_databases: tuple[SQLiteDatabaseEntry, ...] = field(default_factory=tuple, repr=False)
     sqlite_database_passwords: dict[str, str] = field(default_factory=dict, repr=False)
+    sqlite_database_password_bindings: dict[str, tuple[str, str, bool]] | None = field(default=None, repr=False)
 
     def __post_init__(self):
         self.sqlite_databases = decode_sqlite_databases(self.sqlite_databases)
-        self.sqlite_database_passwords = copy_sqlite_database_passwords(
-            self.sqlite_database_passwords, self.sqlite_databases)
+        self.sqlite_database_passwords, self.sqlite_database_password_bindings = bound_sqlite_database_passwords(
+            self.id, self.sqlite_databases, self.sqlite_database_passwords, self.sqlite_database_password_bindings)
 
 
 @dataclass

@@ -87,18 +87,23 @@ def sqlite_database_binding(entry: SQLiteDatabaseEntry) -> tuple[str, bool]:
     return row.database, row.encrypted
 
 
-def sqlite_database_password_binding(connection_id: str, entry: SQLiteDatabaseEntry) -> tuple[str, str, bool]:
+def sqlite_database_password_binding(connection_id: str, entry: SQLiteDatabaseEntry, *,
+                                     cipher_name: str = "", page_size: int = 0) -> tuple:
     """Provenance for a runtime carrier, including its original profile owner."""
     _text(connection_id, 4096)
     database, encrypted = sqlite_database_binding(entry)
+    if encrypted:
+        from .sqlite_encryption_config import decode_sqlite_encryption_fields
+        decode_sqlite_encryption_fields(True, cipher_name, page_size)
+        return connection_id, database, True, cipher_name, page_size
     return connection_id, database, encrypted
 
 
-def bound_sqlite_database_passwords(connection_id, entries, passwords, bindings):
+def bound_sqlite_database_passwords(connection_id, entries, passwords, bindings, *, cipher_name="", page_size=0):
     """Keep provenance through copies; only an initial carrier binds itself."""
     entries = decode_sqlite_databases(entries)
     passwords = copy_sqlite_database_passwords(passwords, entries)
-    expected = {row.id: sqlite_database_password_binding(connection_id, row)
+    expected = {row.id: sqlite_database_password_binding(connection_id, row, cipher_name=cipher_name, page_size=page_size)
                 for row in entries if row.id in passwords}
     if bindings is None:
         # None is only the constructor's initial provided-credential state.
@@ -109,12 +114,17 @@ def bound_sqlite_database_passwords(connection_id, entries, passwords, bindings)
     original = {}
     for key, value in bindings.items():
         _text(key, 128, identifier=True)
-        if type(value) not in (list, tuple) or len(value) != 3:
+        if type(value) not in (list, tuple) or len(value) not in (3, 5):
             raise ValueError("Invalid SQLite database password binding")
         _text(value[0], 4096)
         _text(value[1], 32768)
         if type(value[2]) is not bool:
             raise ValueError("Invalid SQLite database password binding")
+        if len(value) == 5:
+            from .sqlite_encryption_config import decode_sqlite_encryption_fields
+            decode_sqlite_encryption_fields(value[2], value[3], value[4])
+            if value[2] is not True:
+                raise ValueError("Invalid SQLite database password binding")
         original[key] = tuple(value)
     accepted = {key: secret for key, secret in passwords.items() if original.get(key) == expected[key]}
     return accepted, {key: expected[key] for key in accepted}
@@ -132,7 +142,8 @@ def with_sqlite_database_password(config: ConnectionConfig, row_id: str, passwor
         raise ValueError("Unknown SQLite database password identity")
     supplied = copy_sqlite_database_passwords({row_id: password}, snapshot.sqlite_databases)
     snapshot.sqlite_database_passwords[row_id] = supplied[row_id]
-    snapshot.sqlite_database_password_bindings[row_id] = sqlite_database_password_binding(snapshot.id, row)
+    snapshot.sqlite_database_password_bindings[row_id] = sqlite_database_password_binding(
+        snapshot.id, row, cipher_name=snapshot.sqlite_cipher_name, page_size=snapshot.sqlite_cipher_page_size)
     return snapshot
 
 

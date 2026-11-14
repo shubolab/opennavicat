@@ -8,6 +8,7 @@ import pytest
 from opennavicat.database import ConnectionConfig
 from opennavicat.sqlite_database_config import (
     CONNECTION_SECRET_FIELDS, connection_from_metadata, connection_metadata, copy_connection_config,
+    SQLiteDatabaseEntry, with_sqlite_database_password,
 )
 from opennavicat.sqlite_encryption_config import (
     SQLITE_CIPHER_NAMES, SQLITE_CIPHER_PAGE_SIZES, bound_sqlite_encryption_password,
@@ -133,3 +134,35 @@ def test_malformed_runtime_binding_is_rejected_without_value_echo(binding):
     with pytest.raises(ValueError) as captured:
         config(sqlite_encryption_password_binding=binding)
     assert "generated-private-binding" not in str(captured.value)
+
+
+def attached_config(**changes):
+    return config(sqlite_databases=(SQLiteDatabaseEntry("aux", "aux", "aux.sqlite", True),),
+                  sqlite_database_passwords={"aux": "generated-attached-secret"}, **changes)
+
+
+@pytest.mark.parametrize("field,value", [("sqlite_cipher_name", "sqlcipher legacy v4"),
+                                         ("sqlite_cipher_page_size", 8192)])
+def test_encrypted_attachment_key_does_not_rebind_after_cipher_page_edit(field, value):
+    source = attached_config(sqlite_cipher_name="aes256cbc legacy")
+    assert source.sqlite_database_password_bindings["aux"] == (
+        "generated-owner", "aux.sqlite", True, "aes256cbc legacy", 0)
+    setattr(source, field, value)
+    copied = copy_connection_config(source)
+    assert copied.sqlite_database_passwords == copied.sqlite_database_password_bindings == {}
+    explicit = with_sqlite_database_password(copied, "aux", "generated-attached-secret")
+    assert copy_connection_config(explicit).sqlite_database_passwords == {"aux": "generated-attached-secret"}
+
+
+def test_old_encrypted_attachment_three_part_carrier_fails_closed():
+    source = attached_config(sqlite_database_password_bindings={"aux": ("generated-owner", "aux.sqlite", True)})
+    assert source.sqlite_database_passwords == source.sqlite_database_password_bindings == {}
+
+
+def test_plain_attachment_three_part_carrier_is_compatible_and_does_not_supply_main_key():
+    source = config(sqlite_databases=(SQLiteDatabaseEntry("aux", "aux", "aux.sqlite", False),),
+                    sqlite_database_passwords={"aux": "generated-plain-row-carrier"},
+                    sqlite_database_password_bindings={"aux": ("generated-owner", "aux.sqlite", False)})
+    assert source.sqlite_database_password_bindings["aux"] == ("generated-owner", "aux.sqlite", False)
+    source.sqlite_encryption_password = ""
+    assert copy_connection_config(source).sqlite_encryption_password == ""

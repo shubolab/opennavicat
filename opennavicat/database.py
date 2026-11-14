@@ -97,7 +97,7 @@ class ConnectionConfig:
     sqlite_open_mode: Literal["legacy", "existing", "create"] = "legacy"
     sqlite_databases: tuple[SQLiteDatabaseEntry, ...] = field(default_factory=tuple, repr=False)
     sqlite_database_passwords: dict[str, str] = field(default_factory=dict, repr=False)
-    sqlite_database_password_bindings: dict[str, tuple[str, str, bool]] | None = field(default=None, repr=False)
+    sqlite_database_password_bindings: dict[str, tuple] | None = field(default=None, repr=False)
     sqlite_encryption_enabled: bool = False
     sqlite_cipher_name: str = ""
     sqlite_cipher_page_size: int = 0
@@ -109,7 +109,8 @@ class ConnectionConfig:
             raise ValueError("Invalid SQLite database open mode")
         self.sqlite_databases = decode_sqlite_databases(self.sqlite_databases)
         self.sqlite_database_passwords, self.sqlite_database_password_bindings = bound_sqlite_database_passwords(
-            self.id, self.sqlite_databases, self.sqlite_database_passwords, self.sqlite_database_password_bindings)
+            self.id, self.sqlite_databases, self.sqlite_database_passwords, self.sqlite_database_password_bindings,
+            cipher_name=self.sqlite_cipher_name, page_size=self.sqlite_cipher_page_size)
         decode_sqlite_encryption_fields(self.sqlite_encryption_enabled, self.sqlite_cipher_name, self.sqlite_cipher_page_size)
         self.sqlite_encryption_password, self.sqlite_encryption_password_binding = normalize_sqlite_encryption_password(self, initial=True)
 

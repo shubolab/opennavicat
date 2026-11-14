@@ -1,6 +1,8 @@
 # 0.13.2 实际演示的 SQLite Test 阶段
 
-这是录制器开发记录；测试通过不代表已经完成本机 Cocoa 录制、逐阶段审图或发布 GIF。
+已在 exact `59fa01ddc48fea0b605a8322478010b4adcff17a` 完成本机实际 Cocoa 录制，
+36 阶段、492 帧、82 秒；逐阶段代表帧和首中尾联系表已审查，GIF 与原回执精确复制至 README。
+这不代表已发布 0.13.2 安装器或完成三平台完整 UI 验收，详见[验证记录](validation-0.13.2.md)。
 
 `--include-sqlite-test` 在全部既有工作流之后、Oracle 表单之前增加一个阶段
 `sqlite_connection_test`。全部扩展选项合用时从 35 阶段变为 36 阶段，未启用此选项时

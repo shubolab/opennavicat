@@ -1,0 +1,98 @@
+{
+  "schema_version": 7,
+  "captured_at_utc": "2026-11-14T04:09:23.732651+00:00",
+  "handoff": "2026-11-14-small-controls.md",
+  "previous_handoff": "2026-11-14-goal-resume.md",
+  "goal": {
+    "status": "active",
+    "complete": false,
+    "full_parity_verified": false,
+    "priority": "Align all icons and small visual elements"
+  },
+  "repository": {
+    "remote": "git@github.com:shubolab/opennavicat.git",
+    "workspace": "/Users/wangshubo/.codex/worktrees/small-controls-0132/opennavicat",
+    "branch": "codex_small_controls_0132",
+    "qualified_source": "6af4335232e9cfadb5f9c3668490fc22c86da9e2",
+    "source_inputs": 250,
+    "version": "0.13.2"
+  },
+  "public_release": {
+    "tag": "v0.13.1",
+    "source": "b9261016de530dda0311683223a1862efdb05d26",
+    "prerelease": true,
+    "v0_13_2_tag_or_release": false
+  },
+  "local_checks": {
+    "default": {
+      "source": "6af4335",
+      "passed": 2874,
+      "skipped": 662,
+      "total": 3536,
+      "failed": 0
+    },
+    "cocoa": {
+      "source": "6af4335",
+      "passed": 494,
+      "skipped": 3,
+      "total": 497,
+      "failed": 0,
+      "modules": 17
+    },
+    "native_package": {
+      "built_and_run_source": "7ab0f58",
+      "actual_qpa": "cocoa",
+      "architecture": "arm64",
+      "sample": [
+        6,
+        4
+      ],
+      "current_static_checks": 24,
+      "own_modules": 80,
+      "current_source_rebuilt_or_reexecuted": false
+    }
+  },
+  "demo": {
+    "source": "59fa01ddc48fea0b605a8322478010b4adcff17a",
+    "phases": 36,
+    "frames": 492,
+    "seconds": 82.0,
+    "bytes": 1923259,
+    "sha256": "d0bcdd75f7cb27d65003c2b84ea8bf20677b734b99fdeac08b1cd9c5e9982e1b",
+    "actual_qpa": "cocoa",
+    "all_frames_decoded": true,
+    "marker_and_33_driver_roi_source_color_max_error": 0,
+    "all_phase_manual_review": "passed: 36 full-size representatives and 36 first/middle/last contact sheets",
+    "canonical_readme_replaced": true,
+    "independent_exact_container_and_two_volume_absence": true,
+    "temporary_app_paths_independently_retained": false,
+    "all_frames_manual_view_or_ocr_claimed": false
+  },
+  "historical_failed_ci": {
+    "run": 43551247449,
+    "source": "7ab0f58",
+    "required_pass": 6,
+    "required_fail": 3,
+    "publisher": "skipped",
+    "artifacts": 13,
+    "expected_artifacts": 15,
+    "six_installers_qualified": false,
+    "failures": [
+      "Windows amd64 PATH child tests",
+      "Windows arm64 PATH child tests",
+      "Oracle ARM fixture exit24; cause unknown"
+    ]
+  },
+  "new_ci": {
+    "status": "awaiting next main push",
+    "qualification_claimed": false
+  },
+  "open_gates": [
+    "Full icons and all UI states",
+    "SQLite database tab and full form proportions",
+    "All retained database tool functionality",
+    "Windows and Linux actual reference",
+    "Six current installers",
+    "Formal tag and anonymous eight downloads"
+  ]
+}

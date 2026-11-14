@@ -74,8 +74,10 @@ def test_explicit_same_password_input_binds_the_new_metadata(tmp_path, kind):
     runtime.sqlite_databases = (changed(runtime.sqlite_databases[0], kind),)
     fresh = codec.with_sqlite_database_password(runtime, "row", "same-owned-secret")
     assert fresh is not runtime
-    assert fresh.sqlite_database_password_bindings["row"] == (
-        "owner", fresh.sqlite_databases[0].database, fresh.sqlite_databases[0].encrypted)
+    expected = ("owner", fresh.sqlite_databases[0].database, fresh.sqlite_databases[0].encrypted)
+    if fresh.sqlite_databases[0].encrypted:
+        expected += (fresh.sqlite_cipher_name, fresh.sqlite_cipher_page_size)
+    assert fresh.sqlite_database_password_bindings["row"] == expected
     assert store.hydrate(fresh).sqlite_database_passwords == {"row": "same-owned-secret"}
     store.save_connection(fresh)
     assert store.hydrate(store.connections()[0]).sqlite_database_passwords == {"row": "same-owned-secret"}

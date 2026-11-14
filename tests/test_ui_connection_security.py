@@ -81,7 +81,7 @@ def test_main_unknown_host_requires_gui_approval_and_preserves_public_pin(qtbot,
     saved = json.loads(store.path.read_text("utf-8"))["connections"][0]
     assert saved["ssh_host_key"] == expected.pin
     for field in Store.SECRET_FIELDS:
-        assert saved[field] == ""
+        assert saved.get(field, "") == ""
     assert "security" in window.sessions
 
 

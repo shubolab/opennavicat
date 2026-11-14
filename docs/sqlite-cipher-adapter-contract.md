@@ -133,3 +133,9 @@ legacy/非零页大小组合均真实创建、关闭重开、同配置备份后 
 空目标备份均实际重开/quick_check/两行/错 key/标准库拒读；另 5 个正常 cipher 的独立
 8192 字节页原件经过相同目标路径后仍可读取。非空或未保留的目标先失败，既有内容
 不变。含此扩展专项为 **198 项通过、零跳过/失败/error**。
+
+0.14 原子导入清理再增加固定 rollback/savepoint API。停止 progress callback 只解决
+Python 取消标记妨碍清理的问题，不保证任意外部 held reader 下原生 interrupt 已退休。
+独立探针确认：未耗尽 reader 保持 busy 时 rollback 可报 SQLITE_INTERRUPT，关闭 reader
+后再 rollback 成功。当前产品会话在 finally 关闭各 cursor 后才做异常事务清理；本适配
+层仍不宣称全 DBAPI held-cursor 兼容。

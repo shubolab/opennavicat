@@ -1,0 +1,79 @@
+{
+  "schema": 1,
+  "scope": "macOS arm64 provider/model/backend leaf at pinned local commit; not six-target product acceptance",
+  "source_commit": "777c4aeeb46eaf1c617c06100bcc6e29e3f8c8a4",
+  "host": "Darwin",
+  "machine": "arm64",
+  "python": "3.13.11",
+  "provider": "apsw-sqlite3mc==3.54.0.0",
+  "source_sha256": {
+    "opennavicat/database.py": "9eac1d4456b19561af5942ada3b94c2b810d2d3f11ec6831a5667fc4db1083b2",
+    "opennavicat/sqlite_cipher_provider.py": "3bdb6ca1c25824809852c579f17c4f9901567da0b0307a83bc586e2777284b4e",
+    "opennavicat/sqlite_encryption_config.py": "c39de66a85baad1fb76ef2eeeed30cc3cad6e475adc60ce47f52f23be3075bfb",
+    "opennavicat/sqlite_database_config.py": "342129f02f5416a4865ea256772457369d87c8199a6c95cd52d02f998349148b",
+    "tests/test_sqlite_cipher_provider.py": "a2e1a59eaec8f505b9b30240710c01e981de5370dbba8c1712cd833acdb15c66",
+    "tests/test_sqlite_cipher_backend.py": "7345a0b4053acbdd9d872c67671e8b591d04b005318c3b08aeb73e8948d1a9e6",
+    "tests/test_sqlite_encryption_config.py": "0b302e6b29f7b67542665cc07902d649ceba61024f196ee2d2c331e012ef9614",
+    "tests/test_sqlite_database_execution.py": "8293e7bad72ac7462b1c72dbe8e7f83a4284a6194297398e0e577d12c33e118a"
+  },
+  "receipts": {
+    "provider-rollback-tests": {
+      "tests": 200,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "junit_sha256": "f68db2d142abf9ee2c6080f0cce72164d960d376940ee68d5ce0785492aeb368",
+      "log_sha256": "5200f4c43615ea0943c7bc8e00073eeac11260c2d3bf9c616c27d5bdf4a4160b"
+    },
+    "backend-atomic-cancellation-tests": {
+      "tests": 154,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "junit_sha256": "5da812f444e12d9110ccb0f33378e8b50a1b62310fe90a2ee2babf90630da5c2",
+      "log_sha256": "46e02046cab830cd2410c58a4a9acad0f57985af2bb6b28ca4e0a06a3a464a86"
+    },
+    "provider-page-size-clamping-red": {
+      "tests": 170,
+      "failures": 3,
+      "errors": 0,
+      "skipped": 0,
+      "junit_sha256": "577b7dd5e2409d56144cc42bd6d3b898ebd46a599a47b94cc4c160196d942fad",
+      "log_sha256": "eef71a64a22405a5331bf86758f0919a7e2fe63751dff047b5b9c629b44ca869"
+    }
+  },
+  "native_backend": {
+    "supported_labels": 14,
+    "model_tests": 60,
+    "plain_execution_regressions": 41,
+    "backend_workflows": 53,
+    "mc_backup_product_gate": "prewrite rejected; standalone reserved-target helper is separate and not integrated",
+    "main_and_attachment_keys_bound": true,
+    "plain_main_explicit_factory": true,
+    "plain_attachment_explicit_empty_key": true,
+    "create_existing_only_after_reservation": true,
+    "observed_factory_replacement_unchanged": true,
+    "between_row_batch_cancel_atomic": true,
+    "between_row_savepoint_cancel_retains_real_outer": true,
+    "inflight_native_dml_probe_outer_transaction": "engine rolled back outer; reported explicitly; no replay; independent reader only original committed two rows"
+  },
+  "owned_resources": {
+    "reference_provider_fixtures": 14,
+    "reference_provider_hashes_unchanged": 14,
+    "reference_provider_sidecars": 0,
+    "reference_fixtures_and_downloaded_wheels_retained_for_review": true,
+    "new_gui_connections_created_by_this_leaf": 0,
+    "reverse_read_owned_copy_removed": true,
+    "pytest_tmp_policy": "generated owned fixtures use pytest-managed temporary directories; no global tmp cleanup"
+  },
+  "remaining": [
+    "product encrypted main backup integration",
+    "encrypted attachment backup metadata",
+    "full reference inheritance and nonzero page-size acceptance",
+    "full rekey/format conversion",
+    "WAL/recovery workflows",
+    "six-target native installers and complete tool/UI parity"
+  ],
+  "direct_provider_boundary": "A held unexhausted reader can retain native SQLITE_INTERRUPT and prevent rollback until closed; current DatabaseSession closes cursors in finally before cleanup",
+  "independent_busy_reader_probe_sha256": "136a5636068d9129f42692e804805b69d705c47aa6a01d52803914cf221eea22"
+}

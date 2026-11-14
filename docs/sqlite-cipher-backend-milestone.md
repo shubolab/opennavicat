@@ -46,3 +46,14 @@ batch/savepoint 并保留先前 outer 行。另一个真实 native DML/trigger �
 了整个 outer transaction：会话 in_transaction 变 false，同连接与独立只读连接均只有
 原先两条已提交数据、无 batch/outer 新行；错误明确报告 entire transaction 回滚。
 不会重放/猜补外层写入，不把 between-row 结果推广为所有 in-flight 取消都保留外层。
+
+上述 cleanup 适用于当前会话路径：`_cursor` 在 finally 关闭 reader/DML cursor，初始化
+execute 也使用 closing，截断读取离开 context 即关闭。外部直接使用 provider 并保留
+未耗尽 reader 时，原生 interrupt 可以持续生效，固定 rollback 仍可能报 SQLITE_INTERRUPT；
+关闭该 reader 后才可清理。这不是对任意 held-cursor 场景的全 DBAPI 回滚保证，独立
+复核边界探针保留；当前源码核查没有 normal session 的这条触发链。
+
+本地提交及源码/测试/原始收据哈希见
+[macOS arm64 后端叶收据](evidence/sqlite-cipher-backend-macos-arm64.json)。该收据固定指向
+本叶 source commit，包含独立备用 target helper；产品 main 若未集成该 helper，不能把
+收据误称为其整包源码或六目标测试证明。

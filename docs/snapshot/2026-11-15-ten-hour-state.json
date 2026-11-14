@@ -1,6 +1,6 @@
 {
   "schema_version": 11,
-  "captured_at_utc": "2026-11-14T16:03:50Z",
+  "captured_at_utc": "2026-11-14T16:29:00Z",
   "handoff": "2026-11-15-ten-hour-resume.md",
   "previous_handoff": "2026-11-14-small-controls.md",
   "time_budget": {
@@ -21,8 +21,8 @@
     "remote": "git@github.com:shubolab/opennavicat.git",
     "workspace": "/Users/wangshubo/.codex/worktrees/sqlite-databases/opennavicat",
     "branch": "codex_sqlite_databases",
-    "head_at_capture": "dad8c5d1a0a1d30f8116567737678711603feced",
-    "remote_main_at_capture": "4855e8f4df86d1bcc405309b8415c884879d8d3b",
+    "head_at_capture": "e942ab0b15b721d4fdda237cb54e4a6f5981b12d",
+    "remote_main_at_capture": "e942ab0b15b721d4fdda237cb54e4a6f5981b12d",
     "integration_uncommitted_at_capture": true,
     "push_pending": true,
     "product_inputs_equal_to": "b0e407af5f8f8ad4e9fd269270c39e6808d00265"
@@ -35,9 +35,9 @@
   },
   "checks": {
     "default": {
-      "source": "b0e407af5f8f8ad4e9fd269270c39e6808d00265",
-      "total": 3825,
-      "passed": 3152,
+      "source": "e942ab0b15b721d4fdda237cb54e4a6f5981b12d",
+      "total": 3829,
+      "passed": 3156,
       "skipped": 673,
       "failed": 0,
       "errors": 0,
@@ -83,18 +83,21 @@
     }
   },
   "ci": {
-    "run": 43609330345,
-    "source": "4855e8f4df86d1bcc405309b8415c884879d8d3b",
+    "run": 43613934365,
+    "source": "e942ab0b15b721d4fdda237cb54e4a6f5981b12d",
     "status": "completed",
-    "conclusion": "failure",
-    "required_pass": 8,
-    "required_fail": 1,
-    "failure": "Oracle ARM SYSTEM password reset",
+    "conclusion": "success",
+    "required_pass": 9,
+    "required_fail": 0,
+    "failure": null,
     "desktop_targets_passed": 6,
     "native_ui_each": 67,
     "publisher": "skipped",
     "six_installer_bytes_audited": false,
-    "next_run_pending": true
+    "next_run_pending": true,
+    "independent_audit_blocker": "Windows default helper upload differs from actual test snapshot; no large installer request or release",
+    "validation_zip_count_verified": 9,
+    "frozen_helper_input_followup": "uncommitted at capture"
   },
   "demo": {
     "source": "487584d5ea1ee6357c49c46566cf2d4e91b81345",

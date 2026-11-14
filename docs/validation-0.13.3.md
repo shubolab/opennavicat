@@ -234,3 +234,22 @@ all-primary-fill-exact 门禁保持 false。次要背景/文字/线条区域众�
 窄 combo、预览表头与 AND combo、密集页签仍有限制，选项底部为可滚动 viewport；
 stream 两页仍是生成命令、OK 和耗时的 text-only 结果。U15/U08、全部功能及三平台参考
 继续开放。当前公开安装器仍为 v0.13.2。
+
+
+## 完整 helper 字节审查发现的问题
+
+冻结 `e942ab0b15b721d4fdda237cb54e4a6f5981b12d` 本机完整默认测试为
+3,829 项：3,156 通过、673 条件跳过，零失败；源码、helper 与两次 collection/JUnit
+对应。远端 main run [43613934365](https://github.com/shubolab/opennavicat/actions/runs/43613934365)
+的九个必需任务全部成功，包含六目标安装 smoke 与两架构 Oracle，publisher 按 main 跳过。
+
+九份 validation ZIP 已逐份核验 API 身份、大小、摘要、CRC 和解包文件树。安装器下载
+前的独立审查发现 Windows 默认测试记录的 raw helper 与末尾上传的 helper 字节不一致，
+因此停止在小收据阶段，未开始大安装器下载、未打 tag、未发布。这不否定测试前后相等
+的原记录，但末尾文件不能冒充测试实际使用的文件。原失败与原 ZIP 全部保留。
+
+runner 现增加只写一次的 `helper-inputs/` 实际字节快照与映射；它在任何 collect/run
+子进程开始前核对并保存原 helper，结束时再核对快照、映射和原路径的前后哈希。
+后续打包重新编译不再覆盖测试使用的字节证据；独立审查必须按新源码能力读取快照，
+历史 e942 不回填。新增真实文件篡改/路径/覆盖控制，runner 23 项通过。下一冻结候选
+仍需重新执行完整本地与六目标 CI，以及全部安装器字节审查。

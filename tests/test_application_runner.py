@@ -103,3 +103,64 @@ def test_child_uses_full_pyproject_scope_and_records_same_session_collection(tmp
     assert ("--collect-only" in calls) is (phase == "collect")
     assert "error" in calls and "pytestqt.plugin" in calls and "addopts=" in calls
     assert (tmp_path / (phase + "-cases.json")).read_text().strip() == '[\n  "tests/test_owned.py::test_one"\n]'
+
+
+def helper_input(tmp_path, monkeypatch):
+    import hashlib
+    relative = 'artifacts/js-engine/opennavicat-js.exe'
+    source = tmp_path / 'repo' / relative
+    source.parent.mkdir(parents=True)
+    source.write_bytes(b'generated-original-test-helper')
+    monkeypatch.setattr(runner, 'ROOT', tmp_path / 'repo')
+    content = source.read_bytes()
+    hashes = {relative: {'sha256': hashlib.sha256(content).hexdigest(), 'bytes': len(content)}}
+    out = tmp_path / 'result'
+    out.mkdir()
+    return relative, source, hashes, out
+
+
+def test_frozen_helper_retains_test_bytes_after_later_package_rebuild(tmp_path, monkeypatch):
+    relative, source, hashes, out = helper_input(tmp_path, monkeypatch)
+    frozen = runner.freeze_helper_inputs(out, hashes)
+    source.write_bytes(b'generated-later-package-helper')
+    assert runner.verify_frozen_helper_inputs(out, hashes, frozen)
+    assert (out / frozen[relative]['stored_path']).read_bytes() == b'generated-original-test-helper'
+    with pytest.raises(RuntimeError, match='changed'):
+        runner.freeze_helper_inputs(out, hashes)
+
+
+@pytest.mark.parametrize('mutation', ['bytes', 'index', 'inventory', 'address', 'symlink'])
+def test_retained_helper_tampering_is_rejected(tmp_path, monkeypatch, mutation):
+    import json
+    relative, source, hashes, out = helper_input(tmp_path, monkeypatch)
+    frozen = runner.freeze_helper_inputs(out, hashes)
+    target = out / frozen[relative]['stored_path']
+    if mutation == 'bytes':
+        target.write_bytes(b'generated-tampered')
+    elif mutation == 'index':
+        (out / 'helper-inputs.json').write_text('{}')
+    elif mutation == 'inventory':
+        hashes = {}
+    elif mutation == 'address':
+        frozen[relative]['stored_path'] = '../external'
+        (out / 'helper-inputs.json').write_text(json.dumps(frozen))
+    else:
+        target.unlink()
+        target.symlink_to(source)
+    with pytest.raises(RuntimeError, match='Retained'):
+        runner.verify_frozen_helper_inputs(out, hashes, frozen)
+
+
+def test_freezing_helper_never_overwrites_an_existing_snapshot(tmp_path, monkeypatch):
+    relative, source, hashes, out = helper_input(tmp_path, monkeypatch)
+    frozen = runner.freeze_helper_inputs(out, hashes)
+    target = out / frozen[relative]['stored_path']
+    with pytest.raises(FileExistsError):
+        runner.freeze_helper_inputs(out, hashes)
+    assert target.read_bytes() == source.read_bytes()
+
+
+@pytest.mark.parametrize('relative', ['/external/helper', '../helper', 'artifacts/other/helper'])
+def test_helper_snapshot_address_cannot_escape_expected_inputs(tmp_path, monkeypatch, relative):
+    with pytest.raises(RuntimeError, match='address'):
+        runner.freeze_helper_inputs(tmp_path, {relative: {'bytes': 1, 'sha256': 'generated'}})

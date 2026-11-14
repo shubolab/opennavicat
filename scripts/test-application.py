@@ -106,6 +106,44 @@ def helper_snapshot(*, required=False):
     return hashes
 
 
+def freeze_helper_inputs(out, hashes):
+    """Retain the actual test inputs before a later package build replaces them."""
+    frozen = {}
+    for relative, expected in hashes.items():
+        path = Path(relative)
+        if path.is_absolute() or ".." in path.parts or path.parts[:2] != ("artifacts", "js-engine"):
+            raise RuntimeError("Invalid native helper input address")
+        source = ROOT / path
+        if not source.is_file() or source.is_symlink():
+            raise RuntimeError("Native helper input must remain a regular file")
+        content = source.read_bytes()
+        if len(content) != expected["bytes"] or hashlib.sha256(content).hexdigest() != expected["sha256"]:
+            raise RuntimeError("Native helper changed before its input bytes were retained")
+        stored = Path("helper-inputs") / path
+        target = out / stored
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with target.open("xb") as stream:
+            stream.write(content)
+        frozen[relative] = {**expected, "stored_path": stored.as_posix()}
+    write(out / "helper-inputs.json", frozen)
+    return frozen
+
+
+def verify_frozen_helper_inputs(out, hashes, frozen):
+    if set(hashes) != set(frozen) or json.loads((out / "helper-inputs.json").read_text(encoding="utf-8")) != frozen:
+        raise RuntimeError("Retained native helper input inventory changed")
+    for relative, expected in hashes.items():
+        stored = Path("helper-inputs") / relative
+        record = {**expected, "stored_path": stored.as_posix()}
+        target = out / stored
+        if frozen[relative] != record or not target.is_file() or target.is_symlink():
+            raise RuntimeError("Retained native helper input address changed")
+        content = target.read_bytes()
+        if len(content) != expected["bytes"] or hashlib.sha256(content).hexdigest() != expected["sha256"]:
+            raise RuntimeError("Retained native helper input bytes changed")
+    return True
+
+
 def git_snapshot(revision, paths):
     return {path: hashlib.sha256(subprocess.check_output(["git", "show", revision + ":" + path], cwd=ROOT)).hexdigest()
             for path in paths}
@@ -154,7 +192,7 @@ def main(argv=None):
     revision = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     receipt = {"passed": False, "run_id": uuid.uuid4().hex, "source_revision": revision,
                "human_reference_acceptance": False, "conditional_skips_allowed": True}
-    before, helper_before, owned = None, None, None
+    before, helper_before, frozen_helpers, owned = None, None, None, None
     def interrupted(_number, _frame):
         raise KeyboardInterrupt
     for number in (signal.SIGINT, signal.SIGTERM):
@@ -168,6 +206,7 @@ def main(argv=None):
             raise RuntimeError("Default verification requires committed source bytes")
         helper_before = helper_snapshot(required=args.require_native_helper)
         write(out / "helper-before.json", helper_before)
+        frozen_helpers = freeze_helper_inputs(out, helper_before)
         owner_file = "windows_child_owner.py" if os.name == "nt" else "test-sqlite-window.py"
         spec = importlib.util.spec_from_file_location("default_child_owner", ROOT / "scripts" / owner_file)
         owner = importlib.util.module_from_spec(spec)
@@ -210,12 +249,14 @@ def main(argv=None):
             helper_after = helper_snapshot(required=args.require_native_helper)
             write(out / "helper-after.json", helper_after)
             receipt["helper_equal_before_after"] = helper_before is not None and helper_before == helper_after
+            receipt["helper_inputs_frozen"] = verify_frozen_helper_inputs(out, helper_before, frozen_helpers)
         except Exception as error:
-            receipt.update(helper_equal_before_after=False, helper_error_class=type(error).__name__)
+            receipt.update(helper_equal_before_after=False, helper_inputs_frozen=False, helper_error_class=type(error).__name__)
         receipt["same_head"] = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip() == revision
         receipt["owned_store_removed"] = owned is not None and not owned.exists()
         receipt["passed"] = bool(receipt["passed"] and receipt["source_equal_before_after_git"]
-                                 and receipt["helper_equal_before_after"] and receipt["same_head"] and receipt["owned_store_removed"])
+                                 and receipt["helper_equal_before_after"] and receipt["helper_inputs_frozen"]
+                                 and receipt["same_head"] and receipt["owned_store_removed"])
         if args.junit_output and (out / "junit.xml").exists():
             args.junit_output.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(out / "junit.xml", args.junit_output)

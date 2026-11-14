@@ -1,0 +1,5 @@
+# Native qualification compares source bytes with Git blobs on every OS.
+* text=auto eol=lf
+*.gif binary
+*.png binary
+*.ico binary

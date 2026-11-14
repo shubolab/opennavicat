@@ -461,6 +461,34 @@ class CipherConnection:
                 self._raw.set_progress_handler(self._native_progress, self._progress_n)
         return _call(self._module, cleanup)
 
+    def _backup_configuration(self):
+        """Return only certified keyed-main format metadata, without a key."""
+        self._check()
+        if self._main_keyed is not True or type(self._codec) is not tuple or len(self._codec) != 2:
+            raise sqlite3.NotSupportedError("Encrypted SQLite backup requires known keyed main cipher settings")
+        cipher, legacy = self._codec
+        _configuration(cipher, legacy)
+        page_size = _call(self._module, lambda: self._raw.pragma("page_size", schema="main"))
+        if type(page_size) is not int or page_size not in (512, 1024, 2048, 4096, 8192, 16384, 32768, 65536):
+            raise sqlite3.NotSupportedError("Encrypted SQLite backup requires a known valid page size")
+        _configuration(cipher, legacy, page_size if legacy in (1, 2, 3, 4) else 0)
+        return cipher, legacy, page_size
+
+    def open_backup_target(self, database, *, key):
+        """Open an exclusively reserved empty target with this main's format.
+
+        The caller must reserve its new file first. Existing-only open and an
+        empty catalog check precede key configuration. No header is materialized
+        here, allowing the caller to recheck file ownership before backup writes.
+        The original or a deliberately supplied target key stays in memory only.
+        """
+        cipher, legacy, page_size = self._backup_configuration()
+        if not isinstance(key, str) or not key or "\0" in key:
+            raise sqlite3.ProgrammingError("Encrypted SQLite requires a nonempty NUL-free key")
+        return _open_connection(database, key=key, cipher=cipher, legacy=legacy,
+            page_size=page_size if legacy in (1, 2, 3, 4) else 0, database_page_size=page_size,
+            read_only=False, create=False, timeout=5.0, uri=False)
+
     def backup(self, target, *, pages=-1, progress=None, name="main", sleep=.250):
         self._check()
         if (not isinstance(target, CipherConnection) or target is self or target._module is not self._module
@@ -471,13 +499,10 @@ class CipherConnection:
         # reserve/page configurations can report a completed copy that cannot
         # be reopened. This leaf accepts only known identical main codecs;
         # attached-schema metadata is not yet tracked by a dedicated API.
-        if (name != "main" or self._main_keyed is not True or self._codec is None
-                or self._codec != target._codec):
+        if name != "main":
             raise sqlite3.NotSupportedError("Encrypted SQLite backup requires matching known main cipher settings")
-        source_page_size = _call(self._module, lambda: self._raw.pragma("page_size", schema="main"))
-        target_page_size = _call(self._module, lambda: target._raw.pragma("page_size", schema="main"))
-        if type(source_page_size) is not int or source_page_size != target_page_size:
-            raise sqlite3.NotSupportedError("Encrypted SQLite backup requires matching page sizes")
+        if self._backup_configuration() != target._backup_configuration():
+            raise sqlite3.NotSupportedError("Encrypted SQLite backup requires matching main cipher and page sizes")
         if type(pages) is not int or pages == 0 or sleep < 0:
             raise sqlite3.ProgrammingError("Invalid encrypted SQLite backup bounds")
         if self.in_transaction or target.in_transaction:
@@ -524,10 +549,13 @@ def connect_plain_main(database, *, read_only=False, create=False, timeout=5.0, 
                             create=create, timeout=timeout, uri=uri)
 
 
-def _open_connection(database, *, key, cipher, legacy, page_size, read_only, create, timeout, uri):
+def _open_connection(database, *, key, cipher, legacy, page_size, read_only, create, timeout, uri, database_page_size=0):
     if (any(type(flag) is not bool for flag in (read_only, create, uri)) or read_only and create
             or type(timeout) not in (int, float) or not 0 <= timeout <= 2147483):
         raise sqlite3.ProgrammingError("Invalid encrypted SQLite open options")
+    if (type(database_page_size) is not int or database_page_size not in (0, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536)
+            or database_page_size and (read_only or create)):
+        raise sqlite3.ProgrammingError("Invalid encrypted SQLite empty target page layout")
     try:
         filename = os.fspath(database)
     except (TypeError, ValueError):
@@ -548,6 +576,10 @@ def _open_connection(database, *, key, cipher, legacy, page_size, read_only, cre
         nonlocal raw
         raw = module.Connection(filename, flags=flags, statementcachesize=0)
         raw.set_busy_timeout(round(timeout * 1000))
+        if database_page_size:
+            if raw.pragma("page_count") != 0:
+                raise sqlite3.NotSupportedError("Encrypted SQLite backup target must be an empty reserved file")
+            raw.pragma("page_size", database_page_size)
         codec = None
         if key is not None:
             if raw.pragma("cipher", cipher) != cipher:
@@ -567,6 +599,8 @@ def _open_connection(database, *, key, cipher, legacy, page_size, read_only, cre
         raw.execute("SELECT 1 FROM main.sqlite_schema LIMIT 1", can_cache=False).fetchall()
         if page_size and raw.pragma("page_size") != page_size:
             raise sqlite3.NotSupportedError("The SQLite provider did not apply the requested page size")
+        if database_page_size and raw.pragma("page_size") != database_page_size:
+            raise sqlite3.NotSupportedError("The SQLite provider did not apply the backup page layout")
         if create and raw.pragma("page_count") == 0:
             raw.pragma("user_version", raw.pragma("user_version"))
         return CipherConnection(module, raw, main_keyed=key is not None, codec=codec)

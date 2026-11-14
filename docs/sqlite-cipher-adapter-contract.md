@@ -122,3 +122,14 @@ legacy/非零页大小组合均真实创建、关闭重开、同配置备份后 
 
 原 [89 项收据](evidence/sqlite-cipher-adapter-3.54.0.0.json) 的源码、冻结包和测试哈希
 对应独立适配层 d4b9103 快照；其冻结验证不覆盖后续预检或页大小修正。
+
+为后端 main 备份新增 `open_backup_target(database, key=...)`。它从可信 keyed main
+读取实际 cipher/legacy/page_size，目标须由调用方先独占保留；factory 用 existing-only
+打开，先拒绝非空文件，再配置同格式及调用方显式 key。返回时文件仍为零字节，调用方
+可在 copy 前再次检查文件归属，不会先把外来替换物化成加密 header。
+
+正常模式也可有非默认实际页大小。此 target factory 通过空目标的 SQLite page_size
+正式参数保留实际值，而不把 UI 的 legacy 参数擅自应用于正常 cipher。14 个配置的
+空目标备份均实际重开/quick_check/两行/错 key/标准库拒读；另 5 个正常 cipher 的独立
+8192 字节页原件经过相同目标路径后仍可读取。非空或未保留的目标先失败，既有内容
+不变。含此扩展专项为 **198 项通过、零跳过/失败/error**。

@@ -546,6 +546,86 @@ def test_matching_cipher_backup_reopens_two_rows_with_target_key(tmp_path, nativ
     assert before == (sha(source_path), sha(target_path))
 
 
+@pytest.mark.parametrize("cipher,legacy", VARIANTS)
+def test_reserved_empty_backup_target_uses_certified_source_format_without_early_write(tmp_path, native, cipher, legacy):
+    source_path, target_path = tmp_path / "generated-source.sqlite", tmp_path / "generated-reserved.sqlite"
+    source = provider.connect(source_path, key="generated-source-key", cipher=cipher, legacy=legacy, create=True)
+    target = None
+    try:
+        source.execute("CREATE TABLE generated_facts(id INTEGER PRIMARY KEY,label TEXT)").close()
+        source.executemany("INSERT INTO generated_facts VALUES (?,?)", [(1, "first"), (2, "second")]).close()
+        with target_path.open("xb"):
+            pass
+        target = source.open_backup_target(target_path, key="generated-target-key")
+        assert target_path.read_bytes() == b""
+        assert target._backup_configuration() == source._backup_configuration()
+        source.backup(target)
+    finally:
+        if target is not None:
+            target.close()
+        source.close()
+    reopened = provider.connect(target_path, key="generated-target-key", cipher=cipher, legacy=legacy, read_only=True)
+    try:
+        assert reopened.execute("PRAGMA quick_check").fetchone() == ("ok",)
+        assert reopened.execute("SELECT * FROM generated_facts ORDER BY id").fetchall() == [(1, "first"), (2, "second")]
+    finally:
+        reopened.close()
+    with pytest.raises(sqlite3.DatabaseError):
+        provider.connect(target_path, key="generated-source-key", cipher=cipher, legacy=legacy, read_only=True)
+    with sqlite3.connect(target_path.as_uri() + "?mode=ro", uri=True) as ordinary:
+        with pytest.raises(sqlite3.DatabaseError):
+            ordinary.execute("SELECT * FROM sqlite_schema").fetchall()
+    ordinary.close()
+
+
+@pytest.mark.parametrize("cipher", ["aes128cbc", "aes256cbc", "chacha20", "sqlcipher", "ascon128"])
+def test_backup_target_preserves_actual_nondefault_page_size_for_normal_cipher(tmp_path, native, cipher):
+    source_path, target_path = tmp_path / "generated-8192.sqlite", tmp_path / "generated-copy.sqlite"
+    raw = native.Connection(str(source_path))
+    raw.pragma("page_size", 8192)
+    raw.pragma("cipher", cipher)
+    raw.pragma("key", "generated-source-key")
+    raw.execute("CREATE TABLE generated_facts(id INTEGER PRIMARY KEY,label TEXT)")
+    raw.executemany("INSERT INTO generated_facts VALUES (?,?)", [(1, "first"), (2, "second")])
+    raw.close()
+    source = provider.connect(source_path, key="generated-source-key", cipher=cipher)
+    target = None
+    try:
+        assert source.execute("PRAGMA page_size").fetchone() == (8192,)
+        with target_path.open("xb"):
+            pass
+        target = source.open_backup_target(target_path, key="generated-target-key")
+        assert target_path.read_bytes() == b"" and target.execute("PRAGMA page_size").fetchone() == (8192,)
+        source.backup(target)
+    finally:
+        if target is not None:
+            target.close()
+        source.close()
+    reopened = provider.connect(target_path, key="generated-target-key", cipher=cipher, read_only=True)
+    try:
+        assert reopened.execute("PRAGMA page_size").fetchone() == (8192,)
+        assert reopened.execute("PRAGMA quick_check").fetchone() == ("ok",)
+        assert reopened.execute("SELECT * FROM generated_facts ORDER BY id").fetchall() == [(1, "first"), (2, "second")]
+    finally:
+        reopened.close()
+
+
+def test_backup_target_requires_reserved_empty_file_and_never_changes_existing_database(tmp_path, connection):
+    missing = tmp_path / "generated-missing.sqlite"
+    with pytest.raises(sqlite3.OperationalError):
+        connection.open_backup_target(missing, key="generated-target-key")
+    assert not missing.exists()
+    existing = tmp_path / "generated-existing.sqlite"
+    with sqlite3.connect(existing) as ordinary:
+        ordinary.execute("CREATE TABLE generated_original(id INTEGER)")
+        ordinary.execute("PRAGMA user_version=73")
+    ordinary.close()
+    before = sha(existing)
+    with pytest.raises(sqlite3.NotSupportedError):
+        connection.open_backup_target(existing, key="generated-target-key")
+    assert sha(existing) == before
+
+
 @pytest.mark.parametrize("cipher,legacy", (
     ("aes128cbc", None), ("chacha20", None), ("sqlcipher", None), ("rc4", None), ("ascon128", None),
     ("aes128cbc", 1), ("aes256cbc", 1), ("chacha20", 1), ("rc4", 1),

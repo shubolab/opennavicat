@@ -263,6 +263,8 @@ class ConnectionDialog(QDialog):
         self._creating = False
         self._pending_sqlite_creation = None
         self._sqlite_revision = 0
+        self._sqlite_prompting = False
+        self._test_origin_state = None
         self._tested_driver = None
         self._test_server_version = ''
         self._test_task = None
@@ -733,6 +735,10 @@ class ConnectionDialog(QDialog):
         self.sqlite_databases_page.changed.connect(self._sqlite_profile_changed)
         self.sqlite_advanced_tab.changed.connect(self._sqlite_advanced_changed)
         self.remember_check.toggled.connect(self._general_password_state)
+        for signal in (self.name_edit.textChanged, self.user_edit.textChanged,
+                       self.password_edit.textChanged, self.remember_check.toggled,
+                       self.driver_combo.currentIndexChanged):
+            signal.connect(self._sqlite_prompt_metadata_changed)
 
     @staticmethod
     def _restore_mongo_choice(combo, value):
@@ -997,6 +1003,20 @@ class ConnectionDialog(QDialog):
 
     def _sqlite_encryption_endpoint_changed(self, *_):
         self.sqlite_advanced_tab.set_endpoint(self.sqlite_databases_page.connection_id, self.database_edit.text())
+
+    def _sqlite_prompt_metadata_changed(self, *_):
+        self._sqlite_revision += 1
+
+    def _sqlite_prompt_state(self):
+        """Immutable UI origin for modal/worker lifetime checks, never logged."""
+        advanced = self.sqlite_advanced_tab
+        return (self._sqlite_revision, self.driver_combo.currentData(),
+                self.sqlite_databases_page.connection_id, self.sqlite_databases_page._revision,
+                self.name_edit.text(), self.database_edit.text(), self.sqlite_mode_combo.currentData(),
+                self.user_edit.text(), self.password_edit.text(), self.remember_check.isChecked(),
+                self.read_only_check.isChecked(), self.timeout_spin.value(),
+                advanced.encrypted_check.isChecked(), advanced.cipher_combo.currentText(),
+                advanced.page_size_edit.text(), advanced.remember_check.isChecked(), advanced.password_edit.text())
 
     def _sqlite_advanced_changed(self):
         self._sqlite_profile_changed()
@@ -1298,7 +1318,7 @@ class ConnectionDialog(QDialog):
         return str(path)
 
     def accept(self):
-        if self._testing:
+        if self._testing or getattr(self, "_sqlite_prompting", False):
             return
         try:
             config = self._collect_config()
@@ -1360,7 +1380,7 @@ class ConnectionDialog(QDialog):
         return self._config
 
     def test_connection(self):
-        if self._testing or (self.driver_combo.currentData() == "sqlite" and self.sqlite_mode_combo.currentData() == "create"):
+        if self._testing or getattr(self, "_sqlite_prompting", False) or (self.driver_combo.currentData() == "sqlite" and self.sqlite_mode_combo.currentData() == "create"):
             return
         self._sqlite_profile_changed()
         try:
@@ -1378,19 +1398,27 @@ class ConnectionDialog(QDialog):
         self._start_connection_test(config)
 
     def _sqlite_password_snapshot(self, config):
+        if self._sqlite_prompting:
+            return None
         if config.driver == "sqlite" and config.sqlite_encryption_enabled:
             from opennavicat.sqlite_encryption_config import (
                 bound_sqlite_encryption_password, with_sqlite_encryption_password,
             )
             if not self.remember_sqlite_encryption_password or not bound_sqlite_encryption_password(config):
-                revision = self._sqlite_revision
-                password, accepted = QInputDialog.getText(self, "连接密码 - " + config.name,
-                    "数据库加密密码:", QLineEdit.EchoMode.Password)
-                if not accepted:
-                    return None
-                config = with_sqlite_encryption_password(config, password)
-                if revision == self._sqlite_revision:
+                origin = self._sqlite_prompt_state()
+                self._sqlite_prompting = True
+                try:
+                    password, accepted = QInputDialog.getText(self, "连接密码 - " + config.name,
+                        "数据库加密密码:", QLineEdit.EchoMode.Password)
+                    if not accepted or origin != self._sqlite_prompt_state():
+                        return None
+                    if type(password) is not str or not password or len(password) > 65536:
+                        QMessageBox.warning(self, "数据库加密密码", "请输入非空且不超过 65536 个字符的数据库加密密码。")
+                        return None
+                    config = with_sqlite_encryption_password(config, password)
                     self.sqlite_advanced_tab.set_password(password)
+                finally:
+                    self._sqlite_prompting = False
         return config
 
     def _reset_sqlite_test_diagram(self):
@@ -1436,6 +1464,7 @@ class ConnectionDialog(QDialog):
             self.test_status.show()
             self.footer.layout().setStretch(self._test_footer_gap_index, 0)
         self._tested_driver = config.driver
+        self._test_origin_state = self._sqlite_prompt_state() if config.driver == "sqlite" else None
         self._test_sqlite_secrets = self._sqlite_secrets(config) if config.driver == "sqlite" else ()
         self._test_server_version = ''
         self._testing = True
@@ -1533,7 +1562,14 @@ class ConnectionDialog(QDialog):
         self.content.setEnabled(True)
         self.buttons.setEnabled(True)
         self._update_sqlite_test_state()
-        if approved:
+        stale = (self._tested_driver == "sqlite" and self._test_origin_state != self._sqlite_prompt_state())
+        self._test_origin_state = None
+        if stale:
+            message = "连接设置已更改，请重新测试。"
+            self.test_status.setText(message)
+            self.test_status.setToolTip("")
+            self.test_finished.emit(False, message)
+        elif approved:
             self.test_connection()
         elif error is not None:
             message = str(error)
@@ -1545,15 +1581,15 @@ class ConnectionDialog(QDialog):
             self.test_finished.emit(True, self._test_success_message)
 
     def reject(self):
-        if not self._testing:
+        if not self._testing and not getattr(self, "_sqlite_prompting", False):
             super().reject()
 
     def done(self, result):
-        if not self._testing:
+        if not self._testing and not getattr(self, "_sqlite_prompting", False):
             super().done(result)
 
     def closeEvent(self, event):
-        if self._testing:
+        if self._testing or getattr(self, "_sqlite_prompting", False):
             event.ignore()
             return
         super().closeEvent(event)

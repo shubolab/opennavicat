@@ -1,10 +1,11 @@
 """GUI credential capture and the asynchronous SQLite creation protocol."""
 import json
 import threading
+import pytest
 from PySide6.QtCore import Qt, QThread
 from PySide6.QtWidgets import QDialog, QInputDialog, QMessageBox
 
-from opennavicat.database import ConnectionConfig
+from opennavicat.database import ConnectionConfig, QueryResult
 from opennavicat.sqlite_encryption_config import bound_sqlite_encryption_password, with_sqlite_encryption_password
 from opennavicat.sqlite_database_config import SQLiteDatabaseEntry, with_sqlite_database_password
 from opennavicat.ui.dialogs import ConnectionDialog
@@ -66,7 +67,7 @@ def test_test_captures_password_on_gui_and_remember_off_never_copies_it_to_draft
     assert bound_sqlite_encryption_password(original) == "generated remembered key"
 
 
-def test_missing_remembered_key_is_explicit_input_and_stale_modal_never_rebinds_it(qtbot, tmp_path, monkeypatch):
+def test_stale_modal_aborts_without_dispatching_or_rebinding_its_key(qtbot, tmp_path, monkeypatch):
     widget, original = dialog(qtbot, tmp_path)
     snapshots = []
     def prompt(*args):
@@ -75,11 +76,73 @@ def test_missing_remembered_key_is_explicit_input_and_stale_modal_never_rebinds_
     monkeypatch.setattr(QInputDialog, "getText", prompt)
     monkeypatch.setattr(widget, "_start_connection_test", snapshots.append)
     widget.test_connection()
-    assert snapshots[0].sqlite_cipher_name == "aes256cbc"
-    assert bound_sqlite_encryption_password(snapshots[0]) == "generated captured key"
+    assert snapshots == []
     assert widget.sqlite_advanced_tab.cipher_combo.currentText() == "chacha20"
     assert widget.sqlite_advanced_tab.password_edit.text() == ""
     assert bound_sqlite_encryption_password(widget._collect_config()) == ""
+
+
+@pytest.mark.parametrize("change", ["driver", "path", "name", "mode", "cipher_revert", "remember_revert", "enabled_revert"])
+def test_modal_origin_change_always_aborts_even_after_value_revert(qtbot, tmp_path, monkeypatch, change):
+    widget, original = dialog(qtbot, tmp_path)
+    def prompt(*args):
+        if change == "driver":
+            widget.driver_combo.setCurrentIndex(widget.driver_combo.findData("postgresql"))
+        elif change == "path":
+            widget.database_edit.setText(str(tmp_path / "generated-changed.sqlite"))
+        elif change == "name":
+            widget.name_edit.setText("Generated changed")
+        elif change == "mode":
+            widget.sqlite_mode_combo.setCurrentIndex(widget.sqlite_mode_combo.findData("create"))
+        elif change == "cipher_revert":
+            widget.sqlite_advanced.cipher_combo.setEditText("chacha20")
+            widget.sqlite_advanced.cipher_combo.setEditText("aes256cbc")
+        elif change == "remember_revert":
+            widget.set_remember_sqlite_encryption(False); widget.set_remember_sqlite_encryption(True)
+        else:
+            widget.sqlite_advanced.encrypted_check.setChecked(False); widget.sqlite_advanced.encrypted_check.setChecked(True)
+        return "generated stale key", True
+    snapshots = []
+    monkeypatch.setattr(QInputDialog, "getText", prompt)
+    monkeypatch.setattr(widget, "_start_connection_test", snapshots.append)
+    widget.test_connection()
+    assert snapshots == [] and not widget._sqlite_prompting and not widget._testing
+    assert widget.get_config() is None and widget.sqlite_advanced.password_edit.text() == ""
+
+
+@pytest.mark.parametrize("creating", [False, True])
+def test_password_modal_guards_nested_test_accept_and_close(qtbot, tmp_path, monkeypatch, creating):
+    widget, _ = dialog(qtbot, tmp_path)
+    if creating:
+        widget.read_only_check.setChecked(False)
+        widget.sqlite_mode_combo.setCurrentIndex(widget.sqlite_mode_combo.findData("create"))
+    prompts, snapshots, requests = [], [], []
+    widget.create_requested.connect(lambda token, config: requests.append((token, config)))
+    def prompt(*args):
+        prompts.append(True)
+        widget.test_connection(); widget.accept(); widget.reject(); widget.close()
+        assert widget.isVisible()
+        return "generated guarded key", True
+    monkeypatch.setattr(QInputDialog, "getText", prompt)
+    monkeypatch.setattr(widget, "_start_connection_test", snapshots.append)
+    if creating: widget.accept()
+    else: widget.test_connection()
+    assert len(prompts) == 1 and not widget._sqlite_prompting
+    assert len(requests) == int(creating) and len(snapshots) == int(not creating)
+    if creating:
+        monkeypatch.setattr(QMessageBox, "warning", lambda *args: None)
+        widget.finish_sqlite_creation(requests[0][0], error=ValueError("generated completion"))
+
+
+@pytest.mark.parametrize("key", ["", "x" * 65537], ids=["empty", "too-long"])
+def test_invalid_prompt_password_never_starts_worker(qtbot, tmp_path, monkeypatch, key):
+    widget, _ = dialog(qtbot, tmp_path)
+    messages, snapshots = [], []
+    monkeypatch.setattr(QInputDialog, "getText", lambda *args: (key, True))
+    monkeypatch.setattr(QMessageBox, "warning", lambda *args: messages.append(args[-1]))
+    monkeypatch.setattr(widget, "_start_connection_test", snapshots.append)
+    widget.test_connection()
+    assert not snapshots and messages and not widget._sqlite_prompting and not widget._testing
 
 
 def test_loaded_key_is_used_only_for_unchanged_remembered_binding(qtbot, tmp_path, monkeypatch):
@@ -200,6 +263,36 @@ def test_encrypted_test_worker_failure_closes_and_redacts_its_captured_key(qtbot
     assert widget._test_sqlite_secrets == () and widget._test_error is None
     widget.close()
     assert not widget.isVisible()
+
+
+def test_old_worker_success_never_marks_changed_cipher_as_connected(qtbot, tmp_path, monkeypatch):
+    widget, _ = dialog(qtbot, tmp_path, remembered=True)
+    started, release = threading.Event(), threading.Event()
+    class SlowSession:
+        def __init__(self, config): self.config = config
+        def connect(self):
+            started.set()
+            assert release.wait(5)
+        def execute(self, sql, **kwargs):
+            return [QueryResult(["version"], [["generated version"]])]
+        def objects(self, *args): return []
+        def close(self): pass
+    monkeypatch.setattr("opennavicat.database.DatabaseSession", SlowSession)
+    try:
+        with qtbot.waitSignal(widget.test_finished, timeout=5000) as result:
+            widget.test_connection()
+            qtbot.waitUntil(started.is_set)
+            widget.sqlite_advanced.cipher_combo.setEditText("chacha20")
+            release.set()
+        qtbot.waitUntil(lambda: not widget._test_pool.activeThreadCount())
+        assert result.args == [False, "连接设置已更改，请重新测试。"]
+        assert not widget.diagram.sqlite_connection_succeeded
+        assert not widget.sqlite_advanced_diagram.sqlite_connection_succeeded
+        assert not widget.sqlite_database_diagram.sqlite_connection_succeeded
+        assert widget._test_origin_state is None and not widget._testing
+    finally:
+        release.set()
+        qtbot.waitUntil(lambda: not widget._test_pool.activeThreadCount())
 
 
 def test_creation_error_redacts_prompted_key_and_restores_the_draft(qtbot, tmp_path, monkeypatch):

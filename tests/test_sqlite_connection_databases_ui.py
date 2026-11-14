@@ -165,7 +165,7 @@ def test_observed_double_click_cells_open_prefilled_sheet_and_cancel_retains_sel
     assert len(page.table.selectedItems()) == 3 and dialog.get_config() is None
 
 
-def test_empty_encrypted_password_is_accepted_as_draft_but_real_test_rejects_capability(qtbot, files, monkeypatch):
+def test_empty_encrypted_password_is_a_draft_but_test_requires_key_before_file_access(qtbot, files, monkeypatch):
     main, aux, _alternate = files
     dialog = editor(qtbot, profile(main))
     add_row(qtbot, dialog.sqlite_databases_page, aux, encrypted=True)
@@ -175,10 +175,13 @@ def test_empty_encrypted_password_is_accepted_as_draft_but_real_test_rejects_cap
     def forbidden(*_args, **_kwargs):
         pytest.fail("Unsupported encrypted draft opened a database")
     monkeypatch.setattr(sqlite3, "connect", forbidden)
+    from opennavicat import sqlite_cipher_provider
+    monkeypatch.setattr(sqlite_cipher_provider, "connect", forbidden)
+    monkeypatch.setattr(sqlite_cipher_provider, "connect_plain_main", forbidden)
     with qtbot.waitSignal(dialog.test_finished, timeout=5000) as completed:
         qtbot.mouseClick(dialog.test_button, Qt.MouseButton.LeftButton)
     qtbot.waitUntil(lambda: not dialog._test_pool.activeThreadCount())
-    assert completed.args[0] is False and "encryption provider" in completed.args[1]
+    assert completed.args[0] is False and "encryption password is required" in completed.args[1]
     assert not dialog.diagram.sqlite_connection_succeeded and not dialog.sqlite_database_diagram.sqlite_connection_succeeded
     assert dialog.sqlite_test_banner.isHidden()
 

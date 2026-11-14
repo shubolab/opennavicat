@@ -95,10 +95,10 @@ def normalize_sqlite_encryption_password(config: ConnectionConfig, *, initial: b
     password = config.sqlite_encryption_password
     if type(password) is not str or len(password) > 65536:
         raise ValueError("Invalid SQLite encryption password")
-    expected = sqlite_encryption_password_binding(config)
-    previous = _binding(config.sqlite_encryption_password_binding)
     if config.driver != "sqlite" or not config.sqlite_encryption_enabled:
         return "", None
+    expected = sqlite_encryption_password_binding(config)
+    previous = _binding(config.sqlite_encryption_password_binding)
     if previous is None:
         return (password, expected) if initial and password else ("", None)
     return (password, previous) if previous == expected else ("", None)

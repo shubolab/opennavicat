@@ -87,3 +87,23 @@ rekey、cipher、legacy、算法参数 pragma 及 sqlite3mc_config 调用；专�
 UI 配置与密码保存/提示、稳定 secret binding、原子附件初始化与取消代次、只读会话、
 附件算法追踪与备份、完整 rekey/转换、WAL/恢复、许可证通知，以及六目标原生构建、
 整包 smoke 和完整产品验收均保留开放。此叶不是完整 DBAPI 替换或 SQLite 加密工具验收。
+
+## 0.14 预检复杂度与取消修正
+
+独立复核发现原预检对引号内每个分号都重新扫描前缀，100KB 输入可把取消延迟到数秒。
+下一里程碑先修正该适配层：线性跳过字符串、quoted identifier、注释内的分号以及前导
+空分号；只有剩余候选交给 SQLite complete 验证，仍由 scratch authorizer 检查尾部，
+不改变 trigger 与准备期 PRAGMA 的多语句拒绝合同。SQLite 对这些 token 的定义见
+[complete API](https://www.sqlite.org/c3ref/complete.html)。
+
+对含大量 trigger 内部候选的输入，累计 UTF-8 前缀扫描量以连接实际
+`SQLITE_LIMIT_SQL_LENGTH` 为预算；超出时在真实连接 prepare 前给出明确的
+`SQLPreflightLimit`，完整 SQL 不截断。此为当前实现的复杂度边界，不是参考输入限制。
+Python 扫描每约 1024 字符及每个候选检查取消事件与已注册 progress callback；内部
+原生 progress handler 也保留同一取消事件，覆盖 Python 预检与 native execute 之间的
+竞态。下一次新 execute 清除旧操作事件，取消后连接可复用。
+
+本修正专项集合为 **102 项通过、零跳过/失败/error**，新增 100KB quoted/comment/
+leading-noop 输入的单次前缀扫描、所有 quote 形式与真实尾部、trigger 预算耗尽前不写、
+Python 预检期间独立线程取消、进度回调在 prepare 前取消及取消后复用。
+原 d4b9103 的独立失败/性能探针仍保留，不用新结果覆盖历史证据。

@@ -5,6 +5,7 @@ import sqlite3
 import subprocess
 import sys
 import threading
+import time
 
 import pytest
 
@@ -132,6 +133,86 @@ def test_multiple_statements_cannot_change_prepare_time_pragma_before_rejection(
     with pytest.raises(sqlite3.ProgrammingError):
         connection.execute("PRAGMA foreign_keys=OFF; SELECT 99")
     assert connection.execute("PRAGMA foreign_keys").fetchone() == (1,)
+
+
+@pytest.mark.parametrize("text", ["';'", "'a'';b'", '"generated;column"', "`generated;column`", "[generated;column]",
+                                      "1 /* generated ;;;; */", "1 -- generated ;;;;\n"])
+def test_candidate_filter_keeps_native_quoted_comment_and_tail_rules(connection, text):
+    if "column" in text:
+        sql = f"SELECT 1 AS {text};"
+    else:
+        sql = f"SELECT {text};"
+    assert connection.execute(sql).fetchone() is not None
+    with pytest.raises(sqlite3.ProgrammingError):
+        connection.execute(sql + " PRAGMA foreign_keys=OFF;")
+
+
+@pytest.mark.parametrize("kind", ["quoted", "comment", "leading-noops"])
+def test_semicolon_dense_input_only_scans_real_statement_prefix_once(connection, monkeypatch, kind):
+    module = connection._module
+    original, lengths = module.complete, []
+    def counted(sql):
+        lengths.append(len(sql))
+        return original(sql)
+    monkeypatch.setattr(module, "complete", counted)
+    dense = ";" * 100000
+    sql = ("SELECT '" + dense + "';" if kind == "quoted" else
+           "SELECT 1 /*" + dense + "*/;" if kind == "comment" else dense + "SELECT 1;")
+    assert connection.execute(sql).fetchone() is not None
+    assert len(lengths) == 1 and sum(lengths) <= len(sql)
+
+
+def test_incomplete_trigger_prefix_budget_rejects_without_mutation_or_truncation(connection):
+    module, raw = connection._module, connection._raw
+    connection.execute("CREATE TABLE generated_facts(id INTEGER)").close()
+    old = raw.limit(module.SQLITE_LIMIT_SQL_LENGTH, 100000)
+    sql = "CREATE TRIGGER generated_dense AFTER INSERT ON generated_facts BEGIN " + "SELECT 1;" * 500 + " END;"
+    assert len(sql) < 100000
+    try:
+        with pytest.raises(sqlite3.DataError):
+            connection.execute(sql)
+        assert connection.execute("SELECT name FROM sqlite_schema WHERE type='trigger'").fetchall() == []
+    finally:
+        raw.limit(module.SQLITE_LIMIT_SQL_LENGTH, old)
+    assert sql.endswith(" END;") and len(sql) > 4000
+
+
+def test_interrupt_during_python_preflight_is_cooperative_and_next_query_reuses_connection(connection, monkeypatch):
+    entered, release = threading.Event(), threading.Event()
+    original = connection._preflight_checkpoint
+    first, errors = [True], []
+    def checkpoint():
+        if first[0]:
+            first[0] = False
+            entered.set()
+            assert release.wait(2)
+        original()
+    monkeypatch.setattr(connection, "_preflight_checkpoint", checkpoint)
+    def query():
+        try:
+            connection.execute("SELECT '" + ";" * 100000 + "';").fetchall()
+        except Exception as error:
+            errors.append(error)
+    worker = threading.Thread(target=query)
+    worker.start()
+    assert entered.wait(2)
+    started = time.monotonic()
+    connection.interrupt()
+    release.set()
+    worker.join(2)
+    assert not worker.is_alive() and time.monotonic() - started < 2
+    assert len(errors) == 1 and isinstance(errors[0], sqlite3.OperationalError)
+    assert errors[0].sqlite_errorcode == sqlite3.SQLITE_INTERRUPT
+    assert connection.execute("SELECT 7").fetchone() == (7,)
+
+
+def test_registered_progress_handler_can_cancel_before_native_prepare(connection):
+    connection.set_progress_handler(lambda: 1, 1000)
+    with pytest.raises(sqlite3.OperationalError) as caught:
+        connection.execute("PRAGMA foreign_keys=OFF")
+    assert caught.value.sqlite_errorcode == sqlite3.SQLITE_INTERRUPT
+    connection.set_progress_handler(None)
+    assert connection.execute("SELECT 1").fetchone() == (1,)
 
 
 @pytest.mark.parametrize("suffix", [" -- SELECT 99;", " /* SELECT 99; */", "; /* extra empty statement */", " /* unclosed comment"])

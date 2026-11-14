@@ -11,6 +11,7 @@ import importlib
 from importlib import metadata
 import os
 import sqlite3
+import threading
 from urllib.parse import parse_qsl, urlsplit
 import weakref
 
@@ -28,6 +29,10 @@ _MANAGED_CIPHER_PRAGMAS = frozenset((
 
 
 class ProviderUnavailable(sqlite3.NotSupportedError):
+    pass
+
+
+class SQLPreflightLimit(sqlite3.DataError):
     pass
 
 
@@ -74,6 +79,8 @@ def _bindings(values):
 
 
 def _translated(module, error):
+    if isinstance(error, SQLPreflightLimit):
+        return SQLPreflightLimit("SQLite statement preflight exceeds the engine SQL scan budget")
     if isinstance(error, sqlite3.NotSupportedError):
         kind = sqlite3.NotSupportedError
     elif isinstance(error, (module.ConstraintError, sqlite3.IntegrityError)):
@@ -128,17 +135,73 @@ def _trivia(module, tail):
         parser.close()
 
 
-def _single_statement(module, sql):
+def _semicolon_candidates(sql, checkpoint):
+    """Skip quoted/comment text in one pass; SQLite still decides boundaries.
+
+    This is only a candidate filter, not a SQL parser. SQLite's complete()
+    validates each remaining candidate, including CREATE TRIGGER bodies.
+    Invalid/unclosed tokens are left to SQLite rather than repaired here.
+    """
+    index, length, state, next_checkpoint, has_content = 0, len(sql), None, 0, False
+    while index < length:
+        if index >= next_checkpoint:
+            checkpoint()
+            next_checkpoint = index + 1024
+        character = sql[index]
+        following = sql[index + 1] if index + 1 < length else ""
+        if state == "--":
+            if character == "\n":
+                state = None
+        elif state == "/*":
+            if character == "*" and following == "/":
+                state = None
+                index += 1
+        elif state is not None:
+            if character == state:
+                if state != "]" and following == state:
+                    index += 1
+                else:
+                    state = None
+        elif character in "'\"`[":
+            has_content = True
+            state = "]" if character == "[" else character
+        elif character == "-" and following == "-":
+            state = "--"
+            index += 1
+        elif character == "/" and following == "*":
+            state = "/*"
+            index += 1
+        elif character == ";":
+            yield index, has_content
+        elif character not in " \t\n\r\f\v":
+            has_content = True
+        index += 1
+    checkpoint()
+
+
+def _single_statement(module, sql, checkpoint, work_limit):
     """Reject a real tail before SQLite prepares the requested statement.
 
     Some PRAGMAs act while preparing rather than stepping. SQLite's own
-    complete-statement tokenizer decides which semicolon ends a statement,
-    including quoted text and trigger bodies; the scratch parser then rejects
-    any executable tail. The cursor trace repeats the check after preparation.
+    complete-statement tokenizer decides which candidate ends a statement;
+    the scratch parser then rejects any executable tail. Repeated incomplete
+    trigger prefixes have a cumulative scan budget equal to the connection's
+    actual SQLITE_LIMIT_SQL_LENGTH. Exhaustion rejects the complete input,
+    never a truncated prefix. The trace repeats the check after preparation.
     """
-    for index, character in enumerate(sql):
-        if character == ";" and module.complete(sql[:index + 1]):
-            if _trivia(module, sql[:index + 1]):
+    start, work = 0, 0
+    for index, has_content in _semicolon_candidates(sql, checkpoint):
+        checkpoint()
+        if not has_content:
+            start = index + 1
+            continue
+        candidate = sql[start:index + 1]
+        work += len(candidate.encode("utf-8"))
+        if work > work_limit:
+            raise SQLPreflightLimit("SQLite statement preflight exceeds the engine SQL scan budget")
+        if module.complete(candidate):
+            if _trivia(module, candidate):
+                start = index + 1
                 continue
             if not _trivia(module, sql[index + 1:]):
                 raise sqlite3.ProgrammingError("Only one SQLite statement is allowed")
@@ -207,7 +270,9 @@ class CipherCursor:
                 self.rowcount = 0
             return True
         def run():
-            _single_statement(module, sql)
+            self.connection._preflight_cancel.clear()
+            _single_statement(module, sql, self.connection._preflight_checkpoint,
+                              raw.limit(module.SQLITE_LIMIT_SQL_LENGTH))
             raw.set_authorizer(authorizer)
             self._cursor.set_exec_trace(trace)
             try:
@@ -285,6 +350,9 @@ class CipherConnection:
         self._codec = codec
         self._closed = False
         self._cursors = weakref.WeakSet()
+        self._preflight_cancel = threading.Event()
+        self._progress_handler = None
+        self._raw.set_progress_handler(self._native_progress, 1000)
 
     def _check(self):
         if self._closed:
@@ -323,10 +391,24 @@ class CipherConnection:
 
     def set_progress_handler(self, handler, n=1000):
         self._check()
-        return _call(self._module, lambda: self._raw.set_progress_handler(handler, n))
+        if handler is not None and not callable(handler):
+            raise sqlite3.ProgrammingError("Invalid encrypted SQLite progress handler")
+        result = _call(self._module, lambda: self._raw.set_progress_handler(self._native_progress, n if handler is not None else 1000))
+        self._progress_handler = handler
+        return result
+
+    def _native_progress(self):
+        return bool(self._preflight_cancel.is_set() or self._progress_handler is not None and self._progress_handler())
+
+    def _preflight_checkpoint(self):
+        if self._preflight_cancel.is_set() or self._progress_handler is not None and self._progress_handler():
+            error = self._module.InterruptError("Encrypted SQLite operation interrupted")
+            error.extendedresult = self._module.SQLITE_INTERRUPT
+            raise error
 
     def interrupt(self):
         self._check()
+        self._preflight_cancel.set()
         return _call(self._module, self._raw.interrupt)
 
     def configure_attachment(self, *, cipher, legacy=None):

@@ -52,3 +52,23 @@ Linux CI 客户端、amd64 或参考 Navicat UI 的验收。启动完成约 75.7
 
 后续仍需主线的新原生 amd64/arm64 Oracle backend/window 运行；此记录不关闭 Oracle
 完整功能或跨平台门禁，也不授权用现有六目标安装任务成功直接发布 0.13.3。
+
+## 新 CI 的有限阶段证据与初始化顺序
+
+main `4855e8f4df86d1bcc405309b8415c884879d8d3b` 的
+[run43609330345](https://github.com/shubolab/opennavicat/actions/runs/43609330345)
+中，Oracle ARM 再次在约 63.9 秒退出 24、非 OOM。新回执明确记录 `database_start`、
+`password_reset`、密码 DDL 回显对象 `system`，以及 ORA-04021/ORA-65048。
+这能确定失败发生于 SYSTEM 密码重设，仍不能确定锁持有者；原回执保留在
+`artifacts/release-0133/resume-10h/4855-oracle-arm64/`。
+
+旧 fixture 在镜像初始化期间就直接轮询 SYSTEM 连接。现在先调用该固定镜像的
+[`healthcheck.sh FREEPDB1`](https://github.com/gvenzl/oci-oracle-free/blob/main/healthcheck.sh)，
+保留正常 container 初始化检查；只有退出码 0 才开始客户端登录。镜像文档中的 1–5
+表示未就绪或初始化阶段，继续在原 360 秒总预算内等待；未知退出码立即失败。
+每次检查前验证精确 CID、owner、image、mount 和容器状态，不自动重启容器、修改上游
+密码 DDL 或吞掉初始化失败。仅保存有界计数、布尔值和有限退出码，输出正文不进回执。
+
+这项改动保证初始化完成前不会尝试 SYSTEM 登录，并不证明早期登录就是锁错误的成因。
+本机 runner 71 项通过，包含 1–5 未就绪状态不触发登录、未知 126/127 立即失败、
+原 deadline/所有权/日志隐私约束；真实 native server 与两架构 CI 仍待新运行。

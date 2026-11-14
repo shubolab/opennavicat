@@ -53,12 +53,12 @@ def test_readiness_failure_persists_safe_phase_and_owned_state_without_extending
                     "NanoCpus": 2_000_000_000, "ShmSize": 1024**3},
                 "Mounts": [{"Type": "tmpfs", "Destination": support.SECRET_DIR}],
                 "NetworkSettings": {"Ports": {"1521/tcp": [{"HostIp": "127.0.0.1", "HostPort": "31415"}]}},
-                "State": {"Status": "exited", "Running": False, "OOMKilled": True, "ExitCode": 137,
+                "State": {"Status": "exited" if clock.failed else "running", "Running": not clock.failed, "OOMKilled": True, "ExitCode": 137,
                     "Error": fixture.admin_password,
                     "Health": {"Log": [{"Output": fixture.app_password}]}}}]
         else:
             assert args[0] in {"start", "exec"}
-            return SimpleNamespace(stdout="")
+            return SimpleNamespace(stdout="", returncode=0)
         return SimpleNamespace(stdout=json.dumps(value))
     def unavailable(*_args, **_kwargs):
         clock.now, clock.failed = 361.0, True
@@ -561,7 +561,7 @@ def test_running_then_exited_container_stops_after_one_retry_with_exact_revalida
         fixture.start()
     assert len(attempts) == 2 and sleeps == [1]
     assert fixture.receipt["startup"]["readiness_attempts"] == 2
-    assert len([args for args, _ in calls if args[0] == "inspect"]) == 5
+    assert len([args for args, _ in calls if args[0] == "inspect"]) == 6
 
 
 def test_successful_start_and_keyboard_interrupt_never_capture_server_logs(tmp_path, monkeypatch):
@@ -587,6 +587,58 @@ def test_successful_start_and_keyboard_interrupt_never_capture_server_logs(tmp_p
     with pytest.raises(KeyboardInterrupt):
         interrupted.start()
     assert interrupted.receipt["startup"]["reason"] == "interrupted"
+
+
+def test_system_authentication_waits_until_image_initialization_is_complete(tmp_path, monkeypatch):
+    fixture = support.OwnedOracle(tmp_path / "image-health")
+    calls, events = [], []
+    docker = owned_startup_docker(fixture, calls, state={"Status": "running", "Running": True})
+    statuses = iter([2, 3, 4, 5, 1, 0])
+    def health_docker(*args, **kwargs):
+        if args[0] == "exec" and args[-2:] == ("healthcheck.sh", "FREEPDB1"):
+            assert kwargs["check"] is False and 0 < kwargs["timeout"] <= 5
+            code = next(statuses)
+            events.append(("health", code))
+            return SimpleNamespace(returncode=code, stdout=fixture.admin_password)
+        if args[0] == "exec" and args[-2:] == ("uname", "-m"):
+            return SimpleNamespace(stdout="aarch64")
+        return docker(*args, **kwargs)
+    def connect(*args, **kwargs):
+        assert events[-1] == ("health", 0)
+        events.append(("connect", args[0]))
+        return SimpleNamespace(version="23.26.3")
+    monkeypatch.setattr(fixture, "docker", health_docker)
+    monkeypatch.setattr(fixture, "connect", connect)
+    monkeypatch.setattr(fixture, "_seed", lambda: None)
+    monkeypatch.setattr(support.time, "sleep", lambda seconds: events.append(("wait", seconds)))
+    fixture.start()
+    assert events[-1] == ("connect", "system")
+    assert len([event for event in events if event[0] == "connect"]) == 1
+    assert fixture.receipt["startup"]["image_healthcheck_attempts"] == 6
+    assert support.startup_diagnostic(fixture.receipt)["image_healthcheck_ready"] is True
+    assert fixture.receipt["startup"]["readiness_budget_seconds"] == 360
+    assert fixture.admin_password not in (fixture.out / "fixture.json").read_text()
+
+
+@pytest.mark.parametrize("code", [126, 127])
+def test_unknown_image_healthcheck_failure_cannot_become_driver_readiness(tmp_path, monkeypatch, code):
+    fixture = support.OwnedOracle(tmp_path / "health-failed")
+    calls = []
+    docker = owned_startup_docker(fixture, calls, state={"Status": "running", "Running": True})
+    def health_docker(*args, **kwargs):
+        if args[0] == "exec" and args[-2:] == ("healthcheck.sh", "FREEPDB1"):
+            return SimpleNamespace(returncode=code, stdout=fixture.admin_password)
+        return docker(*args, **kwargs)
+    monkeypatch.setattr(fixture, "docker", health_docker)
+    monkeypatch.setattr(fixture, "connect", lambda *_args, **_kwargs: pytest.fail("No driver before image is ready"))
+    monkeypatch.setattr(support.time, "sleep", lambda *_args: pytest.fail("No retry for unknown image failure"))
+    monkeypatch.setattr(support, "_bounded_command_output", lambda *_args: (b"", "captured"))
+    with pytest.raises(RuntimeError, match="image healthcheck failed"):
+        fixture.start()
+    assert fixture.receipt["startup"]["reason"] == "docker_operation"
+    assert fixture.receipt["startup"]["image_healthcheck_ready"] is False
+    assert "last_image_healthcheck_exit" not in fixture.receipt["startup"]
+    assert fixture.admin_password not in (fixture.out / "fixture.json").read_text()
 
 
 def test_engine_probe_rejects_arbitrary_server_errors_and_version_strings(tmp_path, monkeypatch):

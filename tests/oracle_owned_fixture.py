@@ -177,8 +177,12 @@ def startup_diagnostic(receipt):
                         "OperationalError", "InterfaceError", "KeyboardInterrupt", "OSError"}}
     for key, choices in enums.items():
         if type(value.get(key)) is str and value[key] in choices: result[key] = value[key]
-    for key in ("elapsed_ms", "readiness_attempts"):
+    for key in ("elapsed_ms", "readiness_attempts", "image_healthcheck_attempts"):
         if type(value.get(key)) is int and 0 <= value[key] <= 2**31 - 1: result[key] = value[key]
+    if type(value.get("image_healthcheck_ready")) is bool:
+        result["image_healthcheck_ready"] = value["image_healthcheck_ready"]
+    if type(value.get("last_image_healthcheck_exit")) is int and 0 <= value["last_image_healthcheck_exit"] <= 5:
+        result["last_image_healthcheck_exit"] = value["last_image_healthcheck_exit"]
     if type(value.get("readiness_budget_seconds")) is int and value["readiness_budget_seconds"] == READINESS_SECONDS:
         result["readiness_budget_seconds"] = READINESS_SECONDS
     for key in ("driver_code", "last_driver_code"):
@@ -408,11 +412,47 @@ class OwnedOracle:
         self.receipt["startup"].update(readiness_budget_seconds=READINESS_SECONDS, readiness_attempts=0)
         self._startup_phase("readiness")
         deadline = time.monotonic() + READINESS_SECONDS
+        image_ready = False
+        self.receipt["startup"].update(image_healthcheck_ready=False, image_healthcheck_attempts=0)
         while True:
             if time.monotonic() >= deadline:
                 self._startup_reason = "readiness_deadline"
                 raise RuntimeError("Owned Oracle readiness deadline") from None
             self.receipt["startup"]["readiness_attempts"] += 1
+            if not image_ready:
+                # The image's normal healthcheck waits for password resets and
+                # initialization scripts. Do not authenticate as SYSTEM while
+                # that same account is still being changed by its entrypoint.
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    self._startup_reason = "readiness_deadline"
+                    raise RuntimeError("Owned Oracle readiness deadline") from None
+                state = self.inspect(timeout=min(5, remaining)).get("State", {})
+                if (type(state) is dict and state.get("Status") in {"exited", "dead"}
+                        and state.get("Running") is False):
+                    self._startup_reason = "container_exited"
+                    raise RuntimeError("Owned Oracle container exited before readiness") from None
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    self._startup_reason = "readiness_deadline"
+                    raise RuntimeError("Owned Oracle readiness deadline") from None
+                health = self.docker("exec", self.cid, "healthcheck.sh", "FREEPDB1",
+                                     timeout=min(5, remaining), check=False)
+                code = health.returncode
+                self.receipt["startup"]["image_healthcheck_attempts"] += 1
+                if type(code) is not int or code not in range(6):
+                    self._startup_reason = "docker_operation"
+                    raise RuntimeError("Owned Oracle image healthcheck failed") from None
+                self.receipt["startup"]["last_image_healthcheck_exit"] = code
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    self._startup_reason = "readiness_deadline"
+                    raise RuntimeError("Owned Oracle readiness deadline") from None
+                if code:
+                    time.sleep(min(1, remaining))
+                    continue
+                image_ready = True
+                self.receipt["startup"]["image_healthcheck_ready"] = True
             try:
                 self.admin = self.connect("system", self.admin_password)
                 if time.monotonic() >= deadline:

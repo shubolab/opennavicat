@@ -149,14 +149,14 @@ def test_invalid_or_reserved_aliases_are_rejected_before_database_open(files, mo
     assert session.connection is None and session._selected_schema is None
 
 
-def test_encrypted_metadata_rejects_before_any_database_path_access(tmp_path, monkeypatch):
+def test_encrypted_metadata_requires_a_bound_key_before_any_database_path_access(tmp_path, monkeypatch):
     session = DatabaseSession(config(tmp_path / "missing-main.sqlite", attached(tmp_path / "missing-aux.sqlite", encrypted=True)))
     def forbidden(*args, **kwargs):
-        pytest.fail("Unsupported encryption touched a database path")
+        pytest.fail("Missing encrypted attachment key touched a database path")
     monkeypatch.setattr(sqlite3, "connect", forbidden)
     monkeypatch.setattr(Path, "resolve", forbidden)
     monkeypatch.setattr(Path, "is_file", forbidden)
-    with pytest.raises(DatabaseError, match="encryption provider"):
+    with pytest.raises(DatabaseError, match="encryption password"):
         session.connect()
     assert session.connection is None and not list(tmp_path.iterdir())
 

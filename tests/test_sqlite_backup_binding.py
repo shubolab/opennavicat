@@ -24,7 +24,7 @@ def rows(path):
 
 @pytest.fixture
 def backup_source(tmp_path):
-    paths = {name: tmp_path / (name + ".sqlite") for name in ("main", "aux", "aux_b")}
+    paths = {name: tmp_path / ("generated-" + name + ".sqlite") for name in ("main", "aux", "aux_b")}
     for name, data in (("main", MAIN), ("aux", AUX), ("aux_b", AUX_B)):
         with closing(sqlite3.connect(paths[name])) as db, db:
             db.execute("CREATE TABLE things (id INTEGER PRIMARY KEY, value TEXT)")

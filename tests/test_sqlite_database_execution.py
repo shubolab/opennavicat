@@ -22,7 +22,7 @@ def make_database(path, label, *, connector=None):
 
 @pytest.fixture
 def files(tmp_path):
-    return tuple(make_database(tmp_path / (name + ".sqlite"), name) for name in ("main", "aux", "second"))
+    return tuple(make_database(tmp_path / ("generated-" + name + ".sqlite"), name) for name in ("main", "aux", "second"))
 
 
 def config(main, *attachments, **changes):
@@ -526,7 +526,7 @@ def test_execution_uses_the_captured_attachment_plan_when_the_source_config_chan
 
 
 def test_explicit_create_with_a_valid_attachment_initializes_both_namespaces(tmp_path):
-    aux = make_database(tmp_path / "aux.sqlite", "aux")
+    aux = make_database(tmp_path / "generated-aux.sqlite", "aux")
     main = tmp_path / "new-main.sqlite"
     value = config(main, attached(aux))
     value.sqlite_open_mode = "create"

@@ -128,7 +128,12 @@ def test_sheet_inherits_pure_parent_qfont_at_creation_and_keeps_real_controls(qt
     if pixels in (12, 20):
         assert ok.width() == cancel.width() == 80
     else:
-        assert cancel.width() > 80  # Native natural size must be allowed to grow.
+        assert ok.width() >= 80 and cancel.width() >= 80
+        if qapp.platformName() == "cocoa":
+            # Observed QMacStyle/fallback metrics require growth at 36px.
+            # Other native styles may fit the same glyphs in the base width;
+            # assert_editor_and_buttons_fit checks their actual contents.
+            assert cancel.width() > 80
     if pixels == 12:
         assert sheet.size().toTuple() == (600, 215)
     sheet.reject()

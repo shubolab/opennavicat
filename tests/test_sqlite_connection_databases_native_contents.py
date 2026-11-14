@@ -60,7 +60,29 @@ def test_native_sheet_editor_and_button_contents_fit_actual_font(qtbot, qapp, co
     if pixels in (12, 20):
         assert ok.width() == cancel.width() == 80
     else:
-        assert cancel.width() > 80
+        assert ok.width() >= 80 and cancel.width() >= 80
+        if qapp.platformName() == "cocoa":
+            # Only QMacStyle's observed 36px metrics imply a width over 80.
+            assert cancel.width() > 80
+    sheet.reject()
+
+
+def test_native_buttons_grow_when_actual_caption_requires_more_content_width(qtbot, qapp, config):
+    dialog = parent_dialog(qtbot, qapp, config, 12)
+    sheet = SQLiteDatabaseDialog(dialog.sqlite_databases_page.snapshot(), "owned-row", dialog)
+    qtbot.addWidget(sheet); sheet.show(); settle(qapp)
+    _ok, cancel = assert_real_contents_fit(sheet)
+    original_text, baseline = cancel.text(), cancel.width()
+    assert baseline == 80
+    # This is a controlled layout stress input, not a reference UI caption.
+    # It proves natural growth from actual glyph demand on every native style.
+    cancel.setText("W" * 16); settle(qapp)
+    assert cancel.fontMetrics().horizontalAdvance(cancel.text()) > baseline
+    assert cancel.width() > baseline
+    assert_real_contents_fit(sheet)
+    cancel.setText(original_text); settle(qapp)
+    assert cancel.width() == baseline
+    assert_real_contents_fit(sheet)
     sheet.reject()
 
 

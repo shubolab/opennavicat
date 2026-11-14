@@ -31,7 +31,7 @@ def forbid_keyring(monkeypatch):
 def files(tmp_path):
     paths = []
     for name in ("main", "aux", "alternate"):
-        path = tmp_path / (name + ".sqlite")
+        path = tmp_path / ("generated-" + name + ".sqlite")
         with closing(sqlite3.connect(path)) as connection, connection:
             connection.execute("CREATE TABLE items(id INTEGER PRIMARY KEY, label TEXT)")
             connection.executemany("INSERT INTO items VALUES(?,?)", [(1, name + "-1"), (2, name + "-2")])

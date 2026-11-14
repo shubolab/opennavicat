@@ -73,8 +73,14 @@ def test_browse_controls_follow_live_parent_font_and_application_theme(qtbot, qa
         settle(qapp)
         assert dialog.browse_button.font().pixelSize() == sheet.browse_button.font().pixelSize() == pixels
         assert_browse_contents(dialog, sheet)
-        sizes[pixels] = dialog.browse_button.size()
-    assert sizes[36].width() > sizes[20].width() > sizes[12].width()
+        sizes.setdefault(pixels, dialog.browse_button.size())
+        assert dialog.browse_button.size() == sizes[pixels]
+        # Width follows real glyph demand and native chrome, with a 20px
+        # minimum. A larger font may grow only the height while still fitting
+        # three dots in that width (observed on the Windows native QPA).
+        assert dialog.browse_button.width() >= max(20, dialog.browse_button.fontMetrics().horizontalAdvance("...") + 8)
+    assert sizes[36].height() > sizes[20].height() > sizes[12].height()
+    assert sizes[36].width() >= sizes[20].width() >= sizes[12].width()
     font = QFont(dialog.font()); font.setPixelSize(36); dialog.setFont(font)
     settle(qapp)
     for theme in ("dark", "light"):

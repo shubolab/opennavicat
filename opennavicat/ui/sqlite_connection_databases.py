@@ -4,10 +4,11 @@ from __future__ import annotations
 from pathlib import Path
 import uuid
 
-from PySide6.QtCore import Qt, QSize, Signal
+from PySide6.QtCore import QEvent, Qt, QSize, QTimer, Signal
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QAbstractItemView, QCheckBox, QDialog, QDialogButtonBox, QFileDialog,
-    QFormLayout, QHBoxLayout, QHeaderView, QLineEdit, QMessageBox, QPushButton,
+    QFormLayout, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMessageBox, QPushButton,
     QStyle, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
@@ -56,6 +57,12 @@ class SQLiteDatabaseDialog(QDialog):
 
     def __init__(self, config: ConnectionConfig, row_id: str | None = None, parent=None):
         super().__init__(parent)
+        # Top-level dialogs normally use the application font. Propagate the
+        # parent's live font without pinning a copied QFont over later changes.
+        self.setAttribute(Qt.WidgetAttribute.WA_WindowPropagation, True)
+        self._font_refresh = QTimer(self)
+        self._font_refresh.setSingleShot(True)
+        self._font_refresh.timeout.connect(self._resolve_parent_font)
         self.setObjectName("sqliteDatabaseSheet")
         self.setWindowTitle("数据库")
         self.setWindowModality(Qt.WindowModality.WindowModal)
@@ -99,7 +106,15 @@ class SQLiteDatabaseDialog(QDialog):
         self.password_edit.setObjectName("sqliteDatabasePassword")
         self.password_edit.setEchoMode(QLineEdit.EchoMode.Password)
         self.password_edit.setEnabled(self.encrypted_check.isChecked())
-        form.addRow("密码:", self.password_edit)
+        password_row = QWidget()
+        password_layout = QHBoxLayout(password_row)
+        # The retained password row has its own inset, independent of the
+        # name/file form column. Its field shares the same right margin.
+        password_layout.setContentsMargins(123, 0, 0, 0)
+        password_layout.setSpacing(8)
+        password_layout.addWidget(QLabel("密码:"))
+        password_layout.addWidget(self.password_edit, 1)
+        form.addRow(password_row)
         self.file_edit.textChanged.connect(self._binding_changed)
         self.encrypted_check.toggled.connect(self._binding_changed)
         self.password_edit.textEdited.connect(self._password_edited)
@@ -119,6 +134,21 @@ class SQLiteDatabaseDialog(QDialog):
         self.buttons.rejected.connect(self.reject)
         layout.addWidget(self.buttons, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignAbsolute)
         self.name_edit.setFocus()
+
+    def event(self, event):
+        handled = super().event(event)
+        if event.type() in (QEvent.Type.StyleChange, QEvent.Type.ApplicationFontChange, QEvent.Type.Show):
+            timer = getattr(self, "_font_refresh", None)
+            if timer is not None:
+                timer.start(0)
+        return handled
+
+    def _resolve_parent_font(self):
+        if self.parentWidget() is not None and not self.testAttribute(Qt.WidgetAttribute.WA_SetFont):
+            # Qt's stylesheet unpolish can restore an application-font cache
+            # on a window. An empty resolve mask restores live inheritance;
+            # it neither pins parent properties nor overrides active QSS.
+            self.setFont(QFont())
 
     def _browse(self):
         filename, _filter = QFileDialog.getOpenFileName(self, "选择数据库文件", self.file_edit.text(),
@@ -187,7 +217,9 @@ class SQLiteConnectionDatabases(QWidget):
         self.table.setObjectName("sqliteDatabaseTable")
         self.table.setHorizontalHeaderLabels(["数据库", "文件", "已加密"])
         self.table.verticalHeader().hide()
+        self.table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         self.table.setShowGrid(False)
+        self.table.setWordWrap(False)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
